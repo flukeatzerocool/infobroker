@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-031 REQ-040 REQ-041
+// @implements REQ-001 REQ-002 REQ-004 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-031 REQ-032 REQ-040 REQ-041
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -27,6 +27,7 @@ import {
   internetArchiveFetchPage,
   internetArchiveHealth,
 } from "./providers/index.js";
+import { retryWithBackoff } from "./retry.js";
 import { converge } from "./converge.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
@@ -121,30 +122,27 @@ async function doWebSearch(
       const start = Date.now();
       let results: SearchResult[];
 
-      switch (slug) {
-        case "duckduckgo":
-        case "marginalia":
-        case "mojeek":
-          results = await duckduckgoSearch(query, opts);
-          break;
-        case "wikipedia":
-          results = await wikipediaSearch(query, opts);
-          break;
-        case "wikidata":
-          results = await wikidataSearch(query);
-          break;
-        case "wiktionary":
-          results = await wiktionarySearch(query);
-          break;
-        case "openstreetmap":
-          results = await openstreetmapSearch(query);
-          break;
-        case "internet_archive":
-          results = await internetArchiveSearch(query);
-          break;
-        default:
-          results = await duckduckgoSearch(query, opts);
-      }
+      const doCall = async (): Promise<SearchResult[]> => {
+        switch (slug) {
+          case "duckduckgo":
+          case "marginalia":
+          case "mojeek":
+            return await duckduckgoSearch(query, opts);
+          case "wikipedia":
+            return await wikipediaSearch(query, opts);
+          case "wikidata":
+            return await wikidataSearch(query);
+          case "wiktionary":
+            return await wiktionarySearch(query);
+          case "openstreetmap":
+            return await openstreetmapSearch(query);
+          case "internet_archive":
+            return await internetArchiveSearch(query);
+          default:
+            return await duckduckgoSearch(query, opts);
+        }
+      };
+      results = await retryWithBackoff(doCall, slug);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -173,23 +171,29 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       await throttle(slug);
       const start = Date.now();
 
-      let content: string;
-      if (slug === "jina") {
-        content = await jinaFetchPage(url);
-      } else if (slug === "wikipedia") {
-        if (url.includes("wikipedia.org")) {
-          content = await wikipediaFetchPage(url);
+      const doCall = async (): Promise<string> => {
+        if (slug === "jina") {
+          return await jinaFetchPage(url);
+        } else if (slug === "wikipedia") {
+          if (url.includes("wikipedia.org")) {
+            return await wikipediaFetchPage(url);
+          }
+          throw new Error("URL not a wikipedia.org domain");
+        } else if (slug === "internet_archive") {
+          return await internetArchiveFetchPage(url);
         } else {
-          continue;
+          const resp = await fetch(url, {
+            headers: { "User-Agent": "Infobroker/1.0" },
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          return await resp.text();
         }
-      } else if (slug === "internet_archive") {
-        content = await internetArchiveFetchPage(url);
-      } else {
-        const resp = await fetch(url, {
-          headers: { "User-Agent": "Infobroker/1.0" },
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        content = await resp.text();
+      };
+      let content: string;
+      try {
+        content = await retryWithBackoff(doCall, slug);
+      } catch {
+        continue;
       }
 
       const elapsed = Date.now() - start;
@@ -200,7 +204,7 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       return `[OK] Fetched by ${slug}\n\n${truncated.text}${
         truncated.truncated ? `\n\n[TRUNCATED] Full content at: ${truncated.outputPath}` : ""
       }`;
-    } catch (e) {
+    } catch {
       // continue to next renderer
     }
   }
