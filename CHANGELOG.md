@@ -29,6 +29,24 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.06 — Auth Derivation from Config
+
+- Provider auth requirements are now derived from `config.json` rather than
+  duplicated across the spec's reference tables. The `Auth` column was
+  removed from §6.3 and per-provider auth notes were stripped from §A
+  (Appendix A). The spec now defines only the mechanism (REQ-011/012) while
+  `config.json` is the canonical source for which providers require keys.
+
+- A new build step (`npm run generate-auth`) reads `config.json` and
+  produces `skills/infobroker/references/provider-auth.md` — a generated
+  reference table mapping each provider to its tier, auth requirement, and
+  env variable. The generated file is checked into version control and
+  validated for staleness by `npm run validate-spec` at commit time.
+
+- AGENTS.md's provider table no longer has an `Auth` column; it points to
+  the generated reference instead. The §5.4 build phases now include the
+  auth generation step.
+
 ## 2026.08.06 — Full Spec-Compliant Rebuild
 
 - Rate limiting now actually works — all providers are now configured

@@ -257,7 +257,8 @@ interface Provider {
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Convergence Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
-7. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
+7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
+8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
 
 ### 5.5 Convergence Quality (Single Phase)
 
@@ -298,26 +299,26 @@ Tool responses are JSON with this envelope:
 
 ### 6.3 Provider API Conventions
 
-| Provider | Endpoint Base | Auth | Notes |
-|----------|-------------|------|-------|
-| DuckDuckGo | `https://html.duckduckgo.com/html/` | None | HTML scraping, 3s minimum interval |
-| Wikipedia | `https://en.wikipedia.org/w/api.php` | None | `action=query&format=json` |
-| Wiktionary | `https://en.wiktionary.org/w/api.php` | None | Same API as Wikipedia |
-| Wikidata | `https://www.wikidata.org/w/api.php` | None | `action=wbsearchentities` + `action=wbgetentities` |
-| OpenStreetMap | `https://nominatim.openstreetmap.org/search` | None | 1 req/sec, User-Agent required |
-| Jina Reader | `https://r.jina.ai/` | None | Append URL to path, returns Markdown |
-| Internet Archive | `https://archive.org/wayback/available` | None | Check availability, then fetch |
-| Semantic Scholar | `https://api.semanticscholar.org/graph/v1/` | Optional key | 1 RPS authenticated, shared pool unauth |
-| arXiv | `https://export.arxiv.org/api/query` | None | 1 call/3 sec |
-| Stack Exchange | `https://api.stackexchange.com/2.3/` | App key (free) | 300/day unauth, 10K/day keyed |
-| GitHub | `https://api.github.com/search/code` | Optional token | 60/hr unauth, 5K/hr token |
-| Brave | `https://api.search.brave.com/res/v1/web/search` | API key | 2K/mo free tier |
-| SearXNG | User-configured (`/search?format=json`) | None (self-hosted) | Requires Docker, JSON format must be enabled |
-| Marginalia | `https://search.marginalia.nu/search` | None | HTML scraping, open source |
-| Mojeek | `https://www.mojeek.com/search` | None (API key available) | HTML scraping, independent index |
-| Exa | `https://api.exa.ai/search` | API key | 1K/mo free tier, neural search |
-| Tavily | `https://api.tavily.com/search` | API key | 1K/mo free credits |
-| CORE | `https://api.core.ac.uk/v3/search/works` | API key (free) | Open access research |
+| Provider | Endpoint Base | Notes |
+|----------|-------------|-------|
+| DuckDuckGo | `https://html.duckduckgo.com/html/` | HTML scraping, 3s minimum interval |
+| Wikipedia | `https://en.wikipedia.org/w/api.php` | `action=query&format=json` |
+| Wiktionary | `https://en.wiktionary.org/w/api.php` | Same API as Wikipedia |
+| Wikidata | `https://www.wikidata.org/w/api.php` | `action=wbsearchentities` + `action=wbgetentities` |
+| OpenStreetMap | `https://nominatim.openstreetmap.org/search` | 1 req/sec, User-Agent required |
+| Jina Reader | `https://r.jina.ai/` | Append URL to path, returns Markdown |
+| Internet Archive | `https://archive.org/wayback/available` | Check availability, then fetch |
+| Semantic Scholar | `https://api.semanticscholar.org/graph/v1/` | 1 RPS authenticated, shared pool unauth |
+| arXiv | `https://export.arxiv.org/api/query` | 1 call/3 sec |
+| Stack Exchange | `https://api.stackexchange.com/2.3/` | 300/day unauth, 10K/day keyed |
+| GitHub | `https://api.github.com/search/code` | 60/hr unauth, 5K/hr token |
+| Brave | `https://api.search.brave.com/res/v1/web/search` | 2K/mo free tier |
+| SearXNG | User-configured (`/search?format=json`) | Requires Docker, JSON format must be enabled |
+| Marginalia | `https://search.marginalia.nu/search` | HTML scraping, open source |
+| Mojeek | `https://www.mojeek.com/search` | HTML scraping, independent index |
+| Exa | `https://api.exa.ai/search` | 1K/mo free tier, neural search |
+| Tavily | `https://api.tavily.com/search` | 1K/mo free credits |
+| CORE | `https://api.core.ac.uk/v3/search/works` | Open access research |
 
 ### 6.4 Jina Reader
 Append the target URL to `https://r.jina.ai/`. Example:
@@ -574,13 +575,13 @@ infobroker/
 
 ### A.1 Built-in (Zero Config, In-Process)
 
-**DuckDuckGo** — HTML scraping of `html.duckduckgo.com`. No API key. 3s minimum interval enforced server-side. Parses result title, URL, snippet from the HTML page. No server-side state or tracking.
+**DuckDuckGo** — HTML scraping of `html.duckduckgo.com`. 3s minimum interval enforced server-side. Parses result title, URL, snippet from the HTML page. No server-side state or tracking.
 
 ### A.2 Free HTTP (Zero Config)
 
-**Jina Reader** — `https://r.jina.ai/{url}`. Renders any URL as Markdown. No API key. Rate-limited (undocumented). Exponential backoff on 429.
+**Jina Reader** — `https://r.jina.ai/{url}`. Renders any URL as Markdown. Rate-limited (undocumented). Exponential backoff on 429.
 
-**Wikipedia** — `https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch={query}`. Also supports `action=parse` for page content, `prop=extracts` for summary text. No key. Generous rate limits.
+**Wikipedia** — `https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch={query}`. Also supports `action=parse` for page content, `prop=extracts` for summary text. Generous rate limits.
 
 **Wiktionary** — `https://en.wiktionary.org/w/api.php`. Same API as Wikipedia. `action=query&prop=extracts` for definitions.
 
@@ -588,21 +589,21 @@ infobroker/
 
 **OpenStreetMap** — `https://nominatim.openstreetmap.org/search?q={query}&format=json`. 1 req/sec, User-Agent header required. Returns lat/lon, display name, type.
 
-**Internet Archive** — `https://archive.org/wayback/available?url={url}` returns availability timestamp. Then `https://web.archive.org/web/{timestamp}/{url}` retrieves the page. No key. Generous limits.
+**Internet Archive** — `https://archive.org/wayback/available?url={url}` returns availability timestamp. Then `https://web.archive.org/web/{timestamp}/{url}` retrieves the page. Generous limits.
 
-**ArXiv** — `https://export.arxiv.org/api/query?search_query={query}&max_results=10`. No key. 1 call per 3 seconds.
+**ArXiv** — `https://export.arxiv.org/api/query?search_query={query}&max_results=10`. 1 call per 3 seconds.
 
 ### A.3 Free HTTP (Registration Required)
 
-**Semantic Scholar** — `https://api.semanticscholar.org/graph/v1/paper/search?query={query}`. Unauthenticated: shared pool at 1000 RPS. Authenticated (free key): 1 RPS dedicated. Covers 214M papers, 2.5B citations.
+**Semantic Scholar** — `https://api.semanticscholar.org/graph/v1/paper/search?query={query}`. Shared pool at 1000 RPS; dedicated pool with key at 1 RPS. Covers 214M papers, 2.5B citations.
 
-**Stack Exchange** — `https://api.stackexchange.com/2.3/search/advanced?q={query}&site=stackoverflow`. 300 req/day unauthenticated, 10K/day with free app key. Covers 170+ Q&A sites.
+**Stack Exchange** — `https://api.stackexchange.com/2.3/search/advanced?q={query}&site=stackoverflow`. 300 req/day baseline, 10K/day with app key. Covers 170+ Q&A sites.
 
-**GitHub** — `https://api.github.com/search/code?q={query}`. 60 req/hour unauthenticated, 5000/hr with personal access token. Can search code, repos, issues.
+**GitHub** — `https://api.github.com/search/code?q={query}`. 60 req/hour baseline, 5000/hr with token. Can search code, repos, issues.
 
-**CORE** — `https://api.core.ac.uk/v3/search/works?q={query}`. Free API key required. Open access research papers.
+**CORE** — `https://api.core.ac.uk/v3/search/works?q={query}`. Open access research papers.
 
-### A.4 Keyed HTTP (Free Tier, API Key Required)
+### A.4 Keyed HTTP (Free Tier)
 
 **Brave Search** — `https://api.search.brave.com/res/v1/web/search?q={query}`. 2,000 queries/mo free. Independent index (40B+ pages). 669ms average latency. Also has News and Images endpoints.
 

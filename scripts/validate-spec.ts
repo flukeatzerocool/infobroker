@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -149,6 +149,32 @@ for (let i = 0; i < reqBodies.length; i++) {
 if (lifecycleReqs.length > 2) {
   warn(`Duplicate lifecycle descriptions across REQs: ${lifecycleReqs.join(", ")} — violates SR-011(c)`);
 }
+
+// --- Generated auth reference staleness check ---
+
+import { execSync } from "node:child_process";
+
+function checkGeneratedAuthStale(): void {
+  const authPath = join(ROOT, "skills", "infobroker", "references", "provider-auth.md");
+  if (!existsSync(authPath)) {
+    error(`Generated auth reference missing: ${authPath} — run 'npm run generate-auth'`);
+    return;
+  }
+  try {
+    execSync("npx tsx scripts/generate-provider-auth.ts", { cwd: ROOT, stdio: "pipe" });
+  } catch {
+    error("Auth reference generation script failed");
+    return;
+  }
+  // git diff --exit-code detects if the generated file changed
+  try {
+    execSync(`git diff --exit-code -- "${authPath}"`, { cwd: ROOT, stdio: "pipe" });
+  } catch {
+    error(`Generated auth reference is stale — run 'npm run generate-auth' and commit the result`);
+  }
+}
+
+checkGeneratedAuthStale();
 
 // --- Report ---
 
