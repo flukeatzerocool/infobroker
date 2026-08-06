@@ -1,3 +1,4 @@
+// @implements REQ-013
 export { duckduckgoSearch, duckduckgoSuggest, duckduckgoHealth } from "./duckduckgo.js";
 export { jinaFetchPage, jinaHealth } from "./jina.js";
 export { wikipediaSearch, wikipediaFetchPage, wikipediaHealth } from "./wikipedia.js";

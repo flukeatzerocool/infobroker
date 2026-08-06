@@ -1,3 +1,4 @@
+// @implements REQ-033 REQ-034
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

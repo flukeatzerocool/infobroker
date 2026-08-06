@@ -1,3 +1,4 @@
+// @implements REQ-020
 import type { SearchResult } from "../types.js";
 import { normalize } from "../normalizer.js";
 

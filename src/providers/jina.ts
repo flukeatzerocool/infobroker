@@ -1,3 +1,4 @@
+// @implements REQ-021
 const JINA_BASE = "https://r.jina.ai/";
 
 export async function jinaFetchPage(url: string): Promise<string> {

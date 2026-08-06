@@ -7,7 +7,10 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate-spec": "npx tsx scripts/validate-spec.ts",
+    "validate-readme": "npx tsx scripts/validate-readme.ts",
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme"
   },
   "keywords": ["search", "research", "mcp", "infobroker"],
   "author": "Infobroker",
@@ -19,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "markdownlint-cli": "^0.49.1",
     "tsx": "^4.23.5",
     "typescript": "^7.0.2"
   }

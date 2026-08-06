@@ -57,3 +57,41 @@ All tool responses use `[OK]` / `[ERROR]` prefix with JSON bodies per REQ-001. E
 | `INFOBROKER_CONFIG` | Path to config.json (default: `./config.json`) |
 | `INFOBROKER_<PROVIDER>_API_KEY` | API key for keyed providers |
 | `INFOBROKER_<PROVIDER>_URL` | URL for self-hosted providers (SearXNG) |
+
+## Spec Authoring
+
+Before adding or modifying any REQ in `infobroker.md`, apply the standing
+rule tests in SR-011 (contracts, not implementations) and SR-012
+(red-team every REQ). See Appendices B and C for full authoring conventions
+and SDD discipline.
+
+At minimum, every new REQ must pass:
+- (a) states *what*, not *how* — no parameter types, default values, or
+  algorithms in REQ prose
+- (b) verifiable by a gate (G0/G1/G2/G3)
+- (c) not duplicating content elsewhere in the spec
+- (d) no "Default:" clause
+- (e) valid across multiple implementation choices
+
+When implementation behavior changes, update the corresponding REQ in
+the same commit. `npm run validate-spec` must pass before committing.
+
+## Gates
+
+Run before committing or after any change to `infobroker.md` or `src/`:
+
+```
+npm run check
+```
+
+This runs:
+
+| Command              | What it checks                                     |
+|----------------------|----------------------------------------------------|
+| `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
+| `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
+| `npm run validate-readme` | README structure, tool names, links, comparison table |
+
+All must pass. `npm run validate-spec` exits non-zero on errors (uncited
+REQs with no waiver in DECISIONS.md, undocumented source files, REQ body
+violations per SR-011).

@@ -48,6 +48,41 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
 - **SR-010 All tool input is validated server-side before any outbound call.
 
+- **SR-011 Contracts, not implementations.** Requirements state what the server
+  must do. The verification gates (§9) enforce quality — do not prescribe how
+  to achieve it. No output format catalogues, no tool-name enumerations outside
+  §6.1, no specific architecture decisions outside §5.2, no worked examples
+  disguised as requirements. If a verification gate catches a deviation, trust
+  the gate.
+
+  **Before adding a requirement, apply these tests:**
+  (a) Does this REQ state *what* the server must do, or *how* to implement it?
+  If it names a parameter type, default value, sort order, or algorithm — it's
+  an implementation detail. Cut it.
+  (b) Can a verification gate (G0, G1, G2) catch a deviation from this REQ?
+  If not, the REQ is either too vague or too prescriptive. Tighten or loosen
+  accordingly.
+  (c) Does this REQ duplicate content already present elsewhere in this spec?
+  If so, cite it — don't restate it.
+  (d) Does the REQ end with a "Default:" clause specifying a starting value?
+  If so, remove it — defaults are the config file's domain (REQ-010).
+  (e) Would the REQ still be valid if the builder chose a different library,
+  data structure, algorithm, or file format? If not, it's locked to one
+  implementation.
+
+- **SR-012 Red-team every REQ.** Before finalizing a new or modified REQ, answer
+  four questions: (a) How could an AI builder misinterpret this requirement?
+  Read each sentence and list a plausible wrong reading. (b) What words in this
+  REQ body are ambiguous or context-dependent? Flag every hedge, every undefined
+  term, every provider-relative concept. (c) What edge case does this REQ not
+  cover? Think across provider tiers — free_http without auth, keyed_http with
+  quota exhaustion, self_hosted_http with user-controlled URLs. (d) What
+  provider configuration would make this REQ inapplicable or contradictory?
+  If any question produces a concrete gap, tighten the REQ or record the gap
+  in Appendix B. This is a spec-authoring discipline — not a mechanical check
+  — and is exercised by the author, not the builder. No _Check:_ citation
+  attaches.
+
 ### Terminology
 
 | Term | Definition |
@@ -156,6 +191,17 @@ The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Me
 
 **REQ-054 — User Documentation**
 The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers.
+
+### 4.7 Spec Integrity
+
+**REQ-055 — Spec-Code Traceability**
+Every source file in `src/` SHALL cite in a header comment each REQ it
+implements, using the format `@implements REQ-NNN`. A file may satisfy multiple
+REQs; every implemented REQ must appear in at least one source file's citation.
+The `validate-spec` script (§9.4) verifies bidirectional coverage: every REQ
+with an implementation must be cited, and every source file must cite at least
+one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
+REQs (§4.6, verified by file presence) are exempt. _Check:_ T55.
 
 ---
 
@@ -424,6 +470,10 @@ pages are not).
 - Normalizer: input from each provider format → verify common output shape
 - `converge`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
+- Spec drift: parse all `@implements REQ-NNN` citations from `src/**/*.ts`
+  and cross-reference against the REQ manifest in this specification. Report
+  any REQ with zero citations (excluding §4.6 artifact REQs) as unimplemented;
+  report any source file without citations as undocumented.
 
 ### 9.3 G2 — Live Smoke Tests (Optional)
 
@@ -431,6 +481,18 @@ pages are not).
 - Requires API keys for keyed providers
 - Skips providers without keys (reports skipped, not failed)
 - Verifies: connectivity, auth, response parsing, quota reporting
+
+### 9.4 G3 — Spec Validation Gate
+
+- `npm run validate-spec` exits zero
+- Every REQ in §4 has at least one source-file citation
+  (`@implements REQ-NNN`) or belongs to §4.6 (client artifacts verified by
+  file presence) or has a recorded waiver in DECISIONS.md
+- Every source file in `src/` has at least one `@implements` header comment
+- No REQ body contains: a parameter type annotation, a "Default:" clause,
+  an enumerated catalogue longer than 5 items, or a lifecycle description
+  duplicated across multiple REQs
+- Appendix B violations are warnings; Appendix C violations are errors
 
 ---
 
@@ -557,3 +619,105 @@ infobroker/
 **Marginalia** — `https://search.marginalia.nu/search?query={query}`. Open-source search engine prioritizing non-commercial content. HTML scraping. Unknown rate limits — conservative 5s interval.
 
 **Mojeek** — `https://www.mojeek.com/search?q={query}`. Privacy-first search engine with independent index. HTML scraping. Unknown rate limits — conservative 5s interval.
+
+---
+
+## §B Appendix: REQ Authoring Conventions
+
+This appendix defines what belongs in a requirement and what does not. It is not
+a build artifact — it is a spec-maintainer reference.
+
+**REQ anatomy.** One paragraph stating the *what*. Ends in `_Check:_` with test
+citations. Contains no parameter types, no algorithm descriptions, no default
+values, no catalogue enumerations, no tool-name lists.
+
+**What belongs elsewhere:**
+
+- Parameter shapes and tool signatures → tool registration in `src/index.ts`
+  (`zod` schemas are the live contracts)
+- Sort orders, algorithms, and scraping heuristics → builder's implementation
+  judgment; verified by G1 integration tests
+- Default starting values → `config.json` is the canonical source (REQ-010)
+- Tool name lists and output format catalogues → `tools/list` is the live
+  registry; the REQ states the category
+- State-machine transition rules → §6.3 provider API conventions table
+- Worked examples and step-by-step procedures → README.md and the bundled
+  client skills (REQ-051)
+- JSON schemas and file format specifications → `src/types.ts` is canonical;
+  G0 conformance tests verify correctness
+
+**The "trust the gates" test.** If a deviation from a requirement would be
+caught by G0 (MCP conformance), G1 (integration tests), or G2 (live smoke),
+do not specify the mechanism in the REQ — specify the outcome. The REQ ends
+at the contract boundary.
+
+**Gate-driven REQ review.** When the spec validation gate (G3) reports more
+than two findings of the same class across two or more verification runs, the
+maintainer flags the pattern as a candidate for REQ revision. Common classes
+include: consistently missing citations in a provider file not covered by
+existing REQs, repeated G1 failures from an undertested contract, or REQ body
+violations recurring in the same subsection. The flag cites the finding class,
+the affected files, and the REQ(s) most likely affected. This is a
+spec-maintainer signal, not a build requirement.
+
+---
+
+## §C Appendix: Spec-Driven Development Discipline
+
+This appendix defines the development discipline that prevents spec-code drift.
+It is prescriptive — every rule is enforceable by G3 (§9.4).
+
+**C.1 Spec-anchored model.** The specification lives in the repository alongside
+the code. Both evolve together; divergence is a defect. The specification is the
+contract; the implementation is the fulfillment. When the implementation's
+behavior changes, the corresponding REQ must be updated in the same commit.
+
+**C.2 Traceability.** Every source file in `src/` SHALL cite the REQ(s) it
+implements via `@implements REQ-NNN` header comments (REQ-055). Every REQ in
+§4 SHALL be cited in at least one source file, unless it concerns client
+artifacts (§4.6) or build process (§5) which are verified by artifact presence
+rather than source citations.
+
+**C.3 Separate what from how.** The specification (§1–§4, §7–§8) states
+contractual requirements — what the system must do. The build process (§5)
+states architecture. The configuration file (`config.json`) states parameters
+and dispatch rules. Implementation files (`src/`) state how. These layers must
+not blur: a REQ that prescribes a specific zod schema field or encoding
+algorithm is a defect.
+
+**C.4 Update-after-change.** When a tool's behavior changes (new parameter,
+different output shape, modified fallback logic), the corresponding REQ must
+be updated in the same commit. When a provider is added or removed, both the
+spec and config must reflect the change. A commit that changes `src/` without
+a corresponding `infobroker.md` update — where the change alters a
+requirement-level contract — SHALL be flagged by code review.
+
+**C.5 Verification as the enforcer.** The verification gates (§9) are the
+mechanical guarantee that spec and code remain aligned:
+- G0: MCP protocol conformance (tool schemas match implementation)
+- G1: Integration tests with mock providers (REQ behavior verified)
+- G2: Live smoke tests (real endpoints behave as specified)
+- G3: Spec validation gate (bidirectional coverage, REQ body hygiene)
+
+**C.6 Drift detection.** `npm run validate-spec` (G3) is the automated drift
+detector. It must exit zero before any commit that changes `infobroker.md` or
+any file in `src/`. The check surfaces:
+- REQs with no implementing source file (spec-only, needs implementation or
+  explicit waiver recorded in DECISIONS.md)
+- Source files with no REQ citation (undocumented code)
+- REQ bodies that violate SR-011 (implementation detail in a contract)
+- REQ bodies with duplicated lifecycle descriptions across multiple REQs
+
+**C.7 Risk-calibrated detail.** The level of detail in a REQ SHALL match the
+risk profile of the requirement:
+- **High risk** (API key handling, error taxonomy, convergence integrity):
+  precise contract language, explicit SHALL clauses, edge cases enumerated
+- **Medium risk** (rate limiting, quota tracking, fallback behavior):
+  configurable thresholds cited, expected behavior stated, recovery paths named
+- **Low risk** (output formatting, suggestion format, status reporting):
+  shape described, content left to builder judgment
+
+**C.8 Out-of-scope discipline.** Every major section SHALL explicitly state
+what it does NOT cover, using an "Out of scope" clause or equivalent. This
+bounds the builder's interpretation and prevents scope creep. Ambiguity about
+what is in scope is as dangerous as ambiguity about behavior.

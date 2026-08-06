@@ -1,3 +1,4 @@
+// @implements REQ-026
 import type { SearchResult, ConvergenceResult, ConvergenceFinding } from "./types.js";
 import {
   duckduckgoSearch,

@@ -1,3 +1,4 @@
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-040
 import { readFileSync, existsSync } from "node:fs";
 import type { Config, ProviderConfig } from "./types.js";
 

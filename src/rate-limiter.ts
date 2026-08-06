@@ -1,3 +1,4 @@
+// @implements REQ-030
 interface RateLimit {
   perSecond: number;
   lastCall: number;

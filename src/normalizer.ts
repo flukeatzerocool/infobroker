@@ -1,3 +1,4 @@
+// @implements REQ-003
 import type { SearchResult } from "./types.js";
 
 export function normalize(

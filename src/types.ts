@@ -1,3 +1,4 @@
+// @implements REQ-001 REQ-003
 export interface SearchResult {
   title: string;
   url: string;
