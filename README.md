@@ -41,8 +41,8 @@ Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
 behind a single tool surface. Seven zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Optional API keys unlock higher throughput and specialized
-providers. A built-in convergence engine cross-references independent
+configure. Eleven more providers unlock instantly with free API keys or
+self-hosting. A built-in convergence engine cross-references independent
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
@@ -82,7 +82,7 @@ Requirements: Node.js 20+.
 
 ## MCP Server
 
-Your research backend. Nine tools, seven zero-config providers, one
+Your research backend. Nine tools, eighteen providers, one
 convergence engine.
 
 ### Unified Search

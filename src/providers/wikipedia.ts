@@ -1,6 +1,7 @@
 // @implements REQ-020 REQ-021
 import type { SearchResult, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
+import { RetryableError } from "../retry.js";
 
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 
@@ -24,7 +25,7 @@ export async function wikipediaSearch(
   });
 
   if (!resp.ok) {
-    throw new Error(`Wikipedia returned HTTP ${resp.status}`);
+    throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);
   }
 
   const data = (await resp.json()) as {
@@ -57,7 +58,7 @@ export async function wikipediaFetchPage(url: string): Promise<string> {
   });
 
   if (!resp.ok) {
-    throw new Error(`Wikipedia returned HTTP ${resp.status}`);
+    throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);
   }
 
   const data = (await resp.json()) as {

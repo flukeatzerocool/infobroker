@@ -4,18 +4,53 @@ import {
   duckduckgoSearch,
   wikipediaSearch,
   wikidataSearch,
+  wiktionarySearch,
+  openstreetmapSearch,
+  internetArchiveSearch,
+  arxivSearch,
+  semanticScholarSearch,
+  stackExchangeSearch,
+  githubSearch,
+  coreSearch,
+  marginaliaSearch,
+  mojeekSearch,
+  braveSearch,
+  exaSearch,
+  tavilySearch,
+  searxngSearch,
 } from "./providers/index.js";
-import { jinaFetchPage } from "./providers/jina.js";
 import { getConfig, getDispatchChain } from "./config.js";
 import { throttle } from "./rate-limiter.js";
+import { checkQuota, increment } from "./quota.js";
+import { retryWithBackoff } from "./retry.js";
 
 type Searcher = (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]>;
 
 const SEARCHERS: Record<string, Searcher> = {
-  duckduckgo: duckduckgoSearch,
-  wikipedia: wikipediaSearch,
-  wikidata: wikidataSearch,
+  duckduckgo: duckduckgoSearch as Searcher,
+  wikipedia: wikipediaSearch as Searcher,
+  wikidata: wikidataSearch as Searcher,
+  wiktionary: wiktionarySearch as Searcher,
+  openstreetmap: openstreetmapSearch as Searcher,
+  internet_archive: internetArchiveSearch as Searcher,
+  arxiv: arxivSearch as Searcher,
+  semantic_scholar: semanticScholarSearch as Searcher,
+  stack_exchange: stackExchangeSearch as Searcher,
+  github: githubSearch as Searcher,
+  core: coreSearch as Searcher,
+  marginalia: marginaliaSearch as Searcher,
+  mojeek: mojeekSearch as Searcher,
+  brave: braveSearch as Searcher,
+  exa: exaSearch as Searcher,
+  tavily: tavilySearch as Searcher,
+  searxng: searxngSearch as Searcher,
 };
+
+interface Claim {
+  topic: string;
+  text: string;
+  source: { title: string; url: string; snippet: string };
+}
 
 export async function converge(
   query: string,
@@ -35,7 +70,9 @@ export async function converge(
   const maxCalls = config.convergence.max_http_calls;
 
   const providerList = options.providers || getDispatchChain("general_web");
-  if (providerList.length === 0) {
+  const availableProviders = providerList.filter((p) => SEARCHERS[p]);
+
+  if (availableProviders.length === 0) {
     return {
       findings: [],
       agreement_map: { green: [], yellow: [], red: [] },
@@ -50,53 +87,78 @@ export async function converge(
   let totalCalls = 0;
   let iteration = 0;
   const providersUsed = new Set<string>();
+  const searchedQueries = new Set<string>();
 
   while (iteration < maxIterations && totalCalls < maxCalls) {
-    const activeProviders = providerList.filter(
-      (p) => p === "duckduckgo" || p === "wikipedia" || p === "wikidata"
-    );
+    const prevFindingsCount = findings.size;
 
-    for (const slug of activeProviders) {
-      if (totalCalls >= maxCalls) break;
+    if (iteration === 0) {
+      // Phase 1: Broad search across available providers
+      for (const slug of availableProviders) {
+        if (totalCalls >= maxCalls) break;
+        const q = checkQuota(slug, config.providers[slug]?.rate_limit);
+        if (q.exhausted) continue;
 
-      const searcher = SEARCHERS[slug];
-      if (!searcher) continue;
+        try {
+          await throttle(slug);
+          const doCall = async () => {
+            const searcher = SEARCHERS[slug];
+            if (!searcher) throw new Error(`No searcher for ${slug}`);
+            return await searcher(query, { max_results: 5 });
+          };
+          const results = await retryWithBackoff(doCall, slug);
+          totalCalls++;
+          providersUsed.add(slug);
+          increment(slug, config.providers[slug]?.rate_limit);
 
-      try {
-        await throttle(slug);
-        const results = await searcher(query, { max_results: 5 });
-        totalCalls++;
-        providersUsed.add(slug);
-
-        const claims = extractClaims(results, slug);
-        for (const claim of claims) {
-          const key = normalizeTopic(claim.topic);
-          const existing = findings.get(key);
-
-          if (!existing) {
-            findings.set(key, {
-              topic: claim.topic,
-              claim: claim.text,
-              confidence: 0.3,
-              verdict: "unverified",
-              sources: [claim.source],
-            });
-          } else {
-            existing.sources.push(claim.source);
-            existing.confidence = computeConfidence(existing.sources);
-            existing.verdict = getVerdict(existing.confidence, confidenceThreshold);
-          }
+          processClaims(findings, results, slug);
+        } catch {
+          // provider failed, skip
         }
-      } catch {
-        // provider failed, skip
+      }
+    } else {
+      // Phase 3: Refinement — search for gap topics
+      const gaps = getGaps(findings, confidenceThreshold);
+      if (gaps.length === 0) break;
+
+      for (const gapTopic of gaps.slice(0, 3)) {
+        if (totalCalls >= maxCalls) break;
+        const refinedQuery = deriveRefinedQuery(gapTopic, query);
+        if (searchedQueries.has(refinedQuery)) continue;
+        searchedQueries.add(refinedQuery);
+
+        const gapProvider = availableProviders[0];
+        const q = checkQuota(gapProvider, config.providers[gapProvider]?.rate_limit);
+        if (q.exhausted) continue;
+
+        try {
+          await throttle(gapProvider);
+          const doCall = async () => {
+            const searcher = SEARCHERS[gapProvider];
+            if (!searcher) throw new Error(`No searcher for ${gapProvider}`);
+            return await searcher(refinedQuery, { max_results: 3 });
+          };
+          const results = await retryWithBackoff(doCall, gapProvider);
+          totalCalls++;
+          providersUsed.add(gapProvider);
+          increment(gapProvider, config.providers[gapProvider]?.rate_limit);
+
+          processClaims(findings, results, gapProvider);
+        } catch {
+          // skip
+        }
       }
     }
 
+    // Phase 2: Check if confidence threshold met for all findings
     const allConfirmed =
       findings.size > 0 &&
       [...findings.values()].every((f) => f.confidence >= confidenceThreshold);
 
     if (allConfirmed) break;
+
+    // If no new findings in this iteration, exit
+    if (iteration > 0 && findings.size === prevFindingsCount) break;
 
     iteration++;
   }
@@ -111,30 +173,49 @@ export async function converge(
     providers_used: [...providersUsed],
     total_sources: findingsArray.reduce((sum, f) => sum + f.sources.length, 0),
     convergence:
-      findingsArray.every((f) => f.confidence >= confidenceThreshold)
+      findingsArray.length > 0 && findingsArray.every((f) => f.confidence >= confidenceThreshold)
         ? "complete"
         : "partial",
   };
 }
 
-function extractClaims(
+function processClaims(
+  findings: Map<string, ConvergenceFinding>,
   results: SearchResult[],
   slug: string
-): Array<{ topic: string; text: string; source: { title: string; url: string; snippet: string } }> {
-  return results.map((r) => ({
-    topic: r.title,
-    text: r.snippet,
-    source: { title: r.title, url: r.url, snippet: r.snippet },
-  }));
+): void {
+  for (const r of results) {
+    const topic = r.title.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+    if (!topic) continue;
+
+    const existing = findings.get(topic);
+    if (!existing) {
+      findings.set(topic, {
+        topic: r.title,
+        claim: r.snippet,
+        confidence: 0.3,
+        verdict: "unverified",
+        sources: [{ title: r.title, url: r.url, snippet: r.snippet }],
+      });
+    } else {
+      const alreadyHasSource = existing.sources.some(
+        (s) => s.url === r.url
+      );
+      if (!alreadyHasSource) {
+        existing.sources.push({ title: r.title, url: r.url, snippet: r.snippet });
+      }
+      existing.confidence = computeConfidence(existing.sources);
+      if (existing.confidence >= 0.5) {
+        existing.verdict = "contested";
+      }
+      if (existing.confidence >= 0.8) {
+        existing.verdict = "confirmed";
+      }
+    }
+  }
 }
 
-function normalizeTopic(topic: string): string {
-  return topic.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-}
-
-type SourceRef = { title: string; url: string; snippet: string };
-
-function computeConfidence(sources: SourceRef[]): number {
+function computeConfidence(sources: Array<{ title: string; url: string; snippet: string }>): number {
   const uniqueDomains = new Set<string>();
   for (const s of sources) {
     try {
@@ -152,13 +233,19 @@ function computeConfidence(sources: SourceRef[]): number {
   return 0.0;
 }
 
-function getVerdict(
-  confidence: number,
+function getGaps(
+  findings: Map<string, ConvergenceFinding>,
   threshold: number
-): "confirmed" | "contested" | "unverified" {
-  if (confidence >= threshold) return "confirmed";
-  if (confidence >= 0.5) return "contested";
-  return "unverified";
+): string[] {
+  return [...findings.entries()]
+    .filter(([, f]) => f.confidence < threshold)
+    .map(([topic]) => topic);
+}
+
+function deriveRefinedQuery(topic: string, originalQuery: string): string {
+  const words = topic.split(/\s+/).filter((w) => w.length > 3);
+  const keywords = words.slice(0, 4).join(" ");
+  return keywords ? `${originalQuery} ${keywords}` : `${originalQuery} ${topic.slice(0, 50)}`;
 }
 
 function buildAgreementMap(

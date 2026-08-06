@@ -1,4 +1,6 @@
 // @implements REQ-030
+import type { Config } from "./types.js";
+
 interface RateLimit {
   perSecond: number;
   lastCall: number;
@@ -14,6 +16,14 @@ export function configureProviderRateLimit(
     perSecond: config.per_second ?? 0,
     lastCall: 0,
   });
+}
+
+export function configureAllProviders(config: Config): void {
+  for (const [slug, provider] of Object.entries(config.providers)) {
+    if (provider.enabled) {
+      configureProviderRateLimit(slug, provider.rate_limit);
+    }
+  }
 }
 
 export async function throttle(slug: string): Promise<void> {

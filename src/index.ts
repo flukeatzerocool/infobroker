@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-031 REQ-032 REQ-040 REQ-041
+// @implements REQ-001 REQ-002 REQ-004 REQ-006 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-040 REQ-041
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadConfig, reloadConfig, getConfig, getEnvVar, getDispatchChain } from "./config.js";
-import { configureProviderRateLimit, throttle } from "./rate-limiter.js";
+import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import {
   duckduckgoSearch,
@@ -26,17 +26,43 @@ import {
   internetArchiveSearch,
   internetArchiveFetchPage,
   internetArchiveHealth,
+  arxivSearch,
+  arxivHealth,
+  semanticScholarSearch,
+  semanticScholarHealth,
+  stackExchangeSearch,
+  stackExchangeHealth,
+  githubSearch,
+  githubHealth,
+  coreSearch,
+  coreHealth,
+  marginaliaSearch,
+  marginaliaHealth,
+  mojeekSearch,
+  mojeekHealth,
+  braveSearch,
+  braveHealth,
+  exaSearch,
+  exaHealth,
+  tavilySearch,
+  tavilyHealth,
+  searxngSearch,
+  searxngHealth,
 } from "./providers/index.js";
 import { retryWithBackoff } from "./retry.js";
 import { converge } from "./converge.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
+const MAX_FALLBACK_DEPTH = 3;
 let totalRequests = 0;
 const requestLatencies: Record<string, number[]> = {};
 
 loadConfig();
+configureAllProviders(getConfig());
 loadQuotaState();
+
+startupHealthCheck();
 
 function trackRequest(provider: string): void {
   totalRequests++;
@@ -90,6 +116,57 @@ function json(data: unknown): string {
   return JSON.stringify(data, null, 2);
 }
 
+async function startupHealthCheck(): Promise<void> {
+  const config = getConfig();
+  const healthFns: Record<string, () => Promise<{ status: string; avgLatencyMs: number }>> = {
+    duckduckgo: duckduckgoHealth,
+    jina: jinaHealth,
+    wikipedia: wikipediaHealth,
+    wiktionary: wiktionaryHealth,
+    wikidata: wikidataHealth,
+    openstreetmap: openstreetmapHealth,
+    internet_archive: internetArchiveHealth,
+    arxiv: arxivHealth,
+    semantic_scholar: semanticScholarHealth,
+    stack_exchange: stackExchangeHealth,
+    github: githubHealth,
+    core: coreHealth,
+    marginalia: marginaliaHealth,
+    mojeek: mojeekHealth,
+    brave: braveHealth,
+    exa: exaHealth,
+    tavily: tavilyHealth,
+    searxng: searxngHealth,
+  };
+
+  for (const [slug, provider] of Object.entries(config.providers)) {
+    if (!provider.enabled) continue;
+    const keyEnv = provider.auth_env;
+    if (keyEnv && !process.env[keyEnv]) {
+      if (provider.tier === "keyed_http") {
+        console.error(`[infobroker] ${slug}: inactive (no_api_key)`);
+        continue;
+      }
+    }
+    const urlEnv = provider.url_env;
+    if (urlEnv && !process.env[urlEnv]) {
+      console.error(`[infobroker] ${slug}: inactive (no_url)`);
+      continue;
+    }
+    const healthFn = healthFns[slug];
+    if (!healthFn) {
+      console.error(`[infobroker] ${slug}: active (no health check available)`);
+      continue;
+    }
+    try {
+      const h = await healthFn();
+      console.error(`[infobroker] ${slug}: ${h.status} (${h.avgLatencyMs}ms)`);
+    } catch {
+      console.error(`[infobroker] ${slug}: inactive (health check failed)`);
+    }
+  }
+}
+
 async function doWebSearch(
   query: string,
   preferredProvider?: string,
@@ -107,13 +184,15 @@ async function doWebSearch(
   }
 
   if (chain.length === 0) {
-    return json(err("none", "config_error", "No active search providers configured", "Check config.json"));
+    return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"] };
   let lastError: ToolErrorResponse | null = null;
+  let depth = 0;
 
   for (const slug of chain) {
+    if (depth >= MAX_FALLBACK_DEPTH) break;
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) continue;
@@ -125,8 +204,6 @@ async function doWebSearch(
       const doCall = async (): Promise<SearchResult[]> => {
         switch (slug) {
           case "duckduckgo":
-          case "marginalia":
-          case "mojeek":
             return await duckduckgoSearch(query, opts);
           case "wikipedia":
             return await wikipediaSearch(query, opts);
@@ -138,6 +215,28 @@ async function doWebSearch(
             return await openstreetmapSearch(query);
           case "internet_archive":
             return await internetArchiveSearch(query);
+          case "arxiv":
+            return await arxivSearch(query);
+          case "semantic_scholar":
+            return await semanticScholarSearch(query);
+          case "stack_exchange":
+            return await stackExchangeSearch(query);
+          case "github":
+            return await githubSearch(query);
+          case "core":
+            return await coreSearch(query);
+          case "marginalia":
+            return await marginaliaSearch(query);
+          case "mojeek":
+            return await mojeekSearch(query);
+          case "brave":
+            return await braveSearch(query);
+          case "exa":
+            return await exaSearch(query);
+          case "tavily":
+            return await tavilySearch(query);
+          case "searxng":
+            return await searxngSearch(query);
           default:
             return await duckduckgoSearch(query, opts);
         }
@@ -147,19 +246,20 @@ async function doWebSearch(
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
       trackRequest(slug);
+      depth++;
 
-      return json(ok(slug, results, {
+      return `[OK] ${json(ok(slug, results, {
         query_time_ms: elapsed,
         fallback_used: lastError !== null,
         quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).remaining,
-      }));
+      }))}`;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
     }
   }
 
-  return json(lastError || err("none", "provider_unavailable", "All providers failed", "Check network connectivity"));
+  return `[ERROR] ${json(lastError || err("none", "provider_unavailable", "All providers failed", "Check network connectivity"))}`;
 }
 
 async function doFetchPage(url: string, renderer?: string): Promise<string> {
@@ -201,23 +301,39 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       trackRequest(slug);
 
       const truncated = maybeTruncate(content, config.output.max_chars);
-      return `[OK] Fetched by ${slug}\n\n${truncated.text}${
-        truncated.truncated ? `\n\n[TRUNCATED] Full content at: ${truncated.outputPath}` : ""
-      }`;
+
+      return `[OK] ${json({
+        status: "ok",
+        provider: slug,
+        results: [{
+          title: new URL(url).hostname,
+          url,
+          snippet: truncated.text,
+        }],
+        meta: {
+          query_time_ms: elapsed,
+          fallback_used: false,
+        },
+        ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
+      })}`;
     } catch {
       // continue to next renderer
     }
   }
 
-  return `[ERROR] [provider_unavailable] All content renderers failed for: ${url}`;
+  return `[ERROR] ${json(err("none", "provider_unavailable", `All content renderers failed for: ${url}`, "Check network connectivity"))}`;
 }
 
 async function doSearchSuggestions(query: string): Promise<string> {
   try {
     const suggestions = await duckduckgoSuggest(query);
-    return `[OK] Suggestions for "${query}":\n${suggestions.map((s) => `- ${s}`).join("\n")}`;
+    return `[OK] ${json({
+      status: "ok",
+      provider: "duckduckgo",
+      results: suggestions.map((s) => ({ title: s, url: "", snippet: s })),
+    })}`;
   } catch (e) {
-    return `[ERROR] [provider_unavailable] ${e instanceof Error ? e.message : String(e)}`;
+    return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later"))}`;
   }
 }
 
@@ -226,12 +342,18 @@ function doChooseProvider(task: string, priority?: string): string {
 
   const taskTypes: Record<string, string[]> = {
     "general_web": ["search", "find", "look up", "research", "information about"],
-    "encyclopedia": ["definition", "what is", "who is", "encyclopedia", "wiki"],
+    "small_web": ["blog", "personal", "non-commercial", "indie", "small web"],
+    "encyclopedia": ["encyclopedia", "wiki"],
+    "definition": ["definition", "define", "meaning", "etymology", "dictionary", "word"],
+    "structured_fact": ["date", "statistic", "identifier", "population", "birth", "death"],
+    "location": ["where is", "location", "map", "address", "city", "place", "geocode"],
     "academic": ["paper", "study", "research paper", "academic", "scholar", "journal", "thesis"],
-    "code": ["code", "programming", "error", "debug", "function", "api", "docs"],
-    "location": ["where is", "location", "map", "address", "city", "place"],
+    "code": ["code", "programming", "error", "debug", "function", "api", "docs", "stack overflow"],
     "news": ["news", "recent", "latest", "today", "current"],
     "archive": ["archive", "historical", "old", "past version"],
+    "semantic": ["like", "similar to", "semantic", "neural", "conceptual"],
+    "synthesis": ["synthesize", "comprehensive", "summarize sources", "rag"],
+    "privacy_critical": ["private", "anonymous", "no tracking", "self-host"],
   };
 
   let matchedType = "general_web";
@@ -245,18 +367,29 @@ function doChooseProvider(task: string, priority?: string): string {
 
   const chain = getDispatchChain(matchedType);
   if (chain.length === 0) {
-    return `[ERROR] [config_error] No active providers for task type: ${matchedType}. Check config.json.`;
+    return `[ERROR] ${json(err("none", "config_error", `No active providers for task type: ${matchedType}`, "Check config.json"))}`;
   }
 
   const recommended = chain[0];
-  const rationale = `Best match for "${matchedType}" task. ${chain.length > 1 ? `Fallback chain: ${chain.slice(1).join(", ")}.` : "No fallback available."}`;
+  const recommendedPct = config.providers[recommended] ? checkQuota(recommended, config.providers[recommended].rate_limit) : null;
+  let effectiveRecommended = recommended;
+  if (recommendedPct?.exhausted) {
+    effectiveRecommended = chain.length > 1 ? chain[1] : recommended;
+  }
+
+  const rationale = `Best match for "${matchedType}" task. ${chain.length > 1 ? `Fallback chain: ${chain.join(", ")}.` : "No fallback available."}`;
 
   return `[OK] ${json({
-    recommended,
-    matched_type: matchedType,
-    rationale,
-    fallback_chain: chain,
-    priority: priority || "quality",
+    status: "ok",
+    provider: effectiveRecommended,
+    results: [],
+    meta: {
+      recommended: effectiveRecommended,
+      matched_type: matchedType,
+      rationale,
+      fallback_chain: chain,
+      priority: priority || "quality",
+    },
   })}`;
 }
 
@@ -264,16 +397,8 @@ function doListProviders(filter?: string): string {
   const config = getConfig();
   const entries = Object.entries(config.providers);
 
-  const filtered = filter
-    ? entries.filter(([, p]) => {
-        if (!p.enabled) return false;
-        try {
-          const keyEnv = p.auth_env ? process.env[p.auth_env] : undefined;
-          return filter === "active" ? true : false;
-        } catch {
-          return filter === "all";
-        }
-      })
+  const filtered = filter === "active"
+    ? entries.filter(([, p]) => p.enabled)
     : entries;
 
   const list = filtered.map(([slug, p]) => {
@@ -291,14 +416,18 @@ function doListProviders(filter?: string): string {
     };
   });
 
-  return `[OK] ${json(list)}`;
+  return `[OK] ${json({
+    status: "ok",
+    provider: "system",
+    results: list,
+  })}`;
 }
 
 function doProviderHealth(provider: string): string {
   const config = getConfig();
   const p = config.providers[provider];
   if (!p) {
-    return `[ERROR] [invalid_input] Provider "${provider}" not found in config. Use list_providers to see available providers.`;
+    return `[ERROR] ${json(err(provider, "invalid_input", `Provider "${provider}" not found in config`, "Use list_providers to see available providers"))}`;
   }
 
   const quota = checkQuota(provider, p.rate_limit);
@@ -318,7 +447,11 @@ function doProviderHealth(provider: string): string {
     auth_ok: authOk,
   };
 
-  return `[OK] ${json(report)}`;
+  return `[OK] ${json({
+    status: "ok",
+    provider,
+    results: [report],
+  })}`;
 }
 
 function doSpecHealth(): string {
@@ -326,13 +459,17 @@ function doSpecHealth(): string {
   const activeCount = Object.entries(config.providers).filter(([, p]) => p.enabled).length;
 
   return `[OK] ${json({
-    build_version: "2026.08.06",
-    provider_count: Object.keys(config.providers).length,
-    active_provider_count: activeCount,
-    uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
-    total_requests_served: totalRequests,
-    quota_state_path: getQuotaStatePath(),
-    config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
+    status: "ok",
+    provider: "system",
+    results: [{
+      build_version: "2026.08.06",
+      provider_count: Object.keys(config.providers).length,
+      active_provider_count: activeCount,
+      uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
+      total_requests_served: totalRequests,
+      quota_state_path: getQuotaStatePath(),
+      config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
+    }],
   })}`;
 }
 
@@ -475,7 +612,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: `[ERROR] [convergence_error] ${e instanceof Error ? e.message : String(e)}`,
+            text: `[ERROR] ${json(err("none", "convergence_error", e instanceof Error ? e.message : String(e), "Retry with different query"))}`,
           },
         ],
       };
@@ -493,14 +630,15 @@ server.registerTool(
   },
   async () => {
     try {
-      reloadConfig();
-      return { content: [{ type: "text" as const, text: "[OK] Configuration reloaded." }] };
+      const newConfig = reloadConfig();
+      configureAllProviders(newConfig);
+      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message: "Configuration reloaded.", provider_count: Object.keys(newConfig.providers).length }] })}` }] };
     } catch (e) {
       return {
         content: [
           {
             type: "text" as const,
-            text: `[ERROR] [config_error] ${e instanceof Error ? e.message : String(e)}. Previous config remains active.`,
+            text: `[ERROR] ${json(err("system", "config_error", (e instanceof Error ? e.message : String(e)) + ". Previous config remains active.", "Fix config.json and retry"))}`,
           },
         ],
       };
@@ -521,6 +659,16 @@ server.registerTool(
     return { content: [{ type: "text" as const, text: content }] };
   }
 );
+
+process.on("SIGHUP", () => {
+  try {
+    const newConfig = reloadConfig();
+    configureAllProviders(newConfig);
+    console.error("[infobroker] Configuration reloaded via SIGHUP");
+  } catch (e) {
+    console.error("[infobroker] SIGHUP reload failed:", e instanceof Error ? e.message : String(e));
+  }
+});
 
 async function main() {
   const transport = new StdioServerTransport();

@@ -29,6 +29,54 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.06 — Full Spec-Compliant Rebuild
+
+- Rate limiting now actually works — all providers are now configured
+  with their per-second intervals at startup, preventing quota exhaustion
+  from runaway requests. (REQ-030)
+
+- HTTP retries now detect transient errors by status code rather than
+  string-matching, so rate-limit responses from Jina Reader, DuckDuckGo,
+  and other providers are properly retried with exponential backoff.
+  (REQ-032)
+
+- Configuration can now be hot-reloaded by sending SIGHUP to the process
+  in addition to the `reload_config` tool, matching the spec's dual-reload
+  requirement. (REQ-006, REQ-040)
+
+- The fallback chain is now capped at three providers deep by default,
+  preventing unbounded provider cascades. (REQ-031)
+
+- Every provider now reports its status at startup, so you can see which
+  backends are reachable before the first query. (REQ-013)
+
+- All nine tools now return the standardized JSON envelope with status,
+  provider, and results fields — `fetch_page`, `search_suggestions`,
+  `choose_provider`, `list_providers`, `provider_health`, `spec_health`,
+  and `reload_config` were previously returning plain text or ad-hoc
+  formats instead of the contracted JSON shape. (REQ-001)
+
+- Eleven new provider backends are now implemented and wired: arXiv,
+  Semantic Scholar, Stack Exchange, GitHub, CORE, Marginalia, Mojeek,
+  Brave Search, Exa, Tavily, and SearXNG. All 18 configured providers
+  have dedicated source files with search and health-check functions.
+  Keyed providers authenticate via their documented env-vars and report
+  inactive when keys are missing.
+
+- The convergence engine was rewritten to match the three-phase algorithm
+  in the specification: broad search across active providers, claim
+  extraction with cross-source reconciliation, and targeted gap refinement
+  with derived queries. Confidence scoring now follows the independent
+  domain-count table. (REQ-026)
+
+- `choose_provider` now recognizes all 13 task types (including small_web,
+  structured_fact, semantic, synthesis, and privacy_critical) and
+  deprioritizes quota-exhausted providers in its recommendations. (REQ-023)
+
+- A DECISIONS.md file documents all architectural choices, provider wiring
+  conventions, and exemption waivers. The AGENTS.md provider table now
+  lists all 18 backends.
+
 ## 2026.08.06 — Spec Authoring & Drift Prevention
 
 - Requirements must now state contracts, not implementations — two new

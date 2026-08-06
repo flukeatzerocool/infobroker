@@ -2,6 +2,7 @@
 import * as cheerio from "cheerio";
 import type { SearchResult, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
+import { RetryableError } from "../retry.js";
 
 const DDG_URL = "https://html.duckduckgo.com/html/";
 const SUGGEST_URL = "https://duckduckgo.com/ac/";
@@ -29,7 +30,7 @@ export async function duckduckgoSearch(
   });
 
   if (!resp.ok) {
-    throw new Error(`DuckDuckGo returned HTTP ${resp.status}`);
+    throw new RetryableError(`DuckDuckGo returned HTTP ${resp.status}`, resp.status);
   }
 
   const html = await resp.text();

@@ -1,6 +1,7 @@
 // @implements REQ-020
 import type { SearchResult } from "../types.js";
 import { normalize } from "../normalizer.js";
+import { RetryableError } from "../retry.js";
 
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 
@@ -18,7 +19,7 @@ export async function wikidataSearch(query: string): Promise<SearchResult[]> {
     headers: { "User-Agent": "Infobroker/1.0" },
   });
 
-  if (!resp.ok) throw new Error(`Wikidata returned HTTP ${resp.status}`);
+  if (!resp.ok) throw new RetryableError(`Wikidata returned HTTP ${resp.status}`, resp.status);
 
   const data = (await resp.json()) as {
     search?: Array<{ id: string; label: string; description?: string }>;

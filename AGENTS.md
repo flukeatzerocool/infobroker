@@ -31,7 +31,17 @@ src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  �
 | Wikidata | `src/providers/wikidata.ts` | free_http | None |
 | OpenStreetMap | `src/providers/openstreetmap.ts` | free_http | None |
 | Internet Archive | `src/providers/internet_archive.ts` | free_http | None |
-| Brave/Exa/Tavily | configured via config.json | keyed_http | `INFOBROKER_<NAME>_API_KEY` |
+| arXiv | `src/providers/arxiv.ts` | free_http | None |
+| Semantic Scholar | `src/providers/semantic_scholar.ts` | free_http | Optional key |
+| Stack Exchange | `src/providers/stack_exchange.ts` | free_http | Optional key |
+| GitHub | `src/providers/github.ts` | free_http | Optional key |
+| CORE | `src/providers/core.ts` | free_http | Optional key |
+| Marginalia | `src/providers/marginalia.ts` | builtin | None (HTML scraping) |
+| Mojeek | `src/providers/mojeek.ts` | builtin | None (HTML scraping) |
+| Brave Search | `src/providers/brave.ts` | keyed_http | `INFOBROKER_BRAVE_API_KEY` |
+| Exa | `src/providers/exa.ts` | keyed_http | `INFOBROKER_EXA_API_KEY` |
+| Tavily | `src/providers/tavily.ts` | keyed_http | `INFOBROKER_TAVILY_API_KEY` |
+| SearXNG | `src/providers/searxng.ts` | self_hosted_http | `INFOBROKER_SEARXNG_URL` |
 
 ## Running
 

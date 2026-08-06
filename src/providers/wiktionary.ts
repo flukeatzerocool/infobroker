@@ -1,6 +1,7 @@
 // @implements REQ-020
 import type { SearchResult } from "../types.js";
 import { normalize } from "../normalizer.js";
+import { RetryableError } from "../retry.js";
 
 const WIKTIONARY_API = "https://en.wiktionary.org/w/api.php";
 
@@ -18,7 +19,7 @@ export async function wiktionarySearch(query: string): Promise<SearchResult[]> {
     headers: { "User-Agent": "Infobroker/1.0" },
   });
 
-  if (!resp.ok) throw new Error(`Wiktionary returned HTTP ${resp.status}`);
+  if (!resp.ok) throw new RetryableError(`Wiktionary returned HTTP ${resp.status}`, resp.status);
 
   const data = (await resp.json()) as {
     query?: { search?: Array<{ title: string; snippet: string; timestamp: string }> };

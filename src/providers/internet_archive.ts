@@ -1,6 +1,7 @@
 // @implements REQ-020 REQ-021
 import type { SearchResult } from "../types.js";
 import { normalize } from "../normalizer.js";
+import { RetryableError } from "../retry.js";
 
 const IA_API = "https://archive.org/wayback/available";
 
@@ -10,7 +11,7 @@ export async function internetArchiveFetchPage(url: string): Promise<string> {
   });
 
   if (!checkResp.ok) {
-    throw new Error(`Internet Archive returned HTTP ${checkResp.status}`);
+    throw new RetryableError(`Internet Archive returned HTTP ${checkResp.status}`, checkResp.status);
   }
 
   const checkData = (await checkResp.json()) as {
@@ -27,7 +28,7 @@ export async function internetArchiveFetchPage(url: string): Promise<string> {
   });
 
   if (!pageResp.ok) {
-    throw new Error(`Internet Archive page fetch returned HTTP ${pageResp.status}`);
+    throw new RetryableError(`Internet Archive page fetch returned HTTP ${pageResp.status}`, pageResp.status);
   }
 
   return pageResp.text();
@@ -38,7 +39,7 @@ export async function internetArchiveSearch(query: string): Promise<SearchResult
     headers: { "User-Agent": "Infobroker/1.0" },
   });
 
-  if (!checkResp.ok) throw new Error(`Internet Archive returned HTTP ${checkResp.status}`);
+  if (!checkResp.ok) throw new RetryableError(`Internet Archive returned HTTP ${checkResp.status}`, checkResp.status);
 
   const checkData = (await checkResp.json()) as {
     archived_snapshots?: { closest?: { timestamp: string; url: string } };

@@ -1,4 +1,6 @@
 // @implements REQ-021
+import { RetryableError } from "../retry.js";
+
 const JINA_BASE = "https://r.jina.ai/";
 
 export async function jinaFetchPage(url: string): Promise<string> {
@@ -10,10 +12,7 @@ export async function jinaFetchPage(url: string): Promise<string> {
   });
 
   if (!resp.ok) {
-    if (resp.status === 429) {
-      throw new Error("Jina rate limited");
-    }
-    throw new Error(`Jina returned HTTP ${resp.status}`);
+    throw new RetryableError(`Jina returned HTTP ${resp.status}`, resp.status);
   }
 
   return resp.text();

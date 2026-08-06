@@ -1,6 +1,7 @@
 // @implements REQ-020
 import type { SearchResult } from "../types.js";
 import { normalize } from "../normalizer.js";
+import { RetryableError } from "../retry.js";
 
 const OSM_API = "https://nominatim.openstreetmap.org/search";
 
@@ -15,7 +16,7 @@ export async function openstreetmapSearch(query: string): Promise<SearchResult[]
     headers: { "User-Agent": "Infobroker/1.0 (MCP search server)" },
   });
 
-  if (!resp.ok) throw new Error(`OpenStreetMap returned HTTP ${resp.status}`);
+  if (!resp.ok) throw new RetryableError(`OpenStreetMap returned HTTP ${resp.status}`, resp.status);
 
   const data = (await resp.json()) as Array<{
     display_name: string;
