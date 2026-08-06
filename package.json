@@ -11,6 +11,9 @@
     "validate-spec": "npx tsx scripts/validate-spec.ts",
     "validate-readme": "npx tsx scripts/validate-readme.ts",
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",
+    "version-bump": "npx tsx scripts/version-bump.ts",
+    "version-sync": "npx tsx scripts/version-check.ts",
+    "push": "npx tsx scripts/push.ts",
     "check": "npm run typecheck && npm run validate-spec && npm run validate-readme"
   },
   "keywords": ["search", "research", "mcp", "infobroker"],

@@ -241,6 +241,9 @@ Last researched: August 6, 2026.
 - `npm install && npm run typecheck`
 - Bundle your own skill in `skills/` to extend the research pipeline.
 - Validate README structure: `npm run validate-readme`
+- **Versioning:** CalVer (`YYYY.MM.DD`). `npm run version-bump` stamps
+  today's date into all version references. Pre-commit hooks verify
+  consistency. `npm run push` checks, tags, and pushes.
 - MCP protocol: [modelcontextprotocol.io](https://modelcontextprotocol.io)
 - Providers: [DuckDuckGo](https://duckduckgo.com) ·
   [Jina Reader](https://jina.ai/reader) ·

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: node is required to run pre-commit checks but was not found in PATH"
+    exit 1
+fi
+
+echo "Running pre-commit checks (npm run version-sync && npm run check)..."
+npm run version-sync
+npm run check

@@ -1,0 +1,60 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, "..");
+
+function today(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}.${m}.${dd}`;
+}
+
+const version = today();
+
+function replaceInFile(filePath: string, pattern: RegExp, replacement: string, label: string): boolean {
+  const content = readFileSync(filePath, "utf-8");
+  if (!content.match(pattern)) {
+    console.error(`  FAIL  ${label}: pattern not found`);
+    return false;
+  }
+  const updated = content.replace(pattern, replacement);
+  writeFileSync(filePath, updated);
+  console.log(`  OK   ${label}: → ${version}`);
+  return true;
+}
+
+let ok = true;
+
+const pkgPath = join(root, "package.json");
+const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+pkg.version = version;
+writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+console.log(`  OK   package.json: → ${version}`);
+
+const indexPath = join(root, "src", "index.ts");
+
+ok = replaceInFile(
+  indexPath,
+  /(build_version:\s*)"[^"]*"/,
+  `$1"${version}"`,
+  "src/index.ts build_version"
+) && ok;
+
+ok = replaceInFile(
+  indexPath,
+  /(version:\s*)"[^"]*"/,
+  `$1"${version}"`,
+  "src/index.ts McpServer version"
+) && ok;
+
+if (!ok) {
+  console.error("\nVersion bump FAILED.");
+  process.exit(1);
+}
+
+console.log(`\nAll version references bumped to ${version}.`);
+process.exit(0);

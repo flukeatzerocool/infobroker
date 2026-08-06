@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: node is required to run pre-push checks but was not found in PATH"
+    exit 1
+fi
+
+echo "Running pre-push checks..."
+echo "  version sync..."
+npx tsx scripts/version-check.ts
+
+echo "  spec checks (typecheck, spec, readme)..."
+npm run check
+
+echo "Pre-push checks passed."
