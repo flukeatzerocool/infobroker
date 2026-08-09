@@ -11,6 +11,7 @@ unified tool surface. Its design goals:
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
 4. **Truth by iteration.** A `converge` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
 5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, fact-checking, and proofreading.
+6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
 Infobroker is not a chatbot. It is a search backend. It complements (not replaces)
 built-in client `websearch`/`webfetch` tools — the bundled client instructions
@@ -30,6 +31,8 @@ route to Infobroker first, falling back to built-ins only on error.
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
 | F8 | Convergence loop stalls | `converge` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
+| F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
+| F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. `kb_stats` reports the event. |
 
 ---
 
@@ -37,7 +40,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ### Architectural Invariants
 
-- **SR-001 Outbound by design.** Infobroker makes outbound HTTP requests. There is no local data source.
+- **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
 - **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `provider_health` responses.
 - **SR-004 Zero-config works.** DuckDuckGo (in-process scraping) + Jina Reader + Wikipedia + Wiktionary + Internet Archive all require no API key and provide a functional default.
@@ -99,6 +102,9 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `choose_provider` |
 | **Convergence** | The multi-pass truth-finding loop in `converge` |
 | **Synthesis** | The container format that presents search findings to writing skills |
+| **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
+| **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
+| **Vector store** | The local database that indexes chunks by their embedding vectors and supports semantic (vector similarity) and keyword (full-text) retrieval. |
 
 ---
 
@@ -205,7 +211,7 @@ configuration active without interruption. _Check:_ G1.
 The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned. _Check:_ G1.
 
 **REQ-041 — `spec_health`**
-Build health report. Returns: `build_version`, `provider_count`, `active_provider_count`, `uptime_seconds`, `total_requests_served`, `quota_state_path`, `config_path`. _Check:_ G0, G1.
+Build health report. Returns the operational status of the server: build identity (version), provider summary (count, active count), uptime, cumulative request count, and paths to persistent state files. _Check:_ G0, G1.
 
 ### 4.6 Client Artifacts
 
@@ -235,6 +241,40 @@ with an implementation must be cited, and every source file must cite at least
 one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
 REQs (§4.6, verified by file presence) are exempt. _Check:_ G3.
 
+### 4.8 Knowledge Base
+
+**REQ-060 — `kb_search`**
+
+Semantic and keyword hybrid search over the local knowledge base. Parameters: `query` (required), `max_results` (default 10, max 50), `collection` (optional — scope search to one collection), `source_type` (optional — filter by the origin of the indexed content). Returns chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, and matching snippet. If the knowledge base is not initialized, returns error with remediation. Returns zero results when the KB is empty or no matches are found. _Check:_ G0, G1.
+
+**REQ-061 — `kb_ingest`**
+
+Explicit ingestion of content into the knowledge base. Parameters: `text` (optional — raw text to chunk and index), `url` (optional — a URL to fetch and index using the default content renderer per REQ-021), `title` (optional), `collection` (optional). At least one of `text` or `url` must be provided. When `url` is given, the server fetches the page content before indexing; a fetch failure returns an error. Returns the number of chunks ingested and the source identifier. _Check:_ G0, G1.
+
+**REQ-062 — `kb_stats`**
+
+Knowledge base operational metrics. No required parameters. Returns: total chunk count, collection names and their chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage corruption recovery. _Check:_ G0, G1.
+
+**REQ-063 — `kb_delete`**
+
+Remove content from the knowledge base. Parameters: `collection` (optional), `source_url` (optional). At least one filter must be provided. If no filter is provided, the tool returns an error. Returns the count of removed chunks. _Check:_ G0, G1.
+
+**REQ-064 — Auto-Indexing**
+
+Search results from `web_search`, rendered page content from `fetch_page`, and findings from `converge` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be togglable via configuration. _Check:_ G1.
+
+**REQ-065 — Collection Scoping**
+
+A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any KB tool call that omits the `collection` parameter SHALL resolve in order: the tool-provided parameter, the `INFOBROKER_KB_COLLECTION` environment variable, the configured default collection name, and finally the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
+
+**REQ-066 — Content Expiry**
+
+Indexed content SHALL be removable by age. Expiry intervals SHALL be configurable independently per source type. On server startup and at a configurable maintenance interval, content whose age exceeds the expiry interval for its source type SHALL be removed. Source types configured with a zero or absent expiry interval SHALL never expire. _Check:_ G1.
+
+**REQ-067 — Knowledge Base Configuration**
+
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, per-source-type content expiry intervals, and maximum results per query. If the knowledge base configuration section is absent or invalid, all KB tools SHALL return an error with remediation. Config reload SHALL apply KB configuration changes per REQ-040. _Check:_ G1.
+
 ---
 
 ## §5 Build Process
@@ -253,12 +293,16 @@ REQs (§4.6, verified by file presence) are exempt. _Check:_ G3.
 ```
 Layer 3: Tools                 web_search, fetch_page, converge, choose_provider,
                                list_providers, provider_health, search_suggestions,
-                               reload_config, spec_health
+                               reload_config, spec_health,
+                               kb_search, kb_ingest, kb_stats, kb_delete
 
 Layer 2: Provider Backends     ddg, marginalia, mojeek, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
                                github, jina, internet_archive, exa, tavily
+
+Layer 1.5: Knowledge Base      Chunking, embedding generation, vector store,
+                               auto-indexing hooks, collection scoping, expiry
 
 `native_fetch` (content fallback) is implemented inline in the `fetch_page`
 tool handler rather than as a standalone provider file; it has no health
@@ -298,6 +342,7 @@ Free HTTP → `free_http`, Self-hosted HTTP → `self_hosted_http`, Keyed HTTP �
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
 7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
 8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
+9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `converge`, KB MCP tools (`kb_search`, `kb_ingest`, `kb_stats`, `kb_delete`), content expiry maintenance loop.
 
 ### 5.5 Convergence Quality (Single Phase)
 
@@ -318,7 +363,8 @@ responses. The convergence loop validates against:
 
 All tools use `snake_case`. Tool names are domain terminology: `web_search`,
 `fetch_page`, `search_suggestions`, `choose_provider`, `list_providers`,
-`provider_health`, `converge`, `reload_config`, `spec_health`.
+`provider_health`, `converge`, `reload_config`, `spec_health`, `kb_search`,
+`kb_ingest`, `kb_stats`, `kb_delete`.
 
 ### 6.2 Output Format
 
@@ -514,6 +560,13 @@ pages are not).
   and cross-reference against the REQ manifest in this specification. Report
   any REQ with zero citations (excluding §4.6 artifact REQs) as unimplemented;
   report any source file without citations as undocumented.
+- KB search: mock vector store with known embeddings; query → verify results ranked by relevance
+- KB ingestion: provide text content → verify chunks created and stored
+- KB deletion: add content then issue delete → verify correct count removed
+- KB auto-indexing: execute `web_search` with mock provider → verify store received results after response
+- KB collection scoping: insert content into two collections → query scoped to one → verify only scoped results returned
+- KB expiry: insert content with past timestamp → trigger maintenance → verify expired content removed; verify non-expired content retained
+- KB config validation: provide invalid KB config section → verify `kb_search` returns config error
 
 ### 9.3 G2 — Live Smoke Tests (Optional)
 
@@ -562,6 +615,8 @@ infobroker/
 │       ├── code-review/SKILL.md           # Evaluate code solutions
 │       └── translation/SKILL.md           # Multilingual output
 ├── README.md                              # Setup, config, integration (future)
+├── ~/.local/share/infobroker/
+│   └── knowledge-base/                     # Vector store (created at runtime)
 ├── DECISIONS.md                           # Implementation decisions (future)
 └── AGENTS.md                              # Code map for AI maintainers (future)
 ```

@@ -487,7 +487,7 @@ function doSpecHealth(): string {
     status: "ok",
     provider: "system",
     results: [{
-      build_version: "2026.08.08",
+      build_version: "2026.08.09",
       provider_count: Object.keys(config.providers).length,
       active_provider_count: activeCount,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
@@ -500,7 +500,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.08",
+  version: "2026.08.09",
 });
 
 // --- web_search ---

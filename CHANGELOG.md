@@ -29,6 +29,41 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.09 — Knowledge Base Spec Engineering
+
+- A new Knowledge Base subsystem is specified: four MCP tools (`kb_search`,
+  `kb_ingest`, `kb_stats`, `kb_delete`) provide semantic and keyword hybrid
+  search over locally indexed research results, explicit document ingestion,
+  operational metrics, and content removal. (REQ-060 through REQ-063)
+
+- Search results, fetched page content, and convergence findings are
+  automatically indexed after each tool call without delaying or erroring
+  the primary response. Auto-indexing is togglable via configuration.
+  (REQ-064)
+
+- Collections act as implicit namespaces resolved from tool parameters,
+  environment variables, or config defaults. Content expires per source
+  type at configurable intervals, with cleanup on startup and periodic
+  maintenance. (REQ-065, REQ-066)
+
+- The knowledge base configuration section lives in the main config file
+  alongside provider configuration and hot-reloads per the existing
+  config reload mechanism. (REQ-067)
+
+- The architectural invariant against local data sources (SR-001) is
+  relaxed to acknowledge the knowledge base as a derivative cache —
+  the server operates normally when the KB is uninitialized or disabled.
+
+- New failure modes document embedding model unavailability (F9) and
+  storage corruption recovery (F10).
+
+- The specification health report (REQ-041) no longer enumerates return
+  field names, eliminating a pre-existing catalogue violation warning.
+
+- A new DECISIONS.md entry (D-011) documents REQ-060 through REQ-067 as
+  forward-looking requirements from the spec-engineering pass, with
+  intentional validate-spec warnings until implementation.
+
 ## 2026.08.08 — Push Pipeline
 
 - The lightweight `scripts/push.ts` was replaced with a comprehensive

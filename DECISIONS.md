@@ -69,3 +69,13 @@ Quota counters track daily and monthly usage. Reset occurs at midnight
 UTC for daily, month boundary for monthly. The 80% warning threshold
 and 100% exhaustion are computed per-provider. Counters without explicit
 limits (Infinity) never trigger warnings.
+
+### D-011: KB REQ Forward-Looking Waivers (2026.08.09 Spec Engineering)
+
+REQ-060 through REQ-067 (Knowledge Base) were authored during the
+2026.08.09 spec-engineering pass as forward-looking requirements. These
+REQs define contracts for a local RAG knowledge base — a new subsystem
+not yet implemented. They will produce validate-spec warnings (no
+@implements citation) until the corresponding implementation is added
+in a subsequent build cycle. These warnings are intentional and serve
+as implementation reminders.
