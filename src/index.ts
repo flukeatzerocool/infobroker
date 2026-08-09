@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-040 REQ-041
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -56,7 +56,7 @@ import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse
 const START_TIME = Date.now();
 const MAX_FALLBACK_DEPTH = 3;
 let totalRequests = 0;
-const requestLatencies: Record<string, number[]> = {};
+const requestLatencies: Record<string, { latencies: number[]; timestamps: number[] }> = {};
 
 loadConfig();
 configureAllProviders(getConfig());
@@ -64,17 +64,28 @@ loadQuotaState();
 
 startupHealthCheck();
 
-function trackRequest(provider: string): void {
+function trackRequest(provider: string, latencyMs: number): void {
   totalRequests++;
+  const config = getConfig();
+  const windowSize = config.output.latency_window_size ?? 100;
+
   if (!requestLatencies[provider]) {
-    requestLatencies[provider] = [];
+    requestLatencies[provider] = { latencies: [], timestamps: [] };
+  }
+  const entry = requestLatencies[provider];
+  entry.latencies.push(latencyMs);
+  entry.timestamps.push(Date.now());
+
+  while (entry.latencies.length > windowSize) {
+    entry.latencies.shift();
+    entry.timestamps.shift();
   }
 }
 
 function avgLatency(provider: string): number {
-  const lats = requestLatencies[provider];
-  if (!lats || lats.length === 0) return 0;
-  return lats.reduce((a, b) => a + b, 0) / lats.length;
+  const entry = requestLatencies[provider];
+  if (!entry || entry.latencies.length === 0) return 0;
+  return entry.latencies.reduce((a, b) => a + b, 0) / entry.latencies.length;
 }
 
 function ok(provider: string, results: SearchResult[], meta: Record<string, unknown> = {}): ToolOkResponse {
@@ -241,11 +252,19 @@ async function doWebSearch(
             return await duckduckgoSearch(query, opts);
         }
       };
-      results = await retryWithBackoff(doCall, slug);
+      const timeoutMs = config.providers[slug]?.timeout ?? 15000;
+      const timedCall = async (): Promise<SearchResult[]> =>
+        Promise.race([
+          doCall(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ]);
+      results = await retryWithBackoff(timedCall, slug);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
-      trackRequest(slug);
+      trackRequest(slug, elapsed);
       depth++;
 
       return `[OK] ${json(ok(slug, results, {
@@ -291,16 +310,22 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       };
       let content: string;
       try {
-        content = await retryWithBackoff(doCall, slug);
+        const timeoutMs = config.providers[slug]?.timeout ?? 15000;
+        const timedCall = async (): Promise<string> =>
+          Promise.race([
+            doCall(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
+            ),
+          ]);
+        content = await retryWithBackoff(timedCall, slug);
       } catch {
         continue;
       }
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
-      trackRequest(slug);
-
-      const truncated = maybeTruncate(content, config.output.max_chars);
+      trackRequest(slug, elapsed);      const truncated = maybeTruncate(content, config.output.max_chars);
 
       return `[OK] ${json({
         status: "ok",
@@ -462,7 +487,7 @@ function doSpecHealth(): string {
     status: "ok",
     provider: "system",
     results: [{
-      build_version: "2026.08.06",
+      build_version: "2026.08.08",
       provider_count: Object.keys(config.providers).length,
       active_provider_count: activeCount,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
@@ -475,7 +500,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.06",
+  version: "2026.08.08",
 });
 
 // --- web_search ---

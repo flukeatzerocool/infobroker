@@ -16,6 +16,7 @@ export interface ProviderConfig {
   url_env?: string;
   enabled: boolean;
   priority: number;
+  timeout?: number;
 }
 
 export interface Config {
@@ -28,6 +29,7 @@ export interface Config {
   };
   output: {
     max_chars: number;
+    latency_window_size?: number;
   };
 }
 

@@ -25,7 +25,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F1 | Provider API down | Timeout, HTTP 5xx | Fallback chain advances to next provider |
 | F2 | DuckDuckGo HTML scraping breaks | Zero results, parse errors | Scraped providers extract results via CSS selectors targeting known HTML layouts. Upstream layout changes cause selector mismatch (zero results extracted), which advances the fallback chain per REQ-031. Provider restoration requires a build update with corrected selectors. |
 | F3 | API key misconfiguration | HTTP 401/403 from keyed provider | ProviderHealth reports auth status; server skips unauthenticated providers |
-| F4 | Result format inconsistency | Null fields, unexpected types | Normalizer coerces all providers to a single JSON shape; unknown fields dropped |
+| F4 | Result format inconsistency | Null fields, unexpected types | normalizer coerces all providers to a single JSON shape; unknown fields dropped |
 | F5 | MCP protocol errors | tools/list returns wrong schema | G0 conformance gate catches schema drift |
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
@@ -46,7 +46,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-007 Rate limit state persists.** Quota counters survive restarts via a JSON state file.
 - **SR-008 Convergence is bounded.** `converge` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
 - **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
-- **SR-010 All tool input is validated server-side before any outbound call. Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
+- **SR-010 All tool input is validated server-side before any outbound call.** Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
 
 - **SR-011 Contracts, not implementations.** Requirements state what the server
   must do. The verification gates (§9) enforce quality — do not prescribe how
@@ -113,15 +113,15 @@ Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or 
 Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Unknown errors default to `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
-All providers SHALL return results in a common shape: `{title, url, snippet, published_date?, source_type?}`. The normalizer strips provider-specific fields and maps common equivalents. Unknown fields are dropped with a debug-level log. _Check:_ G1.
+All providers SHALL return results in a common shape: `{title, url, snippet, published_date?, source_type?}`. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
 **REQ-004 — Truncation**
-Tool outputs longer than the configured max (default 50k chars) SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
+Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
 
 ### 4.2 Provider Configuration
 
 **REQ-010 — Config File**
-Provider configuration SHALL reside in a JSON file at a path specified by `INFOBROKER_CONFIG` env var (default: `./config.json` in the project root). The config declares each provider's type, auth, rate limits, and priority. _Check:_ G1.
+Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The config declares each provider's type, auth, rate limits, and priority. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
 API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `provider_health` responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
@@ -167,13 +167,13 @@ fields from the provider's rate_limit configuration. Throttling is governed by
 operate independently.
 
 **REQ-030 — Per-Provider Throttling**
-Each provider SHALL enforce a configurable minimum interval between requests (default: DuckDuckGo 3s, others 1s). The throttle is scoped per-provider, not global. Interval is configurable in `config.json`. _Check:_ G1.
+Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain is ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain is configurable per task type. Default max depth: 3 providers. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain depth limit SHALL be configurable per task type. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
-Providers SHALL retry on transient errors (HTTP 429, 503) with exponential backoff: 1s, 2s, 4s. Maximum 3 retries per provider. After 3 failures, advance to next in fallback chain. _Check:_ G1.
+Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
 
 **REQ-033 — Persistent Quota Tracking**
 Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counters SHALL be written to disk after every quota increment. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). This survives restarts. _Check:_ G1.

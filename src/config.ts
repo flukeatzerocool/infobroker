@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-040
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040
 import { readFileSync, existsSync } from "node:fs";
 import type { Config, ProviderConfig } from "./types.js";
 
@@ -12,20 +12,71 @@ export function getConfigPath(): string {
   return configPath;
 }
 
-export function loadConfig(): Config {
+function loadConfigFromDisk(): Config {
   const path = getConfigPath();
   if (!existsSync(path)) {
     throw new Error(`Config file not found: ${path}`);
   }
   const raw = readFileSync(path, "utf-8");
-  const config = JSON.parse(raw) as Config;
+  return JSON.parse(raw) as Config;
+}
+
+function validateConfig(config: Config): void {
+  const errors: string[] = [];
+
+  for (const [slug, provider] of Object.entries(config.providers)) {
+    if (!provider.type || typeof provider.type !== "string") {
+      errors.push(`Provider "${slug}": missing or invalid "type"`);
+    }
+    if (!provider.tier || !["builtin", "free_http", "keyed_http", "self_hosted_http"].includes(provider.tier)) {
+      errors.push(`Provider "${slug}": missing or invalid "tier"`);
+    }
+    if (!Array.isArray(provider.capabilities)) {
+      errors.push(`Provider "${slug}": missing or invalid "capabilities"`);
+    }
+    if (typeof provider.enabled !== "boolean") {
+      errors.push(`Provider "${slug}": missing or invalid "enabled"`);
+    }
+    if (typeof provider.priority !== "number") {
+      errors.push(`Provider "${slug}": missing or invalid "priority"`);
+    }
+    if (provider.rate_limit) {
+      for (const [key, value] of Object.entries(provider.rate_limit)) {
+        if (typeof value === "number" && value < 0) {
+          errors.push(`Provider "${slug}": rate_limit.${key} must be non-negative`);
+        }
+      }
+    }
+    if (provider.timeout !== undefined && (typeof provider.timeout !== "number" || provider.timeout < 0)) {
+      errors.push(`Provider "${slug}": timeout must be a non-negative number`);
+    }
+  }
+
+  for (const [taskType, chain] of Object.entries(config.dispatch)) {
+    for (const slug of chain) {
+      if (!config.providers[slug]) {
+        errors.push(`Dispatch chain "${taskType}" references undeclared provider "${slug}"`);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Config validation failed:\n${errors.join("\n")}`);
+  }
+}
+
+export function loadConfig(): Config {
+  const config = loadConfigFromDisk();
+  validateConfig(config);
   cachedConfig = config;
   return config;
 }
 
 export function reloadConfig(): Config {
-  cachedConfig = null;
-  return loadConfig();
+  const newConfig = loadConfigFromDisk();
+  validateConfig(newConfig);
+  cachedConfig = newConfig;
+  return newConfig;
 }
 
 export function getConfig(): Config {

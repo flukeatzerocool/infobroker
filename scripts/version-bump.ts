@@ -46,7 +46,7 @@ ok = replaceInFile(
 
 ok = replaceInFile(
   indexPath,
-  /(version:\s*)"[^"]*"/,
+  /(\bversion:\s*)"[^"]*"/,
   `$1"${version}"`,
   "src/index.ts McpServer version"
 ) && ok;

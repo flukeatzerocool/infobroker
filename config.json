@@ -6,7 +6,8 @@
       "capabilities": ["web_search", "suggest"],
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
-      "priority": 10
+      "priority": 10,
+      "timeout": 10000
     },
     "jina": {
       "type": "free_http",
@@ -14,7 +15,8 @@
       "capabilities": ["content_fetch"],
       "rate_limit": { "per_second": 1 },
       "enabled": true,
-      "priority": 10
+      "priority": 10,
+      "timeout": 15000
     },
     "wikipedia": {
       "type": "free_http",
@@ -22,7 +24,8 @@
       "capabilities": ["encyclopedia"],
       "rate_limit": { "per_second": 5 },
       "enabled": true,
-      "priority": 20
+      "priority": 20,
+      "timeout": 10000
     },
     "wiktionary": {
       "type": "free_http",
@@ -30,7 +33,8 @@
       "capabilities": ["encyclopedia", "definition"],
       "rate_limit": { "per_second": 5 },
       "enabled": true,
-      "priority": 20
+      "priority": 20,
+      "timeout": 10000
     },
     "wikidata": {
       "type": "free_http",
@@ -38,7 +42,8 @@
       "capabilities": ["structured_fact"],
       "rate_limit": { "per_second": 5 },
       "enabled": true,
-      "priority": 20
+      "priority": 20,
+      "timeout": 10000
     },
     "openstreetmap": {
       "type": "free_http",
@@ -46,7 +51,8 @@
       "capabilities": ["location"],
       "rate_limit": { "per_second": 1 },
       "enabled": true,
-      "priority": 20
+      "priority": 20,
+      "timeout": 10000
     },
     "internet_archive": {
       "type": "free_http",
@@ -54,7 +60,8 @@
       "capabilities": ["archive"],
       "rate_limit": { "per_second": 1 },
       "enabled": true,
-      "priority": 20
+      "priority": 20,
+      "timeout": 15000
     },
     "arxiv": {
       "type": "free_http",
@@ -62,7 +69,8 @@
       "capabilities": ["academic"],
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
-      "priority": 15
+      "priority": 15,
+      "timeout": 15000
     },
     "semantic_scholar": {
       "type": "free_http",
@@ -71,7 +79,8 @@
       "rate_limit": { "per_second": 1 },
       "auth_env": "INFOBROKER_SEMANTIC_SCHOLAR_API_KEY",
       "enabled": true,
-      "priority": 25
+      "priority": 25,
+      "timeout": 10000
     },
     "stack_exchange": {
       "type": "free_http",
@@ -80,7 +89,8 @@
       "rate_limit": { "per_second": 0.003 },
       "auth_env": "INFOBROKER_STACK_EXCHANGE_API_KEY",
       "enabled": true,
-      "priority": 15
+      "priority": 15,
+      "timeout": 10000
     },
     "github": {
       "type": "free_http",
@@ -89,7 +99,8 @@
       "rate_limit": { "per_second": 0.017 },
       "auth_env": "INFOBROKER_GITHUB_API_KEY",
       "enabled": true,
-      "priority": 15
+      "priority": 15,
+      "timeout": 10000
     },
     "core": {
       "type": "free_http",
@@ -98,7 +109,8 @@
       "rate_limit": { "per_second": 1 },
       "auth_env": "INFOBROKER_CORE_API_KEY",
       "enabled": true,
-      "priority": 15
+      "priority": 15,
+      "timeout": 10000
     },
     "marginalia": {
       "type": "scraped",
@@ -106,7 +118,8 @@
       "capabilities": ["web_search", "small_web"],
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
-      "priority": 5
+      "priority": 5,
+      "timeout": 30000
     },
     "mojeek": {
       "type": "scraped",
@@ -114,7 +127,8 @@
       "capabilities": ["web_search"],
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
-      "priority": 5
+      "priority": 5,
+      "timeout": 30000
     },
     "brave": {
       "type": "keyed_http",
@@ -123,7 +137,8 @@
       "rate_limit": { "per_month": 2000 },
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "timeout": 10000
     },
     "exa": {
       "type": "keyed_http",
@@ -132,7 +147,8 @@
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_EXA_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "timeout": 10000
     },
     "tavily": {
       "type": "keyed_http",
@@ -141,7 +157,8 @@
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_TAVILY_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "timeout": 10000
     },
     "searxng": {
       "type": "self_hosted_http",
@@ -150,7 +167,8 @@
       "rate_limit": {},
       "url_env": "INFOBROKER_SEARXNG_URL",
       "enabled": false,
-      "priority": 40
+      "priority": 40,
+      "timeout": 10000
     },
     "native_fetch": {
       "type": "builtin",
@@ -158,7 +176,8 @@
       "capabilities": ["content_fetch"],
       "rate_limit": {},
       "enabled": true,
-      "priority": 1
+      "priority": 1,
+      "timeout": 30000
     }
   },
   "dispatch": {
@@ -183,6 +202,7 @@
     "confidence_threshold": 0.8
   },
   "output": {
-    "max_chars": 50000
+    "max_chars": 50000,
+    "latency_window_size": 100
   }
 }
