@@ -41,6 +41,16 @@ generated/maintained manually: `instructions/search-preferences.md`,
 `skills/infobroker/SKILL.md`, `skills/infobroker/references/*.md`,
 `vendor/opencode-skills/*/SKILL.md`, and `README.md`.
 
+### D-010: Spec-First REQ Waivers (2026.08.08 Spec Engineering)
+
+REQ-035 (Request Timeout), REQ-036 (Latency Tracking Window), and
+REQ-037 (Config Validation) were authored during the 2026.08.08
+spec-engineering pass as forward-looking requirements. These REQs define
+contracts for behavior not yet implemented — they will produce
+validate-spec warnings (no @implements citation) until the corresponding
+implementation is added in a subsequent build cycle. These warnings are
+intentional and serve as implementation reminders.
+
 ### D-007: No Explicit Provider Plugin Interface
 Each provider exports standalone functions matching the same signature
 convention (`search`, `fetchPage`, `health`) rather than implementing

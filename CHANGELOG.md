@@ -29,6 +29,111 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.08 — Push Pipeline
+
+- The lightweight `scripts/push.ts` was replaced with a comprehensive
+  `scripts/push-pipeline.sh` that runs a 9-step gate before pushing:
+  pre-flight checks, spec audit, spec read-through with proofreading,
+  server sync against the spec, provider auth doc regeneration, final
+  typecheck gate, dead-data scan, and README/reference refresh before
+  committing, tagging, and pushing.
+
+## 2026.08.08 — Cross-cutting Infrastructure Spec Engineering
+
+- A new requirement mandates config validation on load and reload:
+  the server must reject configs with missing provider fields, dispatch
+  chains referencing nonexistent providers, or invalid rate-limit values.
+  Invalid configs on reload leave the previous config active. (REQ-037)
+
+- Quota persistence timing is now explicit: counters are written to disk
+  after every quota increment, matching the synchronous-per-request
+  implementation strategy. (REQ-033)
+
+- The unused `perHour` field was removed from the Provider interface in
+  §5.3. It existed in the type definition but was never consumed by
+  rate-limiting or quota-tracking code.
+
+- A rate-limit field ownership note was added to §4.4: `per_second`
+  governs throttling (REQ-030); `per_day` and `per_month` govern quota
+  (REQ-033/034). Previously this split was discoverable only by reading
+  the source.
+
+- A new DECISIONS.md entry (D-010) documents REQ-035, REQ-036, and
+  REQ-037 as forward-looking requirements from the spec-engineering pass,
+  explaining the intentional validate-spec warnings.
+
+## 2026.08.08 — Provider Backends Spec Engineering
+
+- The failure-mode table (F2) now accurately describes scraped provider
+  architecture: results are extracted via CSS selectors that break on
+  upstream HTML changes, with fallback chain advancement per REQ-031
+  providing recovery. The previous "parsed defensively" claim did not
+  reflect the single-path selector implementation.
+
+- The Provider interface in §5.3 now reflects the actual health-function
+  return type (`{ status, avgLatencyMs }`) rather than the full
+  `HealthReport` type, which is assembled in the skeleton layer. This
+  resolves a documented spec-code mismatch.
+
+- REQ-020 (web_search) now defines the contract for unsupported parameters:
+  providers must accept all parameters silently, ignoring those they don't
+  support. The server is responsible for enforcing `max_results` by
+  post-filtering when the underlying provider ignores it.
+
+- `native_fetch` was removed from the §5.2 Layer 2 provider list and
+  documented as an inline implementation in the `fetch_page` tool handler.
+  It had no provider file, no health check, and no rate limiting — the
+  only "provider" that wasn't one.
+
+## 2026.08.08 — MCP Skeleton Spec Engineering
+
+- A new requirement mandates per-provider request timeouts: calls that
+  exceed the timeout are treated as transient failures and advance the
+  fallback chain. Previously, a hung provider could stall a tool call
+  indefinitely. (REQ-035)
+
+- Provider latency metrics must now be computed over a bounded,
+  configurable time window rather than unbounded all-time accumulation —
+  preventing stale averages from misleading health reports over long
+  uptimes. (REQ-036)
+
+- SR-005 was amended from "providers are plugins" to "providers are
+  standalone modules" to match the current architecture (standalone
+  functions wired via switch statement). This resolves a documented
+  spec-code gap (see DECISIONS.md D-002, D-007).
+
+- SR-010 was strengthened to define what "validated" means: structural
+  checks (type, range, format, URL well-formedness) on every input field
+  before any outbound request is dispatched.
+
+## 2026.08.08 — Spec Hygiene: Code Review Remediation
+
+- A stale REQ-006 citation was removed from `src/index.ts` — the SIGHUP
+  reload behavior it referenced was absorbed into SR-006 and REQ-040.
+  (SR-006, REQ-040)
+
+- The `fetch_page` tool's `renderer` parameter now lists all four supported
+  renderers (`jina`, `native_fetch`, `wikipedia`, `internet_archive`) and
+  uses the correct `native_fetch` slug matching the zod schema. (REQ-021)
+
+- SR-011 now explicitly exempts tool-parameter signatures from the
+  "no parameter types or defaults" rule — parameter names, required/optional
+  status, and default values define the tool's external contract and are
+  part of the *what*, not the *how*. Algorithm descriptions and internal
+  mechanics remain prohibited.
+
+- Every REQ in §4 now ends with a `_Check:` citation referencing its
+  verification gate (G0, G1, G3), in accordance with Appendix B's REQ
+  anatomy convention. REQ-055's `_Check: T55` was updated to `_Check: G3`.
+
+- A provider tier naming map was added after §5.3, documenting the mapping
+  between human-readable tier names (Built-in, Free HTTP, etc.) and their
+  code identifiers (`builtin`, `free_http`, etc.).
+
+- Build Phase 3 was renamed from "Keyed Providers" to "Registration-tier
+  & Keyed Providers" to accurately reflect that Semantic Scholar, Stack
+  Exchange, GitHub, and CORE have free unauth tiers.
+
 ## 2026.08.06 — Auth Derivation from Config
 
 - Provider auth requirements are now derived from `config.json` rather than
@@ -60,7 +165,7 @@
 
 - Configuration can now be hot-reloaded by sending SIGHUP to the process
   in addition to the `reload_config` tool, matching the spec's dual-reload
-  requirement. (REQ-006, REQ-040)
+  requirement. (SR-006, REQ-040)
 
 - The fallback chain is now capped at three providers deep by default,
   preventing unbounded provider cascades. (REQ-031)

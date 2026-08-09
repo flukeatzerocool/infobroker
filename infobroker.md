@@ -23,7 +23,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | ID | Failure | Symptoms | Mitigation |
 |----|---------|----------|------------|
 | F1 | Provider API down | Timeout, HTTP 5xx | Fallback chain advances to next provider |
-| F2 | DuckDuckGo HTML scraping breaks | Zero results, parse errors | DDG HTML is parsed defensively; upstream layout changes require build update |
+| F2 | DuckDuckGo HTML scraping breaks | Zero results, parse errors | Scraped providers extract results via CSS selectors targeting known HTML layouts. Upstream layout changes cause selector mismatch (zero results extracted), which advances the fallback chain per REQ-031. Provider restoration requires a build update with corrected selectors. |
 | F3 | API key misconfiguration | HTTP 401/403 from keyed provider | ProviderHealth reports auth status; server skips unauthenticated providers |
 | F4 | Result format inconsistency | Null fields, unexpected types | Normalizer coerces all providers to a single JSON shape; unknown fields dropped |
 | F5 | MCP protocol errors | tools/list returns wrong schema | G0 conformance gate catches schema drift |
@@ -41,12 +41,12 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
 - **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `provider_health` responses.
 - **SR-004 Zero-config works.** DuckDuckGo (in-process scraping) + Jina Reader + Wikipedia + Wiktionary + Internet Archive all require no API key and provide a functional default.
-- **SR-005 Providers are plugins.** Each search/content backend implements a common interface. A provider can be added, removed, or swapped without changing the tool surface.
+- **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Rate limit state persists.** Quota counters survive restarts via a JSON state file.
 - **SR-008 Convergence is bounded.** `converge` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
 - **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
-- **SR-010 All tool input is validated server-side before any outbound call.
+- **SR-010 All tool input is validated server-side before any outbound call. Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
 
 - **SR-011 Contracts, not implementations.** Requirements state what the server
   must do. The verification gates (§9) enforce quality — do not prescribe how
@@ -58,7 +58,12 @@ route to Infobroker first, falling back to built-ins only on error.
   **Before adding a requirement, apply these tests:**
   (a) Does this REQ state *what* the server must do, or *how* to implement it?
   If it names a parameter type, default value, sort order, or algorithm — it's
-  an implementation detail. Cut it.
+  an implementation detail. Cut it. Exception: tool signatures in §4.3 define
+  the server's external contract. Parameter names, required/optional status,
+  and default values are part of *what* the tool must accept — an alternate
+  implementation must accept the same parameters with the same defaults.
+  Algorithm descriptions, sort orders, and internal state mechanics remain
+  prohibited.
   (b) Can a verification gate (G0, G1, G2) catch a deviation from this REQ?
   If not, the REQ is either too vague or too prescriptive. Tighten or loosen
   accordingly.
@@ -102,95 +107,122 @@ route to Infobroker first, falling back to built-ins only on error.
 ### 4.1 Output and Error Contracts
 
 **REQ-001 — Status Prefix Contract**
-Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output.
+Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
-Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Unknown errors default to `internal_error`.
+Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Unknown errors default to `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
-All providers SHALL return results in a common shape: `{title, url, snippet, published_date?, source_type?}`. The normalizer strips provider-specific fields and maps common equivalents. Unknown fields are dropped with a debug-level log.
+All providers SHALL return results in a common shape: `{title, url, snippet, published_date?, source_type?}`. The normalizer strips provider-specific fields and maps common equivalents. Unknown fields are dropped with a debug-level log. _Check:_ G1.
 
 **REQ-004 — Truncation**
-Tool outputs longer than the configured max (default 50k chars) SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file.
+Tool outputs longer than the configured max (default 50k chars) SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
 
 ### 4.2 Provider Configuration
 
 **REQ-010 — Config File**
-Provider configuration SHALL reside in a JSON file at a path specified by `INFOBROKER_CONFIG` env var (default: `./config.json` in the project root). The config declares each provider's type, auth, rate limits, and priority.
+Provider configuration SHALL reside in a JSON file at a path specified by `INFOBROKER_CONFIG` env var (default: `./config.json` in the project root). The config declares each provider's type, auth, rate limits, and priority. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
-API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `provider_health` responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key".
+API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `provider_health` responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
 
 **REQ-012 — Environment Variable Mapping**
-The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`.
+The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
-On startup, the server SHALL log each configured provider's status: `active` (key present + reachable), `inactive` (key missing or unreachable), `degraded` (reachable but slow/limited). This status is exposed via `list_providers` and `provider_health`.
+On startup, the server SHALL log each configured provider's status: `active` (key present + reachable), `inactive` (key missing or unreachable), `degraded` (reachable but slow/limited). This status is exposed via `list_providers` and `provider_health`. _Check:_ G1.
 
 ### 4.3 Core Tools
 
 **REQ-020 — `web_search`**
-Unified search across configured providers. Parameters: `query` (required), `provider` (optional, auto-select if omitted), `max_results` (default 10, max 50), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (pagination, default 1). Returns normalized results with source provenance. Falls back through the configured chain on failure.
+Unified search across configured providers. Parameters: `query` (required), `provider` (optional, auto-select if omitted), `max_results` (default 10, max 50), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (pagination, default 1). Returns normalized results with source provenance. Falls back through the configured chain on failure. Providers SHALL accept all
+parameters without error. A provider that does not support a parameter (page,
+safe_search, time_range) SHALL return results as normal, ignoring the
+unsupported parameter. The server SHALL enforce `max_results` on the response
+even when the underlying provider ignores it. _Check:_ G0, G1.
 
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required), `renderer` (optional: `jina` default, `native` fallback), `max_length` (default 50k chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which produces clean Markdown optimized for LLM consumption. Falls back to native HTTP fetch if Jina is throttled or errors.
+Fetch and extract the content of a URL. Parameters: `url` (required), `renderer` (optional: `jina` default, `native_fetch`, `wikipedia`, `internet_archive`), `max_length` (default 50k chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which produces clean Markdown optimized for LLM consumption. Falls back to native HTTP fetch if Jina is throttled or errors. _Check:_ G0, G1.
 
 **REQ-022 — `search_suggestions`**
-Query autocomplete. Parameters: `query` (required), `provider` (optional, defaults to DuckDuckGo autocomplete endpoint). Returns an array of suggestion strings.
+Query autocomplete. Parameters: `query` (required), `provider` (optional, defaults to DuckDuckGo autocomplete endpoint). Returns an array of suggestion strings. _Check:_ G0, G1.
 
 **REQ-023 — `choose_provider`**
-Recommend the best provider for a given task. Parameters: `task` (required, natural-language description of what the user wants to find), `priority` (optional: `speed`, `quality`, `privacy`, `free_only`). Returns: recommended provider slug, rationale, fallback chain, estimated latency, quota status.
+Recommend the best provider for a given task. Parameters: `task` (required, natural-language description of what the user wants to find), `priority` (optional: `speed`, `quality`, `privacy`, `free_only`). Returns: recommended provider slug, rationale, fallback chain, estimated latency, quota status. _Check:_ G0, G1.
 
 **REQ-024 — `list_providers`**
-List all configured providers with their status, capabilities, rate limits, quota usage, and supported task types. Parameters: `status` (optional filter: `active`, `all`).
+List all configured providers with their status, capabilities, rate limits, quota usage, and supported task types. Parameters: `status` (optional filter: `active`, `all`). _Check:_ G0, G1.
 
 **REQ-025 — `provider_health`**
-Detailed health for a specific provider. Parameters: `provider` (required slug). Returns: status, quota_used, quota_remaining, quota_reset_at, avg_latency_ms, last_error, last_success.
+Detailed health for a specific provider. Parameters: `provider` (required slug). Returns: status, quota_used, quota_remaining, quota_reset_at, avg_latency_ms, last_error, last_success. _Check:_ G0, G1.
 
 **REQ-026 — `converge`**
-Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). See §8 for the full convergence algorithm.
+Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). See §8 for the full convergence algorithm. _Check:_ G0, G1.
 
 ### 4.4 Rate Limiting and Resilience
 
+Rate limiting (REQ-030) and quota tracking (REQ-033, REQ-034) use separate
+fields from the provider's rate_limit configuration. Throttling is governed by
+`per_second`; quota is governed by `per_day` and `per_month`. These systems
+operate independently.
+
 **REQ-030 — Per-Provider Throttling**
-Each provider SHALL enforce a configurable minimum interval between requests (default: DuckDuckGo 3s, others 1s). The throttle is scoped per-provider, not global. Interval is configurable in `config.json`.
+Each provider SHALL enforce a configurable minimum interval between requests (default: DuckDuckGo 3s, others 1s). The throttle is scoped per-provider, not global. Interval is configurable in `config.json`. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain is ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain is configurable per task type. Default max depth: 3 providers.
+The fallback chain is ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain is configurable per task type. Default max depth: 3 providers. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
-Providers SHALL retry on transient errors (HTTP 429, 503) with exponential backoff: 1s, 2s, 4s. Maximum 3 retries per provider. After 3 failures, advance to next in fallback chain.
+Providers SHALL retry on transient errors (HTTP 429, 503) with exponential backoff: 1s, 2s, 4s. Maximum 3 retries per provider. After 3 failures, advance to next in fallback chain. _Check:_ G1.
 
 **REQ-033 — Persistent Quota Tracking**
-Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). This survives restarts.
+Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counters SHALL be written to disk after every quota increment. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). This survives restarts. _Check:_ G1.
 
 **REQ-034 — Quota Warning Threshold**
-At 80% of quota usage, `provider_health` SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset.
+At 80% of quota usage, `provider_health` SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
+
+**REQ-035 — Request Timeout**
+Each outbound provider call SHALL be bounded by a configurable timeout. A call
+that exceeds the timeout SHALL be treated as a transient failure and SHALL
+trigger fallback chain advancement. The timeout is configurable per provider in
+`config.json`. _Check:_ G1.
+
+**REQ-036 — Latency Tracking Window**
+Provider latency metrics reported via `provider_health` SHALL be computed over
+a bounded time window. The window strategy is configurable. All-time unbounded
+accumulation SHALL NOT be the sole computation strategy. _Check:_ G1.
+
+**REQ-037 — Config Validation**
+The server SHALL validate the configuration structure on load and reload.
+Validation SHALL reject: missing required provider fields, dispatch chains
+referencing providers not declared in the configuration, and invalid rate-limit
+values. On reload, an invalid configuration SHALL leave the previous
+configuration active without interruption. _Check:_ G1.
 
 ### 4.5 State and Configuration
 
 **REQ-040 — Configuration Reload**
-The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned.
+The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned. _Check:_ G1.
 
 **REQ-041 — `spec_health`**
-Build health report. Returns: `build_version`, `provider_count`, `active_provider_count`, `uptime_seconds`, `total_requests_served`, `quota_state_path`, `config_path`.
+Build health report. Returns: `build_version`, `provider_count`, `active_provider_count`, `uptime_seconds`, `total_requests_served`, `quota_state_path`, `config_path`. _Check:_ G0, G1.
 
 ### 4.6 Client Artifacts
 
 **REQ-050 — `search-preferences.md`**
-The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. This file is sourced by the MCP client's instruction loader.
+The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence).
 
 **REQ-051 — Orchestrator Skill**
-The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill defines two pipelines: "Research Professional" and "Fact-Check Pipeline".
+The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill defines two pipelines: "Research Professional" and "Fact-Check Pipeline". _Check:_ G3 (file presence).
 
 **REQ-052 — Bundled Skills**
-The build SHALL include all skill dependencies at `vendor/opencode-skills/` so the repo requires no external skill paths. Each bundled skill SHALL include an "Infobroker Integration" section documenting its role in the pipeline.
+The build SHALL include all skill dependencies at `vendor/opencode-skills/` so the repo requires no external skill paths. Each bundled skill SHALL include an "Infobroker Integration" section documenting its role in the pipeline. _Check:_ G3 (file presence).
 
 **REQ-053 — Pipeline Reference**
-The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline and `skills/infobroker/references/provider-map.md` with the task→provider dispatch table.
+The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline and `skills/infobroker/references/provider-map.md` with the task→provider dispatch table. _Check:_ G3 (file presence).
 
 **REQ-054 — User Documentation**
-The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers.
+The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers. _Check:_ G3 (file presence).
 
 ### 4.7 Spec Integrity
 
@@ -201,7 +233,7 @@ REQs; every implemented REQ must appear in at least one source file's citation.
 The `validate-spec` script (§9.4) verifies bidirectional coverage: every REQ
 with an implementation must be cited, and every source file must cite at least
 one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
-REQs (§4.6, verified by file presence) are exempt. _Check:_ T55.
+REQs (§4.6, verified by file presence) are exempt. _Check:_ G3.
 
 ---
 
@@ -226,8 +258,11 @@ Layer 3: Tools                 web_search, fetch_page, converge, choose_provider
 Layer 2: Provider Backends     ddg, marginalia, mojeek, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
-                               github, jina, native_fetch, internet_archive,
-                               exa, tavily
+                               github, jina, internet_archive, exa, tavily
+
+`native_fetch` (content fallback) is implemented inline in the `fetch_page`
+tool handler rather than as a standalone provider file; it has no health
+check or rate limiting.
 
 Layer 1: MCP Skeleton          @modelcontextprotocol/sdk, zod schemas,
                                stdio transport, json-rpc handler
@@ -241,19 +276,23 @@ interface Provider {
   slug: string;
   tier: 'builtin' | 'free_http' | 'self_hosted_http' | 'keyed_http';
   capabilities: ('web_search' | 'academic' | 'code' | 'encyclopedia' | 'news' | 'archive' | 'content_fetch')[];
-  rateLimit: { perSecond?: number; perHour?: number; perDay?: number; perMonth?: number };
-  health(): Promise<HealthReport>;
+  rateLimit: { perSecond?: number; perDay?: number; perMonth?: number };
+  health(): Promise<{ status: "active" | "degraded" | "inactive"; avgLatencyMs: number }>;
   search(query: string, options: SearchOptions): Promise<SearchResult[]>;
   fetchPage?(url: string): Promise<string>;
   suggest?(query: string): Promise<string[]>;
 }
 ```
 
+Terminology tier names map to interface `tier` values: Built-in → `builtin`,
+Free HTTP → `free_http`, Self-hosted HTTP → `self_hosted_http`, Keyed HTTP →
+`keyed_http`.
+
 ### 5.4 Build Phases
 
 1. **MCP Skeleton**: stdio transport, tool registration, config loader, env var reader.
 2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
-3. **Keyed Providers** (optional): Brave, Exa, Tavily, Semantic Scholar, Stack Exchange, GitHub, CORE.
+3. **Registration-tier & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily (API key required; see §A.4).
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Convergence Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
