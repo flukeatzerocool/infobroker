@@ -1,7 +1,7 @@
-// @implements REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067
+// @implements REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-072
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, renameSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import type { KbConfig, KbChunk, KbSearchResult, KbStats } from "./types.js";
 
@@ -10,12 +10,15 @@ interface VectorStore {
   idf: Record<string, number>;
   docCount: number;
   events: string[];
+  sortedVocab?: string[];
 }
 
 let store: VectorStore | null = null;
 let kbConfig: KbConfig | null = null;
 let storagePath: string | null = null;
 let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+const WRITE_INTERVAL_MS = 30_000;
 const modelAvailable = true;
 const modelName = "tf-idf";
 const CONFIG_ERROR_CODE = "config_error";
@@ -48,16 +51,29 @@ function computeTf(tokens: string[]): Record<string, number> {
 
 function computeTfIdfVector(tokens: string[], idf: Record<string, number>, docCount: number): number[] {
   const tf = computeTf(tokens);
-  const vocab = Object.keys(idf).sort();
-  const vec: number[] = new Array(vocab.length).fill(0);
+  const vocab = getSortedVocab();
+  const cap = kbConfig?.max_vocab_terms;
+  const effectiveVocab = cap && cap > 0 && cap < vocab.length ? vocab.slice(0, cap) : vocab;
+  const vec: number[] = new Array(effectiveVocab.length).fill(0);
   const nDocs = docCount || 1;
-  for (let i = 0; i < vocab.length; i++) {
-    const term = vocab[i];
+  for (let i = 0; i < effectiveVocab.length; i++) {
+    const term = effectiveVocab[i];
     const tfVal = tf[term] || 0;
     const idfVal = Math.log((nDocs + 1) / ((idf[term] || 0) + 1)) + 1;
     vec[i] = tfVal * idfVal;
   }
   return vec;
+}
+
+function getSortedVocab(): string[] {
+  if (store?.sortedVocab?.length) return store.sortedVocab;
+  if (!store) return [];
+  store.sortedVocab = Object.keys(store.idf).sort();
+  return store.sortedVocab;
+}
+
+function invalidateVocab(): void {
+  if (store) store.sortedVocab = undefined;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -74,12 +90,12 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-function keywordScore(queryTokens: string[], text: string): number {
+function keywordScore(regexes: RegExp[], text: string): number {
   const lower = text.toLowerCase();
   let score = 0;
-  for (const tok of queryTokens) {
-    const count = (lower.match(new RegExp(tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length;
-    score += count;
+  for (const re of regexes) {
+    const matches = lower.match(re);
+    if (matches) score += matches.length;
   }
   return score / (text.length || 1);
 }
@@ -91,7 +107,9 @@ function loadStore(): void {
     try {
       const raw = JSON.parse(readFileSync(fpath, "utf-8"));
       if (raw && Array.isArray(raw.chunks) && typeof raw.idf === "object") {
-        store = raw;
+        const loaded: VectorStore = raw;
+        loaded.sortedVocab = undefined;
+        store = loaded;
         return;
       }
     } catch {
@@ -100,6 +118,25 @@ function loadStore(): void {
   }
   store = { chunks: [], idf: {}, docCount: 0, events: [] };
 }
+
+function scheduleWrite(): void {
+  if (writeTimer) return;
+  writeTimer = setTimeout(() => {
+    writeTimer = null;
+    saveStore();
+  }, WRITE_INTERVAL_MS);
+}
+
+function flushWrite(): void {
+  if (writeTimer) {
+    clearTimeout(writeTimer);
+    writeTimer = null;
+    saveStore();
+  }
+}
+
+process.on("beforeExit", () => flushWrite());
+process.on("exit", () => flushWrite());
 
 function saveStore(): void {
   if (!storagePath || !store) return;
@@ -176,6 +213,7 @@ export function initKb(config: KbConfig): void {
   storagePath = raw;
   if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
   loadStore();
+  getSortedVocab();
   runMaintenance();
   if (maintenanceTimer) clearInterval(maintenanceTimer);
   maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
@@ -200,6 +238,7 @@ export function kbSearch(
 
   const queryTokens = tokenize(query);
   const queryVec = computeTfIdfVector(queryTokens, getIdf(), getDocCount());
+  const kwRegexes = queryTokens.map((t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
   const actualMax = Math.min(maxResults, kbConfig.max_results);
   const results: KbSearchResult[] = [];
 
@@ -208,7 +247,7 @@ export function kbSearch(
     if (sourceType && chunk.source_type !== sourceType) continue;
 
     const vecSimilarity = cosineSimilarity(queryVec, chunk.embedding);
-    const kwScore = keywordScore(queryTokens, chunk.text);
+    const kwScore = keywordScore(kwRegexes, chunk.text);
     const combinedScore = vecSimilarity * 0.7 + kwScore * 0.3;
 
     if (combinedScore > 0) {
@@ -241,17 +280,26 @@ export function kbIngest(
   if (!store) return 0;
 
   const resolvedCollection = collection || kbConfig.default_collection || "default";
+  const resolvedSourceType = sourceType || "web_search";
   const chunks = chunkText(text, title);
-  const now = Date.now();
 
-  for (const chunkText of chunks) {
-    const tokens = tokenize(chunkText);
-    updateIdf(tokens);
+  if (chunks.length === 0) {
+    store.events.push(`Ingest skipped at ${new Date().toISOString()}: empty or unsplittable text (${text.slice(0, 80)})`);
+    return 0;
   }
 
+  const now = Date.now();
+
+  if (sourceUrl) {
+    store.chunks = store.chunks.filter((c) => c.source_url !== sourceUrl);
+  }
+
+  const preIngestIdf = { ...store.idf };
+  const preIngestDocCount = store.docCount;
+
   for (const chunkText of chunks) {
     const tokens = tokenize(chunkText);
-    const embedding = computeTfIdfVector(tokens, getIdf(), getDocCount());
+    const embedding = computeTfIdfVector(tokens, preIngestIdf, preIngestDocCount);
     const id = randomUUID();
     store.chunks.push({
       id,
@@ -261,12 +309,17 @@ export function kbIngest(
       title,
       provider,
       collection: resolvedCollection,
-      source_type: sourceType || "web_search",
+      source_type: resolvedSourceType,
       ingested_at: now,
     });
   }
 
-  saveStore();
+  for (const chunkText of chunks) {
+    updateIdf(tokenize(chunkText));
+  }
+
+  invalidateVocab();
+  scheduleWrite();
   return chunks.length;
 }
 
@@ -325,7 +378,7 @@ export function kbDelete(collection?: string, sourceUrl?: string): number {
 
   if (removed > 0) {
     rebuildIdf();
-    saveStore();
+    scheduleWrite();
   }
   return removed;
 }
@@ -344,6 +397,7 @@ function rebuildIdf(): void {
     }
     store.docCount++;
   }
+  invalidateVocab();
 }
 
 export function autoIndex(
@@ -357,12 +411,14 @@ export function autoIndex(
 
   setImmediate(() => {
     try {
+      let totalChunks = 0;
       for (const r of results) {
         if (!r.snippet && !r.title) continue;
         const text = r.snippet || r.title;
         const sourceUrl = r.url || "";
-        kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider);
+        totalChunks += kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider);
       }
+      if (totalChunks > 0) flushWrite();
     } catch {
       if (store) store.events.push(`Auto-index error at ${new Date().toISOString()}`);
     }
@@ -385,7 +441,7 @@ export function runMaintenance(): void {
   const removed = before - store.chunks.length;
   if (removed > 0) {
     rebuildIdf();
-    saveStore();
+    scheduleWrite();
     store.events.push(`Maintenance at ${new Date().toISOString()}: removed ${removed} expired chunks`);
   }
 }

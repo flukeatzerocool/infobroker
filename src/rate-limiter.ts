@@ -12,8 +12,10 @@ export function configureProviderRateLimit(
   slug: string,
   config: { per_second?: number }
 ): void {
+  const perSecond = config.per_second;
+  if (!perSecond || perSecond <= 0) return;
   limits.set(slug, {
-    perSecond: config.per_second ?? 0,
+    perSecond,
     lastCall: 0,
   });
 }
@@ -39,7 +41,7 @@ export async function throttle(slug: string): Promise<void> {
     await sleep(delay);
   }
 
-  limits.set(slug, { ...limit, lastCall: Date.now() });
+  limits.set(slug, { ...limit, lastCall: now });
 }
 
 function sleep(ms: number): Promise<void> {

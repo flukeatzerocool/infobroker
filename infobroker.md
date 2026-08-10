@@ -109,7 +109,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–067 (knowledge base), 070–071 (provider architecture).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–072 (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -125,6 +125,10 @@ Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `ra
 
 **REQ-003 — Result Format Normalization**
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date and source type. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
+
+**REQ-073 — Minimum Viable Result**
+
+After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
 
 **REQ-004 — Truncation**
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
@@ -196,9 +200,9 @@ The fallback chain SHALL be ordered by provider priority in `config.json`. On er
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
-
 **REQ-033 — Persistent Quota Tracking**
-Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counters SHALL be written to disk after every quota increment. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). This survives restarts. _Check:_ G1.
+
+Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counter state SHALL be durably written to disk such that quota enforcement survives server restarts. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). _Check:_ G1.
 
 **REQ-034 — Quota Warning Threshold**
 At 80% of quota usage, `provider_health` SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
@@ -307,6 +311,10 @@ Indexed content SHALL be removable by age. Expiry intervals SHALL be configurabl
 **REQ-067 — Knowledge Base Configuration**
 
 The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, per-source-type content expiry intervals, and maximum results per query. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
+
+**REQ-072 — Knowledge Base Deduplication**
+
+Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. The chunk count reported by `kb_stats` SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
 ---
 
@@ -600,6 +608,8 @@ pages are not).
 - KB collection scoping: insert content into two collections → query scoped to one → verify only scoped results returned
 - KB expiry: insert content with past timestamp → trigger maintenance → verify expired content removed; verify non-expired content retained
 - KB config validation: provide invalid KB config section → verify `kb_search` returns config error
+- KB deduplication: ingest URL with content → note chunk count → re-ingest same URL → verify count unchanged, content updated
+- Normalizer discard: normalize results with empty URL → verify zero results returned, max_results count preserved for downstream provider
 
 ### 9.3 G2 — Live Smoke Tests (Optional)
 

@@ -75,7 +75,7 @@ function err(provider: string, code: string, message: string, remediation: strin
   return {
     status: "error",
     provider,
-    error: { code, message, provider, remediation },
+    error: { code, message, remediation },
   };
 }
 
@@ -176,7 +176,7 @@ async function doWebSearch(
             setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
           ),
         ]);
-      const results = await retryWithBackoff(timedCall, slug);
+      const results = await retryWithBackoff(timedCall);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -188,7 +188,7 @@ async function doWebSearch(
       return `[OK] ${json(ok(slug, results, {
         query_time_ms: elapsed,
         fallback_used: lastError !== null,
-        quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).remaining,
+        quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
       }))}`;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -234,7 +234,7 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
               setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
             ),
           ]);
-        content = await retryWithBackoff(timedCall, slug);
+        content = await retryWithBackoff(timedCall);
       } catch {
         continue;
       }
@@ -353,8 +353,8 @@ function doListProviders(filter?: string): string {
       tier: p.tier,
       capabilities: p.capabilities,
       enabled: p.enabled,
-      quota_used: quota.used,
-      quota_remaining: quota.remaining,
+      quota_used: quota.daily.used,
+      quota_remaining: quota.daily.remaining,
       quota_warning: quota.warning,
       quota_exhausted: quota.exhausted,
       priority: p.priority,
@@ -385,9 +385,9 @@ function doProviderHealth(providerSlug: string): string {
     slug: providerSlug,
     tier: p.tier,
     capabilities: p.capabilities,
-    quota_used: quota.used,
-    quota_remaining: quota.remaining,
-    quota_reset_at: quota.resetAt,
+    quota_used: quota.daily.used,
+    quota_remaining: quota.daily.remaining,
+    quota_reset_at: quota.daily.resetAt,
     avg_latency_ms: avgLatency(providerSlug),
     auth_ok: authOk,
   };

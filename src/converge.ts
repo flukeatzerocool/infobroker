@@ -207,6 +207,7 @@ export async function converge(
     max_iterations?: number;
     confidence_threshold?: number;
     providers?: string[];
+    searchers?: Record<string, Searcher>;
   } = {}
 ): Promise<ConvergenceResult> {
   const config = getConfig();
@@ -217,12 +218,13 @@ export async function converge(
   const confidenceThreshold =
     options.confidence_threshold ?? config.convergence.confidence_threshold;
   const maxCalls = config.convergence.max_http_calls;
+  const searchers = options.searchers ?? SEARCHERS;
 
   const providerList = options.providers
     || getActiveProviders()
          .filter(([, p]) => p.capabilities.includes("web_search"))
          .map(([slug]) => slug);
-  const availableProviders = providerList.filter((p) => SEARCHERS[p]);
+  const availableProviders = providerList.filter((p) => searchers[p]);
 
   if (availableProviders.length === 0) {
     return {
@@ -251,11 +253,10 @@ export async function converge(
         if (q.exhausted) return null;
         try {
           await throttle(slug);
-          const searcher = SEARCHERS[slug];
+          const searcher = searchers[slug];
           if (!searcher) return null;
           const results = await retryWithBackoff(
             async () => searcher(query, { max_results: 5 }),
-            slug,
             config.providers[slug]
           );
           return { slug, results };
@@ -289,11 +290,11 @@ export async function converge(
         try {
           await throttle(gapProvider);
           const doCall = async () => {
-            const searcher = SEARCHERS[gapProvider];
+            const searcher = searchers[gapProvider];
             if (!searcher) throw new Error(`No searcher for ${gapProvider}`);
             return await searcher(refinedQuery, { max_results: 3 });
           };
-          const results = await retryWithBackoff(doCall, gapProvider, config.providers[gapProvider]);
+          const results = await retryWithBackoff(doCall, config.providers[gapProvider]);
           totalCalls++;
           providersUsed.add(gapProvider);
           increment(gapProvider, config.providers[gapProvider]?.rate_limit);

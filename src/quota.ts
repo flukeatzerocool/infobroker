@@ -16,12 +16,32 @@ const QUOTA_DIR = join(tmpdir(), "infobroker");
 const QUOTA_FILE = join(QUOTA_DIR, "quota.json");
 
 let quotaState: QuotaState = { providers: {} };
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+const WRITE_INTERVAL_MS = 30_000;
 
 function ensureDir(): void {
   if (!existsSync(QUOTA_DIR)) {
     mkdirSync(QUOTA_DIR, { recursive: true });
   }
 }
+
+function scheduleWrite(): void {
+  if (writeTimer) return;
+  writeTimer = setTimeout(() => {
+    writeTimer = null;
+    saveQuotaState();
+  }, WRITE_INTERVAL_MS);
+}
+
+function flushWrite(): void {
+  if (writeTimer) {
+    clearTimeout(writeTimer);
+    writeTimer = null;
+    saveQuotaState();
+  }
+}
+
+process.on("beforeExit", () => flushWrite());
 
 function getDailyReset(): string {
   const now = new Date();
@@ -36,7 +56,7 @@ function getMonthlyReset(): string {
 }
 
 function isExpired(resetAt: string): boolean {
-  return new Date(resetAt) <= new Date();
+  return new Date(resetAt) < new Date(Date.now() - 30_000);
 }
 
 export function loadQuotaState(): void {
@@ -77,11 +97,36 @@ export function getOrCreateCounter(slug: string): QuotaCounter {
 }
 
 export interface QuotaReport {
-  used: number;
-  remaining?: number;
-  resetAt?: string;
-  warning: boolean;
   exhausted: boolean;
+  warning: boolean;
+  daily: { used: number; remaining: number; resetAt: string };
+  monthly: { used: number; remaining: number; resetAt: string };
+}
+
+function buildReport(counter: QuotaCounter, limits?: { per_day?: number; per_month?: number }): QuotaReport {
+  const dailyCap = limits?.per_day ?? Infinity;
+  const monthlyCap = limits?.per_month ?? Infinity;
+
+  const dailyUsed = counter.daily.count;
+  const monthlyUsed = counter.monthly.count;
+
+  const dailyPct = dailyUsed / dailyCap;
+  const monthlyPct = monthlyUsed / monthlyCap;
+
+  return {
+    exhausted: dailyUsed >= dailyCap || monthlyUsed >= monthlyCap,
+    warning: dailyPct >= 0.8 || monthlyPct >= 0.8,
+    daily: {
+      used: dailyUsed,
+      remaining: dailyCap < Infinity ? dailyCap - dailyUsed : Infinity,
+      resetAt: counter.daily.resetAt,
+    },
+    monthly: {
+      used: monthlyUsed,
+      remaining: monthlyCap < Infinity ? monthlyCap - monthlyUsed : Infinity,
+      resetAt: counter.monthly.resetAt,
+    },
+  };
 }
 
 export function increment(slug: string, limits?: {
@@ -91,28 +136,8 @@ export function increment(slug: string, limits?: {
   const counter = getOrCreateCounter(slug);
   counter.daily.count++;
   counter.monthly.count++;
-
-  const dailyCap = limits?.per_day ?? Infinity;
-  const monthlyCap = limits?.per_month ?? Infinity;
-
-  const dailyUsed = counter.daily.count;
-  const monthlyUsed = counter.monthly.count;
-
-  const dailyPct = dailyUsed / dailyCap;
-  const monthlyPct = monthlyUsed / monthlyCap;
-
-  const exhausted = dailyUsed >= dailyCap || monthlyUsed >= monthlyCap;
-  const warning = dailyPct >= 0.8 || monthlyPct >= 0.8;
-
-  saveQuotaState();
-
-  return {
-    used: Math.max(dailyUsed, monthlyUsed),
-    remaining: dailyCap < Infinity ? dailyCap - dailyUsed : undefined,
-    resetAt: counter.daily.resetAt,
-    warning,
-    exhausted,
-  };
+  scheduleWrite();
+  return buildReport(counter, limits);
 }
 
 export function checkQuota(
@@ -120,25 +145,7 @@ export function checkQuota(
   limits?: { per_day?: number; per_month?: number }
 ): QuotaReport {
   const counter = getOrCreateCounter(slug);
-  const dailyCap = limits?.per_day ?? Infinity;
-  const monthlyCap = limits?.per_month ?? Infinity;
-
-  const dailyUsed = counter.daily.count;
-  const monthlyUsed = counter.monthly.count;
-
-  const dailyPct = dailyUsed / dailyCap;
-  const monthlyPct = monthlyUsed / monthlyCap;
-
-  const exhausted = dailyUsed >= dailyCap || monthlyUsed >= monthlyCap;
-  const warning = dailyPct >= 0.8 || monthlyPct >= 0.8;
-
-  return {
-    used: Math.max(dailyUsed, monthlyUsed),
-    remaining: dailyCap < Infinity ? dailyCap - dailyUsed : undefined,
-    resetAt: counter.daily.resetAt,
-    warning,
-    exhausted,
-  };
+  return buildReport(counter, limits);
 }
 
 export function getQuotaStatePath(): string {

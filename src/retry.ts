@@ -14,7 +14,6 @@ export class RetryableError extends Error {
 
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  slug: string,
   retryConfig?: { retry_count?: number; retry_backoff_ms?: number },
 ): Promise<T> {
   const baseDelay = retryConfig?.retry_backoff_ms ?? DEFAULT_BASE_DELAY;
@@ -33,7 +32,7 @@ export async function retryWithBackoff<T>(
       lastError = e instanceof Error ? e : new Error(String(e));
       if (!isRetryable(lastError)) throw lastError;
       if (attempt < delays.length) {
-        await sleep(delays[attempt]);
+        await sleep(delays[attempt] * (0.5 + Math.random() * 0.5));
       }
     }
   }
@@ -45,7 +44,7 @@ function isRetryable(e: Error): boolean {
     return e.status === 429 || e.status === 503;
   }
   const msg = e.message;
-  return /429|503|rate.?limit|too many requests|service unavailable/i.test(msg);
+  return /\b429\b|\b503\b|rate.?limit|too many requests|service unavailable/i.test(msg);
 }
 
 function sleep(ms: number): Promise<void> {

@@ -25,9 +25,6 @@ function validateConfig(config: Config): void {
   const errors: string[] = [];
 
   for (const [slug, provider] of Object.entries(config.providers)) {
-    if (!provider.type || typeof provider.type !== "string") {
-      errors.push(`Provider "${slug}": missing or invalid "type"`);
-    }
     if (!provider.tier || !["builtin", "free_http", "keyed_http", "self_hosted_http"].includes(provider.tier)) {
       errors.push(`Provider "${slug}": missing or invalid "tier"`);
     }

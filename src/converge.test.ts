@@ -34,7 +34,6 @@ import {
   reconcileClaims,
   computeConfidence,
   converge,
-  SEARCHERS,
 } from "../src/converge.js";
 import type { ConvergenceFinding as CF } from "../src/types.js";
 
@@ -42,12 +41,16 @@ function makeResult(title: string, url: string, snippet: string): SearchResult {
   return { title, url, snippet };
 }
 
+function makeQuota(exhausted = false, remaining = 100) {
+  return { exhausted, warning: exhausted, daily: { used: 0, remaining, resetAt: "" }, monthly: { used: 0, remaining, resetAt: "" } };
+}
+
 function mockConfig(overrides: Record<string, unknown> = {}) {
   const base = {
     providers: {
       duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
-      wikipedia: { enabled: true, capabilities: ["encyclopedia"], rate_limit: {}, priority: 20, timeout: 10000 },
-      wikidata: { enabled: true, capabilities: ["structured_fact"], rate_limit: {}, priority: 20, timeout: 10000 },
+      wikipedia: { enabled: true, capabilities: ["encyclopedia", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      wikidata: { enabled: true, capabilities: ["structured_fact", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
     },
     dispatch: { general_web: ["duckduckgo"] },
     convergence: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8 },
@@ -128,6 +131,27 @@ describe("computeConfidence", () => {
   });
 
   it("returns 1.0 for five unique domains", () => {
+    expect(computeConfidence([
+      { title: "a", url: "https://a.com/1", snippet: "x" },
+      { title: "b", url: "https://b.com/2", snippet: "x" },
+      { title: "c", url: "https://c.com/3", snippet: "x" },
+      { title: "d", url: "https://d.com/4", snippet: "x" },
+      { title: "e", url: "https://e.com/5", snippet: "x" },
+    ])).toBe(1.0);
+  });
+
+  it("matches spec §8.2 confidence table: 0/1/2/3/5+ domains -> 0/0.3/0.7/0.9/1.0", () => {
+    expect(computeConfidence([])).toBe(0);
+    expect(computeConfidence([{ title: "a", url: "https://a.com/1", snippet: "x" }])).toBe(0.3);
+    expect(computeConfidence([
+      { title: "a", url: "https://a.com/1", snippet: "x" },
+      { title: "b", url: "https://b.com/2", snippet: "y" },
+    ])).toBe(0.7);
+    expect(computeConfidence([
+      { title: "a", url: "https://a.com/1", snippet: "x" },
+      { title: "b", url: "https://b.com/2", snippet: "y" },
+      { title: "c", url: "https://c.com/3", snippet: "z" },
+    ])).toBe(0.9);
     expect(computeConfidence([
       { title: "a", url: "https://a.com/1", snippet: "x" },
       { title: "b", url: "https://b.com/2", snippet: "x" },
@@ -225,8 +249,8 @@ describe("converge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(throttle).mockResolvedValue(undefined);
-    vi.mocked(checkQuota).mockReturnValue({ used: 0, remaining: 100, warning: false, exhausted: false });
-    vi.mocked(increment).mockReturnValue({ used: 0, remaining: 100 } as any);
+    vi.mocked(checkQuota).mockReturnValue(makeQuota());
+    vi.mocked(increment).mockReturnValue(makeQuota());
     vi.mocked(retryWithBackoff).mockImplementation(async (fn) => (fn as () => Promise<any>)());
   });
 
@@ -239,7 +263,7 @@ describe("converge", () => {
     expect(result.iteration_count).toBe(0);
   });
 
-  it("detects agreement across three providers", async () => {
+  it("detects agreement across three providers using DI searchers", async () => {
     mockConfig({
       providers: {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
@@ -250,17 +274,13 @@ describe("converge", () => {
 
     vi.mocked(retryWithBackoff).mockImplementation(async (fn) => fn());
 
-    SEARCHERS.duckduckgo = async () => [
-      makeResult("Quantum Computing Error Correction Study", "https://a.com/1", "quantum computing is making rapid progress in error correction"),
-    ];
-    SEARCHERS.wikipedia = async () => [
-      makeResult("Quantum Computing Error Correction Advances", "https://b.com/2", "quantum computing advances in error correction are accelerating"),
-    ];
-    SEARCHERS.wikidata = async () => [
-      makeResult("Quantum Computing Error Correction Methods", "https://c.com/3", "quantum computing error correction shows promising results"),
-    ];
-
-    const result = await converge("quantum computing error correction");
+    const result = await converge("quantum computing error correction", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Quantum Computing Error Correction Study", "https://a.com/1", "quantum computing is making rapid progress in error correction")],
+        wikipedia: async () => [makeResult("Quantum Computing Error Correction Advances", "https://b.com/2", "quantum computing advances in error correction are accelerating")],
+        wikidata: async () => [makeResult("Quantum Computing Error Correction Methods", "https://c.com/3", "quantum computing error correction shows promising results")],
+      },
+    });
     expect(result.findings.length).toBeGreaterThan(0);
     const mainFinding = result.findings[0];
     expect(mainFinding.confidence).toBeGreaterThanOrEqual(0.7);
@@ -272,20 +292,21 @@ describe("converge", () => {
     mockConfig({
       providers: {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
       },
       convergence: { max_iterations: 2, max_http_calls: 30, confidence_threshold: 0.8 },
     });
 
-    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => fn());
-    SEARCHERS.duckduckgo = async () => [
-      makeResult("Rare Topic", "https://a.com/rare", "very obscure information about rare topic"),
-    ];
-
-    const result = await converge("rare topic details");
+    const result = await converge("rare topic details", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Rare Topic", "https://a.com/rare", "very obscure information about rare topic")],
+        wikipedia: async () => [makeResult("Rare Topic Variation", "https://b.com/other", "different information about rare topic")],
+      },
+    });
     expect(result.iteration_count).toBeLessThanOrEqual(2);
   });
 
-  it("returns partial convergence when limits reached", async () => {
+  it("returns partial convergence when confidence threshold not met", async () => {
     mockConfig({
       providers: {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
@@ -293,28 +314,100 @@ describe("converge", () => {
       convergence: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.95 },
     });
 
-    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => fn());
-    SEARCHERS.duckduckgo = async () => [
-      makeResult("Single Result", "https://a.com/1", "only one source for this obscure topic"),
-    ];
-
-    const result = await converge("obscure topic", { confidence_threshold: 0.95 });
+    const result = await converge("obscure topic", {
+      confidence_threshold: 0.95,
+      searchers: {
+        duckduckgo: async () => [makeResult("Single Result", "https://a.com/1", "only one source for this obscure topic")],
+      },
+    });
     if (result.findings.length > 0) {
       expect(result.convergence).toBe("partial");
     }
   });
 
-  it("filters providers to those specified", async () => {
+  it("filters providers to only those specified", async () => {
     mockConfig();
 
-    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => fn());
     let ddgCalled = false;
     let wikiCalled = false;
-    SEARCHERS.duckduckgo = async () => { ddgCalled = true; return []; };
-    SEARCHERS.wikipedia = async () => { wikiCalled = true; return []; };
 
-    await converge("test", { providers: ["wikipedia"] });
+    await converge("test", {
+      providers: ["wikipedia"],
+      searchers: {
+        duckduckgo: async () => { ddgCalled = true; return []; },
+        wikipedia: async () => { wikiCalled = true; return []; },
+      },
+    });
     expect(ddgCalled).toBe(false);
     expect(wikiCalled).toBe(true);
+  });
+
+  it("skips exhausted providers mid-iteration", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      convergence: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    let ddgCalls = 0;
+    let wikiCalls = 0;
+
+    vi.mocked(checkQuota).mockImplementation((slug) => {
+      if (slug === "duckduckgo") return makeQuota(true, 0);
+      return makeQuota(false, 100);
+    });
+
+    const result = await converge("test", {
+      searchers: {
+        duckduckgo: async () => { ddgCalls++; return [makeResult("DDG", "https://a.com/1", "a")]; },
+        wikipedia: async () => { wikiCalls++; return [makeResult("Wiki", "https://b.com/1", "b")]; },
+      },
+    });
+    expect(ddgCalls).toBe(0);
+    expect(wikiCalls).toBe(1);
+    expect(result.providers_used).toContain("wikipedia");
+    expect(result.providers_used).not.toContain("duckduckgo");
+  });
+
+  it("continues after one provider throws", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      convergence: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    let wikiCalled = false;
+
+    const result = await converge("test", {
+      searchers: {
+        duckduckgo: async () => { throw new Error("DDG down"); },
+        wikipedia: async () => { wikiCalled = true; return [makeResult("Wiki", "https://b.com/1", "reliable information from wikipedia")]; },
+      },
+    });
+    expect(wikiCalled).toBe(true);
+    expect(result.providers_used).toContain("wikipedia");
+    expect(result.providers_used).not.toContain("duckduckgo");
+  });
+
+  it("returns partial convergence when all providers fail", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      convergence: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    const result = await converge("test", {
+      searchers: {
+        duckduckgo: async () => { throw new Error("Service down"); },
+      },
+    });
+    expect(result.findings).toEqual([]);
+    expect(result.convergence).toBe("partial");
+    expect(result.providers_used).toEqual([]);
   });
 });

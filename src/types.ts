@@ -8,7 +8,6 @@ export interface SearchResult {
 }
 
 export interface ProviderConfig {
-  type: "scraped" | "free_http" | "keyed_http" | "self_hosted_http" | "builtin";
   tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http";
   capabilities: string[];
   rate_limit: { per_second?: number; per_day?: number; per_month?: number };
@@ -71,7 +70,6 @@ export interface ToolErrorResponse {
   error: {
     code: string;
     message: string;
-    provider: string;
     remediation: string;
   };
 }
@@ -122,6 +120,7 @@ export interface KbConfig {
   default_collection: string;
   max_results: number;
   expiry: Record<string, number>;
+  max_vocab_terms: number;
   maintenance_interval_minutes: number;
 }
 

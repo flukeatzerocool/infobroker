@@ -29,6 +29,54 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.10 — Code and spec hardening via plan-review audit
+
+- Quota counters are now written to disk at intervals rather than
+  synchronously on every increment, eliminating a latency bottleneck
+  under concurrent load. Durability on shutdown is preserved via a
+  process-exit flush. Quota reports now expose daily and monthly
+  counters separately rather than a single opaque maximum. (REQ-033)
+
+- Retry backoff now includes random jitter, preventing thundering-herd
+  retries when multiple callers hit the same transient error. Retry
+  eligibility regex matching now uses word boundaries to avoid false
+  positives from coincidental status-code substrings. The unused
+  `slug` parameter was removed from the retry signature. (REQ-032)
+
+- Rate-limiter no longer registers providers without an active
+  per-second limit, and uses the pre-sleep timestamp for the elapsed
+  interval rather than the post-sleep clock. (REQ-030)
+
+- Normalized results with empty URLs are now discarded rather than
+  passed to callers as junk. A provider-specific field-alias map
+  handles edge-case provider formats without touching the generic
+  normalization logic. The normalizer also handles one level of
+  nested object fields (e.g., `{title: {rendered: "..."}}`) instead
+  of silently dropping them. (REQ-003, REQ-073)
+
+- Knowledge base ingestion is now deduplicated by source URL —
+  re-ingesting the same URL updates existing chunks rather than
+  creating duplicates. IDF weights are computed from the pre-ingestion
+  vocabulary, eliminating the self-influence bias where a new
+  document's own terms inflated its vector scores. KB writes are
+  debounced at the same 30s interval as quota writes. A configurable
+  vocabulary dimension cap (`max_vocab_terms`, default 10,000) bounds
+  TF-IDF vector size for large stores. Keyword-match regexes are
+  compiled once per query rather than once per chunk, and auto-index
+  batches flush in one write rather than per-result. (REQ-060 through
+  REQ-067, REQ-072)
+
+- The `ProviderConfig` type dropped the vestigial `type` field (the
+  `tier` field already serves this purpose) and the `"scraped"` enum
+  value. The `ToolErrorResponse` error object no longer redundantly
+  nests `provider` when it already appears at the top level.
+
+- `converge` now accepts searchers via an optional `options.searchers`
+  parameter, allowing tests to inject mock searchers through the API
+  rather than monkey-patching module-level state. Added test coverage
+  for error recovery (one provider throws, others continue), quota
+  exhaustion mid-iteration, and the §8.2 confidence table mapping.
+
 ## 2026.08.10 — Vendor Skill Consolidation
 
 - Vendored skill files (`code-review`, `deep-research`, `fact-checking`,
