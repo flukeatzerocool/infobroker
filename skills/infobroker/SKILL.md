@@ -57,7 +57,11 @@ Phase 5: WRITE
 Phase 6: POLISH
   `proofreading` skill — grammar, spelling, style, clarity, tone verification
 
-Phase 7: CITE
+Phase 7: TRANSLATE
+  `translation` skill — produce multilingual output when findings are
+  requested in a language other than English
+
+Phase 8: CITE
   Include source URLs from Phase 1/2 with every factual claim.
   Use the `evidence-based-reporting` instruction pattern.
 ```
@@ -102,6 +106,7 @@ Use this when evaluating or comparing code solutions found via search.
 | Ingest into knowledge base | `kb_ingest` | Text or URL |
 | Knowledge base stats | `kb_stats` | Operational metrics |
 | Delete from knowledge base | `kb_delete` | By collection or source URL |
+| Translate findings | `translation` skill | Multilingual output |
 
 ## Best Practices
 

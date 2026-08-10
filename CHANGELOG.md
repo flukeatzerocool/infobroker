@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-10 — Spec artifact drift remediation
+
+- Vendor directory references removed from the specification, decisions
+  document, and client integration snippet — the eight pipeline skills
+  were moved to the global OpenCode skills directory during an earlier
+  consolidation pass, but the spec and DECISIONS.md still pointed at the
+  deleted `vendor/opencode-skills/` path. (REQ-052)
+- README provider counts corrected from eight/en to ten/eight, matching
+  the ten providers with "No" in the Key Required column of the adjacent
+  table.
+- The translation skill is now wired into the orchestrator as an explicit
+  TRANSLATE phase in the Research Professional pipeline and a row in the
+  Quick Guide table, closing the gap where it was listed in REQ-052 but
+  absent from any pipeline.
+- The `research-engineering-loop` skill (CTI-modeled research workflow)
+  is now listed in the project file tree. It directly consumes Infobroker
+  tools and was previously undocumented.
+- Spec version reference bumped from v2026.08.06 to v2026.08.10.
+
 ## 2026-08-10 — Knowledge base freshness classification and consumer integration
 
 - Content ingested into the knowledge base is now classified by freshness

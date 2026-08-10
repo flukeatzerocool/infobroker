@@ -4,11 +4,11 @@
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `11092c8845d560ec5bd946e1fc9a3f5066e6a31fc38be7e6b9822a4408d554ea`
+**Spec hash:** `de05e6dd1f01a6966191283b61e75a23364c02fdf75cbc7dafbec16a0b9456e5`
 **Source hash:** `134bddd476bed485e90c63491ead735814dae0c2eb4ca1fd8d4af28ecbec0a52`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `4af69e7fc9402585cb61afecf1572fd8b5489d48db895765d71cdbca39d76ecb`
-**Generated:** 2026-08-10T15:38:40.333Z
+**Total fingerprint:** `8c81681cae6bcd925553517f0c59902157cbc1b1fecbbcbe91171479c565c398`
+**Generated:** 2026-08-10T15:51:28.942Z
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -50,7 +50,7 @@ REQs 050-054 (client artifacts) are verified by file presence, not
 source citations, per the validate-spec exemption. These files are
 generated/maintained manually: `instructions/search-preferences.md`,
 `skills/infobroker/SKILL.md`, `skills/infobroker/references/*.md`,
-`vendor/opencode-skills/*/SKILL.md`, and `README.md`.
+and `README.md`. Pipeline skills are global OpenCode dependencies, not vendored in the repository.
 
 ### D-010: Timeout, Latency Window, and Config Validation (2026.08.08 — implemented 2026.08.10)
 

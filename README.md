@@ -43,9 +43,9 @@ README DESIGN:
 
 Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
-behind a single tool surface. Eight zero-config providers ship in the
+behind a single tool surface. Ten zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Eleven more providers unlock instantly with free API keys or
+configure. Eight more providers unlock with free API keys or
 self-hosting. A built-in convergence engine cross-references independent
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
@@ -178,7 +178,7 @@ doing and how much capacity remains.
 
 ## Providers
 
-Eighteen providers. Seven work with zero configuration.
+Eighteen providers. Ten work with zero configuration.
 
 | Provider | Tier | Type | Key Required |
 |----------|------|------|-------------|
@@ -267,4 +267,4 @@ MIT.
 
 ## Spec
 
-Built from `infobroker.md` v2026.08.06.
+Built from `infobroker.md` v2026.08.10.

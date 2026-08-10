@@ -282,7 +282,7 @@ The build SHALL produce an instruction file at `instructions/search-preferences.
 The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge base search phase positioned before external web search, such that the client retrieves previously indexed results before making outbound requests. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
-The build SHALL include all skill dependencies at `vendor/opencode-skills/` so the repo requires no external skill paths. Each bundled skill SHALL include an "Infobroker Integration" section documenting its role in the pipeline. _Check:_ G3 (file presence).
+The build SHALL produce an orchestrator skill (REQ-051) that references the eight pipeline skills — deep-research, fact-checking, summarization, technical-writing, copywriting, proofreading, code-review, and translation — by name. These skills are global OpenCode dependencies; they are not vendored in the repository. _Check:_ G3 (content verification).
 
 **REQ-053 — Pipeline Reference**
 The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline and `skills/infobroker/references/provider-map.md` with the task→provider dispatch table. _Check:_ G3 (file presence).
@@ -677,22 +677,14 @@ infobroker/
 ├── instructions/
 │   └── search-preferences.md              # AI tool-routing instructions
 ├── skills/
-│   └── infobroker/
-│       ├── SKILL.md                       # Orchestrator: chains search → skills
-│       └── references/
-│           ├── provider-map.md            # Task → provider dispatch reference
-│           └── pipeline-map.md            # Skill pipeline diagram (Mermaid)
-├── vendor/
-│   └── opencode-skills/
-│       ├── deep-research/SKILL.md         # Phase 3: verify & triangulate
-│       ├── fact-checking/SKILL.md         # Claims → verdicts
-│       ├── summarization/SKILL.md         # Multi-strategy condensation
-│       ├── technical-writing/SKILL.md     # Reports, docs, tutorials
-│       ├── copywriting/SKILL.md           # Persuasive frameworks
-│       ├── proofreading/SKILL.md          # Grammar, style, clarity
-│       ├── code-review/SKILL.md           # Evaluate code solutions
-│       └── translation/SKILL.md           # Multilingual output
-├── README.md                              # Setup, config, integration (future)
+│   ├── infobroker/
+│   │   ├── SKILL.md                       # Orchestrator: chains search → skills
+│   │   └── references/
+│   │       ├── provider-map.md            # Task → provider dispatch reference
+│   │       └── pipeline-map.md            # Skill pipeline diagram (Mermaid)
+│   └── research-engineering-loop/
+│       └── SKILL.md                       # CTI-modeled research workflow
+├── README.md                              # Setup, config, integration
 ├── ~/.local/share/infobroker/
 │   └── knowledge-base/                     # Vector store (created at runtime)
 ├── DECISIONS.md                           # Implementation decisions (future)
@@ -711,7 +703,6 @@ infobroker/
   "skills": {
     "paths": [
       "/home/fluke/infobroker/skills",
-      "/home/fluke/infobroker/vendor/opencode-skills",
       "/home/fluke/.config/opencode/skills"
     ]
   },
