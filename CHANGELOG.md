@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-08-10 — Knowledge base freshness classification and consumer integration
+
+- Content ingested into the knowledge base is now classified by freshness
+  tier at ingest time — ephemeral, recent, stable, or evergreen — based on
+  query intent, time range, and source provider. Each tier defines its own
+  confidence decay rate and expiry interval, so news results age out quickly
+  while encyclopedia content persists indefinitely. (REQ-074, REQ-075)
+- Expiry is now determined by freshness tier rather than source type,
+  resolving the problem where all web search results shared the same
+  expiration window. (REQ-066)
+- Web search now queries the knowledge base before hitting external
+  providers. If the KB returns results that meet configurable relevance and
+  freshness thresholds, those results replace external search entirely — no
+  API calls wasted on previously researched questions. An empty or disabled
+  KB does not prevent external search. (REQ-076)
+- `choose_provider` now recommends knowledge base search as a first-resort
+  option when the KB is configured and contains content. (REQ-023)
+- `spec_health` now reports knowledge base status: total chunks, collection
+  breakdown, freshness tier distribution, and last ingestion time. (REQ-041)
+- The client search-preferences instruction file now directs AI clients to
+  check the knowledge base before making external web requests. (REQ-050)
+- The Infobroker skill pipelines now include a RECALL phase that searches
+  the knowledge base before external web search, allowing cached results
+  to skip the full research pipeline. (REQ-051)
+- The `kb_search` tool description now signals its role as the
+  first-resort search tool, describing its content as cached results from
+  previous web_search, fetch_page, and converge calls with
+  freshness-adjusted scores.
+- Freshness tier configuration accepts the legacy `expiry` shape with a
+  deprecation warning, so existing config files continue working without
+  migration. (REQ-074)
+- Spec validation now checks that the instruction and skill files contain
+  knowledge base routing language. (REQ-050, REQ-051)
+
 <!--
   CHANGELOG WRITING STYLE
 

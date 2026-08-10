@@ -251,11 +251,18 @@
     "auto_index": true,
     "default_collection": "default",
     "max_results": 50,
-    "expiry": {
-      "web_search": 0,
-      "fetch_page": 0,
-      "converge": 0
+    "freshness": {
+      "tiers": {
+        "ephemeral": { "decay_hours": 24, "expiry_hours": 168 },
+        "recent": { "decay_hours": 168, "expiry_hours": 720 },
+        "stable": { "decay_hours": 720, "expiry_hours": 0 },
+        "evergreen": { "decay_hours": 0, "expiry_hours": 0 }
+      },
+      "auto_classify": true,
+      "default_tier": "stable"
     },
+    "kb_first_relevance_threshold": 0.3,
+    "kb_first_confidence_threshold": 0.5,
     "maintenance_interval_minutes": 60
   }
 }

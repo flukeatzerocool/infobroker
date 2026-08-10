@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -136,6 +136,35 @@ async function doWebSearch(
   page = 1
 ): Promise<string> {
   const config = getConfig();
+
+  if (isKbConfigured()) {
+    try {
+      const kbResults = kbSearch(query, maxResults);
+      if (kbResults.length > 0) {
+        const relevanceThreshold = config.kb?.kb_first_relevance_threshold ?? 0.3;
+        const confidenceThreshold = config.kb?.kb_first_confidence_threshold ?? 0.5;
+        const sufficient = kbResults.some(
+          (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
+        );
+        if (sufficient) {
+          const kbProvider = "knowledge_base";
+          return `[OK] ${json(ok(kbProvider, kbResults.map((r) => ({
+            title: r.title,
+            url: r.source_url,
+            snippet: r.snippet,
+            source_type: r.freshness_tier,
+          })), {
+            query_time_ms: 0,
+            fallback_used: false,
+            quota_remaining: undefined,
+          }))}`;
+        }
+      }
+    } catch {
+      // KB search failed — proceed to external providers
+    }
+  }
+
   let chain: string[];
 
   if (preferredProvider && config.providers[preferredProvider]?.enabled) {
@@ -183,7 +212,7 @@ async function doWebSearch(
       trackRequest(slug, elapsed);
       depth++;
 
-      autoIndex(results, slug);
+      autoIndex(results, slug, undefined, undefined, query, timeRange);
 
       return `[OK] ${json(ok(slug, results, {
         query_time_ms: elapsed,
@@ -311,18 +340,23 @@ function doChooseProvider(task: string, priority?: string): string {
   }
 
   const chain = getDispatchChain(matchedType);
-  if (chain.length === 0) {
+
+  const kbAvailable = isKbConfigured();
+  const kbHasContent = kbAvailable && (kbStats().chunk_count > 0);
+  const firstResort = kbHasContent ? "knowledge_base" : (chain.length > 0 ? chain[0] : null);
+
+  if (chain.length === 0 && !kbHasContent) {
     return `[ERROR] ${json(err("none", "config_error", `No active providers for task type: ${matchedType}`, "Check config.json"))}`;
   }
 
-  const recommended = chain[0];
+  const recommended = chain.length > 0 ? chain[0] : "";
   const recommendedPct = config.providers[recommended] ? checkQuota(recommended, config.providers[recommended].rate_limit) : null;
   let effectiveRecommended = recommended;
   if (recommendedPct?.exhausted) {
     effectiveRecommended = chain.length > 1 ? chain[1] : recommended;
   }
 
-  const rationale = `Best match for "${matchedType}" task. ${chain.length > 1 ? `Fallback chain: ${chain.join(", ")}.` : "No fallback available."}`;
+  const rationale = `Best match for "${matchedType}" task.${kbHasContent ? " Search the knowledge base first for cached results." : ""} ${chain.length > 1 ? `Fallback chain: ${chain.join(", ")}.` : "No fallback available."}`;
 
   return `[OK] ${json({
     status: "ok",
@@ -330,6 +364,7 @@ function doChooseProvider(task: string, priority?: string): string {
     results: [],
     meta: {
       recommended: effectiveRecommended,
+      first_resort: firstResort,
       matched_type: matchedType,
       rationale,
       fallback_chain: chain,
@@ -414,6 +449,7 @@ function doProviderHealth(providerSlug: string): string {
 function doSpecHealth(): string {
   const config = getConfig();
   const activeCount = Object.entries(config.providers).filter(([, p]) => p.enabled).length;
+  const kbStatsData = isKbConfigured() ? kbStats() : null;
 
   return `[OK] ${json({
     status: "ok",
@@ -422,6 +458,12 @@ function doSpecHealth(): string {
       build_version: "2026.08.10",
       provider_count: Object.keys(config.providers).length,
       active_provider_count: activeCount,
+      kb: kbStatsData ? {
+        chunk_count: kbStatsData.chunk_count,
+        collections: kbStatsData.collections,
+        freshness_tiers: kbStatsData.freshness_tiers,
+        last_ingestion: kbStatsData.last_ingestion,
+      } : undefined,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
       total_requests_served: totalRequests,
       quota_state_path: getQuotaStatePath(),
@@ -589,7 +631,7 @@ server.registerTool(
   "infobroker_kb_search",
   {
     title: "Knowledge Base Search",
-    description: "Semantic and keyword hybrid search over the local knowledge base.",
+    description: "Search the local knowledge base for previously indexed content before making external web requests. Contains cached results from web_search, fetch_page, and converge. Results include freshness-adjusted scores. Semantic and keyword hybrid search.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_results: z.number().min(1).max(50).optional().default(10),

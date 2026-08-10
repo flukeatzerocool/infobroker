@@ -201,6 +201,29 @@ function checkSpecHashStale(): void {
 
 checkSpecHashStale();
 
+// --- Client artifact content verification ---
+
+function checkArtifactContent(): void {
+  const prefPath = join(ROOT, "instructions", "search-preferences.md");
+  const skillPath = join(ROOT, "skills", "infobroker", "SKILL.md");
+
+  if (existsSync(prefPath)) {
+    const content = readFileSync(prefPath, "utf-8");
+    if (!/\bkb_search\b/.test(content)) {
+      warn("instructions/search-preferences.md: missing kb_search routing instruction");
+    }
+  }
+
+  if (existsSync(skillPath)) {
+    const content = readFileSync(skillPath, "utf-8");
+    if (!/(?:RECALL|knowledge base search)/i.test(content)) {
+      warn("skills/infobroker/SKILL.md: missing knowledge base search phase in pipelines");
+    }
+  }
+}
+
+checkArtifactContent();
+
 // --- Report ---
 
 console.log(`\nvalidate-spec — Infobroker spec-code traceability\n`);

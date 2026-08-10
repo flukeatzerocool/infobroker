@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040 REQ-067
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040 REQ-067 REQ-074
 import { readFileSync, existsSync } from "node:fs";
 import type { Config, ProviderConfig } from "./types.js";
 
@@ -74,12 +74,37 @@ function validateConfig(config: Config): void {
     if (typeof kb.auto_index !== "boolean") {
       errors.push("kb.auto_index must be a boolean");
     }
-    if (kb.expiry) {
-      for (const [key, value] of Object.entries(kb.expiry)) {
-        if (typeof value === "number" && value < 0) {
-          errors.push(`kb.expiry.${key} must be non-negative`);
+    if (kb.expiry && !kb.freshness) {
+      console.error("[infobroker] kb.expiry is deprecated — migrate to kb.freshness tiers");
+    }
+    if (!kb.freshness && !kb.expiry) {
+      errors.push("kb must define freshness or expiry");
+    }
+    if (kb.freshness) {
+      if (!kb.freshness.tiers || typeof kb.freshness.tiers !== "object") {
+        errors.push("kb.freshness.tiers must be an object");
+      } else {
+        for (const [tier, def] of Object.entries(kb.freshness.tiers)) {
+          if (typeof (def as Record<string, unknown>).decay_hours !== "number" || (def as Record<string, unknown>).decay_hours === undefined) {
+            errors.push(`kb.freshness.tiers.${tier}.decay_hours must be a number`);
+          }
+          if (typeof (def as Record<string, unknown>).expiry_hours !== "number" || (def as Record<string, unknown>).expiry_hours === undefined) {
+            errors.push(`kb.freshness.tiers.${tier}.expiry_hours must be a number`);
+          }
         }
       }
+      if (typeof kb.freshness.auto_classify !== "boolean") {
+        errors.push("kb.freshness.auto_classify must be a boolean");
+      }
+      if (typeof kb.freshness.default_tier !== "string") {
+        errors.push("kb.freshness.default_tier must be a string");
+      }
+    }
+    if (kb.kb_first_relevance_threshold !== undefined && typeof kb.kb_first_relevance_threshold !== "number") {
+      errors.push("kb.kb_first_relevance_threshold must be a number");
+    }
+    if (kb.kb_first_confidence_threshold !== undefined && typeof kb.kb_first_confidence_threshold !== "number") {
+      errors.push("kb.kb_first_confidence_threshold must be a number");
     }
   }
 

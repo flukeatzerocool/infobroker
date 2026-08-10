@@ -120,10 +120,11 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
 | **Vector store** | The local database that indexes chunks by their embedding vectors and supports semantic (vector similarity) and keyword (full-text) retrieval. |
 | **KB** | Abbreviation for "knowledge base." |
+| **Freshness tier** | A classification assigned to knowledge base content at ingest time that determines how quickly its retrieval confidence decays and when it expires. Tiers range from volatile content that loses accuracy rapidly to stable content that remains accurate indefinitely. |
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–072 (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -182,7 +183,7 @@ HTTP fetch if the selected renderer is throttled or errors. _Check:_ G0, G1.
 Query autocomplete. Parameters: `query` (required), `provider` (optional, defaults to DuckDuckGo autocomplete endpoint). Returns an array of suggestion strings. _Check:_ G0, G1.
 
 **REQ-023 — `choose_provider`**
-Recommend the best provider for a given task. Parameters: `task` (required, natural-language description of what the user wants to find), `priority` (optional: `speed`, `quality`, `privacy`, `free_only`). Returns: recommended provider slug, rationale, fallback chain, estimated latency, quota status. _Check:_ G0, G1.
+Recommend the best provider for a given task. Parameters: `task` (required, natural-language description of what the user wants to find), `priority` (optional: `speed`, `quality`, `privacy`, `free_only`). When the knowledge base is configured and contains indexed content, the recommendation SHALL include knowledge base search as a first-resort option. Returns: recommended provider slug, rationale, fallback chain, estimated latency, quota status. _Check:_ G0, G1.
 
 **REQ-024 — `list_providers`**
 List all configured providers with their status, capabilities, rate limits, quota usage, and supported task types. Parameters: `status` (optional filter: `active`, `all`). _Check:_ G0, G1.
@@ -245,7 +246,7 @@ configuration active without interruption. _Check:_ G1.
 The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned. _Check:_ G1.
 
 **REQ-041 — `spec_health`**
-Build health report. Returns the operational status of the server: build identity (version), provider summary (count, active count), uptime, cumulative request count, and paths to persistent state files. _Check:_ G0, G1.
+Build health report. Returns the operational status of the server: build identity (version), provider summary (count, active count), uptime, cumulative request count, and paths to persistent state files. When the knowledge base is configured, the report SHALL include knowledge base status: total chunk count, collection names and their chunk counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
 ### 4.9 Provider Architecture
 
@@ -267,10 +268,10 @@ provider tier or transport. _Check:_ G1.
 ### 4.6 Client Artifacts
 
 **REQ-050 — `search-preferences.md`**
-The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence).
+The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
 
 **REQ-051 — Orchestrator Skill**
-The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill defines two pipelines: "Research Professional" and "Fact-Check Pipeline". _Check:_ G3 (file presence).
+The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge base search phase positioned before external web search, such that the client retrieves previously indexed results before making outbound requests. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
 The build SHALL include all skill dependencies at `vendor/opencode-skills/` so the repo requires no external skill paths. Each bundled skill SHALL include an "Infobroker Integration" section documenting its role in the pipeline. _Check:_ G3 (file presence).
@@ -318,13 +319,25 @@ Search results from `web_search`, rendered page content from `fetch_page`, and f
 
 A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
 
+**REQ-074 — Freshness Classification**
+
+Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
+
+**REQ-075 — Confidence Decay**
+
+Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL be proportional to the content's freshness tier and the elapsed time since ingestion. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
+
 **REQ-066 — Content Expiry**
 
-Indexed content SHALL be removable by age. Expiry intervals SHALL be configurable independently per source type. On server startup and at a configurable maintenance interval, content whose age exceeds the expiry interval for its source type SHALL be removed. Source types configured with a zero or absent expiry interval SHALL never expire. _Check:_ G1.
+Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its source type. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
+
+**REQ-076 — KB-First Sufficiency**
+
+When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
 
 **REQ-067 — Knowledge Base Configuration**
 
-The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, per-source-type content expiry intervals, and maximum results per query. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, and maximum results per query. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
 

@@ -31,6 +31,11 @@ description: >
 Use this for reports, articles, documentation, and in-depth analysis.
 
 ```
+Phase 0: RECALL
+  Infobroker `kb_search` — check local knowledge base for previously indexed results
+  → If results found and freshness-adjusted scores are sufficient, skip to Phase 2
+  → If results are empty or stale, continue to Phase 1 (SEARCH)
+
 Phase 1: SEARCH
   Infobroker `web_search` (multi-provider, with fallback)
   → Infobroker `converge` (if truth-finding or cross-source verification needed)
@@ -62,6 +67,7 @@ Phase 7: CITE
 Use this when the user wants to verify specific claims.
 
 ```
+0. RECALL: Infobroker `kb_search` on all claims — check if previously verified
 1. EXTRACT claims from the user's input
 2. SEARCH each claim with Infobroker `web_search` (targeted, per-claim queries)
 3. CROSS-REFERENCE with Infobroker `converge` for multi-source verification

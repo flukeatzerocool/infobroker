@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-072
+// @implements REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
@@ -207,6 +207,38 @@ function chunkText(text: string, title: string): string[] {
   return chunks;
 }
 
+function classifyFreshness(query?: string, timeRange?: string, provider?: string, sourceType?: string): string {
+  if (!kbConfig?.freshness?.auto_classify) {
+    return kbConfig?.freshness?.default_tier || "stable";
+  }
+
+  if (timeRange === "day") return "ephemeral";
+  if (timeRange === "week") return "recent";
+
+  if (provider === "wikipedia") return "evergreen";
+  if (sourceType === "converge") return "stable";
+  if (sourceType === "fetch_page") return "stable";
+
+  if (query) {
+    const lower = query.toLowerCase();
+    if (/\b(latest|current|today|breaking|live|now|just\s+in)\b/.test(lower)) return "ephemeral";
+    if (/\b(recent|update|this\s+week|this\s+month)\b/.test(lower)) return "recent";
+    if (/\b(202\d|this\s+year)\b/.test(lower)) return "recent";
+  }
+
+  return kbConfig?.freshness?.default_tier || "stable";
+}
+
+function computeFreshnessScore(tier: string, ingestedAt: number, now: number): number {
+  const tiers = kbConfig?.freshness?.tiers;
+  if (!tiers || !tiers[tier]) return 1;
+  const def = tiers[tier];
+  if (!def.decay_hours || def.decay_hours === 0) return 1;
+  const ageHours = (now - ingestedAt) / (1000 * 60 * 60);
+  const factor = Math.max(0, 1 - ageHours / def.decay_hours);
+  return factor;
+}
+
 export function initKb(config: KbConfig): void {
   kbConfig = config;
   const raw = resolvePath(config.storage_path);
@@ -241,6 +273,7 @@ export function kbSearch(
   const kwRegexes = queryTokens.map((t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
   const actualMax = Math.min(maxResults, kbConfig.max_results);
   const results: KbSearchResult[] = [];
+  const now = Date.now();
 
   for (const chunk of store.chunks) {
     if (collection && chunk.collection !== collection) continue;
@@ -251,10 +284,13 @@ export function kbSearch(
     const combinedScore = vecSimilarity * 0.7 + kwScore * 0.3;
 
     if (combinedScore > 0) {
+      const freshnessScore = computeFreshnessScore(chunk.freshness_tier, chunk.ingested_at, now);
       results.push({
         chunk_id: chunk.id,
         text: chunk.text,
         score: combinedScore,
+        freshness_score: freshnessScore,
+        freshness_tier: chunk.freshness_tier,
         source_url: chunk.source_url,
         title: chunk.title,
         provider: chunk.provider,
@@ -264,7 +300,7 @@ export function kbSearch(
     }
   }
 
-  results.sort((a, b) => b.score - a.score);
+  results.sort((a, b) => b.freshness_score - a.freshness_score);
   return results.slice(0, actualMax);
 }
 
@@ -274,13 +310,15 @@ export function kbIngest(
   sourceUrl: string,
   provider: string,
   collection?: string,
-  sourceType?: string
+  sourceType?: string,
+  freshnessTier?: string
 ): number {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!store) return 0;
 
   const resolvedCollection = collection || kbConfig.default_collection || "default";
   const resolvedSourceType = sourceType || "web_search";
+  const resolvedTier = freshnessTier || kbConfig?.freshness?.default_tier || "stable";
   const chunks = chunkText(text, title);
 
   if (chunks.length === 0) {
@@ -310,6 +348,7 @@ export function kbIngest(
       provider,
       collection: resolvedCollection,
       source_type: resolvedSourceType,
+      freshness_tier: resolvedTier,
       ingested_at: now,
     });
   }
@@ -337,9 +376,11 @@ export function kbStats(): KbStats {
   }
 
   const collections: Record<string, number> = {};
+  const tiers: Record<string, number> = {};
   let lastIngestion = 0;
   for (const c of store?.chunks ?? []) {
     collections[c.collection] = (collections[c.collection] || 0) + 1;
+    tiers[c.freshness_tier] = (tiers[c.freshness_tier] || 0) + 1;
     if (c.ingested_at > lastIngestion) lastIngestion = c.ingested_at;
   }
 
@@ -355,6 +396,7 @@ export function kbStats(): KbStats {
   return {
     chunk_count: store?.chunks.length ?? 0,
     collections,
+    freshness_tiers: Object.keys(tiers).length > 0 ? tiers : undefined,
     storage_size_bytes: sizeBytes,
     last_ingestion: lastIngestion ? new Date(lastIngestion).toISOString() : null,
     model_available: modelAvailable,
@@ -404,7 +446,9 @@ export function autoIndex(
   results: Array<{ title: string; url: string; snippet: string }>,
   provider: string,
   collection?: string,
-  sourceType?: string
+  sourceType?: string,
+  query?: string,
+  timeRange?: string
 ): void {
   if (!kbConfig || !kbConfig.auto_index) return;
   if (!store) return;
@@ -412,11 +456,12 @@ export function autoIndex(
   setImmediate(() => {
     try {
       let totalChunks = 0;
+      const tier = classifyFreshness(query, timeRange, provider, sourceType || provider);
       for (const r of results) {
         if (!r.snippet && !r.title) continue;
         const text = r.snippet || r.title;
         const sourceUrl = r.url || "";
-        totalChunks += kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider);
+        totalChunks += kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider, tier);
       }
       if (totalChunks > 0) flushWrite();
     } catch {
@@ -427,16 +472,17 @@ export function autoIndex(
 
 export function runMaintenance(): void {
   if (!kbConfig || !store) return;
+  const tiers = kbConfig.freshness?.tiers;
+  if (!tiers) return;
   const now = Date.now();
   const before = store.chunks.length;
 
-  for (const [sourceType, hours] of Object.entries(kbConfig.expiry)) {
-    if (!hours || hours <= 0) continue;
-    const cutoff = now - hours * 60 * 60 * 1000;
-    store.chunks = store.chunks.filter(
-      (c) => c.source_type !== sourceType || c.ingested_at > cutoff
-    );
-  }
+  store.chunks = store.chunks.filter((c) => {
+    const def = tiers[c.freshness_tier];
+    if (!def || !def.expiry_hours || def.expiry_hours <= 0) return true;
+    const cutoff = now - def.expiry_hours * 60 * 60 * 1000;
+    return c.ingested_at > cutoff;
+  });
 
   const removed = before - store.chunks.length;
   if (removed > 0) {

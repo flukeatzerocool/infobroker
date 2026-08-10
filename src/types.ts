@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-003 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070
+// @implements REQ-001 REQ-003 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
 export interface SearchResult {
   title: string;
   url: string;
@@ -119,7 +119,14 @@ export interface KbConfig {
   auto_index: boolean;
   default_collection: string;
   max_results: number;
-  expiry: Record<string, number>;
+  expiry?: Record<string, number>;
+  freshness?: {
+    tiers: Record<string, { decay_hours: number; expiry_hours: number }>;
+    auto_classify: boolean;
+    default_tier: string;
+  };
+  kb_first_relevance_threshold?: number;
+  kb_first_confidence_threshold?: number;
   max_vocab_terms: number;
   maintenance_interval_minutes: number;
 }
@@ -133,6 +140,7 @@ export interface KbChunk {
   provider: string;
   collection: string;
   source_type: string;
+  freshness_tier: string;
   ingested_at: number;
 }
 
@@ -140,6 +148,8 @@ export interface KbSearchResult {
   chunk_id: string;
   text: string;
   score: number;
+  freshness_score: number;
+  freshness_tier: string;
   source_url: string;
   title: string;
   provider: string;
@@ -150,6 +160,7 @@ export interface KbSearchResult {
 export interface KbStats {
   chunk_count: number;
   collections: Record<string, number>;
+  freshness_tiers?: Record<string, number>;
   storage_size_bytes: number;
   last_ingestion: string | null;
   model_available: boolean;
