@@ -269,7 +269,7 @@ async function doWebSearch(
             setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
           ),
         ]);
-      results = await retryWithBackoff(timedCall, slug);
+      results = await retryWithBackoff(timedCall, slug, config.providers[slug]);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -329,7 +329,7 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
               setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
             ),
           ]);
-        content = await retryWithBackoff(timedCall, slug);
+        content = await retryWithBackoff(timedCall, slug, config.providers[slug]);
       } catch {
         continue;
       }
@@ -636,6 +636,7 @@ server.registerTool(
       query: z.string().describe("Search query"),
       max_iterations: z.number().min(1).max(10).optional().default(5),
       confidence_threshold: z.number().min(0).max(1).optional().default(0.8),
+      providers: z.array(z.string()).optional().describe("Provider slugs to use (defaults to all active web_search providers)"),
     },
   },
   async (params) => {
@@ -643,6 +644,7 @@ server.registerTool(
       const result = await converge(String(params.query), {
         max_iterations: Number(params.max_iterations ?? 5),
         confidence_threshold: Number(params.confidence_threshold ?? 0.8),
+        providers: params.providers as string[] | undefined,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),

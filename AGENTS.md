@@ -104,6 +104,7 @@ This runs:
 | `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool names, links, comparison table |
+| `npm run test`       | Vitest unit and integration tests                  |
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
 REQs with no waiver in DECISIONS.md, undocumented source files, REQ body

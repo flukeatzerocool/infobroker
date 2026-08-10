@@ -29,6 +29,36 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.10 — Convergence Loop Implementation
+
+- The `converge` tool now accepts a `providers` parameter so users can
+  scope multi-source verification to specific backends (REQ-026).
+
+- Convergence no longer simply counts unique domains and deduplicates
+  sources. It now compares what sources actually claim using token-based
+  similarity, clustering agreeing sources and surfacing competing
+  perspectives when sources disagree. This transforms convergence from
+  federated search with deduplication into a truth-finding loop that
+  detects agreement, contradiction, and gaps (REQ-026).
+
+- Phase 1 broad search now dispatches to all providers in parallel using
+  `Promise.allSettled`, cutting convergence latency significantly for
+  typical configurations. Per-provider throttles remain independent and
+  safe for concurrent dispatch.
+
+- Gap refinement (Phase 3) now distributes follow-up queries across
+  available providers using round-robin selection rather than repeatedly
+  hitting a single backend, improving result diversity.
+
+- Provider retry behavior is now configurable per-provider: each provider
+  in `config.json` accepts `retry_count` and `retry_backoff_ms` fields
+  that override the default exponential backoff (1s, 2s, 4s). Absent
+  configuration preserves existing behavior (REQ-032).
+
+- Convergence now has 26 automated tests covering topic extraction, claim
+  similarity scoring, agreement detection, disagreement with perspectives,
+  provider filtering, and iteration limits.
+
 ## 2026.08.10 — Spec Review Remediation
 
 - The dispatch table in §7.2 was aligned to the canonical `config.json`:

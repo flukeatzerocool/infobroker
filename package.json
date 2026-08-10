@@ -8,13 +8,14 @@
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "validate-spec": "npx tsx scripts/validate-spec.ts",
     "validate-readme": "npx tsx scripts/validate-readme.ts",
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",
     "version-bump": "npx tsx scripts/version-bump.ts",
     "version-sync": "npx tsx scripts/version-check.ts",
     "push": "bash scripts/push-pipeline.sh",
-    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme",
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run test",
     "hash": "npx tsx scripts/hash-manifest.ts"
   },
   "keywords": [
@@ -34,6 +35,7 @@
     "@types/node": "^26.1.2",
     "markdownlint-cli": "^0.49.1",
     "tsx": "^4.23.5",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

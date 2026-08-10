@@ -17,6 +17,8 @@ export interface ProviderConfig {
   enabled: boolean;
   priority: number;
   timeout?: number;
+  retry_count?: number;
+  retry_backoff_ms?: number;
 }
 
 export interface Config {

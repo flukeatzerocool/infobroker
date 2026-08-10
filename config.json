@@ -7,7 +7,9 @@
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
       "priority": 10,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "jina": {
       "type": "free_http",
@@ -16,7 +18,9 @@
       "rate_limit": { "per_second": 1 },
       "enabled": true,
       "priority": 10,
-      "timeout": 15000
+      "timeout": 15000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "wikipedia": {
       "type": "free_http",
@@ -25,7 +29,9 @@
       "rate_limit": { "per_second": 5 },
       "enabled": true,
       "priority": 20,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "wiktionary": {
       "type": "free_http",
@@ -34,7 +40,9 @@
       "rate_limit": { "per_second": 5 },
       "enabled": true,
       "priority": 20,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "wikidata": {
       "type": "free_http",
@@ -43,7 +51,9 @@
       "rate_limit": { "per_second": 5 },
       "enabled": true,
       "priority": 20,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "openstreetmap": {
       "type": "free_http",
@@ -52,7 +62,9 @@
       "rate_limit": { "per_second": 1 },
       "enabled": true,
       "priority": 20,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "internet_archive": {
       "type": "free_http",
@@ -61,7 +73,9 @@
       "rate_limit": { "per_second": 1 },
       "enabled": true,
       "priority": 20,
-      "timeout": 15000
+      "timeout": 15000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "arxiv": {
       "type": "free_http",
@@ -70,7 +84,9 @@
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
       "priority": 15,
-      "timeout": 15000
+      "timeout": 15000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "semantic_scholar": {
       "type": "free_http",
@@ -80,7 +96,9 @@
       "auth_env": "INFOBROKER_SEMANTIC_SCHOLAR_API_KEY",
       "enabled": true,
       "priority": 25,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "stack_exchange": {
       "type": "free_http",
@@ -90,7 +108,9 @@
       "auth_env": "INFOBROKER_STACK_EXCHANGE_API_KEY",
       "enabled": true,
       "priority": 15,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "github": {
       "type": "free_http",
@@ -100,7 +120,9 @@
       "auth_env": "INFOBROKER_GITHUB_API_KEY",
       "enabled": true,
       "priority": 15,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "core": {
       "type": "free_http",
@@ -110,7 +132,9 @@
       "auth_env": "INFOBROKER_CORE_API_KEY",
       "enabled": true,
       "priority": 15,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "marginalia": {
       "type": "scraped",
@@ -119,7 +143,9 @@
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000
+      "timeout": 30000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "mojeek": {
       "type": "scraped",
@@ -128,7 +154,9 @@
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000
+      "timeout": 30000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "brave": {
       "type": "keyed_http",
@@ -138,7 +166,9 @@
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
       "enabled": true,
       "priority": 30,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "exa": {
       "type": "keyed_http",
@@ -148,7 +178,9 @@
       "auth_env": "INFOBROKER_EXA_API_KEY",
       "enabled": true,
       "priority": 30,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "tavily": {
       "type": "keyed_http",
@@ -158,7 +190,9 @@
       "auth_env": "INFOBROKER_TAVILY_API_KEY",
       "enabled": true,
       "priority": 30,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "searxng": {
       "type": "self_hosted_http",
@@ -168,7 +202,9 @@
       "url_env": "INFOBROKER_SEARXNG_URL",
       "enabled": false,
       "priority": 40,
-      "timeout": 10000
+      "timeout": 10000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     },
     "native_fetch": {
       "type": "builtin",
@@ -177,7 +213,9 @@
       "rate_limit": {},
       "enabled": true,
       "priority": 1,
-      "timeout": 30000
+      "timeout": 30000,
+      "retry_count": 3,
+      "retry_backoff_ms": 1000
     }
   },
   "dispatch": {
