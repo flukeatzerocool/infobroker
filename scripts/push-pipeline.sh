@@ -7,7 +7,38 @@
 # current spec, dead-data audit, and documentation refresh.
 #
 # Usage:
-#   ./scripts/push-pipeline.sh
+#   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--help]
+#   --dry-run    Assemble, check, typecheck — skip commit, push, tag.
+#   --yes (-y)   Skip confirmation prompt before commit/push.
+#   --help (-h)  Show this message.
+
+# ── Flag parsing ──
+
+DRY_RUN=false
+FORCE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    --yes|-y) FORCE=true ;;
+    --help|-h)
+      echo "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes]"
+      echo ""
+      echo "  --dry-run   Spec audit, read-through, sync, checks, scans — skip commit, push, tag."
+      echo "  --yes (-y)  Skip confirmation prompt before commit/push."
+      echo "  --help (-h) Show this message."
+      echo ""
+      echo "Steps: spec audit → read-through → server sync → provider auth sync →"
+      echo "       typecheck → dead-data scan → README update → commit → push → tag"
+      exit 0
+      ;;
+    *)
+      echo "Unknown flag: $arg"
+      echo "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes]"
+      exit 1
+      ;;
+  esac
+done
 
 set -euo pipefail
 
@@ -52,7 +83,7 @@ run_opencode() {
   fi
 
   local timeout_cmd=("opencode")
-  if [[ "${OPC_TIMEOUT:-0}" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
+  if [[ "${OPC_TIMEOUT:-1800}" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
     timeout_cmd=("timeout" "$OPC_TIMEOUT" "opencode")
   fi
 
@@ -76,8 +107,11 @@ run_opencode() {
       --title "${session_title}-retry" \
       --dir "$PROJECT_DIR" \
       "$prompt" \
-      > "$out_file" 2>> "$WRAP_LOG"
+      > "${out_file}.retry" 2>> "$WRAP_LOG"
     OPC_RC=$?
+    if [[ $OPC_RC -eq 0 ]]; then
+      mv "${out_file}.retry" "$out_file"
+    fi
     set -e
   fi
 }
@@ -161,7 +195,7 @@ if ! command -v npx >/dev/null 2>&1; then
   FAILED_PRECHECKS="$FAILED_PRECHECKS npx"
 fi
 
-if ! npm ls --depth=0 2>/dev/null >/dev/null; then
+if ! npm ls --depth=0 >/dev/null 2>&1; then
   echo -e "${RED}npm dependencies missing — run 'npm install' first${NC}"
   FAILED_PRECHECKS="$FAILED_PRECHECKS npm-deps"
 fi
@@ -173,6 +207,23 @@ if [[ -n "$FAILED_PRECHECKS" ]]; then
 fi
 
 echo -e "${GREEN}Pre-flight checks: PASSED${NC}"
+echo ""
+
+# ── clean working tree ──────────────────────────────────────────────────────
+
+if ! git -C "$PROJECT_DIR" diff --exit-code --quiet 2>/dev/null; then
+  echo -e "${RED}Working tree has unstaged changes. Commit or stash before running.${NC}"
+  git -C "$PROJECT_DIR" status --short
+  exit 1
+fi
+
+if ! git -C "$PROJECT_DIR" diff --cached --exit-code --quiet 2>/dev/null; then
+  echo -e "${RED}Working tree has staged changes. Commit or unstage before running.${NC}"
+  git -C "$PROJECT_DIR" status --short
+  exit 1
+fi
+
+echo -e "${GREEN}Working tree: clean${NC}"
 echo ""
 
 # ── step 1: spec audit ─────────────────────────────────────────────────────
@@ -257,6 +308,17 @@ echo ""
 echo -e "${GREEN}Read-through: DONE — ${critical}c / ${high}h / ${info}i${NC}"
 if [[ "$high" != "0" && "$high" != "?" ]]; then
   echo -e "${YELLOW}Warning: ${high} high-severity finding(s) — review before commit.${NC}"
+fi
+echo ""
+
+# Deterministic gate: if read-through auto-fixed infobroker.md, re-verify spec checks
+if git -C "$PROJECT_DIR" diff --name-only | grep -q 'infobroker.md'; then
+  echo -e "${YELLOW}infobroker.md modified by read-through — re-verifying spec checks...${NC}"
+  if ! npm run check 2>/dev/null; then
+    echo -e "${RED}Spec checks FAILED after read-through auto-fix. Aborting.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}Post-read-through spec checks: PASSED${NC}"
 fi
 echo ""
 
@@ -414,6 +476,14 @@ echo ""
 echo -e "${GREEN}README + references update: DONE${NC}"
 echo ""
 
+# ── Dry-run exit ────────────────────────────────────────────────────────────
+
+if $DRY_RUN; then
+  echo ""
+  echo -e "${YELLOW}[DRY RUN] All checks passed. Would commit and push.${NC}"
+  exit 0
+fi
+
 # ── step 8a: pre-commit guard ──────────────────────────────────────────────
 
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
@@ -421,7 +491,7 @@ echo -e "${GREEN}Step 8a/9: Pre-commit guard${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
 echo ""
 
-if git -C "$PROJECT_DIR" diff --name-only | grep -q 'node_modules'; then
+if git -C "$PROJECT_DIR" diff --name-only | grep -q '^node_modules/'; then
   echo -e "${RED}node_modules in diff — aborting commit. Check .gitignore.${NC}"
   exit 1
 fi
@@ -441,9 +511,13 @@ echo ""
 # Read version from package.json for the tag (set by version-bump in step 3)
 VERSION=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || echo "unknown")
 
-git -C "$PROJECT_DIR" add infobroker.md README.md CHANGELOG.md AGENTS.md \
-  package.json tsconfig.json config.json \
-  instructions/ src/ skills/ scripts/ vendor/ 2>/dev/null || true
+# Stage explicit root files (skip missing without error)
+for f in infobroker.md README.md CHANGELOG.md AGENTS.md \
+         package.json tsconfig.json config.json; do
+  [[ -f "$f" ]] && git -C "$PROJECT_DIR" add "$f"
+done
+# Stage only tracked modifications in subdirectories (never untracked files)
+git -C "$PROJECT_DIR" add -u instructions/ src/ skills/ scripts/ vendor/
 
 COMMIT_DATE=$(date +%Y-%m-%d)
 
@@ -460,6 +534,26 @@ COMMIT_SUMMARY="${COMMIT_SUMMARY}Spec audited, README and references refreshed."
 if git -C "$PROJECT_DIR" diff --staged --quiet 2>/dev/null; then
   echo -e "${YELLOW}No changes to commit.${NC}"
 else
+  echo ""
+  echo -e "${YELLOW}Changes about to be committed:${NC}"
+  git -C "$PROJECT_DIR" diff --staged --stat
+  echo ""
+
+  # Confirmation prompt (skip if --yes, refuse in non-TTY)
+  if ! $FORCE; then
+    if [[ ! -t 0 ]]; then
+      echo -e "${RED}Non-interactive terminal detected.${NC}"
+      echo -e "${RED}Use --yes to skip the confirmation prompt in CI/unattended runs.${NC}"
+      exit 1
+    fi
+    read -p "Commit, push, and tag? (y/N) " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      echo "Aborted."
+      exit 0
+    fi
+  fi
+  echo ""
+
   echo -e "${YELLOW}Committing changes...${NC}"
   git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}
 
@@ -482,7 +576,10 @@ echo -e "${GREEN}Push: DONE${NC}"
 # Tag with version
 echo -e "${YELLOW}Tagging v${VERSION}...${NC}"
 if git -C "$PROJECT_DIR" tag -l "v${VERSION}" | grep -q "v${VERSION}"; then
-  echo -e "${YELLOW}  Tag v${VERSION} exists — force-moving to HEAD${NC}"
+  echo -e "${YELLOW}  Tag v${VERSION} already exists and WILL BE OVERWRITTEN.${NC}"
+  echo -e "${YELLOW}  Packages that pinned the old tag will see divergence.${NC}"
+  echo -e "${YELLOW}  To skip tagging, Ctrl-C now (5s).${NC}"
+  sleep 5
   git -C "$PROJECT_DIR" tag -f "v${VERSION}"
 else
   git -C "$PROJECT_DIR" tag "v${VERSION}"
