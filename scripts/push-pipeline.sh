@@ -233,18 +233,7 @@ echo -e "${GREEN}Step 1/9: Spec audit${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
 echo ""
 
-# 1a: lint the spec markdown
-echo -e "${YELLOW}Linting infobroker.md...${NC}"
-set +e
-npx markdownlint infobroker.md 2>/dev/null
-SPECLINT_RC=$?
-set -e
-if [[ $SPECLINT_RC -ne 0 ]]; then
-  echo -e "${YELLOW}infobroker.md lint warnings (non-blocking)${NC}"
-fi
-echo ""
-
-# 1b: run full check suite
+# run full check suite
 echo -e "${YELLOW}Running spec checks (typecheck + validate-spec + validate-readme)...${NC}"
 if ! npm run check 2>/dev/null; then
   echo ""
@@ -346,7 +335,7 @@ implementation gaps between the spec and the code.
 5. Run \`npm run version-bump\` to update the version in package.json and
    src/index.ts to today's date.
 6. Smoke test: start the server and call \`infobroker_spec_health\`. Verify:
-   - Tool count has not decreased from baseline (9 tools)
+    - Tool count has not decreased from baseline (13 tools)
    - Provider count matches config.json
    - No confidence scores below 50%
    - \`last_spec_review\` timestamp is current (within 24 hours)
@@ -436,11 +425,12 @@ tool count, provider count, and key features.
    REQs from infobroker.md. Draft feature blurbs following the existing cadence.
 3. Check the provider comparison table — update counts, tiers, and any new
    competitive advantages from recent REQ changes.
-4. Verify tool names in README match the 9-tool surface: infobroker_web_search,
+4. Verify tool names in README match the 13-tool surface: infobroker_web_search,
    infobroker_fetch_page, infobroker_search_suggestions,
    infobroker_choose_provider, infobroker_list_providers,
    infobroker_provider_health, infobroker_converge, infobroker_reload_config,
-   infobroker_spec_health. Update any stale names.
+   infobroker_spec_health, infobroker_kb_search, infobroker_kb_ingest,
+   infobroker_kb_stats, infobroker_kb_delete. Update any stale names.
 5. Update skills/infobroker/references/provider-auth.md if config.json has
    changed.
 6. Update skills/infobroker/references/provider-map.md — verify provider slugs,
@@ -517,7 +507,7 @@ for f in infobroker.md README.md CHANGELOG.md AGENTS.md \
   [[ -f "$f" ]] && git -C "$PROJECT_DIR" add "$f"
 done
 # Stage only tracked modifications in subdirectories (never untracked files)
-git -C "$PROJECT_DIR" add -u instructions/ src/ skills/ scripts/ vendor/
+git -C "$PROJECT_DIR" add -u instructions/ src/ skills/ scripts/
 
 COMMIT_DATE=$(date +%Y-%m-%d)
 

@@ -6,7 +6,7 @@
 src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  →  src/normalizer.ts  →  src/providers/ (→ src/converge.ts)  →  src/index.ts
 ```
 
-## Tool Surface (9 tools)
+## Tool Surface (13 tools)
 
 | Tool | Purpose |
 |------|---------|
@@ -19,6 +19,10 @@ src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  �
 | `infobroker_converge` | Multi-pass truth-finding with cross-source verification |
 | `infobroker_reload_config` | Hot-reload config.json without restart |
 | `infobroker_spec_health` | Build health: counts, uptime, request stats |
+| `infobroker_kb_search` | Semantic and keyword hybrid search over local knowledge base |
+| `infobroker_kb_ingest` | Ingest text or URL content into the knowledge base |
+| `infobroker_kb_stats` | Knowledge base operational metrics |
+| `infobroker_kb_delete` | Remove content from the knowledge base |
 
 ## Provider Backends
 
