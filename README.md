@@ -4,8 +4,9 @@ README DESIGN:
   Demo: Natural-language prompts in blockquotes ("Search for..."),
     never tool names (`infobroker_web_search`). Show the reader how
     to express what they want — the AI maps intent to tools.
-  Structure: Hero → Quick Start → MCP Server (§3 features) → Providers →
-    Configuration → How It Compares → Contribute → License → Spec.
+  Structure: Hero → North Star → Quick Start → MCP Server (§3 features) →
+    Providers → Configuration → How It Compares → Contribute →
+    License → Spec.
   Audience split: §2 is for developers who want to start the server.
     §3 describes what users can do with it. §4-5 are configuration.
     §6 is competitive context.
@@ -27,10 +28,13 @@ README DESIGN:
   Hero: Exactly three elements — h1 heading, bold tagline, one prose
     paragraph. No sub-headings, bullet lists, or preamble paragraphs.
     The tagline uses short declarative fragments separated by periods
-    — never a sentence or question. The closing refrain "Free first.
+    — never a sentence or question.   The closing refrain "Free first.
     Privacy always." is echoed in the comparison section; changing
     one requires updating the other. Enforced maximum 200 words
     (validate-readme).
+  North Star: Single paragraph stating the Bothan Spynet metaphor and
+    intelligence-cycle framing. No sub-headings, lists, or blockquotes.
+    Maximum 100 words (enforced by validate-readme).
 -->
 
 # Infobroker
@@ -46,6 +50,14 @@ self-hosting. A built-in convergence engine cross-references independent
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
+
+## North Star
+
+Infobroker is the Bothan Spynet as a tool — a decentralized intelligence
+network that queries independent sources and routes results through a
+single, impartial interface. In intelligence-cycle terms, you supply the
+direction and get the dissemination; the server handles the collection and
+processing.
 
 ## Quick Start
 

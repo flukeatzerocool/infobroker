@@ -13,6 +13,20 @@ unified tool surface. Its design goals:
 5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, fact-checking, and proofreading.
 6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
+### North Star
+
+Infobroker is the Bothan Spynet as a tool. Like the Spynet's decentralized
+cells trading intelligence across the galaxy, Infobroker queries independent
+provider backends — each with its own sources, specialties, and limits —
+through a single, impartial interface. It doesn't collect secrets, cultivate
+sources, or pick sides. It retrieves, normalizes, and delivers.
+
+In intelligence-cycle terms: the user's query is direction; provider
+backends are collection; the normalizer, rate-limiter, and quota tracker are
+processing; and the response contract is dissemination. Infobroker automates
+collection and processing so the user only supplies direction and receives
+dissemination — ask, and it finds out.
+
 Infobroker is not a chatbot. It is a search backend. It complements (not replaces)
 built-in client `websearch`/`webfetch` tools — the bundled client instructions
 route to Infobroker first, falling back to built-ins only on error.

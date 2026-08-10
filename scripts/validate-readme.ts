@@ -67,6 +67,7 @@ function checkHeadingOrder(text: string): Issue[] {
 
   const expected: { level: number; title: string }[] = [
     { level: 1, title: "Infobroker" },
+    { level: 2, title: "North Star" },
     { level: 2, title: "Quick Start" },
     { level: 2, title: "MCP Server" },
     { level: 2, title: "Providers" },
@@ -371,6 +372,13 @@ function checkSectionLengths(text: string): Issue[] {
     if (headings[i].title === "Infobroker") {
       if (wordCount > 200) {
         issues.push({ error: false, msg: `Hero section is ${wordCount} words — may be growing too long (suggest ≤200)` });
+      }
+      continue;
+    }
+
+    if (headings[i].title === "North Star") {
+      if (wordCount > 100) {
+        issues.push({ error: false, msg: `North Star section is ${wordCount} words — suggest ≤100 for a single short paragraph (README design comment)` });
       }
       continue;
     }
