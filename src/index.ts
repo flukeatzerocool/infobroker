@@ -494,14 +494,14 @@ function doSpecHealth(): string {
   const avgConfidence = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   const minConfidence = scores.length > 0 ? Math.min(...scores) : 0;
 
-  const toolCount = 13;
+  const toolCount = Object.keys((server as any)._registeredTools).length;
 
   return `[OK] ${json({
     status: "ok",
     provider: "system",
     results: [{
       build_version: "2026.08.10",
-      provider_count: Object.keys(config.providers).length,
+      provider_count: Object.keys(config.providers).filter(k => k !== "native_fetch").length,
       active_provider_count: activeCount,
       tool_count: toolCount,
       provider_confidence: {
