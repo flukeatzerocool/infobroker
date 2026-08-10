@@ -109,7 +109,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–067 (knowledge base).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–067 (knowledge base), 070–071 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -153,7 +153,12 @@ unsupported parameter. The server SHALL enforce `max_results` on the response
 even when the underlying provider ignores it. _Check:_ G0, G1.
 
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required), `renderer` (optional: `jina` default, `native_fetch`, `wikipedia`, `internet_archive`), `max_length` (default 50k chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which produces clean Markdown optimized for LLM consumption. Falls back to native HTTP fetch if Jina is throttled or errors. _Check:_ G0, G1.
+Fetch and extract the content of a URL. Parameters: `url` (required),
+`renderer` (optional: `jina` default, `native_fetch`, `wikipedia`,
+`internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k
+chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which
+produces clean Markdown optimized for LLM consumption. Falls back to native
+HTTP fetch if the selected renderer is throttled or errors. _Check:_ G0, G1.
 
 **REQ-022 — `search_suggestions`**
 Query autocomplete. Parameters: `query` (required), `provider` (optional, defaults to DuckDuckGo autocomplete endpoint). Returns an array of suggestion strings. _Check:_ G0, G1.
@@ -165,7 +170,13 @@ Recommend the best provider for a given task. Parameters: `task` (required, natu
 List all configured providers with their status, capabilities, rate limits, quota usage, and supported task types. Parameters: `status` (optional filter: `active`, `all`). _Check:_ G0, G1.
 
 **REQ-025 — `provider_health`**
-Detailed health for a specific provider. Parameters: `provider` (required slug). Returns: status, quota_used, quota_remaining, quota_reset_at, avg_latency_ms, last_error, last_success. _Check:_ G0, G1.
+Provider health report. Parameters: `provider` (required slug). When
+`provider_health` is invoked, the server SHALL perform a live connectivity
+check against the provider. The reported `status` and `avg_latency_ms`
+SHALL reflect the result of this live check. Quota fields SHALL report
+current counters. The `last_error` and `last_success` fields SHALL report
+the most recent error and successful request timestamps from operational
+history. _Check:_ G0, G1.
 
 **REQ-026 — `converge`**
 Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). See §8 for the full convergence algorithm. _Check:_ G0, G1.
@@ -217,6 +228,23 @@ The `reload_config` tool SHALL re-read the config file without restarting. Activ
 
 **REQ-041 — `spec_health`**
 Build health report. Returns the operational status of the server: build identity (version), provider summary (count, active count), uptime, cumulative request count, and paths to persistent state files. _Check:_ G0, G1.
+
+### 4.9 Provider Architecture
+
+**REQ-070 — Provider Registration**
+Adding a provider backend to the source tree SHALL NOT require modification
+of any tool handler source code — the functions that respond to MCP
+tool/call requests. The server SHALL resolve a provider slug to its search,
+health, and content-fetch implementations through a single mapping
+structure maintained independently of tool handler source. A provider
+present in the source tree but disabled in configuration SHALL be
+registered but skipped during dispatch. _Check:_ G1.
+
+**REQ-071 — Outbound HTTP Identification**
+Every outbound HTTP request from a provider backend SHALL include an
+identifier that distinguishes the request as originating from this server.
+The identifier SHALL be consistent across all providers regardless of
+provider tier or transport. _Check:_ G1.
 
 ### 4.6 Client Artifacts
 

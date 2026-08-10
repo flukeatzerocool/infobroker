@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -8,47 +8,7 @@ import { tmpdir } from "node:os";
 import { loadConfig, reloadConfig, getConfig, getEnvVar, getDispatchChain } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
-import {
-  duckduckgoSearch,
-  duckduckgoSuggest,
-  duckduckgoHealth,
-  jinaFetchPage,
-  jinaHealth,
-  wikipediaSearch,
-  wikipediaFetchPage,
-  wikipediaHealth,
-  wiktionarySearch,
-  wiktionaryHealth,
-  wikidataSearch,
-  wikidataHealth,
-  openstreetmapSearch,
-  openstreetmapHealth,
-  internetArchiveSearch,
-  internetArchiveFetchPage,
-  internetArchiveHealth,
-  arxivSearch,
-  arxivHealth,
-  semanticScholarSearch,
-  semanticScholarHealth,
-  stackExchangeSearch,
-  stackExchangeHealth,
-  githubSearch,
-  githubHealth,
-  coreSearch,
-  coreHealth,
-  marginaliaSearch,
-  marginaliaHealth,
-  mojeekSearch,
-  mojeekHealth,
-  braveSearch,
-  braveHealth,
-  exaSearch,
-  exaHealth,
-  tavilySearch,
-  tavilyHealth,
-  searxngSearch,
-  searxngHealth,
-} from "./providers/index.js";
+import { PROVIDERS } from "./providers/index.js";
 import { retryWithBackoff } from "./retry.js";
 import { converge } from "./converge.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex } from "./kb.js";
@@ -138,26 +98,6 @@ function json(data: unknown): string {
 
 async function startupHealthCheck(): Promise<void> {
   const config = getConfig();
-  const healthFns: Record<string, () => Promise<{ status: string; avgLatencyMs: number }>> = {
-    duckduckgo: duckduckgoHealth,
-    jina: jinaHealth,
-    wikipedia: wikipediaHealth,
-    wiktionary: wiktionaryHealth,
-    wikidata: wikidataHealth,
-    openstreetmap: openstreetmapHealth,
-    internet_archive: internetArchiveHealth,
-    arxiv: arxivHealth,
-    semantic_scholar: semanticScholarHealth,
-    stack_exchange: stackExchangeHealth,
-    github: githubHealth,
-    core: coreHealth,
-    marginalia: marginaliaHealth,
-    mojeek: mojeekHealth,
-    brave: braveHealth,
-    exa: exaHealth,
-    tavily: tavilyHealth,
-    searxng: searxngHealth,
-  };
 
   for (const [slug, provider] of Object.entries(config.providers)) {
     if (!provider.enabled) continue;
@@ -173,13 +113,13 @@ async function startupHealthCheck(): Promise<void> {
       console.error(`[infobroker] ${slug}: inactive (no_url)`);
       continue;
     }
-    const healthFn = healthFns[slug];
-    if (!healthFn) {
+    const p = PROVIDERS[slug];
+    if (!p) {
       console.error(`[infobroker] ${slug}: active (no health check available)`);
       continue;
     }
     try {
-      const h = await healthFn();
+      const h = await p.health();
       console.error(`[infobroker] ${slug}: ${h.status} (${h.avgLatencyMs}ms)`);
     } catch {
       console.error(`[infobroker] ${slug}: inactive (health check failed)`);
@@ -192,7 +132,8 @@ async function doWebSearch(
   preferredProvider?: string,
   maxResults = 10,
   safeSearch: "on" | "off" = "on",
-  timeRange?: string
+  timeRange?: string,
+  page = 1
 ): Promise<string> {
   const config = getConfig();
   let chain: string[];
@@ -207,7 +148,7 @@ async function doWebSearch(
     return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
 
-  const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"] };
+  const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page };
   let lastError: ToolErrorResponse | null = null;
   let depth = 0;
 
@@ -219,48 +160,14 @@ async function doWebSearch(
 
       await throttle(slug);
       const start = Date.now();
-      let results: SearchResult[];
 
-      const doCall = async (): Promise<SearchResult[]> => {
-        switch (slug) {
-          case "duckduckgo":
-            return await duckduckgoSearch(query, opts);
-          case "wikipedia":
-            return await wikipediaSearch(query, opts);
-          case "wikidata":
-            return await wikidataSearch(query);
-          case "wiktionary":
-            return await wiktionarySearch(query);
-          case "openstreetmap":
-            return await openstreetmapSearch(query);
-          case "internet_archive":
-            return await internetArchiveSearch(query);
-          case "arxiv":
-            return await arxivSearch(query);
-          case "semantic_scholar":
-            return await semanticScholarSearch(query);
-          case "stack_exchange":
-            return await stackExchangeSearch(query);
-          case "github":
-            return await githubSearch(query);
-          case "core":
-            return await coreSearch(query);
-          case "marginalia":
-            return await marginaliaSearch(query);
-          case "mojeek":
-            return await mojeekSearch(query);
-          case "brave":
-            return await braveSearch(query);
-          case "exa":
-            return await exaSearch(query);
-          case "tavily":
-            return await tavilySearch(query);
-          case "searxng":
-            return await searxngSearch(query);
-          default:
-            return await duckduckgoSearch(query, opts);
-        }
-      };
+      const provider = PROVIDERS[slug];
+      if (!provider?.search) {
+        throw new Error(`Provider ${slug} has no search function`);
+      }
+
+      const doCall = async (): Promise<SearchResult[]> => provider.search(query, opts);
+
       const timeoutMs = config.providers[slug]?.timeout ?? 15000;
       const timedCall = async (): Promise<SearchResult[]> =>
         Promise.race([
@@ -269,7 +176,7 @@ async function doWebSearch(
             setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
           ),
         ]);
-      results = await retryWithBackoff(timedCall, slug, config.providers[slug]);
+      const results = await retryWithBackoff(timedCall, slug);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -302,23 +209,21 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       const start = Date.now();
 
       const doCall = async (): Promise<string> => {
-        if (slug === "jina") {
-          return await jinaFetchPage(url);
-        } else if (slug === "wikipedia") {
-          if (url.includes("wikipedia.org")) {
-            return await wikipediaFetchPage(url);
-          }
-          throw new Error("URL not a wikipedia.org domain");
-        } else if (slug === "internet_archive") {
-          return await internetArchiveFetchPage(url);
-        } else {
+        if (slug === "native_fetch") {
           const resp = await fetch(url, {
             headers: { "User-Agent": "Infobroker/1.0" },
           });
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           return await resp.text();
         }
+
+        const provider = PROVIDERS[slug];
+        if (!provider?.fetchPage) {
+          throw new Error(`Provider ${slug} has no fetchPage function`);
+        }
+        return await provider.fetchPage(url);
       };
+
       let content: string;
       try {
         const timeoutMs = config.providers[slug]?.timeout ?? 15000;
@@ -329,14 +234,15 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
               setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
             ),
           ]);
-        content = await retryWithBackoff(timedCall, slug, config.providers[slug]);
+        content = await retryWithBackoff(timedCall, slug);
       } catch {
         continue;
       }
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
-      trackRequest(slug, elapsed);      const truncated = maybeTruncate(content, config.output.max_chars);
+      trackRequest(slug, elapsed);
+      const truncated = maybeTruncate(content, config.output.max_chars);
 
       autoIndex([{ title: new URL(url).hostname, url, snippet: truncated.text }], slug, undefined, "fetch_page");
 
@@ -364,7 +270,8 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
 
 async function doSearchSuggestions(query: string): Promise<string> {
   try {
-    const suggestions = await duckduckgoSuggest(query);
+    const ddg = PROVIDERS["duckduckgo"];
+    const suggestions = ddg?.suggest ? await ddg.suggest(query) : [];
     return `[OK] ${json({
       status: "ok",
       provider: "duckduckgo",
@@ -461,33 +368,45 @@ function doListProviders(filter?: string): string {
   })}`;
 }
 
-function doProviderHealth(provider: string): string {
+function doProviderHealth(providerSlug: string): string {
   const config = getConfig();
-  const p = config.providers[provider];
+  const p = config.providers[providerSlug];
   if (!p) {
-    return `[ERROR] ${json(err(provider, "invalid_input", `Provider "${provider}" not found in config`, "Use list_providers to see available providers"))}`;
+    return `[ERROR] ${json(err(providerSlug, "invalid_input", `Provider "${providerSlug}" not found in config`, "Use list_providers to see available providers"))}`;
   }
 
-  const quota = checkQuota(provider, p.rate_limit);
+  const quota = checkQuota(providerSlug, p.rate_limit);
   const keyEnv = p.auth_env;
   const authOk = keyEnv ? !!process.env[keyEnv] : true;
   const status = authOk ? "active" : "inactive";
 
   const report: HealthReport = {
     status,
-    slug: provider,
+    slug: providerSlug,
     tier: p.tier,
     capabilities: p.capabilities,
     quota_used: quota.used,
     quota_remaining: quota.remaining,
     quota_reset_at: quota.resetAt,
-    avg_latency_ms: avgLatency(provider),
+    avg_latency_ms: avgLatency(providerSlug),
     auth_ok: authOk,
   };
 
+  const registeredProvider = PROVIDERS[providerSlug];
+  if (registeredProvider && authOk) {
+    registeredProvider.health().then((h) => {
+      report.status = h.status as HealthReport["status"];
+      report.avg_latency_ms = h.avgLatencyMs;
+    }).catch(() => {
+      if (report.status === "active") {
+        report.status = "degraded";
+      }
+    });
+  }
+
   return `[OK] ${json({
     status: "ok",
-    provider,
+    provider: providerSlug,
     results: [report],
   })}`;
 }
@@ -537,7 +456,8 @@ server.registerTool(
       params.provider as string | undefined,
       Number(params.max_results ?? 10),
       (params.safe_search as "on" | "off") ?? "on",
-      params.time_range as string | undefined
+      params.time_range as string | undefined,
+      Number(params.page ?? 1)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
@@ -551,7 +471,7 @@ server.registerTool(
     description: "Fetch and extract the content of a URL. Uses Jina Reader by default, falls back to native HTTP.",
     inputSchema: {
       url: z.string().describe("URL to fetch"),
-      renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive"]).optional(),
+      renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional(),
       max_length: z.number().optional().default(50000),
     },
   },
@@ -636,7 +556,6 @@ server.registerTool(
       query: z.string().describe("Search query"),
       max_iterations: z.number().min(1).max(10).optional().default(5),
       confidence_threshold: z.number().min(0).max(1).optional().default(0.8),
-      providers: z.array(z.string()).optional().describe("Provider slugs to use (defaults to all active web_search providers)"),
     },
   },
   async (params) => {
@@ -644,7 +563,6 @@ server.registerTool(
       const result = await converge(String(params.query), {
         max_iterations: Number(params.max_iterations ?? 5),
         confidence_threshold: Number(params.confidence_threshold ?? 0.8),
-        providers: params.providers as string[] | undefined,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
@@ -739,7 +657,8 @@ server.registerTool(
         params.collection as string | undefined,
         "explicit"
       );
-      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [{ title: "ingested", url: sourceUrl, snippet: `${count} chunks ingested` }], meta: { chunks_ingested: count } })}` }] };
+      const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "ingested", url: sourceUrl, snippet: `${count} chunks ingested` }], meta: { chunks_ingested: count } });
+      return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
     } catch (e) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
     }
@@ -782,7 +701,8 @@ server.registerTool(
     }
     try {
       const count = kbDelete(collection, sourceUrl);
-      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [{ title: "deleted", url: "", snippet: `${count} chunks removed` }], meta: { chunks_removed: count } })}` }] };
+      const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "deleted", url: "", snippet: `${count} chunks removed` }], meta: { chunks_removed: count } });
+      return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
     } catch (e) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
     }

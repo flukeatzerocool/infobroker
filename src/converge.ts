@@ -1,24 +1,6 @@
 // @implements REQ-026
 import type { SearchResult, ConvergenceResult, ConvergenceFinding } from "./types.js";
-import {
-  duckduckgoSearch,
-  wikipediaSearch,
-  wikidataSearch,
-  wiktionarySearch,
-  openstreetmapSearch,
-  internetArchiveSearch,
-  arxivSearch,
-  semanticScholarSearch,
-  stackExchangeSearch,
-  githubSearch,
-  coreSearch,
-  marginaliaSearch,
-  mojeekSearch,
-  braveSearch,
-  exaSearch,
-  tavilySearch,
-  searxngSearch,
-} from "./providers/index.js";
+import { PROVIDERS } from "./providers/index.js";
 import { getConfig, getActiveProviders } from "./config.js";
 import { throttle } from "./rate-limiter.js";
 import { checkQuota, increment } from "./quota.js";
@@ -26,25 +8,12 @@ import { retryWithBackoff } from "./retry.js";
 
 type Searcher = (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]>;
 
-export const SEARCHERS: Record<string, Searcher> = {
-  duckduckgo: duckduckgoSearch as Searcher,
-  wikipedia: wikipediaSearch as Searcher,
-  wikidata: wikidataSearch as Searcher,
-  wiktionary: wiktionarySearch as Searcher,
-  openstreetmap: openstreetmapSearch as Searcher,
-  internet_archive: internetArchiveSearch as Searcher,
-  arxiv: arxivSearch as Searcher,
-  semantic_scholar: semanticScholarSearch as Searcher,
-  stack_exchange: stackExchangeSearch as Searcher,
-  github: githubSearch as Searcher,
-  core: coreSearch as Searcher,
-  marginalia: marginaliaSearch as Searcher,
-  mojeek: mojeekSearch as Searcher,
-  brave: braveSearch as Searcher,
-  exa: exaSearch as Searcher,
-  tavily: tavilySearch as Searcher,
-  searxng: searxngSearch as Searcher,
-};
+export const SEARCHERS: Record<string, Searcher> = {};
+for (const [slug, provider] of Object.entries(PROVIDERS)) {
+  if (provider.search) {
+    SEARCHERS[slug] = provider.search as Searcher;
+  }
+}
 
 const STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",

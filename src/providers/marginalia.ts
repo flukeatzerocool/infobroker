@@ -1,17 +1,16 @@
 // @implements REQ-020
 import * as cheerio from "cheerio";
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const MARGINALIA_URL = "https://search.marginalia.nu/search";
 
-export async function marginaliaSearch(query: string): Promise<SearchResult[]> {
+async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({ query, profile: "default" });
 
-  const resp = await fetch(`${MARGINALIA_URL}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const resp = await infobrokerFetch(`${MARGINALIA_URL}?${params.toString()}`, { providerSlug: "marginalia" });
 
   if (!resp.ok) throw new RetryableError(`Marginalia returned HTTP ${resp.status}`, resp.status);
 
@@ -32,16 +31,10 @@ export async function marginaliaSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "marginalia");
 }
 
-export async function marginaliaHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${MARGINALIA_URL}?query=test&profile=default`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(15000),
-    });
+    const resp = await infobrokerFetch(`${MARGINALIA_URL}?query=test&profile=default`, { providerSlug: "marginalia" });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
     return { status: "degraded", avgLatencyMs: elapsed };
@@ -49,3 +42,11 @@ export async function marginaliaHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "marginalia",
+  tier: "builtin",
+  capabilities: ["web_search"],
+  search,
+  health,
+};

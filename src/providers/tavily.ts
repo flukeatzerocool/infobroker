@@ -1,22 +1,29 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
+import { infobrokerFetch } from "../http.js";
 
 const TAVILY_API = "https://api.tavily.com/search";
 
-export async function tavilySearch(query: string): Promise<SearchResult[]> {
-  const apiKey = getEnvVar("tavily", "_API_KEY");
+let _tavilyApiKey: string | undefined;
+function tavilyApiKey(): string | undefined {
+  if (_tavilyApiKey === undefined) _tavilyApiKey = getEnvVar("tavily", "_API_KEY");
+  return _tavilyApiKey;
+}
+
+async function search(query: string): Promise<SearchResult[]> {
+  const apiKey = tavilyApiKey();
   if (!apiKey) throw new Error("INFOBROKER_TAVILY_API_KEY not set");
 
-  const resp = await fetch(TAVILY_API, {
+  const resp = await infobrokerFetch(TAVILY_API, {
     method: "POST",
     headers: {
-      "User-Agent": "Infobroker/1.0",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ api_key: apiKey, query, max_results: 10, include_answer: false }),
+    providerSlug: "tavily",
   });
 
   if (!resp.ok) throw new RetryableError(`Tavily returned HTTP ${resp.status}`, resp.status);
@@ -36,23 +43,19 @@ export async function tavilySearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "tavily");
 }
 
-export async function tavilyHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
-  const apiKey = getEnvVar("tavily", "_API_KEY");
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
+  const apiKey = tavilyApiKey();
   if (!apiKey) return { status: "inactive", avgLatencyMs: 0 };
 
   const start = Date.now();
   try {
-    const resp = await fetch(TAVILY_API, {
+    const resp = await infobrokerFetch(TAVILY_API, {
       method: "POST",
       headers: {
-        "User-Agent": "Infobroker/1.0",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ api_key: apiKey, query: "test", max_results: 1 }),
-      signal: AbortSignal.timeout(10000),
+      providerSlug: "tavily",
     });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
@@ -61,3 +64,11 @@ export async function tavilyHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "tavily",
+  tier: "keyed_http",
+  capabilities: ["web_search"],
+  search,
+  health,
+};

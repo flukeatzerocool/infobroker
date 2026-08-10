@@ -1,15 +1,13 @@
 // @implements REQ-021
+import type { Provider } from "../types.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const JINA_BASE = "https://r.jina.ai/";
 
-export async function jinaFetchPage(url: string): Promise<string> {
+async function fetchPage(url: string): Promise<string> {
   const target = `${JINA_BASE}${url}`;
-  const resp = await fetch(target, {
-    headers: {
-      "User-Agent": "Infobroker/1.0",
-    },
-  });
+  const resp = await infobrokerFetch(target, { providerSlug: "jina" });
 
   if (!resp.ok) {
     throw new RetryableError(`Jina returned HTTP ${resp.status}`, resp.status);
@@ -18,16 +16,10 @@ export async function jinaFetchPage(url: string): Promise<string> {
   return resp.text();
 }
 
-export async function jinaHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${JINA_BASE}https://example.com`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
+    const resp = await infobrokerFetch(`${JINA_BASE}https://example.com`, { providerSlug: "jina" });
     const elapsed = Date.now() - start;
     if (resp.ok) {
       return { status: "active", avgLatencyMs: elapsed };
@@ -37,3 +29,12 @@ export async function jinaHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "jina",
+  tier: "free_http",
+  capabilities: ["content_fetch"],
+  search: async () => [],
+  fetchPage,
+  health,
+};

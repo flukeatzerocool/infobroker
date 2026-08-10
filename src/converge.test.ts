@@ -21,23 +21,7 @@ vi.mock("../src/retry.js", () => ({
 }));
 
 vi.mock("../src/providers/index.js", () => ({
-  duckduckgoSearch: vi.fn(),
-  wikipediaSearch: vi.fn(),
-  wikidataSearch: vi.fn(),
-  wiktionarySearch: vi.fn(),
-  openstreetmapSearch: vi.fn(),
-  internetArchiveSearch: vi.fn(),
-  arxivSearch: vi.fn(),
-  semanticScholarSearch: vi.fn(),
-  stackExchangeSearch: vi.fn(),
-  githubSearch: vi.fn(),
-  coreSearch: vi.fn(),
-  marginaliaSearch: vi.fn(),
-  mojeekSearch: vi.fn(),
-  braveSearch: vi.fn(),
-  exaSearch: vi.fn(),
-  tavilySearch: vi.fn(),
-  searxngSearch: vi.fn(),
+  PROVIDERS: {} as Record<string, { search?: (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]> }>,
 }));
 
 import { getConfig, getActiveProviders } from "../src/config.js";

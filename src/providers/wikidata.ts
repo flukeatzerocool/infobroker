@@ -1,11 +1,12 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 
-export async function wikidataSearch(query: string): Promise<SearchResult[]> {
+async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     action: "wbsearchentities",
     search: query,
@@ -15,9 +16,7 @@ export async function wikidataSearch(query: string): Promise<SearchResult[]> {
     origin: "*",
   });
 
-  const resp = await fetch(`${WIKIDATA_API}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const resp = await infobrokerFetch(`${WIKIDATA_API}?${params.toString()}`, { providerSlug: "wikidata" });
 
   if (!resp.ok) throw new RetryableError(`Wikidata returned HTTP ${resp.status}`, resp.status);
 
@@ -35,18 +34,12 @@ export async function wikidataSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "wikidata");
 }
 
-export async function wikidataHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(
+    const resp = await infobrokerFetch(
       `${WIKIDATA_API}?action=wbsearchentities&search=test&language=en&format=json&origin=*`,
-      {
-        headers: { "User-Agent": "Infobroker/1.0" },
-        signal: AbortSignal.timeout(10000),
-      }
+      { providerSlug: "wikidata" }
     );
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
@@ -55,3 +48,11 @@ export async function wikidataHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "wikidata",
+  tier: "free_http",
+  capabilities: ["encyclopedia"],
+  search,
+  health,
+};

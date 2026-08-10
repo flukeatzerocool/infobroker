@@ -1,21 +1,29 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
+import { infobrokerFetch } from "../http.js";
 
 const SS_API = "https://api.semanticscholar.org/graph/v1/paper/search";
 
-export async function semanticScholarSearch(query: string): Promise<SearchResult[]> {
-  const apiKey = getEnvVar("semantic_scholar", "_API_KEY");
+let _ssApiKey: string | undefined;
+function ssApiKey(): string | undefined {
+  if (_ssApiKey === undefined) _ssApiKey = getEnvVar("semantic_scholar", "_API_KEY");
+  return _ssApiKey;
+}
+
+async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({ query, limit: "10" });
 
-  const headers: Record<string, string> = {
-    "User-Agent": "Infobroker/1.0",
-  };
-  if (apiKey) headers["x-api-key"] = apiKey;
+  const headers: Record<string, string> = {};
+  const key = ssApiKey();
+  if (key) headers["x-api-key"] = key;
 
-  const resp = await fetch(`${SS_API}?${params.toString()}`, { headers });
+  const resp = await infobrokerFetch(`${SS_API}?${params.toString()}`, {
+    providerSlug: "semantic_scholar",
+    headers,
+  });
 
   if (!resp.ok) throw new RetryableError(`Semantic Scholar returned HTTP ${resp.status}`, resp.status);
 
@@ -34,16 +42,10 @@ export async function semanticScholarSearch(query: string): Promise<SearchResult
   return normalize(raw, "semantic_scholar");
 }
 
-export async function semanticScholarHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${SS_API}?query=test&limit=1`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
+    const resp = await infobrokerFetch(`${SS_API}?query=test&limit=1`, { providerSlug: "semantic_scholar" });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
     return { status: "degraded", avgLatencyMs: elapsed };
@@ -51,3 +53,11 @@ export async function semanticScholarHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "semantic_scholar",
+  tier: "free_http",
+  capabilities: ["academic"],
+  search,
+  health,
+};

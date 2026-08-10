@@ -4,11 +4,11 @@
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `f6c882f9ed3d85a522ca9796e4c85bafd368d7036a354718bd2753c9f14424ea`
-**Source hash:** `86b87cf25d4323242d46570db5a8ddcd5a20833357a8d39921d344d5b42a6ad5`
-**Config hash:** `b7444aafdc27a5aed72f82e6cc6296f740263a96f920d775b24bb64561735994`
-**Total fingerprint:** `11e293d0f85f36c7102682cf1588d1e2cc75dac3acf14a9b8fd576d2f1b1397e`
-**Generated:** 2026-08-10T13:07:26.842Z
+**Spec hash:** `ebf9a1f668de1f2f781e9a85b594e2c2b2a9e24427696f0b10036442e78f2a60`
+**Source hash:** `eae3458c98f616ff335a9804e36d6f0aa16a40ab07fb22f356e2742fcadee04e`
+**Config hash:** `1b991afa1af2a6b61a4c70c95ee59a683eb46f81316460fb6de8f80bc39c3c22`
+**Total fingerprint:** `ba0c0815fbea8a1404f6f616e14246c9fa41ed6940a3035dcc68454681ac212a`
+**Generated:** 2026-08-10T13:32:38.856Z
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -16,12 +16,14 @@ MCP's `{content: [{type: "text", text: ...}]}` format. The JSON body
 follows the `ToolOkResponse` / `ToolErrorResponse` shapes.
 
 ### D-002: Provider Search Architecture
-All providers export standalone functions (`search`, `health`). They are
-wired in a switch statement in `index.ts` rather than using a dynamic
-plugin registry. This was chosen for type safety and simplicity. Adding
-a new provider requires: (1) implementing the search and health functions,
-(2) exporting from `providers/index.ts`, (3) importing and adding the
-case to the switch in `index.ts`.
+
+All providers export a `Provider` object matching the `Provider` interface
+from `types.ts`. They are aggregated into a `PROVIDERS` registry in
+`providers/index.ts` and dispatched by slug at runtime — no switch
+statement or per-provider branching in tool handlers. Adding a new
+provider requires one file (the provider module) and one line in the
+registry. The prior switch-statement approach (2026.08.10 and earlier) was
+replaced to satisfy REQ-070 (Provider Registration).
 
 ### D-003: Scraped Provider Rate Limits
 Marginalia and Mojeek use conservative rate limits (0.2 req/sec = 5s
@@ -62,12 +64,16 @@ on load and reload rejects missing provider fields, invalid dispatch
 chains, and negative rate-limit values; invalid configs on reload leave
 the previous config active.
 
-### D-007: No Explicit Provider Plugin Interface
-Each provider exports standalone functions matching the same signature
-convention (`search`, `fetchPage`, `health`) rather than implementing
-a TypeScript `Provider` interface. The interface type exists in `types.ts`
-for documentation but is not used for enforcement at runtime. This avoids
-the need for a dynamic registry while keeping the structure consistent.
+### D-007: Provider Interface Enforcement
+
+Every provider exports a `const provider: Provider` object that satisfies
+the `Provider` interface at the TypeScript type level. The `PROVIDERS`
+registry in `providers/index.ts` is typed as `Record<string, Provider>`,
+so an invalid provider entry (missing `slug`, wrong `health()` return shape,
+etc.) is caught by `tsc --noEmit` at commit time. This replaces the
+earlier convention-based approach (documented in the initial D-007) where
+the `Provider` interface existed only for documentation and was not
+enforced at build time.
 
 ### D-008: Retry Strategy
 

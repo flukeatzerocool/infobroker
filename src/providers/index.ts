@@ -1,23 +1,41 @@
-// @implements REQ-013
-export { duckduckgoSearch, duckduckgoSuggest, duckduckgoHealth } from "./duckduckgo.js";
-export { jinaFetchPage, jinaHealth } from "./jina.js";
-export { wikipediaSearch, wikipediaFetchPage, wikipediaHealth } from "./wikipedia.js";
-export { wiktionarySearch, wiktionaryHealth } from "./wiktionary.js";
-export { wikidataSearch, wikidataHealth } from "./wikidata.js";
-export { openstreetmapSearch, openstreetmapHealth } from "./openstreetmap.js";
-export {
-  internetArchiveSearch,
-  internetArchiveFetchPage,
-  internetArchiveHealth,
-} from "./internet_archive.js";
-export { arxivSearch, arxivHealth } from "./arxiv.js";
-export { semanticScholarSearch, semanticScholarHealth } from "./semantic_scholar.js";
-export { stackExchangeSearch, stackExchangeHealth } from "./stack_exchange.js";
-export { githubSearch, githubHealth } from "./github.js";
-export { coreSearch, coreHealth } from "./core.js";
-export { marginaliaSearch, marginaliaHealth } from "./marginalia.js";
-export { mojeekSearch, mojeekHealth } from "./mojeek.js";
-export { braveSearch, braveHealth } from "./brave.js";
-export { exaSearch, exaHealth } from "./exa.js";
-export { tavilySearch, tavilyHealth } from "./tavily.js";
-export { searxngSearch, searxngHealth } from "./searxng.js";
+// @implements REQ-013 REQ-070
+import { provider as duckduckgo } from "./duckduckgo.js";
+import { provider as jina } from "./jina.js";
+import { provider as wikipedia } from "./wikipedia.js";
+import { provider as wiktionary } from "./wiktionary.js";
+import { provider as wikidata } from "./wikidata.js";
+import { provider as openstreetmap } from "./openstreetmap.js";
+import { provider as internet_archive } from "./internet_archive.js";
+import { provider as arxiv } from "./arxiv.js";
+import { provider as semantic_scholar } from "./semantic_scholar.js";
+import { provider as stack_exchange } from "./stack_exchange.js";
+import { provider as github } from "./github.js";
+import { provider as core } from "./core.js";
+import { provider as marginalia } from "./marginalia.js";
+import { provider as mojeek } from "./mojeek.js";
+import { provider as brave } from "./brave.js";
+import { provider as exa } from "./exa.js";
+import { provider as tavily } from "./tavily.js";
+import { provider as searxng } from "./searxng.js";
+import type { Provider } from "../types.js";
+
+export const PROVIDERS: Record<string, Provider> = {
+  duckduckgo,
+  jina,
+  wikipedia,
+  wiktionary,
+  wikidata,
+  openstreetmap,
+  internet_archive,
+  arxiv,
+  semantic_scholar,
+  stack_exchange,
+  github,
+  core,
+  marginalia,
+  mojeek,
+  brave,
+  exa,
+  tavily,
+  searxng,
+};

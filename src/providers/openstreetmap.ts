@@ -1,20 +1,19 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const OSM_API = "https://nominatim.openstreetmap.org/search";
 
-export async function openstreetmapSearch(query: string): Promise<SearchResult[]> {
+async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     q: query,
     format: "json",
     limit: "10",
   });
 
-  const resp = await fetch(`${OSM_API}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0 (MCP search server)" },
-  });
+  const resp = await infobrokerFetch(`${OSM_API}?${params.toString()}`, { providerSlug: "openstreetmap" });
 
   if (!resp.ok) throw new RetryableError(`OpenStreetMap returned HTTP ${resp.status}`, resp.status);
 
@@ -35,16 +34,10 @@ export async function openstreetmapSearch(query: string): Promise<SearchResult[]
   return normalize(raw, "openstreetmap");
 }
 
-export async function openstreetmapHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${OSM_API}?q=test&format=json&limit=1`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
+    const resp = await infobrokerFetch(`${OSM_API}?q=test&format=json&limit=1`, { providerSlug: "openstreetmap" });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
     return { status: "degraded", avgLatencyMs: elapsed };
@@ -52,3 +45,11 @@ export async function openstreetmapHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "openstreetmap",
+  tier: "free_http",
+  capabilities: ["web_search"],
+  search,
+  health,
+};

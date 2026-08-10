@@ -1,19 +1,31 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
+import { infobrokerFetch } from "../http.js";
 
 const BRAVE_API = "https://api.search.brave.com/res/v1/web/search";
 
-export async function braveSearch(query: string): Promise<SearchResult[]> {
-  const apiKey = getEnvVar("brave", "_API_KEY");
+let _braveApiKey: string | undefined;
+function braveApiKey(): string | undefined {
+  if (_braveApiKey === undefined) _braveApiKey = getEnvVar("brave", "_API_KEY");
+  return _braveApiKey;
+}
+
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+  const apiKey = braveApiKey();
   if (!apiKey) throw new Error("INFOBROKER_BRAVE_API_KEY not set");
 
   const params = new URLSearchParams({ q: query, count: "10" });
-  const resp = await fetch(`${BRAVE_API}?${params.toString()}`, {
+
+  if (options?.time_range) {
+    params.set("freshness", mapTimeRange(options.time_range));
+  }
+
+  const resp = await infobrokerFetch(`${BRAVE_API}?${params.toString()}`, {
+    providerSlug: "brave",
     headers: {
-      "User-Agent": "Infobroker/1.0",
       "Accept": "application/json",
       "Accept-Encoding": "gzip",
       "X-Subscription-Token": apiKey,
@@ -37,23 +49,19 @@ export async function braveSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "brave");
 }
 
-export async function braveHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
-  const apiKey = getEnvVar("brave", "_API_KEY");
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
+  const apiKey = braveApiKey();
   if (!apiKey) return { status: "inactive", avgLatencyMs: 0 };
 
   const start = Date.now();
   try {
-    const resp = await fetch(`${BRAVE_API}?q=test&count=1`, {
+    const resp = await infobrokerFetch(`${BRAVE_API}?q=test&count=1`, {
+      providerSlug: "brave",
       headers: {
-        "User-Agent": "Infobroker/1.0",
         "Accept": "application/json",
         "Accept-Encoding": "gzip",
         "X-Subscription-Token": apiKey,
       },
-      signal: AbortSignal.timeout(10000),
     });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
@@ -62,3 +70,21 @@ export async function braveHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+function mapTimeRange(range: string): string {
+  const map: Record<string, string> = {
+    day: "pd",
+    week: "pw",
+    month: "pm",
+    year: "py",
+  };
+  return map[range] || "";
+}
+
+export const provider: Provider = {
+  slug: "brave",
+  tier: "keyed_http",
+  capabilities: ["web_search"],
+  search,
+  health,
+};

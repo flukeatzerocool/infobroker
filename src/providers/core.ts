@@ -1,23 +1,30 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
+import { infobrokerFetch } from "../http.js";
 
 const CORE_API = "https://api.core.ac.uk/v3/search/works";
 
-export async function coreSearch(query: string): Promise<SearchResult[]> {
-  const apiKey = getEnvVar("core", "_API_KEY");
+let _coreApiKey: string | undefined;
+function coreApiKey(): string | undefined {
+  if (_coreApiKey === undefined) _coreApiKey = getEnvVar("core", "_API_KEY");
+  return _coreApiKey;
+}
+
+async function search(query: string): Promise<SearchResult[]> {
+  const apiKey = coreApiKey();
   const headers: Record<string, string> = {
-    "User-Agent": "Infobroker/1.0",
     "Content-Type": "application/json",
   };
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-  const resp = await fetch(CORE_API, {
+  const resp = await infobrokerFetch(CORE_API, {
     method: "POST",
     headers,
     body: JSON.stringify({ q: query, limit: 10 }),
+    providerSlug: "core",
   });
 
   if (!resp.ok) throw new RetryableError(`CORE returned HTTP ${resp.status}`, resp.status);
@@ -43,17 +50,14 @@ export async function coreSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "core");
 }
 
-export async function coreHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(CORE_API, {
+    const resp = await infobrokerFetch(CORE_API, {
       method: "POST",
-      headers: { "User-Agent": "Infobroker/1.0", "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ q: "test", limit: 1 }),
-      signal: AbortSignal.timeout(10000),
+      providerSlug: "core",
     });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
@@ -62,3 +66,11 @@ export async function coreHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "core",
+  tier: "free_http",
+  capabilities: ["academic"],
+  search,
+  health,
+};

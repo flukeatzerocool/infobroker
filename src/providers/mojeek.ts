@@ -1,17 +1,16 @@
 // @implements REQ-020
 import * as cheerio from "cheerio";
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const MOJEEK_URL = "https://www.mojeek.com/search";
 
-export async function mojeekSearch(query: string): Promise<SearchResult[]> {
+async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query });
 
-  const resp = await fetch(`${MOJEEK_URL}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const resp = await infobrokerFetch(`${MOJEEK_URL}?${params.toString()}`, { providerSlug: "mojeek" });
 
   if (!resp.ok) throw new RetryableError(`Mojeek returned HTTP ${resp.status}`, resp.status);
 
@@ -32,16 +31,10 @@ export async function mojeekSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "mojeek");
 }
 
-export async function mojeekHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${MOJEEK_URL}?q=test`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(15000),
-    });
+    const resp = await infobrokerFetch(`${MOJEEK_URL}?q=test`, { providerSlug: "mojeek" });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
     return { status: "degraded", avgLatencyMs: elapsed };
@@ -49,3 +42,11 @@ export async function mojeekHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "mojeek",
+  tier: "builtin",
+  capabilities: ["web_search"],
+  search,
+  health,
+};

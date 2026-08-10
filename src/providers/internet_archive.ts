@@ -1,14 +1,13 @@
 // @implements REQ-020 REQ-021
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const IA_API = "https://archive.org/wayback/available";
 
-export async function internetArchiveFetchPage(url: string): Promise<string> {
-  const checkResp = await fetch(`${IA_API}?url=${encodeURIComponent(url)}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+async function fetchPage(url: string): Promise<string> {
+  const checkResp = await infobrokerFetch(`${IA_API}?url=${encodeURIComponent(url)}`, { providerSlug: "internet_archive" });
 
   if (!checkResp.ok) {
     throw new RetryableError(`Internet Archive returned HTTP ${checkResp.status}`, checkResp.status);
@@ -23,9 +22,7 @@ export async function internetArchiveFetchPage(url: string): Promise<string> {
     throw new Error("No archived snapshot available");
   }
 
-  const pageResp = await fetch(snapshot.url, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const pageResp = await infobrokerFetch(snapshot.url, { providerSlug: "internet_archive" });
 
   if (!pageResp.ok) {
     throw new RetryableError(`Internet Archive page fetch returned HTTP ${pageResp.status}`, pageResp.status);
@@ -34,10 +31,8 @@ export async function internetArchiveFetchPage(url: string): Promise<string> {
   return pageResp.text();
 }
 
-export async function internetArchiveSearch(query: string): Promise<SearchResult[]> {
-  const checkResp = await fetch(`${IA_API}?url=${encodeURIComponent(query)}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+async function search(query: string): Promise<SearchResult[]> {
+  const checkResp = await infobrokerFetch(`${IA_API}?url=${encodeURIComponent(query)}`, { providerSlug: "internet_archive" });
 
   if (!checkResp.ok) throw new RetryableError(`Internet Archive returned HTTP ${checkResp.status}`, checkResp.status);
 
@@ -61,16 +56,10 @@ export async function internetArchiveSearch(query: string): Promise<SearchResult
   );
 }
 
-export async function internetArchiveHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${IA_API}?url=https://example.com`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
+    const resp = await infobrokerFetch(`${IA_API}?url=https://example.com`, { providerSlug: "internet_archive" });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
     return { status: "degraded", avgLatencyMs: elapsed };
@@ -78,3 +67,12 @@ export async function internetArchiveHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "internet_archive",
+  tier: "free_http",
+  capabilities: ["archive", "content_fetch"],
+  search,
+  fetchPage,
+  health,
+};

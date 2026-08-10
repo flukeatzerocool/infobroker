@@ -1,16 +1,15 @@
 // @implements REQ-020 REQ-022
 import * as cheerio from "cheerio";
-import type { SearchResult, SearchOptions } from "../types.js";
+import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
+import { stripHtml } from "../lib/html.js";
 
 const DDG_URL = "https://html.duckduckgo.com/html/";
 const SUGGEST_URL = "https://duckduckgo.com/ac/";
 
-export async function duckduckgoSearch(
-  query: string,
-  options?: SearchOptions
-): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const maxResults = options?.max_results ?? 10;
   const safeSearch = options?.safe_search === "off" ? "0" : "1";
   const timeRange = options?.time_range ? `&df=${mapTimeRange(options.time_range)}` : "";
@@ -23,11 +22,7 @@ export async function duckduckgoSearch(
 
   const url = `${DDG_URL}?${params.toString()}${timeRange}`;
 
-  const resp = await fetch(url, {
-    headers: {
-      "User-Agent": "Infobroker/1.0 (MCP search server; https://github.com/infobroker)",
-    },
-  });
+  const resp = await infobrokerFetch(url, { providerSlug: "duckduckgo" });
 
   if (!resp.ok) {
     throw new RetryableError(`DuckDuckGo returned HTTP ${resp.status}`, resp.status);
@@ -48,24 +43,22 @@ export async function duckduckgoSearch(
     const title = titleEl.text().trim();
     const rawUrl = urlEl.text().trim() || titleEl.attr("href") || "";
 
-    let url = rawUrl;
-    if (url.startsWith("//")) url = "https:" + url;
+    let resultUrl = rawUrl;
+    if (resultUrl.startsWith("//")) resultUrl = "https:" + resultUrl;
 
     const snippet = snippetEl.text().trim();
 
-    if (title && url) {
-      rawResults.push({ title, url, snippet });
+    if (title && resultUrl) {
+      rawResults.push({ title, url: resultUrl, snippet });
     }
   });
 
   return normalize(rawResults, "duckduckgo");
 }
 
-export async function duckduckgoSuggest(query: string): Promise<string[]> {
+async function suggest(query: string): Promise<string[]> {
   const resp = await fetch(`${SUGGEST_URL}?q=${encodeURIComponent(query)}&type=list`, {
-    headers: {
-      "User-Agent": "Infobroker/1.0",
-    },
+    headers: { "User-Agent": "Infobroker/1.0" },
   });
 
   if (!resp.ok) return [];
@@ -74,16 +67,10 @@ export async function duckduckgoSuggest(query: string): Promise<string[]> {
   return Array.isArray(data) && Array.isArray(data[1]) ? data[1] : [];
 }
 
-export async function duckduckgoHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${DDG_URL}?q=test`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
+    const resp = await infobrokerFetch(`${DDG_URL}?q=test`, { providerSlug: "duckduckgo" });
     const elapsed = Date.now() - start;
     if (resp.ok) {
       return { status: "active", avgLatencyMs: elapsed };
@@ -103,3 +90,12 @@ function mapTimeRange(range: string): string {
   };
   return map[range] || "";
 }
+
+export const provider: Provider = {
+  slug: "duckduckgo",
+  tier: "builtin",
+  capabilities: ["web_search"],
+  search,
+  suggest,
+  health,
+};

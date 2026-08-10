@@ -1,19 +1,18 @@
-// @implements REQ-020
-import type { SearchResult } from "../types.js";
+// @implements REQ-020 REQ-021
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
 
 const ARXIV_API = "https://export.arxiv.org/api/query";
 
-export async function arxivSearch(query: string): Promise<SearchResult[]> {
+async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     search_query: query,
     max_results: "10",
   });
 
-  const resp = await fetch(`${ARXIV_API}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv" });
 
   if (!resp.ok) throw new RetryableError(`arXiv returned HTTP ${resp.status}`, resp.status);
 
@@ -41,16 +40,25 @@ export async function arxivSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "arxiv");
 }
 
-export async function arxivHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function fetchPage(url: string): Promise<string> {
+  const id = extractId(url);
+  if (!id) throw new Error("Could not extract arXiv ID from URL");
+
+  const params = new URLSearchParams({ id_list: id });
+  const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv" });
+
+  if (!resp.ok) throw new RetryableError(`arXiv returned HTTP ${resp.status}`, resp.status);
+
+  const xml = await resp.text();
+  const summary = tagContent(xml, "summary");
+  const title = tagContent(xml, "title");
+  return title ? `${title}\n\n${summary.replace(/\s+/g, " ").trim()}` : summary.replace(/\s+/g, " ").trim();
+}
+
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${ARXIV_API}?search_query=test&max_results=1`, {
-      headers: { "User-Agent": "Infobroker/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
+    const resp = await infobrokerFetch(`${ARXIV_API}?search_query=test&max_results=1`, { providerSlug: "arxiv" });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
     return { status: "degraded", avgLatencyMs: elapsed };
@@ -64,3 +72,17 @@ function tagContent(xml: string, tag: string): string {
   const m = xml.match(re);
   return m ? (m[1] || "").replace(/<[^>]*>/g, "").trim() : "";
 }
+
+function extractId(url: string): string | null {
+  const match = url.match(/arxiv\.org\/(?:abs|pdf)\/([^?#]+)/);
+  return match ? match[1] : null;
+}
+
+export const provider: Provider = {
+  slug: "arxiv",
+  tier: "free_http",
+  capabilities: ["academic", "content_fetch"],
+  search,
+  fetchPage,
+  health,
+};

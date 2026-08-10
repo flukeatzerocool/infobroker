@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-003 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067
+// @implements REQ-001 REQ-003 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070
 export interface SearchResult {
   title: string;
   url: string;
@@ -100,7 +100,7 @@ export interface Provider {
   slug: string;
   tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http";
   capabilities: string[];
-  health(): Promise<HealthReport>;
+  health(): Promise<{ status: string; avgLatencyMs: number }>;
   search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
   fetchPage?(url: string): Promise<string>;
   suggest?(query: string): Promise<string[]>;

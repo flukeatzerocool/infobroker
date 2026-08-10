@@ -1,14 +1,13 @@
 // @implements REQ-020 REQ-021
-import type { SearchResult, SearchOptions } from "../types.js";
+import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
+import { infobrokerFetch } from "../http.js";
+import { stripHtml } from "../lib/html.js";
 
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 
-export async function wikipediaSearch(
-  query: string,
-  options?: SearchOptions
-): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const maxResults = options?.max_results ?? 10;
 
   const params = new URLSearchParams({
@@ -20,9 +19,7 @@ export async function wikipediaSearch(
     origin: "*",
   });
 
-  const resp = await fetch(`${WIKI_API}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const resp = await infobrokerFetch(`${WIKI_API}?${params.toString()}`, { providerSlug: "wikipedia" });
 
   if (!resp.ok) {
     throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);
@@ -43,7 +40,7 @@ export async function wikipediaSearch(
   return normalize(raw, "wikipedia");
 }
 
-export async function wikipediaFetchPage(url: string): Promise<string> {
+async function fetchPage(url: string): Promise<string> {
   const title = extractTitle(url);
   const params = new URLSearchParams({
     action: "parse",
@@ -53,9 +50,7 @@ export async function wikipediaFetchPage(url: string): Promise<string> {
     origin: "*",
   });
 
-  const resp = await fetch(`${WIKI_API}?${params.toString()}`, {
-    headers: { "User-Agent": "Infobroker/1.0" },
-  });
+  const resp = await infobrokerFetch(`${WIKI_API}?${params.toString()}`, { providerSlug: "wikipedia" });
 
   if (!resp.ok) {
     throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);
@@ -68,18 +63,12 @@ export async function wikipediaFetchPage(url: string): Promise<string> {
   return stripHtml(data.parse?.text?.["*"] || "(no content)");
 }
 
-export async function wikipediaHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(
+    const resp = await infobrokerFetch(
       `${WIKI_API}?action=query&list=search&srsearch=test&format=json&origin=*`,
-      {
-        headers: { "User-Agent": "Infobroker/1.0" },
-        signal: AbortSignal.timeout(10000),
-      }
+      { providerSlug: "wikipedia" }
     );
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
@@ -94,8 +83,11 @@ function extractTitle(url: string): string {
   return match ? decodeURIComponent(match[1]).replace(/_/g, " ") : url;
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .trim();
-}
+export const provider: Provider = {
+  slug: "wikipedia",
+  tier: "free_http",
+  capabilities: ["encyclopedia", "content_fetch"],
+  search,
+  fetchPage,
+  health,
+};

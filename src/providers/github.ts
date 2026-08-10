@@ -1,21 +1,30 @@
 // @implements REQ-020
-import type { SearchResult } from "../types.js";
+import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
+import { infobrokerFetch } from "../http.js";
 
 const GH_API = "https://api.github.com/search/code";
 
-export async function githubSearch(query: string): Promise<SearchResult[]> {
-  const token = getEnvVar("github", "_API_KEY");
+let _ghToken: string | undefined;
+function ghToken(): string | undefined {
+  if (_ghToken === undefined) _ghToken = getEnvVar("github", "_API_KEY");
+  return _ghToken;
+}
+
+async function search(query: string): Promise<SearchResult[]> {
+  const token = ghToken();
   const headers: Record<string, string> = {
-    "User-Agent": "Infobroker/1.0",
     "Accept": "application/vnd.github.v3+json",
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const params = new URLSearchParams({ q: query, per_page: "10" });
-  const resp = await fetch(`${GH_API}?${params.toString()}`, { headers });
+  const resp = await infobrokerFetch(`${GH_API}?${params.toString()}`, {
+    providerSlug: "github",
+    headers,
+  });
 
   if (!resp.ok) throw new RetryableError(`GitHub returned HTTP ${resp.status}`, resp.status);
 
@@ -38,15 +47,12 @@ export async function githubSearch(query: string): Promise<SearchResult[]> {
   return normalize(raw, "github");
 }
 
-export async function githubHealth(): Promise<{
-  status: "active" | "degraded" | "inactive";
-  avgLatencyMs: number;
-}> {
+async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await fetch(`${GH_API}?q=test&per_page=1`, {
-      headers: { "User-Agent": "Infobroker/1.0", "Accept": "application/vnd.github.v3+json" },
-      signal: AbortSignal.timeout(10000),
+    const resp = await infobrokerFetch(`${GH_API}?q=test&per_page=1`, {
+      providerSlug: "github",
+      headers: { "Accept": "application/vnd.github.v3+json" },
     });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
@@ -55,3 +61,11 @@ export async function githubHealth(): Promise<{
     return { status: "inactive", avgLatencyMs: Date.now() - start };
   }
 }
+
+export const provider: Provider = {
+  slug: "github",
+  tier: "free_http",
+  capabilities: ["code"],
+  search,
+  health,
+};
