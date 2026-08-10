@@ -7,8 +7,8 @@
 **Spec hash:** `de05e6dd1f01a6966191283b61e75a23364c02fdf75cbc7dafbec16a0b9456e5`
 **Source hash:** `134bddd476bed485e90c63491ead735814dae0c2eb4ca1fd8d4af28ecbec0a52`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `8c81681cae6bcd925553517f0c59902157cbc1b1fecbbcbe91171479c565c398`
-**Generated:** 2026-08-10T15:51:28.942Z
+**Total fingerprint:** `a824b3295180ca77a0f776aa46fd1262027e18ac3cd849bf4d7658a044ae7741`
+**Generated:** 2026-08-10T16:02:19.165Z
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
