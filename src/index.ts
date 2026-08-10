@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -15,9 +15,12 @@ import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoInde
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
+const SPEC_REVIEW_TIME = Date.now();
 const MAX_FALLBACK_DEPTH = 3;
 let totalRequests = 0;
 const requestLatencies: Record<string, { latencies: number[]; timestamps: number[] }> = {};
+const providerLastSuccess: Record<string, number> = {};
+const providerLastError: Record<string, { message: string; timestamp: number }> = {};
 
 loadConfig();
 configureAllProviders(getConfig());
@@ -210,6 +213,7 @@ async function doWebSearch(
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
       trackRequest(slug, elapsed);
+      providerLastSuccess[slug] = Date.now();
       depth++;
 
       autoIndex(results, slug, undefined, undefined, query, timeRange);
@@ -221,11 +225,12 @@ async function doWebSearch(
       }))}`;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      providerLastError[slug] = { message: msg, timestamp: Date.now() };
       lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
     }
   }
 
-  return `[ERROR] ${json(lastError || err("none", "provider_unavailable", "All providers failed", "Check network connectivity"))}`;
+  return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration"))}`;
 }
 
 async function doFetchPage(url: string, renderer?: string): Promise<string> {
@@ -264,13 +269,15 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
             ),
           ]);
         content = await retryWithBackoff(timedCall);
-      } catch {
+      } catch (e) {
+        providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
         continue;
       }
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
       trackRequest(slug, elapsed);
+      providerLastSuccess[slug] = Date.now();
       const truncated = maybeTruncate(content, config.output.max_chars);
 
       autoIndex([{ title: new URL(url).hostname, url, snippet: truncated.text }], slug, undefined, "fetch_page");
@@ -294,7 +301,7 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
     }
   }
 
-  return `[ERROR] ${json(err("none", "provider_unavailable", `All content renderers failed for: ${url}`, "Check network connectivity"))}`;
+  return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
 }
 
 async function doSearchSuggestions(query: string): Promise<string> {
@@ -403,7 +410,7 @@ function doListProviders(filter?: string): string {
   })}`;
 }
 
-function doProviderHealth(providerSlug: string): string {
+async function doProviderHealth(providerSlug: string): Promise<string> {
   const config = getConfig();
   const p = config.providers[providerSlug];
   if (!p) {
@@ -413,30 +420,49 @@ function doProviderHealth(providerSlug: string): string {
   const quota = checkQuota(providerSlug, p.rate_limit);
   const keyEnv = p.auth_env;
   const authOk = keyEnv ? !!process.env[keyEnv] : true;
-  const status = authOk ? "active" : "inactive";
+  let status = authOk ? "active" : "inactive";
+
+  let avgLatencyMs: number | undefined;
+  const registeredProvider = PROVIDERS[providerSlug];
+  if (registeredProvider && authOk) {
+    try {
+      const h = await registeredProvider.health();
+      status = h.status;
+      avgLatencyMs = h.avgLatencyMs;
+      providerLastSuccess[providerSlug] = Date.now();
+    } catch (e) {
+      providerLastError[providerSlug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
+      if (status === "active") {
+        status = "degraded";
+      }
+    }
+  } else {
+    avgLatencyMs = avgLatency(providerSlug);
+  }
+
+  if (quota.exhausted) {
+    status = "exhausted";
+  } else if (quota.warning && status === "active") {
+    status = "degraded";
+  }
 
   const report: HealthReport = {
-    status,
+    status: status as HealthReport["status"],
     slug: providerSlug,
     tier: p.tier,
     capabilities: p.capabilities,
     quota_used: quota.daily.used,
     quota_remaining: quota.daily.remaining,
     quota_reset_at: quota.daily.resetAt,
-    avg_latency_ms: avgLatency(providerSlug),
+    avg_latency_ms: avgLatencyMs,
     auth_ok: authOk,
   };
 
-  const registeredProvider = PROVIDERS[providerSlug];
-  if (registeredProvider && authOk) {
-    registeredProvider.health().then((h) => {
-      report.status = h.status as HealthReport["status"];
-      report.avg_latency_ms = h.avgLatencyMs;
-    }).catch(() => {
-      if (report.status === "active") {
-        report.status = "degraded";
-      }
-    });
+  if (providerLastError[providerSlug]) {
+    report.last_error = new Date(providerLastError[providerSlug].timestamp).toISOString();
+  }
+  if (providerLastSuccess[providerSlug]) {
+    report.last_success = new Date(providerLastSuccess[providerSlug]).toISOString();
   }
 
   return `[OK] ${json({
@@ -451,6 +477,25 @@ function doSpecHealth(): string {
   const activeCount = Object.entries(config.providers).filter(([, p]) => p.enabled).length;
   const kbStatsData = isKbConfigured() ? kbStats() : null;
 
+  const providerConfidence: Record<string, number> = {};
+  for (const [slug, p] of Object.entries(config.providers)) {
+    if (!p.enabled) { providerConfidence[slug] = 0; continue; }
+    if (p.tier === "builtin") providerConfidence[slug] = 95;
+    else if (p.tier === "free_http") providerConfidence[slug] = 85;
+    else if (p.tier === "keyed_http") {
+      providerConfidence[slug] = p.auth_env && !process.env[p.auth_env] ? 55 : 75;
+    } else if (p.tier === "self_hosted_http") {
+      providerConfidence[slug] = p.url_env && !process.env[p.url_env] ? 55 : 70;
+    } else {
+      providerConfidence[slug] = 60;
+    }
+  }
+  const scores = Object.values(providerConfidence).filter((s) => s > 0);
+  const avgConfidence = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  const minConfidence = scores.length > 0 ? Math.min(...scores) : 0;
+
+  const toolCount = 13;
+
   return `[OK] ${json({
     status: "ok",
     provider: "system",
@@ -458,6 +503,13 @@ function doSpecHealth(): string {
       build_version: "2026.08.10",
       provider_count: Object.keys(config.providers).length,
       active_provider_count: activeCount,
+      tool_count: toolCount,
+      provider_confidence: {
+        min: minConfidence,
+        max: scores.length > 0 ? Math.max(...scores) : 0,
+        avg: avgConfidence,
+        providers: providerConfidence,
+      },
       kb: kbStatsData ? {
         chunk_count: kbStatsData.chunk_count,
         collections: kbStatsData.collections,
@@ -466,6 +518,7 @@ function doSpecHealth(): string {
       } : undefined,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
       total_requests_served: totalRequests,
+      last_spec_review: new Date(SPEC_REVIEW_TIME).toISOString(),
       quota_state_path: getQuotaStatePath(),
       config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
     }],
@@ -583,7 +636,7 @@ server.registerTool(
     },
   },
   async (params) => {
-    const content = doProviderHealth(String(params.provider));
+    const content = await doProviderHealth(String(params.provider));
     return { content: [{ type: "text" as const, text: content }] };
   }
 );

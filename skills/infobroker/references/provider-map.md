@@ -6,19 +6,19 @@ Quick reference for `choose_provider` recommendations.
 
 | Task type | Primary | Fallback 1 | Fallback 2 |
 |-----------|---------|-----------|-----------|
-| General web search | DuckDuckGo | Marginalia | Brave (if keyed) |
+| General web search | Brave (if keyed) | DuckDuckGo | Marginalia, Mojeek |
 | Small web / blogs / non-commercial | Marginalia | Mojeek | DuckDuckGo |
 | Encyclopedia article | Wikipedia | DuckDuckGo | — |
 | Word definition / etymology | Wiktionary | DuckDuckGo | — |
 | Structured fact (dates, stats) | Wikidata | Wikipedia | DuckDuckGo |
 | Location / place lookup | OpenStreetMap Nominatim | Wikipedia | DuckDuckGo |
-| Academic paper search | Semantic Scholar | arXiv | CORE (if keyed) |
+| Academic paper search | Semantic Scholar | arXiv | — |
 | Code / technical Q&A | Stack Exchange | GitHub | DuckDuckGo |
 | Recent news | Brave (if keyed) | DuckDuckGo | — |
 | Historical web page | Internet Archive | DuckDuckGo | — |
 | Semantic / "find things like X" | Exa (if keyed) | Brave (if keyed) | DuckDuckGo |
 | Synthesized answer with citations | Tavily (if keyed) | Exa (if keyed) | DuckDuckGo |
-| Privacy-critical search | SearXNG (if self-hosted) | DuckDuckGo | — |
+| Privacy-critical search | DuckDuckGo | SearXNG (if configured) | Mojeek |
 | URL content → Markdown | Jina Reader | Native HTTP fetch | — |
 
 ## Provider Capabilities

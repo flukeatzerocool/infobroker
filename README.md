@@ -43,10 +43,9 @@ README DESIGN:
 
 Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
-behind a single tool surface. Ten zero-config providers ship in the
+behind a single tool surface. Fourteen zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Eight more providers unlock with free API keys or
-self-hosting. A built-in convergence engine cross-references independent
+configure. Four more providers unlock with API keys or self-hosting. A built-in convergence engine cross-references independent
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
@@ -178,7 +177,7 @@ doing and how much capacity remains.
 
 ## Providers
 
-Eighteen providers. Ten work with zero configuration.
+Eighteen providers. Fourteen work with zero configuration.
 
 | Provider | Tier | Type | Key Required |
 |----------|------|------|-------------|
@@ -230,9 +229,9 @@ restart.
 
 | Tool name | What you're used to | How Infobroker differs |
 |-----------|--------------------|-----------------------|
-| Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Seven zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
+| Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Fourteen zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
-| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and five other providers work with zero configuration. Upgrade paths for Brave, Exa, and Tavily. Self-hosted SearXNG for full privacy. |
+| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and twelve other providers work with zero configuration. Upgrade paths for Brave, Exa, and Tavily. Self-hosted SearXNG for full privacy. |
 | Other search MCP servers | Single-provider focus, no fallback, no convergence, no writing pipeline | Multi-provider with automatic fallback. Convergence engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
 | AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The convergence engine verifies facts across independent sources. |
 
@@ -244,7 +243,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last researched: August 10, 2026.
+Last updated: 2026-08-10.
 
 ## Contribute
 
