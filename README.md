@@ -94,7 +94,7 @@ Requirements: Node.js 20+.
 
 ## MCP Server
 
-Your research backend. Nine tools, eighteen providers, one
+Your research backend. Thirteen tools, eighteen providers, one
 convergence engine.
 
 ### Unified Search
@@ -244,7 +244,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last researched: August 6, 2026.
+Last researched: August 10, 2026.
 
 ## Contribute
 

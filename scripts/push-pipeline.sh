@@ -233,7 +233,18 @@ echo -e "${GREEN}Step 1/9: Spec audit${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
 echo ""
 
-# run full check suite
+# 1a: lint the spec markdown
+echo -e "${YELLOW}Linting infobroker.md...${NC}"
+set +e
+npx markdownlint infobroker.md 2>/dev/null
+SPECLINT_RC=$?
+set -e
+if [[ $SPECLINT_RC -ne 0 ]]; then
+  echo -e "${YELLOW}infobroker.md lint warnings (non-blocking)${NC}"
+fi
+echo ""
+
+# 1b: run full check suite
 echo -e "${YELLOW}Running spec checks (typecheck + validate-spec + validate-readme)...${NC}"
 if ! npm run check 2>/dev/null; then
   echo ""
