@@ -360,6 +360,11 @@ After adding a new requirement ID, expect these validator complaints:
 - New REQ not in the manifest (Appendix E or equivalent).
 - Test ID count mismatch.
 - Cross-reference totals stale.
+- **Spec hash drift.** When amending spec source files, `npm run
+  assemble` produces a new SHA-256 that downstream artifacts (DECISIONS.md,
+  server metadata) may store. A stale hash blocks pre-commit hooks — update
+  the stored hash before committing. A content-only change (no REQ
+  additions) still changes the hash via the assembly.
 
 These are consequences of the change, not regressions. Fix them as part
 of the same batch.
