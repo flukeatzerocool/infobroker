@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 // @implements REQ-055
 
@@ -175,6 +176,30 @@ function checkGeneratedAuthStale(): void {
 }
 
 checkGeneratedAuthStale();
+
+// --- Spec hash staleness check ---
+
+function checkSpecHashStale(): void {
+  const decisionsPath = join(ROOT, "DECISIONS.md");
+  if (!existsSync(decisionsPath)) return;
+
+  const decisions = readFileSync(decisionsPath, "utf-8");
+  const storedHash = decisions.match(/\*\*Spec hash:\*\*\s*`([a-f0-9]+)`/)?.[1];
+  if (!storedHash) {
+    warn("Spec hash missing from DECISIONS.md — run 'npm run hash'");
+    return;
+  }
+
+  const specPath = join(ROOT, "infobroker.md");
+  if (!existsSync(specPath)) return;
+
+  const currentHash = createHash("sha256").update(readFileSync(specPath)).digest("hex");
+  if (currentHash !== storedHash) {
+    warn(`Spec hash is stale (stored: ${storedHash.slice(0, 8)}..., current: ${currentHash.slice(0, 8)}...) — run 'npm run hash'`);
+  }
+}
+
+checkSpecHashStale();
 
 // --- Report ---
 

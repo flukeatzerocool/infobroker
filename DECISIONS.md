@@ -2,6 +2,13 @@
 
 ## Active Decisions
 
+### D-012: Build Fingerprint (auto-generated)
+
+**Spec hash:** `0242f19284836ebfd138a484bff8c60855287b38a1d11f746c432ce2d6806184`
+**Source hash:** `86b87cf25d4323242d46570db5a8ddcd5a20833357a8d39921d344d5b42a6ad5`
+**Config hash:** `b7444aafdc27a5aed72f82e6cc6296f740263a96f920d775b24bb64561735994`
+**Total fingerprint:** `4694bc029490bdbf3f2b8baa7a7e6f61561ed3af80bb1ec8198cc5a6575fdad6`
+**Generated:** 2026-08-10T12:34:40.930Z
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -41,15 +48,17 @@ generated/maintained manually: `instructions/search-preferences.md`,
 `skills/infobroker/SKILL.md`, `skills/infobroker/references/*.md`,
 `vendor/opencode-skills/*/SKILL.md`, and `README.md`.
 
-### D-010: Spec-First REQ Waivers (2026.08.08 Spec Engineering)
+### D-010: Timeout, Latency Window, and Config Validation (2026.08.08 — implemented 2026.08.10)
 
 REQ-035 (Request Timeout), REQ-036 (Latency Tracking Window), and
 REQ-037 (Config Validation) were authored during the 2026.08.08
-spec-engineering pass as forward-looking requirements. These REQs define
-contracts for behavior not yet implemented — they will produce
-validate-spec warnings (no @implements citation) until the corresponding
-implementation is added in a subsequent build cycle. These warnings are
-intentional and serve as implementation reminders.
+spec-engineering pass and implemented in the subsequent build cycle.
+Per-provider request timeouts use `Promise.race` with configurable
+timeout values. Latency metrics are computed over a bounded sliding
+window configured via `output.latency_window_size`. Config validation
+on load and reload rejects missing provider fields, invalid dispatch
+chains, and negative rate-limit values; invalid configs on reload leave
+the previous config active.
 
 ### D-007: No Explicit Provider Plugin Interface
 Each provider exports standalone functions matching the same signature
@@ -70,12 +79,15 @@ UTC for daily, month boundary for monthly. The 80% warning threshold
 and 100% exhaustion are computed per-provider. Counters without explicit
 limits (Infinity) never trigger warnings.
 
-### D-011: KB REQ Forward-Looking Waivers (2026.08.09 Spec Engineering)
+### D-011: Knowledge Base Implementation (2026.08.09 — implemented 2026.08.10)
 
 REQ-060 through REQ-067 (Knowledge Base) were authored during the
-2026.08.09 spec-engineering pass as forward-looking requirements. These
-REQs define contracts for a local RAG knowledge base — a new subsystem
-not yet implemented. They will produce validate-spec warnings (no
-@implements citation) until the corresponding implementation is added
-in a subsequent build cycle. These warnings are intentional and serve
-as implementation reminders.
+2026.08.09 spec-engineering pass and implemented with a TF-IDF + cosine
+similarity hybrid search approach. The embedding model ("tf-idf") runs
+in-process with zero external dependencies. The vector store persists to
+a JSON file at the configured storage path. Auto-indexing fires via
+`setImmediate` after successful `web_search`, `fetch_page`, and `converge`
+calls — it never delays or errors the primary response. Content expiry
+runs on startup and at the configured maintenance interval. Collection
+scoping resolves from user-provided, env var, config default, then literal
+"default". Storage corruption triggers backup and fresh store creation.

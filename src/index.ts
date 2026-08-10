@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -51,6 +51,7 @@ import {
 } from "./providers/index.js";
 import { retryWithBackoff } from "./retry.js";
 import { converge } from "./converge.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
@@ -63,6 +64,14 @@ configureAllProviders(getConfig());
 loadQuotaState();
 
 startupHealthCheck();
+
+const kbConfig = getConfig().kb;
+if (kbConfig) {
+  initKb(kbConfig);
+  console.error("[infobroker] Knowledge base initialized");
+} else {
+  console.error("[infobroker] Knowledge base not configured — KB tools disabled");
+}
 
 function trackRequest(provider: string, latencyMs: number): void {
   totalRequests++;
@@ -267,6 +276,8 @@ async function doWebSearch(
       trackRequest(slug, elapsed);
       depth++;
 
+      autoIndex(results, slug);
+
       return `[OK] ${json(ok(slug, results, {
         query_time_ms: elapsed,
         fallback_used: lastError !== null,
@@ -326,6 +337,8 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
       trackRequest(slug, elapsed);      const truncated = maybeTruncate(content, config.output.max_chars);
+
+      autoIndex([{ title: new URL(url).hostname, url, snippet: truncated.text }], slug, undefined, "fetch_page");
 
       return `[OK] ${json({
         status: "ok",
@@ -487,7 +500,7 @@ function doSpecHealth(): string {
     status: "ok",
     provider: "system",
     results: [{
-      build_version: "2026.08.09",
+      build_version: "2026.08.10",
       provider_count: Object.keys(config.providers).length,
       active_provider_count: activeCount,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
@@ -500,7 +513,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.09",
+  version: "2026.08.10",
 });
 
 // --- web_search ---
@@ -631,6 +644,12 @@ server.registerTool(
         max_iterations: Number(params.max_iterations ?? 5),
         confidence_threshold: Number(params.confidence_threshold ?? 0.8),
       });
+      autoIndex(
+        result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
+        "converge",
+        undefined,
+        "converge"
+      );
       return { content: [{ type: "text" as const, text: `[OK] ${json(result)}` }] };
     } catch (e) {
       return {
@@ -641,6 +660,129 @@ server.registerTool(
           },
         ],
       };
+    }
+  }
+);
+
+// --- kb_search ---
+server.registerTool(
+  "infobroker_kb_search",
+  {
+    title: "Knowledge Base Search",
+    description: "Semantic and keyword hybrid search over the local knowledge base.",
+    inputSchema: {
+      query: z.string().describe("Search query"),
+      max_results: z.number().min(1).max(50).optional().default(10),
+      collection: z.string().optional().describe("Scope search to one collection"),
+      source_type: z.string().optional().describe("Filter by source type"),
+    },
+  },
+  async (params) => {
+    if (!isKbConfigured()) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
+    }
+    try {
+      const results = kbSearch(
+        String(params.query),
+        Number(params.max_results ?? 10),
+        params.collection as string | undefined,
+        params.source_type as string | undefined
+      );
+      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results })}` }] };
+    } catch (e) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
+    }
+  }
+);
+
+// --- kb_ingest ---
+server.registerTool(
+  "infobroker_kb_ingest",
+  {
+    title: "Knowledge Base Ingest",
+    description: "Ingest text or URL content into the knowledge base.",
+    inputSchema: {
+      text: z.string().optional().describe("Raw text to chunk and index"),
+      url: z.string().optional().describe("URL to fetch and index"),
+      title: z.string().optional(),
+      collection: z.string().optional(),
+    },
+  },
+  async (params) => {
+    if (!isKbConfigured()) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
+    }
+    const text = params.text as string | undefined;
+    const url = params.url as string | undefined;
+    if (!text && !url) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of text or url must be provided", "Provide text or url parameter"))}` }] };
+    }
+    try {
+      let content = text || "";
+      let sourceUrl = url || "";
+      if (url && !text) {
+        const fetched = await doFetchPage(url);
+        if (fetched.startsWith("[ERROR]")) {
+          return { content: [{ type: "text" as const, text: fetched }] };
+        }
+        const parsed = JSON.parse(fetched.slice(5));
+        content = parsed.results?.[0]?.snippet || "";
+        sourceUrl = url;
+      }
+      const count = kbIngest(
+        content,
+        (params.title as string) || url || "untitled",
+        sourceUrl,
+        "explicit",
+        params.collection as string | undefined,
+        "explicit"
+      );
+      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [{ title: "ingested", url: sourceUrl, snippet: `${count} chunks ingested` }], meta: { chunks_ingested: count } })}` }] };
+    } catch (e) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
+    }
+  }
+);
+
+// --- kb_stats ---
+server.registerTool(
+  "infobroker_kb_stats",
+  {
+    title: "Knowledge Base Stats",
+    description: "Knowledge base operational metrics.",
+    inputSchema: {},
+  },
+  async () => {
+    const stats = kbStats();
+    return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [stats] })}` }] };
+  }
+);
+
+// --- kb_delete ---
+server.registerTool(
+  "infobroker_kb_delete",
+  {
+    title: "Knowledge Base Delete",
+    description: "Remove content from the knowledge base.",
+    inputSchema: {
+      collection: z.string().optional().describe("Remove all chunks in this collection"),
+      source_url: z.string().optional().describe("Remove all chunks from this source URL"),
+    },
+  },
+  async (params) => {
+    if (!isKbConfigured()) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
+    }
+    const collection = params.collection as string | undefined;
+    const sourceUrl = params.source_url as string | undefined;
+    if (!collection && !sourceUrl) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of collection or source_url must be provided", "Provide a filter parameter"))}` }] };
+    }
+    try {
+      const count = kbDelete(collection, sourceUrl);
+      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [{ title: "deleted", url: "", snippet: `${count} chunks removed` }], meta: { chunks_removed: count } })}` }] };
+    } catch (e) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
     }
   }
 );
@@ -657,6 +799,10 @@ server.registerTool(
     try {
       const newConfig = reloadConfig();
       configureAllProviders(newConfig);
+      if (newConfig.kb) {
+        initKb(newConfig.kb);
+        console.error("[infobroker] Knowledge base re-initialized");
+      }
       return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message: "Configuration reloaded.", provider_count: Object.keys(newConfig.providers).length }] })}` }] };
     } catch (e) {
       return {
@@ -689,6 +835,7 @@ process.on("SIGHUP", () => {
   try {
     const newConfig = reloadConfig();
     configureAllProviders(newConfig);
+    if (newConfig.kb) initKb(newConfig.kb);
     console.error("[infobroker] Configuration reloaded via SIGHUP");
   } catch (e) {
     console.error("[infobroker] SIGHUP reload failed:", e instanceof Error ? e.message : String(e));

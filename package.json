@@ -1,6 +1,6 @@
 {
   "name": "infobroker",
-  "version": "2026.08.09",
+  "version": "2026.08.10",
   "description": "Infobroker MCP Server — multi-provider research & writing backend",
   "type": "module",
   "main": "src/index.ts",
@@ -13,8 +13,9 @@
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",
     "version-bump": "npx tsx scripts/version-bump.ts",
     "version-sync": "npx tsx scripts/version-check.ts",
-    "push": "npx tsx scripts/push.ts",
-    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme"
+    "push": "bash scripts/push-pipeline.sh",
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme",
+    "hash": "npx tsx scripts/hash-manifest.ts"
   },
   "keywords": [
     "search",

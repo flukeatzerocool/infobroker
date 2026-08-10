@@ -92,6 +92,10 @@ Use this when evaluating or comparing code solutions found via search.
 | Multi-source truth-finding | `converge` | Uses all active providers |
 | Check provider status | `list_providers` / `provider_health` | N/A |
 | Reload config at runtime | `reload_config` | N/A |
+| Search local knowledge base | `kb_search` | Semantic + keyword hybrid |
+| Ingest into knowledge base | `kb_ingest` | Text or URL |
+| Knowledge base stats | `kb_stats` | Operational metrics |
+| Delete from knowledge base | `kb_delete` | By collection or source URL |
 
 ## Best Practices
 

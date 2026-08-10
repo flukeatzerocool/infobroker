@@ -29,6 +29,49 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.10 — Knowledge Base Implementation + Repo Hygiene
+
+- A new Knowledge Base subsystem is implemented: four MCP tools provide
+  semantic and keyword hybrid search over locally indexed research results
+  (`kb_search`), explicit text or URL ingestion (`kb_ingest`), operational
+  metrics (`kb_stats`), and content removal (`kb_delete`). Vector embeddings
+  use in-process TF-IDF with cosine similarity — zero external dependencies.
+  (REQ-060 through REQ-067)
+
+- Search results, fetched page content, and convergence findings are
+  automatically indexed after each tool call via `setImmediate`, never
+  delaying or erroring the primary response. Auto-indexing is togglable
+  via the `kb.auto_index` config field. (REQ-064)
+
+- Content expiry runs on startup and at a configurable maintenance interval,
+  removing chunks whose source-type age exceeds the configured threshold.
+  Collections are implicit namespaces resolved from tool parameters,
+  environment variables, config defaults, or literal "default". Storage
+  corruption triggers automatic backup and fresh store creation.
+  (REQ-065, REQ-066)
+
+- The KB configuration section lives in `config.json` alongside provider
+  configuration and hot-reloads per `reload_config`. KB tools return a
+  config error when the section is absent — the server operates normally
+  without it. (REQ-067)
+
+- A content-addressable build manifest (`scripts/hash-manifest.ts`)
+  fingerprints every artifact category (spec, source, config, dependencies,
+  artifacts) using SHA-256. Hashes are embedded in DECISIONS.md for
+  git-trackable integrity and written to `$TMPDIR/infobroker/fingerprints.txt`
+  for local comparisons. A new `npm run hash` script regenerates the
+  manifest, and `npm run validate-spec` warns when the spec hash is stale.
+
+- The stale `push` script reference in `package.json` was corrected to
+  point at `push-pipeline.sh`. The `per_hour` field was removed from
+  `ProviderConfig.rate_limit` (never consumed, removed from the spec's
+  Provider interface in the 2026.08.08 pass). The pre-commit hook now
+  runs `npm run hash` before other checks.
+
+- DECISIONS.md D-010 was updated to reflect that REQ-035/036/037 are
+  now implemented. D-011 was replaced with the KB implementation note.
+  The README's zero-config provider count was corrected from 7 to 8.
+
 ## 2026.08.09 — Knowledge Base Spec Engineering
 
 - A new Knowledge Base subsystem is specified: four MCP tools (`kb_search`,

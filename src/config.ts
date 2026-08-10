@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040 REQ-067
 import { readFileSync, existsSync } from "node:fs";
 import type { Config, ProviderConfig } from "./types.js";
 
@@ -56,6 +56,32 @@ function validateConfig(config: Config): void {
     for (const slug of chain) {
       if (!config.providers[slug]) {
         errors.push(`Dispatch chain "${taskType}" references undeclared provider "${slug}"`);
+      }
+    }
+  }
+
+  if (config.kb) {
+    const kb = config.kb;
+    if (typeof kb.chunk_size !== "number" || kb.chunk_size < 1) {
+      errors.push("kb.chunk_size must be a positive number");
+    }
+    if (typeof kb.chunk_overlap !== "number" || kb.chunk_overlap < 0) {
+      errors.push("kb.chunk_overlap must be a non-negative number");
+    }
+    if (typeof kb.max_results !== "number" || kb.max_results < 1) {
+      errors.push("kb.max_results must be a positive number");
+    }
+    if (typeof kb.maintenance_interval_minutes !== "number" || kb.maintenance_interval_minutes < 0) {
+      errors.push("kb.maintenance_interval_minutes must be a non-negative number");
+    }
+    if (typeof kb.auto_index !== "boolean") {
+      errors.push("kb.auto_index must be a boolean");
+    }
+    if (kb.expiry) {
+      for (const [key, value] of Object.entries(kb.expiry)) {
+        if (typeof value === "number" && value < 0) {
+          errors.push(`kb.expiry.${key} must be non-negative`);
+        }
       }
     }
   }

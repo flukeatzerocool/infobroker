@@ -136,7 +136,7 @@
       "capabilities": ["web_search", "news", "semantic"],
       "rate_limit": { "per_month": 2000 },
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
-      "enabled": false,
+      "enabled": true,
       "priority": 30,
       "timeout": 10000
     },
@@ -146,7 +146,7 @@
       "capabilities": ["semantic", "synthesis"],
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_EXA_API_KEY",
-      "enabled": false,
+      "enabled": true,
       "priority": 30,
       "timeout": 10000
     },
@@ -156,7 +156,7 @@
       "capabilities": ["synthesis"],
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_TAVILY_API_KEY",
-      "enabled": false,
+      "enabled": true,
       "priority": 30,
       "timeout": 10000
     },
@@ -181,7 +181,7 @@
     }
   },
   "dispatch": {
-    "general_web": ["duckduckgo", "marginalia", "mojeek"],
+    "general_web": ["brave", "duckduckgo", "marginalia", "mojeek"],
     "small_web": ["marginalia", "mojeek", "duckduckgo"],
     "encyclopedia": ["wikipedia", "duckduckgo"],
     "definition": ["wiktionary", "duckduckgo"],
@@ -189,10 +189,10 @@
     "location": ["openstreetmap", "wikipedia", "duckduckgo"],
     "academic": ["semantic_scholar", "arxiv"],
     "code": ["stack_exchange", "github", "duckduckgo"],
-    "news": ["duckduckgo"],
+    "news": ["brave", "duckduckgo"],
     "archive": ["internet_archive", "duckduckgo"],
-    "semantic": ["duckduckgo"],
-    "synthesis": ["duckduckgo"],
+    "semantic": ["exa", "brave", "duckduckgo"],
+    "synthesis": ["tavily", "exa", "duckduckgo"],
     "privacy_critical": ["duckduckgo"],
     "content_fetch": ["jina", "native_fetch"]
   },
@@ -204,5 +204,20 @@
   "output": {
     "max_chars": 50000,
     "latency_window_size": 100
+  },
+  "kb": {
+    "storage_path": "~/.local/share/infobroker/knowledge-base",
+    "embedding_model": "tf-idf",
+    "chunk_size": 512,
+    "chunk_overlap": 64,
+    "auto_index": true,
+    "default_collection": "default",
+    "max_results": 50,
+    "expiry": {
+      "web_search": 0,
+      "fetch_page": 0,
+      "converge": 0
+    },
+    "maintenance_interval_minutes": 60
   }
 }
