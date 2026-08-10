@@ -231,7 +231,7 @@
     "archive": ["internet_archive", "duckduckgo"],
     "semantic": ["exa", "brave", "duckduckgo"],
     "synthesis": ["tavily", "exa", "duckduckgo"],
-    "privacy_critical": ["duckduckgo"],
+    "privacy_critical": ["duckduckgo", "searxng", "mojeek"],
     "content_fetch": ["jina", "native_fetch"]
   },
   "convergence": {

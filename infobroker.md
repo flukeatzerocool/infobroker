@@ -13,6 +13,12 @@ unified tool surface. Its design goals:
 5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, fact-checking, and proofreading.
 6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
+The knowledge base is a local caching layer — it does not alter the core
+intelligence cycle. When the KB is configured, the server checks the cache
+before collection (KB-First Sufficiency, REQ-076); when it is not, the
+server operates as a pure retrieval pipeline. Both paths satisfy the North
+Star contract: ask, and it finds out.
+
 ### North Star
 
 Infobroker is the Bothan Spynet as a tool. Like the Spynet's decentralized
@@ -112,7 +118,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Provider** | A search or content-extraction backend (DuckDuckGo, Wikipedia, Brave, etc.) |
 | **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) |
 | **Fallback chain** | Ordered list of providers tried in sequence on failure |
-| **Content renderer** | A provider that fetches and formats a URL (Jina Reader, native HTTP) |
+| **Content renderer** | A provider that fetches and formats a URL (Jina Reader, native HTTP). Task type for dispatch: `content_fetch`. |
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `choose_provider` |
 | **Convergence** | The multi-pass truth-finding loop in `converge` |
 | **Synthesis** | The container format that presents search findings to writing skills |
@@ -128,6 +134,8 @@ REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (p
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
+---
+
 ## §4 Requirements
 
 ### 4.1 Output and Error Contracts
@@ -136,7 +144,7 @@ REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (p
 Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
-Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Unknown errors default to `internal_error`. _Check:_ G0.
+Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date and source type. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
@@ -211,7 +219,7 @@ operate independently.
 Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain SHALL be ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain depth limit SHALL be configurable per task type. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain depth limit SHALL be configurable per task type. When every provider in the fallback chain is exhausted, the server SHALL return an error with code `all_providers_exhausted` and remediation naming the chain that was attempted. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -313,7 +321,7 @@ Remove content from the knowledge base. Parameters: `collection` (optional), `so
 
 **REQ-064 — Auto-Indexing**
 
-Search results from `web_search`, rendered page content from `fetch_page`, and findings from `converge` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
+Search results from `web_search`, rendered page content from `fetch_page`, and findings from `converge` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
 
@@ -517,7 +525,7 @@ when Jina returns 429 or error.
 | `archive` | internet_archive | duckduckgo | — |
 | `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo |
 | `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo |
-| `privacy_critical` | duckduckgo | searxng (if configured) | — |
+| `privacy_critical` | duckduckgo | searxng (if configured) | mojeek |
 | `content_fetch` | jina | native_fetch | — |
 
 ### 7.3 Provider Deprioritization
