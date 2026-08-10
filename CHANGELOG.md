@@ -29,7 +29,46 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
-## 2026.08.10 — Convergence Loop Implementation
+## 2026.08.10 — Vendor Skill Consolidation
+
+- Vendored skill files (`code-review`, `deep-research`, `fact-checking`,
+  `summarization`, `technical-writing`, `copywriting`, `proofreading`,
+  `translation`) were moved from `vendor/opencode-skills/` into the global
+  opencode skills directory, eliminating project-level duplication. The
+  global skill stubs were previously empty; the vendored copies were the
+  sole source of content. The vendor directory is removed and the
+  project's `opencode.json` no longer references it.
+
+## 2026.08.10 — Provider Backend Hardening
+
+- Provider backends are now registered in a typed `PROVIDERS` registry instead
+  of a manually maintained switch statement, so adding a new provider requires
+  only the module file and one registry entry — no tool handler code changes.
+  The `Provider` interface is enforced at build time by TypeScript. (REQ-070)
+
+- Every outbound HTTP request now carries a consistent server identifier,
+  enforced through a shared HTTP client used by all 18 providers. This replaces
+  41 individually hardcoded User-Agent headers with a single source of truth.
+  HTTP timeouts are applied uniformly from provider configuration. (REQ-071)
+
+- `provider_health` now performs a live connectivity check against the
+  provider during each invocation, replacing startup-only health probes.
+  The reported status and latency reflect current conditions. (REQ-025)
+
+- `fetch_page` now supports arXiv and Stack Exchange as content renderers,
+  enabling retrieval of paper abstracts and top-voted answer bodies. (REQ-021)
+
+- All 18 providers now accept `SearchOptions` (max_results, safe_search,
+  time_range, page), with server-side `max_results` enforcement as a
+  safety net for providers that ignore result-count parameters. The
+  previously dead `page` parameter is wired through to provider search
+  functions.
+
+- Brave Search now accepts `time_range` for recency-filtered queries.
+
+- Duplicate HTML-stripping code removed — `stripHtml` is now a single
+  shared utility used by Wikipedia, Wiktionary, and Stack Exchange.
+
 
 - The `converge` tool now accepts a `providers` parameter so users can
   scope multi-source verification to specific backends (REQ-026).
