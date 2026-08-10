@@ -29,6 +29,36 @@
      the spec in a month understand what changed and why it matters?"
 -->
 
+## 2026.08.10 — Spec Review Remediation
+
+- The dispatch table in §7.2 was aligned to the canonical `config.json`:
+  `general_web` now lists Brave as primary (matching the active dispatch
+  chain), `academic` drops CORE as a fallback (not in the configured
+  chain), and `privacy_critical` promotes DuckDuckGo to primary with
+  SearXNG as fallback (reflecting SearXNG's default-disabled state).
+
+- "KB" is now formally defined in the Terminology table (§3) and REQ-065
+  and REQ-067 use the full "knowledge base" term in their bodies, removing
+  an undefined abbreviation from normative language.
+
+- REQ-065's collection resolution chain was rewritten from a 4-step
+  procedural algorithm to a precedence-based contract, per SR-011(a)'s
+  prohibition on algorithm descriptions in REQ bodies.
+
+- REQ-003's inline type shape (`{title, url, ...}`) was replaced with
+  plain-English prose. REQ-013's vague "slow/limited" qualifier was
+  replaced with measurable conditions (latency exceeds configurable
+  threshold, partial results). `togglable` was corrected to `toggleable`.
+
+- SR-004's zero-config provider list was expanded to include all
+  free-tier providers now enabled by default in `config.json`: Wikidata,
+  OpenStreetMap, arXiv, Marginalia, Mojeek, Semantic Scholar, Stack
+  Exchange, GitHub, and CORE.
+
+- A REQ block reservation note now appears before §4, documenting the
+  numbering scheme for new contributors. §4 gains an explicit "Out of
+  scope" clause per Appendix C.8.
+
 ## 2026.08.10 — Knowledge Base Implementation + Repo Hygiene
 
 - A new Knowledge Base subsystem is implemented: four MCP tools provide

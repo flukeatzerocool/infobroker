@@ -43,7 +43,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
 - **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `provider_health` responses.
-- **SR-004 Zero-config works.** DuckDuckGo (in-process scraping) + Jina Reader + Wikipedia + Wiktionary + Internet Archive all require no API key and provide a functional default.
+- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE (all free HTTP, no API key required) provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Rate limit state persists.** Quota counters survive restarts via a JSON state file.
@@ -105,8 +105,13 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
 | **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
 | **Vector store** | The local database that indexes chunks by their embedding vectors and supports semantic (vector similarity) and keyword (full-text) retrieval. |
+| **KB** | Abbreviation for "knowledge base." |
 
 ---
+
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–067 (knowledge base).
+
+**Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
 ## §4 Requirements
 
@@ -119,7 +124,7 @@ Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or 
 Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Unknown errors default to `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
-All providers SHALL return results in a common shape: `{title, url, snippet, published_date?, source_type?}`. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
+All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date and source type. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
 **REQ-004 — Truncation**
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
@@ -136,7 +141,7 @@ API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API
 The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
-On startup, the server SHALL log each configured provider's status: `active` (key present + reachable), `inactive` (key missing or unreachable), `degraded` (reachable but slow/limited). This status is exposed via `list_providers` and `provider_health`. _Check:_ G1.
+On startup, the server SHALL log each configured provider's status: `active` (key present + reachable), `inactive` (key missing or unreachable), `degraded` (reachable but response latency exceeds a configurable threshold or the provider returns partial results). This status is exposed via `list_providers` and `provider_health`. _Check:_ G1.
 
 ### 4.3 Core Tools
 
@@ -261,11 +266,11 @@ Remove content from the knowledge base. Parameters: `collection` (optional), `so
 
 **REQ-064 — Auto-Indexing**
 
-Search results from `web_search`, rendered page content from `fetch_page`, and findings from `converge` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be togglable via configuration. _Check:_ G1.
+Search results from `web_search`, rendered page content from `fetch_page`, and findings from `converge` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
 
-A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any KB tool call that omits the `collection` parameter SHALL resolve in order: the tool-provided parameter, the `INFOBROKER_KB_COLLECTION` environment variable, the configured default collection name, and finally the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
+A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
 
 **REQ-066 — Content Expiry**
 
@@ -273,7 +278,7 @@ Indexed content SHALL be removable by age. Expiry intervals SHALL be configurabl
 
 **REQ-067 — Knowledge Base Configuration**
 
-The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, per-source-type content expiry intervals, and maximum results per query. If the knowledge base configuration section is absent or invalid, all KB tools SHALL return an error with remediation. Config reload SHALL apply KB configuration changes per REQ-040. _Check:_ G1.
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, per-source-type content expiry intervals, and maximum results per query. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 ---
 
@@ -437,19 +442,19 @@ when Jina returns 429 or error.
 
 | Task type | Primary | Fallback 1 | Fallback 2 |
 |-----------|---------|-----------|-----------|
-| `general_web` | duckduckgo | marginalia | brave (if keyed) |
+| `general_web` | brave (if keyed) | duckduckgo | marginalia |
 | `small_web` | marginalia | mojeek | duckduckgo |
 | `encyclopedia` | wikipedia | duckduckgo | — |
 | `definition` | wiktionary | duckduckgo | — |
 | `structured_fact` | wikidata | wikipedia | duckduckgo |
 | `location` | openstreetmap | wikipedia | duckduckgo |
-| `academic` | semantic_scholar | arxiv | core (if keyed) |
+| `academic` | semantic_scholar | arxiv | — |
 | `code` | stack_exchange | github | duckduckgo |
 | `news` | brave (if keyed) | duckduckgo | — |
 | `archive` | internet_archive | duckduckgo | — |
 | `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo |
 | `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo |
-| `privacy_critical` | searxng (if configured) | duckduckgo | — |
+| `privacy_critical` | duckduckgo | searxng (if configured) | — |
 | `content_fetch` | jina | native_fetch | — |
 
 ### 7.3 Provider Deprioritization
