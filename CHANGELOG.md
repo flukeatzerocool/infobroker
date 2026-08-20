@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.08.20 — Build fingerprint determinism and hook staging
+
+- The auto-generated build fingerprint block in `DECISIONS.md` no longer
+  includes a `Generated:` timestamp, so re-running `npm run hash` on an
+  unchanged tree produces no diff. The timestamp remains only in the
+  gitignored `$TMPDIR/infobroker/fingerprints.txt`.
+- The pre-commit hook now re-stages `DECISIONS.md` after `npm run hash`,
+  so a spec-hash change lands in the same commit as the spec edit instead of
+  surfacing as a post-commit dirty tree.
+- Shell scripts remain gate-checked with `bash -n`; `shellcheck` is
+  documented as recommended-but-optional (not a devDependency).
+
 ## 2026.08.20 — Push pipeline overhaul
 
 - The `push-pipeline.sh` was restructured into a modular pipeline

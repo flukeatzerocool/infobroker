@@ -113,3 +113,8 @@ This runs:
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
 REQs with no waiver in DECISIONS.md, undocumented source files, REQ body
 violations per SR-011).
+
+Shell scripts (`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`) are
+gate-checked with `bash -n`. Running `shellcheck` on them before committing
+is recommended but not required — it is not installed as a devDependency and
+is not part of `npm run check`.

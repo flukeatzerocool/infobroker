@@ -90,7 +90,6 @@ const fpBlock = [
   `**Source hash:** \`${sourceAggregate}\``,
   `**Config hash:** \`${configHash}\``,
   `**Total fingerprint:** \`${totalFingerprint}\``,
-  `**Generated:** ${generated}`,
   "",
 ];
 
