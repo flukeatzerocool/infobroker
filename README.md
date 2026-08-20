@@ -216,14 +216,21 @@ Then set `"enabled": true` in `config.json` for the provider.
 | Variable | Purpose |
 |----------|---------|
 | `INFOBROKER_CONFIG` | Path to config.json (default: `./config.json`) |
+| `INFOBROKER_CONFIG_LOCAL` | Optional path to a user config layer (default: `config.local.json`) |
 | `INFOBROKER_<NAME>_API_KEY` | API key for keyed providers |
 | `INFOBROKER_<NAME>_URL` | URL for self-hosted providers |
 
-`config.json` controls which providers are enabled, their priority in
-fallback chains, rate limits, convergence parameters, and the
-task-to-provider dispatch table. Hot-reloadable via `reload_config` —
-edit the file, call the tool, and changes take effect without a
-restart.
+`config.json` ships with the repository and holds the defaults: which
+providers are enabled, their priority in fallback chains, rate limits,
+convergence parameters, and the task-to-provider dispatch table.
+Hot-reloadable via `reload_config` — edit the file, call the tool, and
+changes take effect without a restart.
+
+Your own overrides live in a separate user layer — `config.local.json`
+in the project directory (or a path you set via `INFOBROKER_CONFIG_LOCAL`).
+This file is git-ignored, so pulling updates from the repository never
+overwrites your settings. Values in the user layer take precedence over
+the shipped defaults; anything left out falls back to `config.json`.
 
 ## How It Compares
 

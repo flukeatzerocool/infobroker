@@ -58,8 +58,10 @@ Once the spec file is found, discover:
   or similar files for rules governing how requirements are written. Common
   patterns: contracts vs. implementation ("what, not how"), prohibited
   detail types (algorithms, data formats, library choices, default values),
-  and style checklists. Record any conventions found. If none: note it —
-  the fallback is "state contracts, not implementations."
+  and style checklists. Also record any mechanical limits the spec defines
+  on requirement bodies (character, sentence, or clause counts). Record any
+  conventions found. If none: note it — the fallback is "state contracts,
+  not implementations."
 
 **Gate.** Present a one-line summary and wait for confirmation:
 
@@ -266,6 +268,14 @@ Example — a requirement that fails this check, and the corrected version:
    implementation can invoke the decision with the same identifier on
    another."
    → States what consistent behavior looks like, not which format to use.
+
+**SDD-limit precheck.** For each new or amended requirement in the plan,
+compute the projected body length, sentence count, and SHALL-clause count,
+and verify them against the mechanical limits in the spec's authoring
+conventions (e.g., Holonovel Appendix M: ≤ 800 characters, ≤ 8 sentences,
+≤ 8 SHALL clauses, one paragraph, one contract). Record the computed values
+in the plan entry. A requirement body that exceeds a limit at plan time is a
+plan defect — split or trim it before running `plan-review`.
 
 ### Identifier namespace check
 

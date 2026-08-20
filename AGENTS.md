@@ -59,7 +59,7 @@ npm run typecheck   # tsc --noEmit
 
 ## State Model
 
-- **Config**: `config.json` — provider config, dispatch tables, limits. Hot-reloadable.
+- **Config**: `config.json` (shipped default) — provider config, dispatch tables, limits, hot-reloadable. A user layer at `config.local.json` (or `INFOBROKER_CONFIG_LOCAL`) is merged over the shipped default; user values take precedence and survive updates (REQ-010, REQ-042, REQ-043). `config.local.json` is git-ignored.
 - **Quota**: `$TMPDIR/infobroker/quota.json` — daily/monthly counters, persists across restarts.
 - **Truncation**: `$TMPDIR/infobroker/trunc-*.txt` — full content of truncated responses.
 

@@ -1,5 +1,6 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040 REQ-067 REQ-074
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074
 import { readFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
 
 let configPath: string;
@@ -12,13 +13,47 @@ export function getConfigPath(): string {
   return configPath;
 }
 
-function loadConfigFromDisk(): Config {
-  const path = getConfigPath();
+export function getUserConfigPath(): string | undefined {
+  return process.env["INFOBROKER_CONFIG_LOCAL"] || join(dirname(getConfigPath()), "config.local.json");
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// Deep-merge a user object over a shipped default object. Leaf values in the
+// user layer replace the shipped values; arrays are replaced wholesale.
+function mergeLayer<T>(base: T, overlay: unknown): T {
+  if (!isPlainObject(base) || !isPlainObject(overlay)) {
+    return (overlay === undefined ? base : overlay) as T;
+  }
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(overlay)) {
+    if (value === undefined) continue;
+    if (isPlainObject(value) && isPlainObject(out[key])) {
+      out[key] = mergeLayer(out[key], value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out as T;
+}
+
+function readJson(path: string): unknown {
   if (!existsSync(path)) {
     throw new Error(`Config file not found: ${path}`);
   }
-  const raw = readFileSync(path, "utf-8");
-  return JSON.parse(raw) as Config;
+  return JSON.parse(readFileSync(path, "utf-8"));
+}
+
+function loadConfigFromDisk(): Config {
+  const base = readJson(getConfigPath()) as Config;
+  const userPath = getUserConfigPath();
+  if (userPath && existsSync(userPath)) {
+    const user = readJson(userPath);
+    return mergeLayer(base, user);
+  }
+  return base;
 }
 
 function validateConfig(config: Config): void {

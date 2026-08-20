@@ -53,6 +53,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F8 | Convergence loop stalls | `converge` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. `kb_stats` reports the event. |
+| F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
 
 ---
 
@@ -130,7 +131,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 050–055 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -159,7 +160,7 @@ Tool outputs longer than the configured max length SHALL be truncated and writte
 ### 4.2 Provider Configuration
 
 **REQ-010 — Config File**
-Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The config declares each provider's type, auth, rate limits, and priority. _Check:_ G1.
+Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The configuration SHALL be composed of a shipped default configuration and a user configuration layer. Values in the user layer SHALL take precedence over values in the shipped default. The user configuration layer SHALL be preserved when the software is updated. The config declares each provider's type, auth, rate limits, and priority. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
 API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `provider_health` responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
@@ -352,6 +353,23 @@ The knowledge base configuration SHALL reside within the server's main configura
 
 Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. The chunk count reported by `kb_stats` SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
+### 4.10 Deployment and Updates
+
+**REQ-042 — Source Distribution**
+
+Users SHALL obtain the server from a public source repository. Updates
+SHALL be delivered as repository updates that users apply to their local
+copy. The distributed repository SHALL NOT contain user configuration
+layers, stored research content, or accumulated quota state. _Check:_ G1.
+
+**REQ-043 — Update Preservation**
+
+Applying an update to the server SHALL NOT remove, reset, or overwrite
+user-owned state: the user configuration layer (REQ-010), indexed
+knowledge base content (REQ-067), and accumulated quota state (REQ-033).
+The server SHALL operate on preserved user state after an update without
+requiring reconfiguration. _Check:_ G1.
+
 ---
 
 ## §5 Build Process
@@ -363,7 +381,7 @@ Content ingested into the knowledge base SHALL be deduplicated by source URL. In
 - Validation: `zod` (peer dependency of MCP SDK)
 - HTTP: `undici` (built into Node.js 20+)
 - HTML parsing: `cheerio` (for DuckDuckGo scraping)
-- Distribution: `npx` via npm package, or direct `tsx src/index.ts`
+- Distribution: public source repository (currently hosted at git.gay). Users clone the repository and run locally with `tsx src/index.ts`; updates arrive as repository fetches. Secret material is provided at runtime via environment variables (REQ-011).
 
 ### 5.2 Layered Architecture
 
@@ -646,6 +664,8 @@ pages are not).
 - KB config validation: provide invalid KB config section → verify `kb_search` returns config error
 - KB deduplication: ingest URL with content → note chunk count → re-ingest same URL → verify count unchanged, content updated
 - Normalizer discard: normalize results with empty URL → verify zero results returned, max_results count preserved for downstream provider
+- Config overlay: load shipped default plus user configuration layer → verify user values take precedence over shipped values
+- Update preservation: apply updated shipped defaults over an existing user layer, knowledge base store, and quota file → verify all user-owned state is retained and the server operates without reconfiguration
 
 ### 9.3 G2 — Live Smoke Tests (Optional)
 
@@ -672,6 +692,8 @@ pages are not).
 
 ### 10.1 Project Files
 
+Shipped in the distributed repository:
+
 ```
 infobroker/
 ├── infobroker.md                          # This specification
@@ -686,11 +708,23 @@ infobroker/
 │   └── research-engineering-loop/
 │       └── SKILL.md                       # CTI-modeled research workflow
 ├── README.md                              # Setup, config, integration
-├── ~/.local/share/infobroker/
-│   └── knowledge-base/                     # Vector store (created at runtime)
-├── DECISIONS.md                           # Implementation decisions (future)
-└── AGENTS.md                              # Code map for AI maintainers (future)
+├── config.json                            # Shipped default configuration
+├── DECISIONS.md                           # Implementation decisions
+└── AGENTS.md                              # Code map for AI maintainers
 ```
+
+User-owned (NOT in the repository; preserved across updates per REQ-043):
+
+```
+config.local.json                          # User configuration layer (REQ-010)
+~/.local/share/infobroker/knowledge-base/  # Vector store (created at runtime)
+$TMPDIR/infobroker/quota.json              # Persistent quota counters (REQ-033)
+$TMPDIR/infobroker/trunc-*.txt             # Full content of truncated responses
+```
+
+Component names above are the reference layout; the user configuration
+layer's location is a build decision (REQ-010), so long as it ships
+separately from the shipped default and survives updates.
 
 ### 10.2 Client Integration
 
@@ -698,26 +732,30 @@ infobroker/
 // opencode.json additions
 {
   "instructions": [
-    "/home/fluke/infobroker/instructions/search-preferences.md",
+    "<path-to-Infobroker>/instructions/search-preferences.md",
     ...existing instructions...
   ],
   "skills": {
     "paths": [
-      "/home/fluke/infobroker/skills",
-      "/home/fluke/.config/opencode/skills"
+      "<path-to-Infobroker>/skills",
+      "<path-to-opencode-config>/skills"
     ]
   },
   "mcp": {
     "infobroker": {
       "type": "local",
-      "command": ["node", "/home/fluke/infobroker/dist/index.js"],
+      "command": ["node_modules/.bin/tsx", "src/index.ts"],
+      "cwd": "<path-to-Infobroker>",
       "environment": {
-        "INFOBROKER_CONFIG": "/home/fluke/infobroker/config.json"
+        "INFOBROKER_CONFIG": "<path-to-Infobroker>/config.json"
       }
     }
   }
 }
 ```
+
+The `INFOBROKER_CONFIG` path points to the shipped default; the user
+configuration layer is merged over it by the server (REQ-010).
 
 ### 10.3 What Replaces What
 

@@ -4,11 +4,11 @@
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `fd9b55b41a572f1eebb97c418011de8f59c3fe5a7c15100b906d9827cdc12899`
-**Source hash:** `134bddd476bed485e90c63491ead735814dae0c2eb4ca1fd8d4af28ecbec0a52`
+**Spec hash:** `5526a82217d0997a94c9379c46c417f8a46142e994e17fac87415606c19f01de`
+**Source hash:** `7c3b0d59d007b229d1af6318a3538824a50d4cc13dbf6e8df762d30bd60f11d0`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `6750ee4916da315d5962c7afd9b1304e9caccce626eed21a70b32d8068773bda`
-**Generated:** 2026-08-10T16:30:08.859Z
+**Total fingerprint:** `026368aa1c2167a1b9561eebf0dca625eedbac663f1a0bbcbceda42c1a9a0bbb`
+**Generated:** 2026-08-20T03:33:19.474Z
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -121,3 +121,21 @@ calls — it never delays or errors the primary response. Content expiry
 runs on startup and at the configured maintenance interval. Collection
 scoping resolves from user-provided, env var, config default, then literal
 "default". Storage corruption triggers backup and fresh store creation.
+
+### D-015: User Configuration Overlay and Source Distribution (2026.08.19)
+
+REQ-042 (Source Distribution) and REQ-043 (Update Preservation) were
+authored to document the repository-based deployment (hosted at git.gay)
+and guarantee that updates do not erase user-owned state. Distribution is
+a git repository: users clone it and run the server locally with `tsx`;
+updates arrive as repository fetches. There is no npm publication.
+
+Configuration is layered per REQ-010: the tracked `config.json` holds the
+shipped defaults, and a git-ignored `config.local.json` (or a path set via
+`INFOBROKER_CONFIG_LOCAL`) holds user overrides. The server deep-merges the
+user layer over the shipped default — user values take precedence, arrays
+are replaced wholesale — before validation and reload. The knowledge base
+(`~/.local/share/infobroker/knowledge-base`) and quota state
+(`$TMPDIR/infobroker/quota.json`) live outside the repository, so they are
+preserved across updates. API keys remain environment-variable-only
+(REQ-011) and are therefore update-safe.

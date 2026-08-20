@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.08.19 — Source distribution and update-preservation guarantees
+
+- The specification now documents the actual deployment channel: Infobroker
+  is distributed as a public source repository (hosted at git.gay) that users
+  clone and run locally, with updates delivered as repository fetches. The
+  prior "distributed via npm" claim was removed. (REQ-042)
+- Applying an update now guarantees user-owned state is preserved: the user
+  configuration layer, knowledge base content, and quota state all live
+  outside the distributed tree and are never reset or overwritten by a pull.
+  (REQ-043)
+- Configuration is now layered: the tracked `config.json` holds shipped
+  defaults, and a git-ignored `config.local.json` (or `INFOBROKER_CONFIG_LOCAL`)
+  holds user overrides that take precedence and survive updates. (REQ-010)
+- The client-integration snippet and project file tree were corrected to
+  use repo-relative paths and to separate shipped files from user-owned
+  state. A new failure mode documents update-clobbers-user-state mitigation.
+  (F11)
+
 ## 2026-08-10 — Spec artifact drift remediation
 
 - Vendor directory references removed from the specification, decisions
