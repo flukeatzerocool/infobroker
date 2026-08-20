@@ -291,7 +291,13 @@ if $PARALLEL; then
   sed -e "s|<SCAN_DIR>|${SCAN_DIRS%% *}|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan.json|g" \
     "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
   (
-    export PIPELINE_SESSION_ID="${PIPELINE_SESSION_ID}-scan"
+    # The scan runs in its own session so it does not collide with the README
+    # step, which continues the main session. Ensure it bootstraps a fresh
+    # session under a distinct title rather than deriving from the resolved
+    # ses_ id of the main session.
+    unset PIPELINE_SESSION_ID
+    PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-scan"
+    ensure_session
     for d in $SCAN_DIRS; do
       run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
       [[ $OPC_RC -ne 0 ]] && exit 1
