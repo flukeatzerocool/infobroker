@@ -4,10 +4,10 @@
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `3ce63b7f4e447eee5d87fe759c1534b38fcb5b47b24efa5313d51638346d5ec5`
+**Spec hash:** `38f6c2048b1d8528ae564049ff11e7be25630253d30f167888ac26cb2ff7c13e`
 **Source hash:** `7c3b0d59d007b229d1af6318a3538824a50d4cc13dbf6e8df762d30bd60f11d0`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `f4aeca248120df3d0c5cafbaaff12948fcbcac53076efc8baca23d08915810ce`
+**Total fingerprint:** `bf42e5366b15229e0d50a72971905af7c5ce7d6a8a25594f1e7e158859b0bff9`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

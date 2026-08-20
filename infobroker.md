@@ -412,7 +412,7 @@ Layer 3: Tools                 web_search, fetch_page, converge, choose_provider
                                reload_config, spec_health,
                                kb_search, kb_ingest, kb_stats, kb_delete
 
-Layer 2: Provider Backends     ddg, marginalia, mojeek, brave, searxng,
+Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
                                github, jina, internet_archive, exa, tavily
@@ -480,7 +480,8 @@ responses. The convergence loop validates against:
 All tools use `snake_case`. Tool names are domain terminology: `web_search`,
 `fetch_page`, `search_suggestions`, `choose_provider`, `list_providers`,
 `provider_health`, `converge`, `reload_config`, `spec_health`, `kb_search`,
-`kb_ingest`, `kb_stats`, `kb_delete`.
+`kb_ingest`, `kb_stats`, `kb_delete`. These logical names are registered with
+the MCP client under an `infobroker_` prefix (e.g., `infobroker_web_search`).
 
 ### 6.2 Output Format
 
@@ -511,14 +512,14 @@ Tool responses are JSON with this envelope:
 | Internet Archive | `https://archive.org/wayback/available` | Check availability, then fetch |
 | Semantic Scholar | `https://api.semanticscholar.org/graph/v1/` | 1 RPS authenticated, shared pool unauth |
 | arXiv | `https://export.arxiv.org/api/query` | 1 call/3 sec |
-| Stack Exchange | `https://api.stackexchange.com/2.3/` | 300/day unauth, 10K/day keyed |
-| GitHub | `https://api.github.com/search/code` | 60/hr unauth, 5K/hr token |
-| Brave | `https://api.search.brave.com/res/v1/web/search` | 2K/mo free tier |
+| Stack Exchange | `https://api.stackexchange.com/2.3/` | 300/day unauth, 10,000/day keyed |
+| GitHub | `https://api.github.com/search/code` | 60/hr unauth, 5,000/hr token |
+| Brave | `https://api.search.brave.com/res/v1/web/search` | 2,000/mo free tier |
 | SearXNG | User-configured (`/search?format=json`) | Requires Docker, JSON format must be enabled |
 | Marginalia | `https://search.marginalia.nu/search` | HTML scraping, open source |
 | Mojeek | `https://www.mojeek.com/search` | HTML scraping, independent index |
-| Exa | `https://api.exa.ai/search` | 1K/mo free tier, neural search |
-| Tavily | `https://api.tavily.com/search` | 1K/mo free credits |
+| Exa | `https://api.exa.ai/search` | 1,000/mo free tier, neural search |
+| Tavily | `https://api.tavily.com/search` | 1,000/mo free credits |
 | CORE | `https://api.core.ac.uk/v3/search/works` | Open access research |
 
 ### 6.4 Jina Reader
@@ -876,15 +877,15 @@ configuration layer is merged over it by the server (REQ-010).
 
 **Internet Archive** — `https://archive.org/wayback/available?url={url}` returns availability timestamp. Then `https://web.archive.org/web/{timestamp}/{url}` retrieves the page. Generous limits.
 
-**ArXiv** — `https://export.arxiv.org/api/query?search_query={query}&max_results=10`. 1 call per 3 seconds.
+**arXiv** — `https://export.arxiv.org/api/query?search_query={query}&max_results=10`. 1 call per 3 seconds.
 
 ### A.3 Free HTTP (Registration Required)
 
-**Semantic Scholar** — `https://api.semanticscholar.org/graph/v1/paper/search?query={query}`. Shared pool at 1000 RPS; dedicated pool with key at 1 RPS. Covers 214M papers, 2.5B citations.
+**Semantic Scholar** — `https://api.semanticscholar.org/graph/v1/paper/search?query={query}`. Shared pool at 1,000 RPS; dedicated pool with key at 1 RPS. Covers 214M papers, 2.5B citations.
 
-**Stack Exchange** — `https://api.stackexchange.com/2.3/search/advanced?q={query}&site=stackoverflow`. 300 req/day baseline, 10K/day with app key. Covers 170+ Q&A sites.
+**Stack Exchange** — `https://api.stackexchange.com/2.3/search/advanced?q={query}&site=stackoverflow`. 300 req/day baseline, 10,000/day with app key. Covers 170+ Q&A sites.
 
-**GitHub** — `https://api.github.com/search/code?q={query}`. 60 req/hour baseline, 5000/hr with token. Can search code, repos, issues.
+**GitHub** — `https://api.github.com/search/code?q={query}`. 60 req/hour baseline, 5,000/hr with token. Can search code, repos, issues.
 
 **CORE** — `https://api.core.ac.uk/v3/search/works?q={query}`. Open access research papers.
 
