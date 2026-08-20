@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.08.20 — Push pipeline overhaul
+
+- The `push-pipeline.sh` was restructured into a modular pipeline
+  (`scripts/pipeline/lib.sh` + `scripts/pipeline/prompts/`) with the AI
+  steps driven through a single persistent `opencode serve` session rather
+  than four cold-start sessions, reducing per-run context reloads.
+- Release-discipline guarantees were added: the pipeline now stages new
+  files in the source tree (previously only already-tracked files were
+  staged, so a sync that added a file shipped nothing), runs tests and
+  version-consistency checks after the server sync, refuses to silently
+  overwrite an existing version tag without `--force-tag`, and refuses to
+  commit staged content matching secret patterns. (Appendix C.9)
+- New flags: `--resume`, `--from=<step>`, `--parallel`, `--force-tag`,
+  `--force-push`, `--allow-secrets`. Model tiering is configurable via
+  `PIPELINE_MODEL` and `PIPELINE_LIGHT_MODEL`; dead-data scan scope via
+  `SCAN_DIRS`.
+
 ## 2026.08.19 — Source distribution and update-preservation guarantees
 
 - The specification now documents the actual deployment channel: Infobroker

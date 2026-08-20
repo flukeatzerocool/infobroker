@@ -924,3 +924,14 @@ risk profile of the requirement:
 what it does NOT cover, using an "Out of scope" clause or equivalent. This
 bounds the builder's interpretation and prevents scope creep. Ambiguity about
 what is in scope is as dangerous as ambiguity about behavior.
+
+**C.9 Release discipline.** Release tooling that ships the distributed
+repository SHALL stage new files and modified files in the source tree —
+not only modified files that were already tracked — so that the full change
+set passes the verification gates (C.6) before commit. The release tooling
+SHALL run the verification gates and version-consistency checks against the
+change set it is about to ship, before committing or pushing, and SHALL fail
+fast on a dirty working tree before staging. Release tooling SHALL NOT
+silently overwrite an existing version tag; re-tagging a version SHALL
+require explicit confirmation. Release tooling SHALL refuse to commit
+material that would expose secret material (REQ-011).
