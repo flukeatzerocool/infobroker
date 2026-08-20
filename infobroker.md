@@ -15,7 +15,7 @@
 11. [§A Appendix: Provider Catalog](#a-appendix-provider-catalog)
 12. [§B Appendix: REQ Authoring Conventions](#b-appendix-req-authoring-conventions)
 13. [§C Appendix: Spec-Driven Development Discipline](#c-appendix-spec-driven-development-discipline)
-
+14. [§D Appendix: Feature Taxonomy](#d-appendix-feature-taxonomy)
 ## §1 Mission and Capability Model
 
 Infobroker is a configurable, multi-provider MCP server that wraps public web
@@ -147,7 +147,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055, 077 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055, 077–078 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -323,6 +323,13 @@ REQs (§4.7, verified by file presence) are exempt. _Check:_ G3.
 listing every REQ with its ID, title, section, and verification gate. The
 manifest SHALL match the REQ bodies in §4 exactly: no REQ in the body without
 a manifest row, and no manifest row without a body. _Check:_ G3.
+
+**REQ-078 — Feature Taxonomy.** The specification SHALL include a feature
+taxonomy appendix (§D) that lists every tool and every §4 REQ grouped by
+thematic feature area, with each area's primary REQ range and verification gate.
+The taxonomy SHALL be exhaustive: every tool and every §4 REQ SHALL appear in
+exactly one feature area. The client-facing README SHALL link to the taxonomy.
+_Check:_ G3.
 
 ### 4.9 Knowledge Base
 
@@ -755,6 +762,7 @@ pages are not).
 | REQ-054 | User Documentation | 4.7 | G3 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
+| REQ-078 | Feature Taxonomy | 4.8 | G3 |
 | REQ-060 | kb_search | 4.9 | G0, G1 |
 | REQ-061 | kb_ingest | 4.9 | G0, G1 |
 | REQ-062 | kb_stats | 4.9 | G0, G1 |
@@ -1109,3 +1117,40 @@ material that would expose secret material (REQ-011).
 CHANGELOG entry in which it was introduced or last modified. A modified REQ's
 CHANGELOG entry SHALL cite the REQ ID and the nature of the change. The REQ
 manifest (§9.5) is the index; version-control history is the record.
+
+---
+
+## §D Appendix: Feature Taxonomy
+
+This appendix groups every feature of the server into eight thematic areas.
+Each area is a self-contained unit of work — a sprint-sized chunk — defined by
+the tools it surfaces and the requirements that govern it. The group-to-tool
+mapping lets a maintainer plan an improvement sprint as "harden the Knowledge
+Base" and immediately know which REQs and gates bound the work.
+
+Every tool and every §4 REQ appears in exactly one group (its primary home).
+Where a REQ supports more than one concern, the primary group is the one whose
+behavior the REQ most directly governs; the "also governs" column names the
+secondary concerns rather than duplicating the REQ.
+
+| # | Feature area | Tools | Primary REQs | Gate |
+|---|--------------|-------|--------------|------|
+| 1 | Core Retrieval | `web_search`, `fetch_page`, `search_suggestions` | REQ-003, REQ-004, REQ-020, REQ-021, REQ-022, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 2 | Provider Intelligence | `choose_provider`, `list_providers`, `provider_health` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-023, REQ-024, REQ-025, REQ-070, REQ-071 | G0, G1 |
+| 3 | Convergence | `converge` | REQ-026 | G0, G1 |
+| 4 | Knowledge Base | `kb_search`, `kb_ingest`, `kb_stats`, `kb_delete` | REQ-060, REQ-061, REQ-062, REQ-063, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
+| 5 | State & Operations | `reload_config`, `spec_health` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-041, REQ-042, REQ-043 | G0, G1 |
+| 6 | Tool Surface & Contracts | (all 13 tools) | REQ-001, REQ-002 | G0 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |
+| 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078 | G3 |
+
+Notes:
+
+- **Group 6** groups the output and error envelope contracts (REQ-001, REQ-002)
+  that bind to every tool; the per-tool behavior REQs live in their thematic
+  group (1–5).
+- **Group 7** and **Group 8** are build-and-spec concerns with no runtime tool
+  surface; they are verified by file presence and by the G3 drift detector
+  rather than by live tool calls.
+- The README documents Groups 1–5 as the user-facing feature tour; Groups 7–8
+  are maintainer concerns surfaced only in this spec.

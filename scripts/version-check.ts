@@ -27,8 +27,17 @@ let ok = true;
 
 const indexPath = join(root, "src", "index.ts");
 
-const buildVersion = grepVersion(indexPath, /build_version:\s*"([^"]+)"/);
-ok = check("src/index.ts build_version", buildVersion, rootVersion) && ok;
+// build_version is derived at runtime from package.json (BUILD_VERSION =
+// readPackageVersion()); there is no hardcoded literal to compare. The
+// invariant is that a hardcoded literal is absent, so a version bump cannot
+// drift out of sync.
+const buildLiteral = grepVersion(indexPath, /build_version:\s*"([^"]+)"/);
+if (buildLiteral !== null) {
+  console.error(`  FAIL  src/index.ts build_version is hardcoded ("${buildLiteral}") — should derive from package.json`);
+  ok = false;
+} else {
+  console.log("  OK  src/index.ts build_version: derived from package.json");
+}
 
 const mcpVersion = grepVersion(indexPath, /^\s+version:\s*"([^"]+)"/m);
 ok = check("src/index.ts McpServer version", mcpVersion, rootVersion) && ok;

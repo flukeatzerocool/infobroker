@@ -39,7 +39,7 @@ while ((match = reqPattern.exec(specText)) !== null) {
 const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054"]);
 
 // Meta-REQs that describe the spec process itself
-const metaReqs = new Set(["REQ-055", "REQ-077"]);
+const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078"]);
 
 // --- Collect @implements citations from source files ---
 
@@ -300,6 +300,36 @@ function checkManifest(): void {
 }
 
 checkManifest();
+
+// --- Feature taxonomy exhaustive coverage check ---
+
+function checkFeatureTaxonomy(): void {
+  const taxIdx = specText.indexOf("## §D Appendix: Feature Taxonomy");
+  if (taxIdx === -1) {
+    error("Feature taxonomy appendix (§D) not found");
+    return;
+  }
+  const appendix = specText.slice(taxIdx);
+
+  const toolSlugs = [
+    "web_search", "fetch_page", "search_suggestions", "choose_provider",
+    "list_providers", "provider_health", "converge", "reload_config",
+    "spec_health", "kb_search", "kb_ingest", "kb_stats", "kb_delete",
+  ];
+  for (const tool of toolSlugs) {
+    if (!new RegExp(`\`${tool}\``).test(appendix)) {
+      error(`Feature taxonomy (§D) is missing tool \`${tool}\``);
+    }
+  }
+
+  for (const req of allReqs) {
+    if (!new RegExp(`\\b${req}\\b`).test(appendix)) {
+      error(`Feature taxonomy (§D) is missing ${req}`);
+    }
+  }
+}
+
+checkFeatureTaxonomy();
 
 // --- Client artifact content verification ---
 

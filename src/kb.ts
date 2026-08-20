@@ -300,7 +300,7 @@ export function kbSearch(
     }
   }
 
-  results.sort((a, b) => b.freshness_score - a.freshness_score);
+  results.sort((a, b) => (b.score * b.freshness_score) - (a.score * a.freshness_score));
   return results.slice(0, actualMax);
 }
 

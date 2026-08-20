@@ -2,12 +2,26 @@
 
 ## Active Decisions
 
+### D-016: Feature Taxonomy as Verified Spec Artifact (2026.08.20)
+
+REQ-078 mandates a feature taxonomy appendix (§D) that groups every tool
+and every §4 REQ into eight thematic feature areas (Core Retrieval,
+Provider Intelligence, Convergence, Knowledge Base, State & Operations,
+Tool Surface & Contracts, Client Artifacts, Spec Governance). The taxonomy
+is the canonical map for planning improvement sprints — each area names a
+self-contained REQ range and verification gate. It is enforced by
+`validate-spec` (G3), which checks that every tool slug and every §4 REQ ID
+appears in §D, and by `validate-readme`, which checks that the README links
+to the taxonomy and documents a Knowledge Base feature section. The taxonomy
+is a spec-integrity concern, so REQ-078 sits in §4.8 alongside REQ-055 and
+REQ-077 and is treated as a meta-REQ (no source-file citation required).
+
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `38f6c2048b1d8528ae564049ff11e7be25630253d30f167888ac26cb2ff7c13e`
-**Source hash:** `7c3b0d59d007b229d1af6318a3538824a50d4cc13dbf6e8df762d30bd60f11d0`
+**Spec hash:** `6bf816ff5b60ee00bf734da854a8dfca2f85e06b5b2cce008a9ecdf1dace245d`
+**Source hash:** `01817b37bdb9a44c90dbade761b933d00430d6a722f1163ce9f4e7e9a0ada82e`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `bf42e5366b15229e0d50a72971905af7c5ce7d6a8a25594f1e7e158859b0bff9`
+**Total fingerprint:** `deada25e87c1d696693a58a3787150376f61e1b857296ffba88f45e984617a83`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -122,7 +136,6 @@ scoping resolves from user-provided, env var, config default, then literal
 "default". Storage corruption triggers backup and fresh store creation.
 
 ### D-015: User Configuration Overlay and Source Distribution (2026.08.19)
-
 REQ-042 (Source Distribution) and REQ-043 (Update Preservation) were
 authored to document the repository-based deployment (hosted at git.gay)
 and guarantee that updates do not erase user-owned state. Distribution is

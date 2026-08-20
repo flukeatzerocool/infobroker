@@ -94,7 +94,9 @@ Requirements: Node.js 20+.
 ## MCP Server
 
 Your research backend. Thirteen tools, eighteen providers, one
-convergence engine.
+convergence engine. The complete feature inventory is documented in the
+[feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
+spec.
 
 ### Unified Search
 
@@ -148,6 +150,19 @@ structured report — confirmed, contested, and unverified findings —
 with source provenance and confidence scores. Every other search tool
 returns a list of links; Infobroker finds the truth and tells you how
 sure it is.
+
+### Knowledge Base
+
+> "Search what you already found about EU climate policy."
+> "Ingest this article so it's cached for next time."
+
+Every search, fetch, and convergence run is cached in a local knowledge
+base. Subsequent queries check the cache before hitting external
+providers — only falling back to the network when the cached results
+aren't fresh enough or relevant enough. Content is age-scored, expired
+on a freshness schedule, and deduplicated by source. Other search MCP
+servers re-fetch the same facts every session; Infobroker remembers and
+reuses what it already found.
 
 ### Research Pipeline
 

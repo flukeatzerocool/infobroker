@@ -395,6 +395,17 @@ function checkSectionLengths(text: string): Issue[] {
   return issues;
 }
 
+function checkTaxonomyLink(text: string): Issue[] {
+  const issues: Issue[] = [];
+  if (!text.includes("feature-taxonomy")) {
+    issues.push({ error: true, msg: "README missing link to the feature taxonomy (§D) — REQ-078 requires the README link to the taxonomy" });
+  }
+  if (!/#\s*Knowledge Base\b/m.test(text) && !text.includes("### Knowledge Base")) {
+    issues.push({ error: true, msg: "README missing 'Knowledge Base' feature section in §3" });
+  }
+  return issues;
+}
+
 function main(): void {
   const text = readReadme();
   let errors = 0;
@@ -412,6 +423,7 @@ function main(): void {
     { name: "External links", run: checkExternalLinks, severity: "soft" },
     { name: "Comparison table", run: checkComparisonTable, severity: "soft" },
     { name: "Section lengths", run: checkSectionLengths, severity: "soft" },
+    { name: "Taxonomy link", run: checkTaxonomyLink, severity: "hard" },
   ];
 
   for (const { name, run, severity } of checks) {

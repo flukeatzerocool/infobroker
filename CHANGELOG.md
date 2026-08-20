@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.08.20 — Feature taxonomy and defect fixes
+
+- A feature taxonomy appendix (§D) now groups every tool and every §4 REQ
+  into eight thematic feature areas, each naming its primary REQ range and
+  verification gate, to serve as the canonical map for improvement sprints.
+  (REQ-078)
+- The `validate-spec` script (G3) now enforces taxonomy exhaustiveness —
+  every tool slug and every §4 REQ must appear in §D — and treats REQ-078 as
+  a meta-REQ alongside REQ-055 and REQ-077.
+- The README documents a Knowledge Base feature in §3 and links to the
+  feature taxonomy; `validate-readme` checks both. (REQ-078)
+- Defect fixes: `fetch_page` now honors its `max_length` parameter, the
+  `converge` tool now accepts a `providers` parameter (REQ-026), `kb_search`
+  now ranks by combined relevance and age (REQ-075), `list_providers`
+  `active` filtering reflects operational status (REQ-024), `choose_provider`
+  demotes providers at 80% quota (REQ-023), `spec_health` derives the build
+  version from package metadata (REQ-041), and `fetch_page` auto-indexes
+  full page content rather than the truncated snippet (REQ-064).
+
 ## 2026.08.20 — Spec format and style guide reform
 
 - The REQ authoring conventions (Appendix B) now define a full format guide:

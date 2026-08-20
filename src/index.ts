@@ -2,9 +2,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { loadConfig, reloadConfig, getConfig, getEnvVar, getDispatchChain } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
@@ -17,7 +18,18 @@ import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
 const MAX_FALLBACK_DEPTH = 3;
+const BUILD_VERSION = readPackageVersion();
 let totalRequests = 0;
+
+function readPackageVersion(): string {
+  try {
+    const pkgPath = join(fileURLToPath(import.meta.url), "..", "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 const requestLatencies: Record<string, { latencies: number[]; timestamps: number[] }> = {};
 const providerLastSuccess: Record<string, number> = {};
 const providerLastError: Record<string, { message: string; timestamp: number }> = {};
@@ -233,9 +245,10 @@ async function doWebSearch(
   return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration"))}`;
 }
 
-async function doFetchPage(url: string, renderer?: string): Promise<string> {
+async function doFetchPage(url: string, renderer?: string, maxLength?: number): Promise<string> {
   const config = getConfig();
   const renderers = renderer ? [renderer] : getDispatchChain("content_fetch");
+  const effectiveMax = maxLength ?? config.output.max_chars;
 
   for (const slug of renderers) {
     try {
@@ -278,9 +291,9 @@ async function doFetchPage(url: string, renderer?: string): Promise<string> {
       increment(slug, config.providers[slug]?.rate_limit);
       trackRequest(slug, elapsed);
       providerLastSuccess[slug] = Date.now();
-      const truncated = maybeTruncate(content, config.output.max_chars);
+      const truncated = maybeTruncate(content, effectiveMax);
 
-      autoIndex([{ title: new URL(url).hostname, url, snippet: truncated.text }], slug, undefined, "fetch_page");
+      autoIndex([{ title: new URL(url).hostname, url, snippet: content }], slug, undefined, "fetch_page");
 
       return `[OK] ${json({
         status: "ok",
@@ -359,7 +372,7 @@ function doChooseProvider(task: string, priority?: string): string {
   const recommended = chain.length > 0 ? chain[0] : "";
   const recommendedPct = config.providers[recommended] ? checkQuota(recommended, config.providers[recommended].rate_limit) : null;
   let effectiveRecommended = recommended;
-  if (recommendedPct?.exhausted) {
+  if (recommendedPct?.exhausted || recommendedPct?.warning) {
     effectiveRecommended = chain.length > 1 ? chain[1] : recommended;
   }
 
@@ -380,12 +393,19 @@ function doChooseProvider(task: string, priority?: string): string {
   })}`;
 }
 
+function providerOperational(p: ProviderConfig): boolean {
+  if (!p.enabled) return false;
+  if (p.auth_env && !process.env[p.auth_env]) return false;
+  if (p.url_env && !process.env[p.url_env]) return false;
+  return true;
+}
+
 function doListProviders(filter?: string): string {
   const config = getConfig();
   const entries = Object.entries(config.providers);
 
   const filtered = filter === "active"
-    ? entries.filter(([, p]) => p.enabled)
+    ? entries.filter(([, p]) => providerOperational(p))
     : entries;
 
   const list = filtered.map(([slug, p]) => {
@@ -395,6 +415,7 @@ function doListProviders(filter?: string): string {
       tier: p.tier,
       capabilities: p.capabilities,
       enabled: p.enabled,
+      status: quota.exhausted ? "exhausted" : (providerOperational(p) ? "active" : "inactive"),
       quota_used: quota.daily.used,
       quota_remaining: quota.daily.remaining,
       quota_warning: quota.warning,
@@ -500,7 +521,7 @@ function doSpecHealth(): string {
     status: "ok",
     provider: "system",
     results: [{
-      build_version: "2026.08.10",
+      build_version: BUILD_VERSION,
       provider_count: Object.keys(config.providers).filter(k => k !== "native_fetch").length,
       active_provider_count: activeCount,
       tool_count: toolCount,
@@ -571,7 +592,7 @@ server.registerTool(
     },
   },
   async (params) => {
-    const content = await doFetchPage(String(params.url), params.renderer as string | undefined);
+    const content = await doFetchPage(String(params.url), params.renderer as string | undefined, params.max_length !== undefined ? Number(params.max_length) : undefined);
     return { content: [{ type: "text" as const, text: content }] };
   }
 );
@@ -651,6 +672,7 @@ server.registerTool(
       query: z.string().describe("Search query"),
       max_iterations: z.number().min(1).max(10).optional().default(5),
       confidence_threshold: z.number().min(0).max(1).optional().default(0.8),
+      providers: z.array(z.string()).optional().describe("Optional array of provider slugs to limit the search to"),
     },
   },
   async (params) => {
@@ -658,6 +680,7 @@ server.registerTool(
       const result = await converge(String(params.query), {
         max_iterations: Number(params.max_iterations ?? 5),
         confidence_threshold: Number(params.confidence_threshold ?? 0.8),
+        providers: params.providers as string[] | undefined,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
