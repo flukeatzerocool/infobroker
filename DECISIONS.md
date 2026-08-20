@@ -21,7 +21,7 @@ REQ-077 and is treated as a meta-REQ (no source-file citation required).
 **Spec hash:** `6bf816ff5b60ee00bf734da854a8dfca2f85e06b5b2cce008a9ecdf1dace245d`
 **Source hash:** `01817b37bdb9a44c90dbade761b933d00430d6a722f1163ce9f4e7e9a0ada82e`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `deada25e87c1d696693a58a3787150376f61e1b857296ffba88f45e984617a83`
+**Total fingerprint:** `3f0baedb21d8dbc657731d7b5d1e5b048626e3700f28759149e44d5fc13abcbc`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

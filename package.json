@@ -1,6 +1,6 @@
 {
   "name": "infobroker",
-  "version": "2026.08.10",
+  "version": "2026.08.20",
   "description": "Infobroker MCP Server — multi-provider research & writing backend",
   "type": "module",
   "main": "src/index.ts",

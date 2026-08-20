@@ -39,13 +39,6 @@ const indexPath = join(root, "src", "index.ts");
 
 ok = replaceInFile(
   indexPath,
-  /(build_version:\s*)"[^"]*"/,
-  `$1"${version}"`,
-  "src/index.ts build_version"
-) && ok;
-
-ok = replaceInFile(
-  indexPath,
   /(\bversion:\s*)"[^"]*"/,
   `$1"${version}"`,
   "src/index.ts McpServer version"
