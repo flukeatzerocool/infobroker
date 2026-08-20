@@ -70,10 +70,42 @@ ensure_server() {
 }
 
 # Resolve the shared session id. Uses a stable identifier so all steps in one
-# run share a single conversation. opencode accepts a plain session id via
-# --session; the first step creates it and later steps continue it.
+# run share a single conversation.
+#
+# opencode distinguishes two operations: `--title` CREATES a session (the id
+# is only known afterward), while `--session <id>` CONTINUES an existing
+# session by its `ses_...` id. There is no flag that creates a session and
+# names its id in advance, so the first step must (a) create the session via
+# `--title`, (b) capture the resulting `sessionID` from the JSON event stream,
+# and then (c) later steps continue it via `--session <id>`.
+#
+# PIPELINE_SESSION_ID starts as a title; ensure_session promotes it to a real
+# id (or leaves it alone if a caller/the resume path already supplied one).
 ensure_session() {
-  PIPELINE_SESSION_ID="${PIPELINE_SESSION_TITLE:-push-pipeline}"
+  local title="${PIPELINE_SESSION_TITLE:-push-pipeline}"
+  PIPELINE_SESSION_TITLE="$title"
+
+  # Already resolved (resume / caller-provided): leave as-is.
+  if [[ "${PIPELINE_SESSION_ID:-}" == ses_* ]]; then
+    return 0
+  fi
+
+  # Bootstrap: create the session and capture its id via a minimal probe turn.
+  local server="${PIPELINE_SERVER_URL:-http://localhost:${PIPELINE_PORT:-4096}}"
+  local probe
+  probe=$(
+    opencode run --attach "$server" --title "$title" --agent build --auto --format json \
+      "Session bootstrap only — reply with the single word: ack" \
+      2>>"$PIPELINE_LOG_FILE" \
+    | grep -oE '"sessionID":"ses_[^"]+"' | head -1 \
+    | sed -E 's/.*"sessionID":"(ses_[^"]+)"/\1/'
+  )
+  if [[ -n "$probe" ]]; then
+    PIPELINE_SESSION_ID="$probe"
+    info "Shared session resolved: $PIPELINE_SESSION_ID"
+  else
+    die "Failed to resolve shared session id for title '$title' (opencode serve may be down)"
+  fi
 }
 
 # run_pipeline_step <prompt-file> <out-file> [--model <m>] [--retry]
