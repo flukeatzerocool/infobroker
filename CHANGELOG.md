@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.08.20 — Spec format and style guide reform
+
+- The REQ authoring conventions (Appendix B) now define a full format guide:
+  mechanical limits on every REQ body (at most 800 characters, 8 sentences,
+  8 SHALL clauses, one paragraph, and 5 backtick tokens outside the
+  tool-signature and output/error-contract exemptions), RFC 2119 keyword
+  semantics, optional EARS notation, a pre-commit authoring checklist, and
+  proofreading/readability dimensions. The mechanical limits are now enforced
+  as gate-blocking errors, not warnings.
+- A REQ manifest (§9.5) lists every requirement with its section and
+  verification gate, and the spec validator checks it against the §4 body for
+  bidirectional coverage. (REQ-077)
+- Section numbering in §4 was corrected to run sequentially, knowledge-base
+  and output-contract REQ blocks were reordered numerically, and a table of
+  contents was added. Appendix C now requires REQ provenance to the changelog
+  and spec version. (C.10)
+
 ## 2026.08.20 — Build fingerprint determinism and hook staging
 
 - The auto-generated build fingerprint block in `DECISIONS.md` no longer

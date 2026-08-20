@@ -1,5 +1,21 @@
 # Infobroker — Research & Writing Professional MCP Server
 
+## Contents
+
+1. [§1 Mission and Capability Model](#1-mission-and-capability-model)
+2. [§2 Failure Modes](#2-failure-modes)
+3. [§3 Standing Rules and Terminology](#3-standing-rules-and-terminology)
+4. [§4 Requirements](#4-requirements)
+5. [§5 Build Process](#5-build-process)
+6. [§6 Runtime Conventions](#6-runtime-conventions)
+7. [§7 Provider Selection Dispatch](#7-provider-selection-dispatch)
+8. [§8 Convergence Loop](#8-convergence-loop)
+9. [§9 Verification](#9-verification)
+10. [§10 Artifacts and Handoff](#10-artifacts-and-handoff)
+11. [§A Appendix: Provider Catalog](#a-appendix-provider-catalog)
+12. [§B Appendix: REQ Authoring Conventions](#b-appendix-req-authoring-conventions)
+13. [§C Appendix: Spec-Driven Development Discipline](#c-appendix-spec-driven-development-discipline)
+
 ## §1 Mission and Capability Model
 
 Infobroker is a configurable, multi-provider MCP server that wraps public web
@@ -131,7 +147,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055, 077 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -150,12 +166,12 @@ Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `ra
 **REQ-003 — Result Format Normalization**
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date and source type. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
+**REQ-004 — Truncation**
+Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
+
 **REQ-073 — Minimum Viable Result**
 
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
-
-**REQ-004 — Truncation**
-Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
 
 ### 4.2 Provider Configuration
 
@@ -258,7 +274,7 @@ The `reload_config` tool SHALL re-read the config file without restarting. Activ
 **REQ-041 — `spec_health`**
 Build health report. Returns the operational status of the server: build identity (version), provider summary (count, active count), uptime, cumulative request count, and paths to persistent state files. When the knowledge base is configured, the report SHALL include knowledge base status: total chunk count, collection names and their chunk counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
-### 4.9 Provider Architecture
+### 4.6 Provider Architecture
 
 **REQ-070 — Provider Registration**
 Adding a provider backend to the source tree SHALL NOT require modification
@@ -275,7 +291,7 @@ identifier that distinguishes the request as originating from this server.
 The identifier SHALL be consistent across all providers regardless of
 provider tier or transport. _Check:_ G1.
 
-### 4.6 Client Artifacts
+### 4.7 Client Artifacts
 
 **REQ-050 — `search-preferences.md`**
 The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
@@ -292,7 +308,7 @@ The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Me
 **REQ-054 — User Documentation**
 The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers. _Check:_ G3 (file presence).
 
-### 4.7 Spec Integrity
+### 4.8 Spec Integrity
 
 **REQ-055 — Spec-Code Traceability**
 Every source file in `src/` SHALL cite in a header comment each REQ it
@@ -301,9 +317,14 @@ REQs; every implemented REQ must appear in at least one source file's citation.
 The `validate-spec` script (§9.4) verifies bidirectional coverage: every REQ
 with an implementation must be cited, and every source file must cite at least
 one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
-REQs (§4.6, verified by file presence) are exempt. _Check:_ G3.
+REQs (§4.7, verified by file presence) are exempt. _Check:_ G3.
 
-### 4.8 Knowledge Base
+**REQ-077 — REQ Manifest.** The specification SHALL include a manifest table
+listing every REQ with its ID, title, section, and verification gate. The
+manifest SHALL match the REQ bodies in §4 exactly: no REQ in the body without
+a manifest row, and no manifest row without a body. _Check:_ G3.
+
+### 4.9 Knowledge Base
 
 **REQ-060 — `kb_search`**
 
@@ -329,21 +350,9 @@ Search results from `web_search`, rendered page content from `fetch_page`, and f
 
 A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
 
-**REQ-074 — Freshness Classification**
-
-Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
-
-**REQ-075 — Confidence Decay**
-
-Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL be proportional to the content's freshness tier and the elapsed time since ingestion. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
-
 **REQ-066 — Content Expiry**
 
 Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its source type. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
-
-**REQ-076 — KB-First Sufficiency**
-
-When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
 
 **REQ-067 — Knowledge Base Configuration**
 
@@ -352,6 +361,18 @@ The knowledge base configuration SHALL reside within the server's main configura
 **REQ-072 — Knowledge Base Deduplication**
 
 Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. The chunk count reported by `kb_stats` SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
+
+**REQ-074 — Freshness Classification**
+
+Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
+
+**REQ-075 — Confidence Decay**
+
+Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL be proportional to the content's freshness tier and the elapsed time since ingestion. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
+
+**REQ-076 — KB-First Sufficiency**
+
+When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
 
 ### 4.10 Deployment and Updates
 
@@ -653,7 +674,7 @@ pages are not).
 - Config reload: change config → verify new provider active, old inactive
 - Spec drift: parse all `@implements REQ-NNN` citations from `src/**/*.ts`
   and cross-reference against the REQ manifest in this specification. Report
-  any REQ with zero citations (excluding §4.6 artifact REQs) as unimplemented;
+  any REQ with zero citations (excluding §4.7 artifact REQs) as unimplemented;
   report any source file without citations as undocumented.
 - KB search: mock vector store with known embeddings; query → verify results ranked by relevance
 - KB ingestion: provide text content → verify chunks created and stored
@@ -678,13 +699,75 @@ pages are not).
 
 - `npm run validate-spec` exits zero
 - Every REQ in §4 has at least one source-file citation
-  (`@implements REQ-NNN`) or belongs to §4.6 (client artifacts verified by
+  (`@implements REQ-NNN`) or belongs to §4.7 (client artifacts verified by
   file presence) or has a recorded waiver in DECISIONS.md
 - Every source file in `src/` has at least one `@implements` header comment
-- No REQ body contains: a parameter type annotation, a "Default:" clause,
-  an enumerated catalogue longer than 5 items, or a lifecycle description
-  duplicated across multiple REQs
-- Appendix B violations are warnings; Appendix C violations are errors
+- No REQ body exceeds the Appendix B mechanical limits: more than 800
+  characters, more than 8 sentences, more than 8 SHALL clauses, more than one
+  paragraph, a markdown table, a bullet list, or numbered steps
+- No REQ body enumerates more than 5 backtick-delimited tokens, except a
+  tool-signature REQ that declares its parameter contract ("Parameters:") or
+  an output/error contract REQ (§4.1)
+- No REQ body contains a parameter type annotation, a standalone "Default:"
+  clause, or a lifecycle description duplicated across multiple REQs
+- The REQ manifest matches the REQ bodies in §4 exactly
+- Appendix B mechanical violations are errors; Appendix B judgment violations
+  (what/how, red-team, EARS, readability, proofreading dimensions) are
+  warnings; Appendix C violations are errors
+
+### 9.5 REQ Manifest
+
+| REQ | Title | Section | Gate |
+|-----|-------|---------|------|
+| REQ-001 | Status Prefix Contract | 4.1 | G0 |
+| REQ-002 | Error Taxonomy | 4.1 | G0 |
+| REQ-003 | Result Format Normalization | 4.1 | G1 |
+| REQ-004 | Truncation | 4.1 | G1 |
+| REQ-073 | Minimum Viable Result | 4.1 | G1 |
+| REQ-010 | Config File | 4.2 | G1 |
+| REQ-011 | API Key Safety | 4.2 | G1 |
+| REQ-012 | Environment Variable Mapping | 4.2 | G1 |
+| REQ-013 | Provider Discovery | 4.2 | G1 |
+| REQ-020 | web_search | 4.3 | G0, G1 |
+| REQ-021 | fetch_page | 4.3 | G0, G1 |
+| REQ-022 | search_suggestions | 4.3 | G0, G1 |
+| REQ-023 | choose_provider | 4.3 | G0, G1 |
+| REQ-024 | list_providers | 4.3 | G0, G1 |
+| REQ-025 | provider_health | 4.3 | G0, G1 |
+| REQ-026 | converge | 4.3 | G0, G1 |
+| REQ-030 | Per-Provider Throttling | 4.4 | G1 |
+| REQ-031 | Fallback Chain | 4.4 | G1 |
+| REQ-032 | Retry Policy | 4.4 | G1 |
+| REQ-033 | Persistent Quota Tracking | 4.4 | G1 |
+| REQ-034 | Quota Warning Threshold | 4.4 | G1 |
+| REQ-035 | Request Timeout | 4.4 | G1 |
+| REQ-036 | Latency Tracking Window | 4.4 | G1 |
+| REQ-037 | Config Validation | 4.4 | G1 |
+| REQ-040 | Configuration Reload | 4.5 | G1 |
+| REQ-041 | spec_health | 4.5 | G0, G1 |
+| REQ-070 | Provider Registration | 4.6 | G1 |
+| REQ-071 | Outbound HTTP Identification | 4.6 | G1 |
+| REQ-050 | search-preferences.md | 4.7 | G3 |
+| REQ-051 | Orchestrator Skill | 4.7 | G3 |
+| REQ-052 | Bundled Skills | 4.7 | G3 |
+| REQ-053 | Pipeline Reference | 4.7 | G3 |
+| REQ-054 | User Documentation | 4.7 | G3 |
+| REQ-055 | Spec-Code Traceability | 4.8 | G3 |
+| REQ-077 | REQ Manifest | 4.8 | G3 |
+| REQ-060 | kb_search | 4.9 | G0, G1 |
+| REQ-061 | kb_ingest | 4.9 | G0, G1 |
+| REQ-062 | kb_stats | 4.9 | G0, G1 |
+| REQ-063 | kb_delete | 4.9 | G0, G1 |
+| REQ-064 | Auto-Indexing | 4.9 | G1 |
+| REQ-065 | Collection Scoping | 4.9 | G1 |
+| REQ-066 | Content Expiry | 4.9 | G1 |
+| REQ-067 | Knowledge Base Configuration | 4.9 | G1 |
+| REQ-072 | Knowledge Base Deduplication | 4.9 | G1 |
+| REQ-074 | Freshness Classification | 4.9 | G1 |
+| REQ-075 | Confidence Decay | 4.9 | G1 |
+| REQ-076 | KB-First Sufficiency | 4.9 | G1 |
+| REQ-042 | Source Distribution | 4.10 | G1 |
+| REQ-043 | Update Preservation | 4.10 | G1 |
 
 ---
 
@@ -830,9 +913,90 @@ configuration layer is merged over it by the server (REQ-010).
 This appendix defines what belongs in a requirement and what does not. It is not
 a build artifact — it is a spec-maintainer reference.
 
-**REQ anatomy.** One paragraph stating the *what*. Ends in `_Check:_` with test
-citations. Contains no parameter types, no algorithm descriptions, no default
-values, no catalogue enumerations, no tool-name lists.
+**REQ anatomy.** One paragraph stating a single verifiable contract — the
+*what*. Ends in `_Check:_` with gate citations. Contains no parameter types,
+no algorithm descriptions, no default values, no catalog enumerations
+(>5 backtick tokens), no markdown tables, no bullet lists, no numbered steps,
+and no blank lines. A REQ body IS a single paragraph — if it needs more, it is
+at minimum two REQs. Sub-REQs (REQ-XXXa) handle composable, separable concerns.
+
+**Keyword semantics.** The key words "SHALL", "SHALL NOT", "MUST",
+"MUST NOT", "SHOULD", and "MAY" in REQ bodies carry RFC 2119 meaning —
+normative only in uppercase (RFC 8174). Lowercase "shall" and "must" are
+plain English. REQ bodies use "SHALL" for all obligations; "MUST" is reserved
+for security-critical obligations (API key handling, secret leakage). An
+imperative "must" in prose is advisory, not normative.
+
+**EARS notation.** REQ authors are encouraged — but not required — to structure
+requirement bodies using the Easy Approach to Requirements Syntax (EARS), which
+makes trigger, condition, and response explicit in machine-parseable clauses.
+The five patterns are:
+
+- **Ubiquitous:** "THE system SHALL <behavior>."
+- **Event-driven:** "WHEN <trigger> THE system SHALL <response>."
+- **State-driven:** "WHILE <state> THE system SHALL <behavior>."
+- **Unwanted behavior:** "IF <condition> THEN THE system SHALL <response>."
+- **Optional feature:** "WHERE <feature is included> THE system SHALL <behavior>."
+
+The narrative REQ body remains the canonical contract; EARS clauses are
+supplementary precision tools, not replacements. All other Appendix B rules
+still apply to EARS clauses.
+
+**Mechanical limits (gate-blocking).** The following are verified by G3 (§9.4)
+and enforced as errors before commit:
+
+- No REQ body exceeds 800 characters.
+- No REQ body exceeds 8 sentences.
+- No REQ body contains more than 8 SHALL clauses.
+- No REQ body spans more than one paragraph (no blank lines).
+- No REQ body contains a markdown table, bullet list, or numbered steps.
+- No REQ body enumerates more than 5 backtick-delimited tokens, except a
+  tool-signature REQ that declares its parameter contract (body contains
+  "Parameters:") or an output/error contract REQ (§4.1) that enumerates the
+  response envelope or error taxonomy by design.
+- Every REQ body ends with `_Check:` citing at least one gate.
+- No REQ body contains a standalone "Default:" clause.
+- No REQ body contains a parameter type annotation or zod schema.
+
+These rules are not advisory. A REQ violating any rule is a spec defect that
+blocks the gate. Split the REQ or move procedural content to the appropriate
+section (§5 for build processes, §6 for runtime conventions, Appendices for
+reference tables).
+
+**REQ Authoring Checklist** (apply before committing any new or modified REQ):
+
+- [ ] States *what*, not *how* — no parameter types, sort orders, or algorithms (SR-011a)
+- [ ] Tool-signature exception used only where the REQ declares a tool's
+      external parameter contract
+- [ ] No "Default:" clause (SR-011d) — defaults live in config.json
+- [ ] No enumerated catalogues (>5 backtick tokens) outside the tool-signature
+      exception
+- [ ] No worked examples disguised as requirements
+- [ ] Trust-the-gates test: would G0/G1/G2 catch a deviation?
+- [ ] Red-team test: answered the four SR-012 questions
+- [ ] REQ body is exactly one paragraph — no blank lines, no tables, no
+      bullet lists, no numbered steps
+- [ ] REQ body ≤ 800 characters, ≤ 8 sentences, ≤ 8 SHALL clauses
+- [ ] REQ contains exactly one logical contract — if multiple SHALL clauses
+      cover distinct concerns, split it or use a sub-REQ (REQ-XXXa)
+- [ ] Procedural/algorithmic content is in §5 or §6, not the REQ body
+- [ ] No lifecycle description duplicated across multiple REQs
+- [ ] REQ body ends with `_Check:` citing at least one gate
+
+**Proofreading dimensions.** Before committing, review each REQ body and the
+spec's narrative prose for: passive voice, modal drift (should/may used where
+SHALL is intended), double negatives, sentence length (>40 words), condition
+stacking (nested IF/WHEN), and pronoun ambiguity. These are warnings, not gate
+failures — a flag is a pointer, not a verdict.
+
+**Readability standard.** Narrative prose (§1–§3, §5–§8) SHALL read at a
+Flesch-Kincaid grade level of 12 or below. The check is a warning, not a gate.
+REQ bodies and the reference appendices are exempt.
+
+**Provenance.** Every REQ SHALL be traceable to its origin spec version and
+CHANGELOG entry via version control history. When a REQ is modified, the
+CHANGELOG entry SHALL cite the REQ by ID and the nature of the change.
+Provenance for deleted REQs is maintained by the CHANGELOG.
 
 **What belongs elsewhere:**
 
@@ -848,6 +1012,7 @@ values, no catalogue enumerations, no tool-name lists.
   client skills (REQ-051)
 - JSON schemas and file format specifications → `src/types.ts` is canonical;
   G0 conformance tests verify correctness
+- Return-value field enumerations → §6.2 Output Format
 
 **The "trust the gates" test.** If a deviation from a requirement would be
 caught by G0 (MCP conformance), G1 (integration tests), or G2 (live smoke),
@@ -878,7 +1043,7 @@ behavior changes, the corresponding REQ must be updated in the same commit.
 **C.2 Traceability.** Every source file in `src/` SHALL cite the REQ(s) it
 implements via `@implements REQ-NNN` header comments (REQ-055). Every REQ in
 §4 SHALL be cited in at least one source file, unless it concerns client
-artifacts (§4.6) or build process (§5) which are verified by artifact presence
+artifacts (§4.7) or build process (§5) which are verified by artifact presence
 rather than source citations.
 
 **C.3 Separate what from how.** The specification (§1–§4, §7–§8) states
@@ -909,7 +1074,10 @@ any file in `src/`. The check surfaces:
   explicit waiver recorded in DECISIONS.md)
 - Source files with no REQ citation (undocumented code)
 - REQ bodies that violate SR-011 (implementation detail in a contract)
+- REQ bodies that violate the Appendix B mechanical limits (errors) or the
+  judgment conventions (warnings)
 - REQ bodies with duplicated lifecycle descriptions across multiple REQs
+- REQ manifest (§9.5) mismatches against the §4 body
 
 **C.7 Risk-calibrated detail.** The level of detail in a REQ SHALL match the
 risk profile of the requirement:
@@ -935,3 +1103,8 @@ fast on a dirty working tree before staging. Release tooling SHALL NOT
 silently overwrite an existing version tag; re-tagging a version SHALL
 require explicit confirmation. Release tooling SHALL refuse to commit
 material that would expose secret material (REQ-011).
+
+**C.10 Provenance.** Every REQ SHALL be traceable to the spec version and
+CHANGELOG entry in which it was introduced or last modified. A modified REQ's
+CHANGELOG entry SHALL cite the REQ ID and the nature of the change. The REQ
+manifest (§9.5) is the index; version-control history is the record.

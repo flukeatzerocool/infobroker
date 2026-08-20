@@ -28,7 +28,7 @@ function warn(msg: string): void {
 // --- Parse spec for all REQ-NNN in §4 ---
 
 const specText = readFileSync(SPEC, "utf-8");
-const reqPattern = /\*\*REQ-(\d{3})\b[^*]*\*\*/g;
+const reqPattern = /\*\*REQ-(\d{3}[a-z]?)\b[^*]*\*\*/g;
 const allReqs = new Set<string>();
 let match: RegExpExecArray | null;
 while ((match = reqPattern.exec(specText)) !== null) {
@@ -39,7 +39,7 @@ while ((match = reqPattern.exec(specText)) !== null) {
 const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054"]);
 
 // Meta-REQs that describe the spec process itself
-const metaReqs = new Set(["REQ-055"]);
+const metaReqs = new Set(["REQ-055", "REQ-077"]);
 
 // --- Collect @implements citations from source files ---
 
@@ -54,11 +54,11 @@ function scanDir(dir: string): void {
     } else if (entry.name.endsWith(".ts")) {
       const text = readFileSync(full, "utf-8");
       const rel = full.replace(ROOT + "/", "");
-      const citeMatch = text.match(/\/\/\s*@implements\s+((?:REQ-\d{3}\s*)+)/);
+      const citeMatch = text.match(/\/\/\s*@implements\s+((?:REQ-\d{3}[a-z]?\s*)+)/);
       if (!citeMatch) {
         filesWithoutCitation.push(rel);
       } else {
-        const cited = citeMatch[1].match(/REQ-\d{3}/g) || [];
+        const cited = citeMatch[1].match(/REQ-\d{3}[a-z]?/g) || [];
         for (const r of cited) {
           if (!reqCitedBy.has(r)) reqCitedBy.set(r, []);
           reqCitedBy.get(r)!.push(rel);
@@ -90,46 +90,63 @@ const s4Start = specText.indexOf("## §4 Requirements");
 const s5Start = specText.indexOf("## §5 Build Process");
 const body = specText.slice(s4Start >= 0 ? s4Start : 0, s5Start >= 0 ? s5Start : specText.length);
 
-const reqBodies = body.split(/\*\*REQ-\d{3}\b[^*]*\*\*/).slice(1);
-
-function reqNumFromIndex(i: number): number {
-  return i + 1;
+// Split on REQ headers, capturing each REQ ID alongside its body.
+const reqBodyRe = /\*\*REQ-(\d{3}[a-z]?)\b[^*]*\*\*\n?/g;
+const reqBodies: { id: string; body: string }[] = [];
+{
+  let m: RegExpExecArray | null;
+  let lastEnd = 0;
+  while ((m = reqBodyRe.exec(body)) !== null) {
+    if (reqBodies.length > 0) {
+      reqBodies[reqBodies.length - 1].body = body.slice(lastEnd, m.index);
+    }
+    reqBodies.push({ id: `REQ-${m[1]}`, body: "" });
+    lastEnd = m.index + m[0].length;
+  }
+  if (reqBodies.length > 0) {
+    reqBodies[reqBodies.length - 1].body = body.slice(lastEnd);
+  }
 }
 
-function findReq(all: Set<string>, bodyIndex: number): string | undefined {
-  const n = bodyIndex + 1;
-  for (const r of all) {
-    const rn = parseInt(r.slice(4));
-    if (rn >= n - 5 && rn <= n + 5) return r;
-  }
-  return undefined;
+function bodyOf(i: number): string {
+  return reqBodies[i].body;
+}
+function tagOf(i: number): string {
+  return reqBodies[i].id;
+}
+
+// Exempt from the backtick-token limit: tool-signature REQs (declare a
+// parameter contract) and the output/error contract REQs (§4.1), which
+// enumerate the response envelope or error taxonomy by design.
+const outputContractReqs = new Set(["REQ-001", "REQ-002"]);
+function tokenExempt(id: string, bodyText: string): boolean {
+  if (bodyText.includes("Parameters:")) return true;
+  if (outputContractReqs.has(id)) return true;
+  return false;
 }
 
 // a) parameter type annotations
 const typePattern = /\bz\.(string|number|boolean|enum|array|object)\(\)|:\s*(string|number|boolean)\b/g;
 for (let i = 0; i < reqBodies.length; i++) {
-  const reqTag = findReq(allReqs, i) || `REQ-${String(i + 1).padStart(3, "0")}`;
-  if (typePattern.test(reqBodies[i])) {
-    warn(`${reqTag}: REQ body contains parameter type annotation — violates SR-011(a)`);
+  if (typePattern.test(bodyOf(i))) {
+    warn(`${tagOf(i)}: REQ body contains parameter type annotation — violates SR-011(a)`);
   }
 }
 
 // b) "Default:" clauses — only flag standalone clauses, not inline parameter descriptions
 for (let i = 0; i < reqBodies.length; i++) {
-  const actualReq = findReq(allReqs, i);
-  const reqTag = actualReq || `REQ-${String(i + 1).padStart(3, "0")}`;
   // Match "Default:" at start of line or after a sentence break, indicating a standalone clause
-  if (/(?:^|\.\s+)Default:\s/i.test(reqBodies[i]) || /\bDefault:\s+\d/.test(reqBodies[i])) {
-    warn(`${reqTag}: REQ body contains standalone "Default:" clause — violates SR-011(d)`);
+  if (/(?:^|\.\s+)Default:\s/i.test(bodyOf(i)) || /\bDefault:\s+\d/.test(bodyOf(i))) {
+    warn(`${tagOf(i)}: REQ body contains standalone "Default:" clause — violates SR-011(d)`);
   }
 }
 
-// c) enumerated catalogues (>5 items)
-const cataloguePattern = /`([^`]+(?:,\s*[^`]+){5,})`/g;
+// c) enumerated catalogues (>5 backtick tokens), with tool-signature exemption
 for (let i = 0; i < reqBodies.length; i++) {
-  const reqTag = findReq(allReqs, i) || `REQ-${String(i + 1).padStart(3, "0")}`;
-  if (cataloguePattern.test(reqBodies[i])) {
-    warn(`${reqTag}: REQ body may contain enumerated catalogue (>5 items) — violates SR-011`);
+  if (tokenExempt(tagOf(i), bodyOf(i))) continue;
+  const tokens = bodyOf(i).match(/`[^`]+`/g) || [];
+  if (tokens.length > 5) {
+    error(`${tagOf(i)}: REQ body enumerates ${tokens.length} backtick-delimited tokens (>5) — violates Appendix B mechanical limits`);
   }
 }
 
@@ -141,14 +158,63 @@ function reqNum(i: number): number {
 const lifecyclePattern = /(?:survive[sd]?\s+(?:restart|process\s+restart|connection|cross-connection)|persist[sd]?\s+(?:across|through|between)\s+(?:restart|session))/gi;
 const lifecycleReqs: string[] = [];
 for (let i = 0; i < reqBodies.length; i++) {
-  if (lifecyclePattern.test(reqBodies[i])) {
-    const reqTag = findReq(allReqs, i) || `REQ-${String(i + 1).padStart(3, "0")}`;
-    lifecycleReqs.push(reqTag);
+  if (lifecyclePattern.test(bodyOf(i))) {
+    lifecycleReqs.push(tagOf(i));
     lifecyclePattern.lastIndex = 0;
   }
 }
 if (lifecycleReqs.length > 2) {
   warn(`Duplicate lifecycle descriptions across REQs: ${lifecycleReqs.join(", ")} — violates SR-011(c)`);
+}
+
+// e) mechanical limits (gate-blocking errors)
+function splitSentences(text: string): string[] {
+  return text.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0);
+}
+
+for (let i = 0; i < reqBodies.length; i++) {
+  const reqTag = tagOf(i);
+  const bodyText = bodyOf(i).trim();
+  const checkTailIdx = bodyText.indexOf("_Check:");
+  const prose = (checkTailIdx >= 0 ? bodyText.slice(0, checkTailIdx) : bodyText).trim();
+
+  if (prose.length > 800) {
+    error(`${reqTag}: REQ body is ${prose.length} characters (>800) — violates Appendix B mechanical limit`);
+  }
+
+  const sentences = splitSentences(prose);
+  if (sentences.length > 8) {
+    error(`${reqTag}: REQ body has ${sentences.length} sentences (>8) — violates Appendix B mechanical limit`);
+  }
+
+  const shallCount = (prose.match(/\bSHALL\b/g) || []).length;
+  if (shallCount > 8) {
+    error(`${reqTag}: REQ body has ${shallCount} SHALL clauses (>8) — violates Appendix B mechanical limit`);
+  }
+
+  // More than one paragraph = blank line within the prose
+  if (/\n\s*\n/.test(prose)) {
+    error(`${reqTag}: REQ body spans more than one paragraph — violates Appendix B mechanical limit`);
+  }
+
+  // Tables, bullets, numbered steps within the single prose block
+  const proseLines = prose.split("\n");
+  for (const line of proseLines) {
+    if (/^\s*\|/.test(line)) {
+      error(`${reqTag}: REQ body contains a markdown table — violates Appendix B mechanical limit`);
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      error(`${reqTag}: REQ body contains a bullet list — violates Appendix B mechanical limit`);
+    }
+    if (/^\s*\d+\.\s+/.test(line)) {
+      error(`${reqTag}: REQ body contains a numbered list — violates Appendix B mechanical limit`);
+    }
+  }
+
+  // Missing _Check: citation
+  if (!/_Check:/i.test(bodyText) && !/\*Check:/i.test(bodyText)) {
+    error(`${reqTag}: REQ body missing _Check: gate citation`);
+  }
 }
 
 // --- Generated auth reference staleness check ---
@@ -200,6 +266,40 @@ function checkSpecHashStale(): void {
 }
 
 checkSpecHashStale();
+
+// --- REQ manifest verification ---
+
+function checkManifest(): void {
+  const manifestIdx = specText.indexOf("## 9.5 REQ Manifest");
+  if (manifestIdx === -1) {
+    error("REQ manifest (§9.5) not found");
+    return;
+  }
+  const nextHeading = specText.slice(manifestIdx + 1).search(/^##\s/m);
+  const manifestSection = nextHeading === -1
+    ? specText.slice(manifestIdx)
+    : specText.slice(manifestIdx, manifestIdx + 1 + nextHeading);
+
+  const manifestReqs = new Set<string>();
+  const rowRe = /^\|\s*(REQ-\d{3}[a-z]?)\s*\|/gm;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(manifestSection)) !== null) {
+    manifestReqs.add(m[1]);
+  }
+
+  for (const req of allReqs) {
+    if (!manifestReqs.has(req)) {
+      error(`${req}: in §4 body but missing from REQ manifest (§9.5)`);
+    }
+  }
+  for (const req of manifestReqs) {
+    if (!allReqs.has(req)) {
+      error(`${req}: in REQ manifest (§9.5) but missing from §4 body`);
+    }
+  }
+}
+
+checkManifest();
 
 // --- Client artifact content verification ---
 

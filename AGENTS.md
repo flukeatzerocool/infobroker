@@ -80,7 +80,9 @@ All tool responses use `[OK]` / `[ERROR]` prefix with JSON bodies per REQ-001. E
 Before adding or modifying any REQ in `infobroker.md`, apply the standing
 rule tests in SR-011 (contracts, not implementations) and SR-012
 (red-team every REQ). See Appendices B and C for full authoring conventions
-and SDD discipline.
+and SDD discipline. Appendix B defines the mechanical limits on a REQ body
+(≤800 characters, ≤8 sentences, ≤8 SHALL clauses, one paragraph, ≤5 backtick
+tokens outside the tool-signature exception) and an authoring checklist.
 
 At minimum, every new REQ must pass:
 - (a) states *what*, not *how* — no parameter types, default values, or
@@ -111,8 +113,9 @@ This runs:
 | `npm run test`       | Vitest unit and integration tests                  |
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
-REQs with no waiver in DECISIONS.md, undocumented source files, REQ body
-violations per SR-011).
+REQs with no waiver in DECISIONS.md, undocumented source files, Appendix B
+mechanical-limit violations, REQ manifest mismatches, stale generated auth
+reference).
 
 Shell scripts (`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`) are
 gate-checked with `bash -n`. Running `shellcheck` on them before committing
