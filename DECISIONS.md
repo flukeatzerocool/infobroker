@@ -33,10 +33,10 @@ gating on 0 before the README is considered complete. The mechanical
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `6dae8dd1ae99d79ec2072dd4a4a5f6022472b4d1b45d19f5fda70d304a6c2d1e`
+**Spec hash:** `0c112704a7f07e9c361b189ca6621d10a85a9834ccb80c42a8ebd667ebf77143`
 **Source hash:** `1a7ea738f3e3665829b074f4f8070c52a62d47fb6d556fa65a7468a230bf217a`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `08e333c9e3ef630228a3a69ee4d5257e035537911985c4e713a55c4a1af409d0`
+**Total fingerprint:** `1d5c983cef790ddd2c5f8c7e6c3b5b729b7d3b00fc59fff8ec5359fc2b86cd18`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

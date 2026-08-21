@@ -161,7 +161,7 @@ REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (p
 Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
-Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
+Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `convergence_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date and source type. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
@@ -236,7 +236,7 @@ operate independently.
 Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain SHALL be ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. The chain depth limit SHALL be configurable per task type. When every provider in the fallback chain is exhausted, the server SHALL return an error with code `all_providers_exhausted` and remediation naming the chain that was attempted. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. When every provider in the fallback chain is exhausted, the server SHALL return an error with code `all_providers_exhausted` and remediation naming the chain that was attempted. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
