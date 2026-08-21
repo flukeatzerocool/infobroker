@@ -319,12 +319,14 @@ with an implementation must be cited, and every source file must cite at least
 one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
 REQs (§4.7, verified by file presence) are exempt. _Check:_ G3.
 
-**REQ-077 — REQ Manifest.** The specification SHALL include a manifest table
+**REQ-077 — REQ Manifest**
+The specification SHALL include a manifest table
 listing every REQ with its ID, title, section, and verification gate. The
 manifest SHALL match the REQ bodies in §4 exactly: no REQ in the body without
 a manifest row, and no manifest row without a body. _Check:_ G3.
 
-**REQ-078 — Feature Taxonomy.** The specification SHALL include a feature
+**REQ-078 — Feature Taxonomy**
+The specification SHALL include a feature
 taxonomy appendix (§D) that lists every tool and every §4 REQ grouped by
 thematic feature area, with each area's primary REQ range and verification gate.
 The taxonomy SHALL be exhaustive: every tool and every §4 REQ SHALL appear in

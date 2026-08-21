@@ -168,9 +168,9 @@ spec.
 > "Search for the location of the second Death Star."
 > "Find scholarly papers on hyperspace travel theories."
 
-One query, every provider that can answer it. Search across DuckDuckGo,
-Wikipedia, academic databases, news, code repositories — or describe
-your task and the server picks the best source. Failed providers fall
+`web_search` sends one query to every provider that can answer it. Search
+across DuckDuckGo, Wikipedia, academic databases, news, code repositories —
+or describe your task and the server picks the best source. Failed providers fall
 back silently through a configurable chain so you get results, not
 error messages. Other search tools lock you to one engine; Infobroker
 routes every query to the right provider and keeps going when one
@@ -206,7 +206,7 @@ into every backend.
 > "Verify whether the Empire really destroyed Alderaan."
 > "Find the consensus on who fired first — Han or Greedo."
 
-The convergence engine runs a multi-pass truth-finding loop: broad
+`converge` runs a multi-pass truth-finding loop: broad
 search across active providers, claim extraction, cross-source
 reconciliation, and targeted follow-up for gaps. Claims corroborated
 across independent sources score high confidence. Contradictions are
@@ -332,7 +332,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-08-20.
+Last updated: 2026-08-21.
 
 ## Contribute
 
@@ -355,4 +355,4 @@ MIT.
 
 ## Spec
 
-Built from `infobroker.md` v2026.08.20.
+Built from `infobroker.md` v2026.08.21.
