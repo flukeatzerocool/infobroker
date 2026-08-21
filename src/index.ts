@@ -220,7 +220,7 @@ async function doWebSearch(
             setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
           ),
         ]);
-      const results = await retryWithBackoff(timedCall);
+      const results = (await retryWithBackoff(timedCall)).slice(0, maxResults);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);

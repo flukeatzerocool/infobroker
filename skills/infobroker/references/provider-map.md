@@ -41,7 +41,7 @@ Quick reference for `choose_provider` recommendations.
 | Brave | Yes | — | — | — | Yes | — | — | Yes |
 | Exa | Yes | — | — | — | — | — | — | Yes |
 | Tavily | Yes | — | — | — | — | — | — | Yes |
-| CORE | — | Yes | — | — | — | — | — | Yes |
+| CORE | — | Yes | — | — | — | — | — | No* |
 | SearXNG | Yes | Yes | Yes | Yes | Yes | — | — | No* |
 
 \* No key required for baseline access (rate-limited); key increases quota.
