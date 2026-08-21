@@ -240,15 +240,39 @@ function computeFreshnessScore(tier: string, ingestedAt: number, now: number): n
 }
 
 export function initKb(config: KbConfig): void {
-  kbConfig = config;
   const raw = resolvePath(config.storage_path);
-  storagePath = raw;
-  if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
-  loadStore();
+
+  // If the storage path changes (e.g. an update alters the shipped default, or
+  // a user overlay stops overriding it), flush any pending in-memory writes to
+  // the *current* path before re-initializing — otherwise unflushed chunks
+  // would be silently dropped. Data at the previous path is never migrated.
+  if (storagePath !== null && storagePath !== raw) {
+    flushWrite();
+    const oldPath = storagePath;
+    kbConfig = config;
+    storagePath = raw;
+    if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
+    loadStore();
+    const event =
+      `Storage path changed at ${new Date().toISOString()}: ${oldPath} → ${raw}. ` +
+      `Data at the previous path is not migrated; set kb.storage_path in config.local.json to restore it.`;
+    console.warn(`[infobroker] ${event}`);
+    if (store) store.events.push(event);
+  } else {
+    kbConfig = config;
+    storagePath = raw;
+    if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
+    loadStore();
+  }
+
   getSortedVocab();
   runMaintenance();
   if (maintenanceTimer) clearInterval(maintenanceTimer);
   maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+}
+
+export function flushKbWrites(): void {
+  flushWrite();
 }
 
 export function isKbConfigured(): boolean {

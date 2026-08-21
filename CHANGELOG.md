@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.08.21 — Update-safety hardening for user data
+
+- A knowledge-base storage-path change (e.g. an update altering the shipped
+  default, or a user overlay no longer overriding it) is now detected and
+  warned about instead of silently orphaning existing data. Pending writes
+  flush to the previous path first, and the event is recorded in `kb_stats`.
+  Data is never migrated or deleted. (REQ-010, REQ-067)
+- Hot reload (`reload_config` and SIGHUP) now flushes pending knowledge-base
+  writes before re-initializing, so an ingest still inside the write debounce
+  window is no longer dropped on reload. (REQ-040)
+- Config overlay merging now warns when a user layer replaces a non-empty
+  shipped array (such as a `dispatch` chain) wholesale, surfacing that updates
+  to that key's default will not apply. (REQ-010)
+
 ## 2026.08.21 — README update system hardening
 
 - `validate-readme` now derives the tool surface from `src/index.ts` and the

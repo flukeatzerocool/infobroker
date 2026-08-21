@@ -88,6 +88,17 @@ describe("configuration overlay", () => {
     expect(cfg.dispatch.general_web).toEqual(["searxng", "duckduckgo"]);
   });
 
+  it("warns when a user overlay replaces a non-empty shipped array", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await loadWithOverlay(BASE, {
+      dispatch: { general_web: ["searxng"] },
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('"general_web"')
+    );
+    warn.mockRestore();
+  });
+
   it("preserves nested KB defaults not overridden", async () => {
     const cfg = await loadWithOverlay(BASE, {
       kb: { storage_path: "/custom/kb" },

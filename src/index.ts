@@ -12,7 +12,7 @@ import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quot
 import { PROVIDERS } from "./providers/index.js";
 import { retryWithBackoff } from "./retry.js";
 import { converge } from "./converge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex, flushKbWrites } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
@@ -840,6 +840,7 @@ server.registerTool(
       const newConfig = reloadConfig();
       configureAllProviders(newConfig);
       if (newConfig.kb) {
+        flushKbWrites();
         initKb(newConfig.kb);
         console.error("[infobroker] Knowledge base re-initialized");
       }
@@ -875,7 +876,10 @@ process.on("SIGHUP", () => {
   try {
     const newConfig = reloadConfig();
     configureAllProviders(newConfig);
-    if (newConfig.kb) initKb(newConfig.kb);
+    if (newConfig.kb) {
+      flushKbWrites();
+      initKb(newConfig.kb);
+    }
     console.error("[infobroker] Configuration reloaded via SIGHUP");
   } catch (e) {
     console.error("[infobroker] SIGHUP reload failed:", e instanceof Error ? e.message : String(e));

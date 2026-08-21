@@ -32,11 +32,26 @@ function mergeLayer<T>(base: T, overlay: unknown): T {
     if (value === undefined) continue;
     if (isPlainObject(value) && isPlainObject(out[key])) {
       out[key] = mergeLayer(out[key], value);
+    } else if (Array.isArray(value) && Array.isArray(out[key])) {
+      // Arrays are replaced wholesale (per REQ-010/DECISIONS.md). Warn when a
+      // user overlay replaces a non-empty shipped array so the takeover is not
+      // silent — an update to the shipped array will not reach this key.
+      if (out[key].length > 0 && !sameArray(out[key], value)) {
+        console.warn(
+          `[infobroker] config overlay replaces shipped array "${key}" wholesale (shipped ${out[key].length} → user ${value.length}). Updates to the shipped default for this key will not apply.`
+        );
+      }
+      out[key] = value;
     } else {
       out[key] = value;
     }
   }
   return out as T;
+}
+
+function sameArray(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
 }
 
 function readJson(path: string): unknown {

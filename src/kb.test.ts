@@ -1,9 +1,9 @@
 // @implements REQ-075
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbSearch, kbStats } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
@@ -76,5 +76,32 @@ describe("kbStats", () => {
     const stats = kbStats();
     expect(stats.chunk_count).toBeGreaterThan(0);
     expect(stats.model_name).toBe("tf-idf");
+  });
+});
+
+describe("storage path change and write flush", () => {
+  it("flushes pending writes and records an event when storage_path changes", () => {
+    const dir2 = mkdtempSync(join(tmpdir(), "infobroker-kb-test2-"));
+
+    // Ingest into the primary store and flush so it is durable at `dir`.
+    kbIngest("the sky is blue on a clear day", "path-change", "https://example.com/path", "test");
+    flushKbWrites();
+    expect(existsSync(join(dir, "vector-store.json"))).toBe(true);
+
+    // Switch storage path: data at the old path must remain, and an event is
+    // recorded on the (now-empty) new store.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    initKb(makeConfig({ storage_path: dir2 }));
+    warn.mockRestore();
+
+    const stats = kbStats();
+    expect(stats.chunk_count).toBe(0);
+    expect(stats.events.some((e) => e.includes("Storage path changed"))).toBe(true);
+
+    // Old path data is not migrated/deleted.
+    const oldStore = JSON.parse(readFileSync(join(dir, "vector-store.json"), "utf-8"));
+    expect(oldStore.chunks.length).toBeGreaterThan(0);
+
+    rmSync(dir2, { recursive: true, force: true });
   });
 });
