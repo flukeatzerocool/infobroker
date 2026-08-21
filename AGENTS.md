@@ -67,6 +67,32 @@ npm run typecheck   # tsc --noEmit
 
 All tool responses use `[OK]` / `[ERROR]` prefix with JSON bodies per REQ-001. Errors include `code`, `message`, `provider`, and `remediation` fields (REQ-002).
 
+## README Governance
+
+The README is a single file driven by three cooperating pieces that keep it
+in sync with the project:
+
+- **Style guide**: the `README DESIGN` HTML comment at the top of `README.md`.
+  It is the canonical, AI-actionable style guide — readme-driven development,
+  voice, structure, word budget, non-goals, and a 10-item binary style
+  checklist. Edit the style guide here, not in prose elsewhere.
+- **Validator**: `scripts/validate-readme.ts` (`npm run validate-readme`).
+  It derives the tool surface and provider registry from `src/index.ts` and
+  `config.json` at validate time (single source of truth — never hardcoded),
+  then checks structure, voice, links, comparison table, and that every tool
+  and provider is referenced. Do not hardcode tool/provider names in the
+  validator.
+- **Updater**: `scripts/pipeline/prompts/readme.md` — the push-pipeline step
+  that auto-refreshes the README. It runs a two-phase Generate → Verify loop
+  in a single prompt: phase 1 updates the README against the spec and
+  config, phase 2 re-checks every claim against its source and emits a
+  `VERIFY ... N high-severity finding(s).` summary. The mechanical
+  `validate-readme` gate runs afterward.
+
+When a change to tools, providers, or the spec changes what the README
+claims, update the README in the same commit. A README that promises
+something the server does not deliver is a defect.
+
 ## Key Environment Variables
 
 | Variable | Purpose |
@@ -109,7 +135,7 @@ This runs:
 |----------------------|----------------------------------------------------|
 | `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
-| `npm run validate-readme` | README structure, tool names, links, comparison table |
+| `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run test`       | Vitest unit and integration tests                  |
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited

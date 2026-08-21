@@ -4,6 +4,41 @@ import { resolve } from "node:path";
 const PROSE_REPO_ROOT = process.cwd();
 const PROSE_README_PATH = resolve(PROSE_REPO_ROOT, "README.md");
 
+// ── Single source of truth: tool surface & provider registry ────────────────
+// The README's tool and provider counts must reconcile against these derived
+// lists, so the validator never drifts from src/ or config.json.
+
+const SRC_INDEX_PATH = resolve(PROSE_REPO_ROOT, "src/index.ts");
+const CONFIG_PATH = resolve(PROSE_REPO_ROOT, "config.json");
+
+// Provider slugs that are infrastructure/fallback renderers rather than
+// user-facing providers documented in the README. Excluded from the provider
+// count so README parity matches the user-facing surface.
+const PROVIDER_EXCLUSIONS = new Set(["native_fetch"]);
+
+export function deriveToolNames(): string[] {
+  if (!existsSync(SRC_INDEX_PATH)) return [];
+  const src = readFileSync(SRC_INDEX_PATH, "utf-8");
+  const names: string[] = [];
+  const re = /server\.registerTool\(\s*"([^"]+)"/g;
+  let match;
+  while ((match = re.exec(src)) !== null) {
+    names.push(match[1]);
+  }
+  return names;
+}
+
+export function deriveProviderSlugs(): string[] {
+  if (!existsSync(CONFIG_PATH)) return [];
+  try {
+    const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    const providers = config.providers || {};
+    return Object.keys(providers).filter((slug) => !PROVIDER_EXCLUSIONS.has(slug));
+  } catch {
+    return [];
+  }
+}
+
 export interface Heading {
   line: number;
   level: number;
@@ -110,15 +145,24 @@ export function proseLines(text: string): { line: number; content: string }[] {
   const lines = text.split("\n");
   const result: { line: number; content: string }[] = [];
   let inCodeBlock = false;
+  let inHtmlComment = false;
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     if (trimmed.startsWith("```")) {
       inCodeBlock = !inCodeBlock;
       continue;
     }
-    if (inCodeBlock) continue;
+    if (trimmed.startsWith("<!--")) {
+      inHtmlComment = true;
+      continue;
+    }
+    if (trimmed.endsWith("-->")) {
+      inHtmlComment = false;
+      continue;
+    }
+    if (inCodeBlock || inHtmlComment) continue;
     if (trimmed.startsWith("#") || trimmed.startsWith("|") || trimmed.startsWith(">") ||
-        trimmed.startsWith("<!--") || trimmed.startsWith("-->") || trimmed.startsWith("[!")) {
+        trimmed.startsWith("[!")) {
       continue;
     }
     if (trimmed.length === 0) continue;

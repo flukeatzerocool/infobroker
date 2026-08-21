@@ -1,40 +1,105 @@
 <!--
 README DESIGN:
+
+  Product principle.
+    The README is the product — it answers three questions in under
+    60 seconds: what this does, why you should care, how to use it.
+    Readme-driven development: changes that affect the README's claims
+    SHALL update the README before or alongside the code change. A README
+    that promises something the server does not deliver is a defect.
+    Every numeric claim (tool count, provider count, zero-config count)
+    reconciles against src/index.ts and config.json — the validator
+    enforces this (Surface reconciliation).
+
   Voice: Professional, confident, benefit-first. Direct address ("you").
-  Demo: Natural-language prompts in blockquotes ("Search for..."),
-    never tool names (`infobroker_web_search`). Show the reader how
-    to express what they want — the AI maps intent to tools.
+    No first-person ("we", "I", "our"). Short declarative fragments in the
+    tagline. Every sentence survives a reader who knows nothing about
+    Infobroker.
+
+  Demo: Natural-language prompts in blockquotes ("Search for..."), never
+    full tool names (`infobroker_web_search`). Show the reader how to
+    express what they want — the AI maps intent to tools. Every demo
+    prompt SHALL be a valid natural-language command the reader could
+    actually run; broken prompts are a README defect.
+
   Structure: Hero → North Star → Quick Start → MCP Server (§3 features) →
     Providers → Configuration → How It Compares → Contribute →
-    License → Spec.
+    License → Spec. No other ordering. Canonical h2 headings are enforced
+    by validate-readme.
+
   Audience split: §2 is for developers who want to start the server.
     §3 describes what users can do with it. §4-5 are configuration.
-    §6 is competitive context.
-  No tables for feature descriptions. No repetition. One story vector
-    per section.
+    §6 is competitive context. §7-9 are contributor/license/spec.
+
+  No repetition. One story vector per section. Don't explain the same
+    concept in two places — the validator flags near-duplicate sentences.
+    No feature bullet lists in prose. No tables for feature descriptions.
+
   Feature blurbs: Each h3 under §3 follows a four-beat cadence —
     benefit hook, mechanics, competitive proof, closer. The
     competitive-proof sentence contrasts Infobroker against the
     current tool landscape without naming individual competitors; it
     answers "why this beats what you're used to."
+
   MCP server order: Features under §3 follow a research workflow —
     Search → Extract → Verify → Write → Manage. New features
     insert at the workflow point they serve; reorder the section
     to restore the workflow after every addition or removal.
+
   Comparison table: Three columns (Tool name | What you're used to |
     How Infobroker differs). One row per competitor category, never
     individual products. Prose paragraph below synthesizes the table;
     it never repeats a row's content verbatim.
+
   Hero: Exactly three elements — h1 heading, bold tagline, one prose
     paragraph. No sub-headings, bullet lists, or preamble paragraphs.
     The tagline uses short declarative fragments separated by periods
-    — never a sentence or question.   The closing refrain "Free first.
-    Privacy always." is echoed in the comparison section; changing
-    one requires updating the other. Enforced maximum 200 words
-    (validate-readme).
+    — never a sentence or question. Enforced maximum 200 words
+    (validate-readme). The tagline "One server. Every source. Research
+    that delivers." is the repeated refrain — it appears exactly twice,
+    in the Hero tagline and the comparison closing prose, and no more.
+    The hero paragraph closes with "Free first. Privacy always." —
+    distinct from the tagline. Updating any repeated line requires
+    updating its echo.
+
   North Star: Single paragraph stating the Bothan Spynet metaphor and
     intelligence-cycle framing. No sub-headings, lists, or blockquotes.
     Maximum 100 words (enforced by validate-readme).
+
+  Tables. Exactly two tables: the Providers table (§4) and the
+    Comparison table (§6). No other tables. The Providers table lists
+    every configured provider (excluding the `native_fetch` fallback
+    renderer) — one row per provider, matching config.json.
+
+  Word budget. Hero ≤ 200 words. North Star ≤ 100 words. Each §3 feature
+    h3 ≤ 350 words. The validator's section-length check enforces these.
+
+  Non-goals. The README is not an API reference, a tool catalog, a spec
+    document, or a changelog. The complete tool inventory lives in the
+    feature taxonomy (§D of infobroker.md), which the README links to.
+    Tool names appear in prose only as shorthand in backticks where a
+    feature is introduced (e.g. `kb_search`), never as a bare list.
+
+  Validator. Rules marked "(validate-readme)" SHALL be checked by
+    scripts/validate-readme.ts. Other rules are enforced by author/AI
+    discipline. Adding an enforceable rule requires a corresponding
+    validator check. Tool and provider names are derived from
+    src/index.ts and config.json at validate time — never hardcoded.
+
+  Binary style checklist (applies to every AI edit of this file):
+    1. Second person ("you"), never first-person.
+    2. Tool names in backticks, shorthand form; full `infobroker_`
+       prefixes only in the design comment's "never do this" example.
+    3. Blockquotes only in §3 feature subsections, 2-5 natural-language
+       prompts each, no tool names.
+    4. Tagline refrain "One server. Every source. Research that
+       delivers." appears exactly twice (Hero + comparison closing).
+    5. No bullet list of features in prose.
+    6. Exactly two tables (Providers, Comparison), no others.
+    7. Every numeric claim reconciles to src/index.ts + config.json.
+    8. ATX headings only, no setext.
+    9. One story vector per section, no near-duplicate sentences.
+   10. "Last updated: YYYY-MM-DD." matches package.json version date.
 -->
 
 # Infobroker
@@ -52,7 +117,7 @@ Privacy always.
 
 ## North Star
 
-Infobroker is the Bothan Spynet as a tool — a decentralized intelligence
+Infobroker is the [Bothan Spynet](https://starwars.fandom.com/wiki/Bothan_Spynet/Legends) as a tool — a decentralized intelligence
 network that queries independent sources and routes results through a
 single, impartial interface. In intelligence-cycle terms, you supply the
 direction and get the dissemination; the server handles the collection and
@@ -100,8 +165,8 @@ spec.
 
 ### Unified Search
 
-> "Search the web for quantum error correction advances in 2025."
-> "Find scholarly papers on CRISPR delivery mechanisms."
+> "Search for the location of the second Death Star."
+> "Find scholarly papers on hyperspace travel theories."
 
 One query, every provider that can answer it. Search across DuckDuckGo,
 Wikipedia, academic databases, news, code repositories — or describe
@@ -113,19 +178,19 @@ fails.
 
 ### Content Extraction
 
-> "Fetch this article and summarize it."
-> "Get the text of that Wayback Machine snapshot."
+> "Fetch the article on the Battle of Yavin and summarize it."
+> "Get the text of that page about the Death Star plans."
 
-Jina Reader renders any URL as clean Markdown optimized for LLM
-consumption. Falls back to native HTTP when Jina is throttled.
-Wikipedia and Internet Archive have dedicated renderers for
-source-specific extraction. Built-in web fetchers return raw HTML;
-Infobroker gives you clean, readable content from any source — ready
-for summarization or analysis.
+`fetch_page` hands any URL to Jina Reader, which renders it as clean
+Markdown optimized for LLM consumption. Falls back to native HTTP when
+Jina is throttled. Wikipedia and Internet Archive have dedicated
+renderers for source-specific extraction. Built-in web fetchers return
+raw HTML; Infobroker gives you clean, readable content from any source —
+ready for summarization or analysis.
 
 ### Provider Intelligence
 
-> "Which provider should I use for academic papers?"
+> "Which source should I use to research the Death Star's weakness?"
 > "Show me all available sources and their quota status."
 
 The server knows its own capabilities. `choose_provider` recommends
@@ -138,8 +203,8 @@ into every backend.
 
 ### Multi-Source Verification
 
-> "Verify whether honey never spoils."
-> "Find the consensus on recommended daily water intake."
+> "Verify whether the Empire really destroyed Alderaan."
+> "Find the consensus on who fired first — Han or Greedo."
 
 The convergence engine runs a multi-pass truth-finding loop: broad
 search across active providers, claim extraction, cross-source
@@ -153,21 +218,22 @@ sure it is.
 
 ### Knowledge Base
 
-> "Search what you already found about EU climate policy."
+> "Search what you already found about the Rebel Alliance fleet."
 > "Ingest this article so it's cached for next time."
 
 Every search, fetch, and convergence run is cached in a local knowledge
-base. Subsequent queries check the cache before hitting external
-providers — only falling back to the network when the cached results
-aren't fresh enough or relevant enough. Content is age-scored, expired
-on a freshness schedule, and deduplicated by source. Other search MCP
-servers re-fetch the same facts every session; Infobroker remembers and
-reuses what it already found.
+base. `kb_search` checks the cache before hitting external providers —
+only falling back to the network when the cached results aren't fresh
+enough or relevant enough. `kb_ingest` adds new text or a URL by hand;
+`kb_stats` reports what's cached; `kb_delete` removes it. Content is
+age-scored, expired on a freshness schedule, and deduplicated by source.
+Other search MCP servers re-fetch the same facts every session; Infobroker
+remembers and reuses what it already found.
 
 ### Research Pipeline
 
-> "Research EU climate policy, then draft a summary."
-> "Fact-check this article's nutrition claims."
+> "Research the construction of the Death Star, then draft a summary."
+> "Fact-check these claims about Darth Vader's origin."
 
 Infobroker is a search backend — but it ships with bundled client
 skills that chain its tools into writing pipelines. The orchestrator
@@ -186,8 +252,9 @@ work.
 Quota counters persist to disk and survive restarts. Rate limits are
 enforced per-provider, not globally. Configuration is hot-reloadable
 via `reload_config` — change providers, adjust chains, or tweak
-thresholds without dropping connections. Search suggestions via
-DuckDuckGo autocomplete. You always know what your search server is
+thresholds without dropping connections. `search_suggestions` provides
+DuckDuckGo query autocomplete. `spec_health` reports the server's build
+health and request stats. You always know what your search server is
 doing and how much capacity remains.
 
 ## Providers

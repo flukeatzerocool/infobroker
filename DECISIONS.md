@@ -16,12 +16,27 @@ to the taxonomy and documents a Knowledge Base feature section. The taxonomy
 is a spec-integrity concern, so REQ-078 sits in §4.8 alongside REQ-055 and
 REQ-077 and is treated as a meta-REQ (no source-file citation required).
 
+### D-017: README Single Source of Truth and Self-Verifying Update (2026.08.21)
+
+The README's tool and provider surface must reconcile with the live code
+and config, not a hand-maintained list. `validate-readme` derives tool
+names from `src/index.ts` registrations and provider slugs from
+`config.json` at validate time (excluding the `native_fetch` fallback
+renderer), and the tool list for the "names in prose" check is likewise
+derived — the previous hardcoded list omitted the four `kb_*` tools. The
+README auto-update prompt (`scripts/pipeline/prompts/readme.md`) is a
+single prompt with two internal phases (Generate → Verify) rather than a
+separate verifier agent, to minimize script surface: phase 2 re-checks
+every claim against its source and reports `<N> high-severity finding(s)`,
+gating on 0 before the README is considered complete. The mechanical
+`validate-readme` gate still runs after the prompt as the hard stop.
+
 ### D-012: Build Fingerprint (auto-generated)
 
 **Spec hash:** `6bf816ff5b60ee00bf734da854a8dfca2f85e06b5b2cce008a9ecdf1dace245d`
 **Source hash:** `01817b37bdb9a44c90dbade761b933d00430d6a722f1163ce9f4e7e9a0ada82e`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `3f0baedb21d8dbc657731d7b5d1e5b048626e3700f28759149e44d5fc13abcbc`
+**Total fingerprint:** `3e2eef19d194dba97b97de2b96c72b34857c2301fa6d2d890f27a986606c5669`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

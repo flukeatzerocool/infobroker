@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.08.21 — README update system hardening
+
+- `validate-readme` now derives the tool surface from `src/index.ts` and the
+  provider registry from `config.json` at validate time, so the README can
+  never drift from the code or config. The previous hardcoded tool list
+  omitted the four `kb_*` tools.
+- The README DESIGN style guide gained a product principle, word budget,
+  non-goals, refrain contract, and a 10-item binary style checklist for AI
+  edits; the validator's prose scanner now skips HTML-comment content.
+- The README auto-update prompt now runs a single Generate → Verify loop —
+  phase 2 re-checks every claim against its source and reports high-severity
+  findings before the mechanical gate.
+- README prose now names the previously-omitted tools (`fetch_page`,
+  `search_suggestions`, `kb_search`, `kb_ingest`, `kb_stats`, `kb_delete`,
+  `spec_health`) in backticks, substantiating the "thirteen tools" claim.
+
 ## 2026.08.20 — Feature taxonomy and defect fixes
 
 - A feature taxonomy appendix (§D) now groups every tool and every §4 REQ

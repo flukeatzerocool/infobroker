@@ -2,15 +2,11 @@
 import {
   readReadme, extractHeadings, extractLinks, extractBlockquotes,
   extractBulletLists, proseOnly, proseLines, slugify,
+  deriveToolNames, deriveProviderSlugs,
 } from "./lib/parse-readme.js";
 
-const toolNames = [
-  "infobroker_web_search", "infobroker_fetch_page",
-  "infobroker_search_suggestions", "infobroker_choose_provider",
-  "infobroker_list_providers", "infobroker_provider_health",
-  "infobroker_converge", "infobroker_reload_config",
-  "infobroker_spec_health",
-];
+const toolNames = deriveToolNames();
+const providerSlugs = deriveProviderSlugs();
 
 interface Issue {
   line?: number;
@@ -23,7 +19,7 @@ function checkDesignComment(text: string): Issue[] {
   const lines = text.split("\n");
   let commentStart = -1;
   let commentEnd = -1;
-  for (let i = 0; i < Math.min(lines.length, 60); i++) {
+  for (let i = 0; i < Math.min(lines.length, 200); i++) {
     if (lines[i].trim().startsWith("<!--")) commentStart = i;
     if (lines[i].trim().endsWith("-->") && commentStart !== -1) {
       commentEnd = i;
@@ -31,7 +27,7 @@ function checkDesignComment(text: string): Issue[] {
     }
   }
   if (commentStart === -1) {
-    issues.push({ error: true, msg: "README DESIGN HTML comment missing — must appear within first 60 lines" });
+    issues.push({ error: true, msg: "README DESIGN HTML comment missing — must appear within first 200 lines" });
     return issues;
   }
   if (commentEnd === -1 || commentEnd - commentStart < 3) {
@@ -406,6 +402,39 @@ function checkTaxonomyLink(text: string): Issue[] {
   return issues;
 }
 
+function checkSurfaceReconciliation(text: string): Issue[] {
+  const issues: Issue[] = [];
+
+  // Every tool in src/index.ts must have either its full name or its
+  // shorthand (sans `infobroker_` prefix) recognized, so a renamed or
+  // removed tool can never silently fall out of sync. The README favors
+  // shorthand over full names per the design comment, so both are accepted.
+  for (const tool of toolNames) {
+    const short = tool.replace(/^infobroker_/, "");
+    if (!text.includes(tool) && !text.includes(short)) {
+      issues.push({
+        error: true,
+        msg: `Tool '${tool}' registered in src/index.ts but absent from README (neither full name nor '${short}') — reconcile the tool surface`,
+      });
+    }
+  }
+
+  // Every provider in config.json must appear in the README provider table,
+  // matched by display name (slug with underscores as spaces) or raw slug.
+  for (const slug of providerSlugs) {
+    const display = slug.replace(/_/g, " ");
+    const re = new RegExp(`\\b${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b|\\b${display.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    if (!re.test(text)) {
+      issues.push({
+        error: true,
+        msg: `Provider '${slug}' in config.json but absent from README provider table — reconcile the provider registry`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 function main(): void {
   const text = readReadme();
   let errors = 0;
@@ -424,6 +453,7 @@ function main(): void {
     { name: "Comparison table", run: checkComparisonTable, severity: "soft" },
     { name: "Section lengths", run: checkSectionLengths, severity: "soft" },
     { name: "Taxonomy link", run: checkTaxonomyLink, severity: "hard" },
+    { name: "Surface reconciliation", run: checkSurfaceReconciliation, severity: "hard" },
   ];
 
   for (const { name, run, severity } of checks) {
