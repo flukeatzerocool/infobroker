@@ -26,7 +26,7 @@ unified tool surface. Its design goals:
 2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, SearXNG) for higher throughput and specialized queries.
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
 4. **Truth by iteration.** A `converge` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
-5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, fact-checking, and proofreading.
+5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, fact-checking, proofreading, and translation.
 6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
 The knowledge base is a local caching layer — it does not alter the core
@@ -300,7 +300,7 @@ The build SHALL produce an instruction file at `instructions/search-preferences.
 The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge base search phase positioned before external web search, such that the client retrieves previously indexed results before making outbound requests. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
-The build SHALL produce an orchestrator skill (REQ-051) that references the eight pipeline skills — deep-research, fact-checking, summarization, technical-writing, copywriting, proofreading, code-review, and translation — by name. These skills are global OpenCode dependencies; they are not vendored in the repository. _Check:_ G3 (content verification).
+The build SHALL produce an orchestrator skill (REQ-051) that references six pipeline skills — deep-research, fact-checking, summarization, technical-writing, proofreading, and translation — by name. These skills SHALL be shipped in the repository so the build is self-contained and requires no external skill dependency. _Check:_ G3 (content verification).
 
 **REQ-053 — Pipeline Reference**
 The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline and `skills/infobroker/references/provider-map.md` with the task→provider dispatch table. _Check:_ G3 (file presence).
@@ -799,8 +799,20 @@ infobroker/
 │   │   └── references/
 │   │       ├── provider-map.md            # Task → provider dispatch reference
 │   │       └── pipeline-map.md            # Skill pipeline diagram (Mermaid)
-│   └── research-engineering-loop/
-│       └── SKILL.md                       # CTI-modeled research workflow
+│   ├── analysis-loop/
+│   │   └── SKILL.md                       # Gated analytic-rigor research workflow
+│   ├── deep-research/
+│   │   └── SKILL.md                       # Multi-subtopic investigation
+│   ├── fact-checking/
+│   │   └── SKILL.md                       # Claim-to-verdict with confidence
+│   ├── summarization/
+│   │   └── SKILL.md                       # Condense findings
+│   ├── technical-writing/
+│   │   └── SKILL.md                       # Reports, docs, tutorials
+│   ├── proofreading/
+│   │   └── SKILL.md                       # Grammar, style, clarity
+│   └── translation/
+│       └── SKILL.md                       # Multilingual output
 ├── README.md                              # Setup, config, integration
 ├── config.json                            # Shipped default configuration
 ├── DECISIONS.md                           # Implementation decisions

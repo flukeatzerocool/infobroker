@@ -4,8 +4,9 @@ description: >
   Use when the user asks to research a topic, fact-check claims, find
   information from multiple sources, or produce written output backed by
   web research. Orchestrates: Infobroker MCP tools → deep-research →
-  fact-checking → summarization → technical-writing/copywriting →
-  proofreading. Also handles code research via code-review.
+  fact-checking → summarization → technical-writing → proofreading →
+  translation. For high-stakes questions requiring gated analytic rigor,
+  escalate to analysis-loop.
 ---
 
 # Infobroker — Research & Writing Professional
@@ -52,7 +53,6 @@ Phase 4: SUMMARIZE
 
 Phase 5: WRITE
   `technical-writing` skill — for reports, documentation, tutorials, specs
-  `copywriting` skill — for articles, persuasive pieces, marketing content
 
 Phase 6: POLISH
   `proofreading` skill — grammar, spelling, style, clarity, tone verification
@@ -80,17 +80,6 @@ Use this when the user wants to verify specific claims.
 6. CITE: Source URLs with every verdict
 ```
 
-## Pipeline: Code Research
-
-Use this when evaluating or comparing code solutions found via search.
-
-```
-1. SEARCH: Infobroker `web_search` with provider=code (Stack Exchange, GitHub)
-2. EXTRACT: Infobroker `fetch_page` on relevant code pages
-3. EVALUATE: `code-review` skill on found solutions (correctness, security, performance)
-4. DOCUMENT: `technical-writing` skill — present findings with pros/cons
-```
-
 ## Tool Selection Quick Guide
 
 | Intent | Tool | Provider hint |
@@ -107,6 +96,15 @@ Use this when evaluating or comparing code solutions found via search.
 | Knowledge base stats | `kb_stats` | Operational metrics |
 | Delete from knowledge base | `kb_delete` | By collection or source URL |
 | Translate findings | `translation` skill | Multilingual output |
+
+## When to Escalate
+
+Use the `analysis-loop` skill instead of the standard pipeline when the
+question is high-stakes or decision-driving and requires gated analytic
+rigor: confidence-scored findings, source-reliability grading, structured
+analytic techniques (analysis of competing hypotheses, devil's advocacy),
+and explicit refinement rounds. This skill runs the lighter research-and-write
+path; `analysis-loop` runs the disciplined, gated path.
 
 ## Best Practices
 

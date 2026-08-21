@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.08.21 — Self-contained skill suite
+
+- The client-artifact skills now ship self-contained in the repository, so a
+  fresh install carries the full research-and-writing pipeline with no
+  outside skill dependency. Six pipeline skills are vendored — deep-research,
+  fact-checking, summarization, technical-writing, proofreading, and
+  translation. (REQ-052)
+- Two former pipeline skills — copywriting and code-review — are dropped from
+  the set and no longer referenced anywhere in the repository; they remain
+  available as global skills where installed. The spec-authoring skills
+  (spec-review, spec-engineering-loop) are likewise no longer shipped in the
+  repository.
+- The CTI-modeled research workflow was renamed from `research-engineering-loop`
+  to `analysis-loop`, and wired into the orchestrator as the escalation path
+  for high-stakes questions requiring gated analytic rigor.
+
 ## 2026.08.21 — Update-safety hardening for user data
 
 - A knowledge-base storage-path change (e.g. an update altering the shipped

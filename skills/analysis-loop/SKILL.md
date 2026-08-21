@@ -1,5 +1,5 @@
 ---
-name: research-engineering-loop
+name: analysis-loop
 description: >
   Use when the user asks to research a topic, investigate a question, or
   produce structured findings with cited, confidence-scored sources.
@@ -24,7 +24,7 @@ metadata:
   category: research
 ---
 
-# Research Engineering Loop
+# Analysis Loop
 
 Disciplined research workflow: scope the question → collect and assess
 sources → analyze and synthesize → disseminate and refine. One question
@@ -244,7 +244,7 @@ Continue until all "Must answer" EEIs reach at least medium confidence, or
 the user explicitly accepts remaining uncertainty.
 
 ```
-research-engineering complete. <N> findings | Confidence: <H>/<M>/<L> |
+analysis-loop complete. <N> findings | Confidence: <H>/<M>/<L> |
 <K> sources | <G> gaps accepted | Refinement rounds: <R>
 ```
 
@@ -281,7 +281,7 @@ research-analysis complete. <N> findings | Confidence: <H>/<M>/<L> |
 <K> contradictions | <G> gaps
 
 # After Phase 3
-research-engineering complete. <N> findings | Confidence: <H>/<M>/<L> |
+analysis-loop complete. <N> findings | Confidence: <H>/<M>/<L> |
 <K> sources | <G> gaps accepted | Refinement rounds: <R>
 ```
 

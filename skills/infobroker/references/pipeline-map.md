@@ -10,11 +10,9 @@ flowchart TD
         RPMain["infobroker web_search / converge"] --> Extract["infobroker fetch_page"]
         Extract --> Verify["deep-research Phase 3 + fact-checking"]
         Verify --> Summarize["summarization"]
-        Summarize --> Write{"Output type?"}
-        Write -->|"Report / doc / spec"| Tech["technical-writing"]
-        Write -->|"Article / ad / persuasive"| Copy["copywriting"]
-        Tech --> Polish["proofreading"]
-        Copy --> Polish
+        Summarize --> Write["technical-writing"]
+        Write --> Polish["proofreading"]
+        Polish --> Translate["translation (optional)"]
     end
 
     U -->|"Fact-check"| FCMain
@@ -26,21 +24,19 @@ flowchart TD
         FCVerdict --> FCSum["summarization — executive summary"]
     end
 
-    U -->|"Code research"| CRMain
+    U -->|"High-stakes rigor"| ALMain
 
-    subgraph CR["Code Research Pipeline"]
-        CRMain["infobroker web_search provider=code"] --> CRFetch["infobroker fetch_page"]
-        CRFetch --> CREval["code-review"]
-        CREval --> CRDoc["technical-writing"]
+    subgraph AL["Analysis Loop (escalation)"]
+        ALMain["scope → collect → analyze → refine"]
     end
 
-    Polish --> Output["📄 Researched, verified, written, proofread output"]
+    Translate --> Output["📄 Researched, verified, written, proofread output"]
     FCSum --> Output2["📋 Fact-check report with confidence scores"]
-    CRDoc --> Output3["📋 Evaluated code solutions with documentation"]
+    ALMain --> Output3["🧭 Confidence-scored, gated findings"]
 
     style RP fill:#e8f5e9,stroke:#2e7d32
     style FC fill:#fff3e0,stroke:#ef6c00
-    style CR fill:#e3f2fd,stroke:#1565c0
+    style AL fill:#f3e5f5,stroke:#6a1b9a
 ```
 
 ## Skill Dependency Graph
@@ -51,10 +47,11 @@ infobroker (orchestrator)
   ├── fact-checking (sub-skill: claim verdicts)
   ├── summarization (sub-skill: condense findings)
   ├── technical-writing (sub-skill: write docs/reports)
-  ├── copywriting (sub-skill: write persuasive content)
   ├── proofreading (sub-skill: polish output)
-  ├── code-review (sub-skill: evaluate code solutions)
   └── translation (sub-skill: multilingual output)
+
+analysis-loop (sibling — escalate for gated analytic rigor)
+  └── consumed directly by Infobroker tools, not by the orchestrator
 
 All sub-skills can be used standalone.
 infobroker skill provides the pipeline orchestration.

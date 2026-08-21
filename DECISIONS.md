@@ -31,12 +31,26 @@ every claim against its source and reports `<N> high-severity finding(s)`,
 gating on 0 before the README is considered complete. The mechanical
 `validate-readme` gate still runs after the prompt as the hard stop.
 
+### D-018: Self-Contained Skill Suite (2026.08.21)
+
+The client-artifact skill suite is shipped self-contained in the
+repository rather than relying on global OpenCode dependencies, so a
+fresh install carries the full research-and-writing pipeline with no
+outside skill prerequisite (REQ-052). Six pipeline skills are vendored
+— deep-research, fact-checking, summarization, technical-writing,
+proofreading, and translation. Two former pipeline skills (copywriting
+and code-review) are dropped from the set and remain global-only; the
+spec-authoring skills (spec-review, spec-engineering-loop) are likewise
+not shipped in the repository. The CTI-modeled research workflow was
+renamed from `research-engineering-loop` to `analysis-loop`, naming its
+analytic-rigor focus rather than an engineering activity.
+
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `0c112704a7f07e9c361b189ca6621d10a85a9834ccb80c42a8ebd667ebf77143`
+**Spec hash:** `a7dd1e92a6077074b1dc422024c637e1cc15f596238828a3cfdc309ff60ed80a`
 **Source hash:** `1a7ea738f3e3665829b074f4f8070c52a62d47fb6d556fa65a7468a230bf217a`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `43f073cdbccf6b4b2c4adfeb560c4084c9afcc2299a975d008f35352899c8e20`
+**Total fingerprint:** `e6c18e67ca3c5a3f22ac68b76dc12590884d35d9c88d341762d16f6aa89c31c9`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -78,7 +92,7 @@ REQs 050-054 (client artifacts) are verified by file presence, not
 source citations, per the validate-spec exemption. These files are
 generated/maintained manually: `instructions/search-preferences.md`,
 `skills/infobroker/SKILL.md`, `skills/infobroker/references/*.md`,
-and `README.md`. Pipeline skills are global OpenCode dependencies, not vendored in the repository.
+and `README.md`. Pipeline skills are shipped in the repository, not global OpenCode dependencies.
 
 ### D-010: Timeout, Latency Window, and Config Validation (2026.08.08 — implemented 2026.08.10)
 

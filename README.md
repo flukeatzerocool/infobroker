@@ -239,10 +239,12 @@ Infobroker is a search backend — but it ships with bundled client
 skills that chain its tools into writing pipelines. The orchestrator
 skill routes through deep-research (multi-source investigation),
 fact-checking (claim-to-verdict with confidence scoring), and
-summarization before handing off to technical-writing or copywriting.
-Every skill lives in the repository — no external paths needed. Other
-search MCP servers produce search results; Infobroker produces finished
-work.
+summarization before handing off to technical-writing, proofreading, and
+translation. Every skill lives in the repository — no external paths
+needed. For high-stakes questions requiring gated analytic rigor, the
+analysis-loop skill escalates to a confidence-scored, source-graded
+workflow. Other search MCP servers produce search results; Infobroker
+produces finished work.
 
 ### Operational Visibility
 
