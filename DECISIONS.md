@@ -88,7 +88,7 @@ configurable first-pass breadth and similarity threshold.
 **Spec hash:** `13c0b9cfd8fff28b4d9331a19d1f6118e8073a8077506bdf59803d01412a8c09`
 **Source hash:** `cfc46716cd9a159f4ebc8c03b925061e1f42fd2d5bd57ecac8e4d747bbdb02c8`
 **Config hash:** `31d25fef8f122dce22fb6a5c9ce7b9d21115fa731b2fd8e8edc1f4cc47c67f72`
-**Total fingerprint:** `6887ef61eb7440f8ceda9624b5ed223004d0bf34c2393eb9c61af08fc91fe76e`
+**Total fingerprint:** `5d97c47f0eef32846a7d45b24a2c4e567de99c412f96f866035570825ec7f2ac`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

@@ -12,7 +12,7 @@ license: MIT
 metadata:
   author: awesome-ai-agent-skills contributors (adapted for Opencode)
   source: https://github.com/seb1n/awesome-ai-agent-skills
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Proofreading
@@ -55,76 +55,99 @@ or when the document content contains `**REQ-` blocks (auto-detect
 regardless of filename).
 
 Spec mode runs after the standard workflow passes (steps 1-6 above).
-Findings are reported in severity tiers with the same change-list format
-as grammar corrections.
+Proofreading keeps its prose identity here: it corrects grammar,
+punctuation, style, and prose-level consistency. **Structural
+assessment is not proofreading's job.** This skill *detects* structural
+problems but hands off their verdict to `spec-review`, which owns the
+8-dimension assessment and severity tiers. Do not self-grade structural
+severity here.
 
-### Spec mode checklist (7 checks)
+### Prose checks (owned by proofreading)
 
-1. **REQ block hygiene.** Scan for `**REQ-NNN — Title.**` patterns.
-   Every REQ block must end with a check citation (`_Check:_ TNN.` or
-   `*Check:* TNN.`). Blocks missing the citation are flagged. Citations
-   referencing test IDs not present in Appendix F are broken cross-
-   references.
+1. **Grammar, spelling, punctuation** — steps 1–4 apply to REQ bodies
+   and spec prose verbatim. Fix subject-verb, tense, spelling,
+   punctuation per the style guide.
 
-2. **Manifest completeness.** Extract REQ IDs from the Appendix E
-   requirements manifest table. Extract REQ IDs from bold-labeled REQ
-   headers in the body. Report REQs in the manifest but absent from the
-   body. Report REQs in the body but absent from the manifest. The two
-   sets must be identical.
+2. **Style & voice consistency** — enforce heading capitalization,
+   number formatting, abbreviations, and consistent terminology
+   (step 4), including near-duplicate paragraphs and terminology drift
+   in prose within a ~40-sentence window (step 5).
 
-3. **Test ID consistency.** Extract test IDs from the Appendix F test
-   catalogue table. Extract test IDs from `_Check:_` citations in REQ
-   bodies. Report uncited tests (in Appendix F but never cited by a
-   REQ). Report broken citations (`_Check:_ TNN` with no matching
-   Appendix F entry).
+3. **Prose-adjacent structural break risk** — a grammar/style fix must
+   never break a `**REQ-NNN — Title.**` block or its `_Check:_`
+   citation. Before applying an edit inside a REQ body, confirm the
+   edit does not alter the block boundary, the REQ ID, or the check
+   citation. If a correction would, flag it as `PR-<n> [structural]`
+   (below) and do not apply the edit.
 
-4. **Tool name consistency.** Extract tool names from the construction
-   section (§5.4 or equivalent — the numbered list of domain tools),
-   the runtime naming section (§6.4 or equivalent), and the golden
-   transcript tool calls. Flag conflicts: individual parser tools
-   (`look`, `go`, `take`) appearing alongside a consolidated
-   `play_command` tool. Flag tool names used in the transcript but
-   never defined in a REQ or construction section.
+### Structural handoff (owned by spec-review)
 
-5. **Authoring conventions.** In each REQ body (the paragraph between
-   `**REQ-NNN — Title.**` and the next `**REQ-` or heading), flag:
-   - Parameter types: `string`, `number`, `boolean`, `integer`, `Map`,
-     `Array` (exclude code blocks and backtick-quoted tool names)
-   - Default clauses: `(default ...)` or `default <value>`
-   - Enumerated catalogs: lists of 6+ items in a single sentence
-     (count tokens between commas in a REQ body)
+When the file matches a spec convention, scan for the following and
+report each as a **handoff finding** — detected, never graded here:
 
-6. **Term definition hygiene.** Terminology sections (§3 or equivalent)
-   define capitalized terms. Scan REQ bodies for these terms. Flag
-   terms used in REQ bodies that aren't defined in Terminology. Flag
-   definitions that differ from usage (e.g., "Project" defined with
-   capitalization but consistently referenced as "project").
+- REQ block hygiene — blocks missing a `_Check:_` / `*Check:*` citation.
+- Manifest completeness — REQ IDs in the Appendix E manifest vs. body.
+- Test ID consistency — test IDs in Appendix F vs. `_Check:_` citations.
+- Tool name consistency — parser tools vs. a consolidated `play_command`
+  tool; transcript tool names undefined in a REQ or construction section.
+- Term definition hygiene — capitalized terms used in REQ bodies but
+  undefined in Terminology.
+- Golden transcript coverage — parser commands / error categories in
+  REQs but never exercised in the transcript.
 
-7. **Golden transcript coverage.** The golden transcript should exercise
-   every parser command and error category defined in REQs. For each
-   parser command listed in a REQ (e.g., LOOK, GO, TAKE, DROP,
-   EXAMINE, INVENTORY, WAIT), verify a corresponding transcript
-   interaction exists. Flag missing commands. Flag error categories
-   referenced in REQs but never triggered in the transcript
-   (`RULE_VIOLATION`, `NOT_FOUND`, `AMBIGUOUS`, `NOT_IMPLEMENTED`).
+For each, emit:
 
-### Severity tiers
+```
+PR-<n> [structural] <location> — <what was detected>.
+  → defer verdict to spec-review.
+```
 
-**Critical** — block a build or push: C1 tool name conflicts, C2
-undefined workflow tools, C3 manifest/body REQ mismatch, C4
-missing golden transcript coverage for required parser commands.
-
-**Warning** — need attention but don't block: W1 uncited test
-IDs, W2 minor authoring convention violations, W3
-capitalization/terminology inconsistency.
-
-**Info** — advisory: I1 general readability, I2 potential
-clarity improvements.
+The finding carries a `PR-<n>` ID for downstream tracking. It assigns no
+Critical/Major/Minor tier — `spec-review` grades severity and
+`spec-engineering-loop` fixes. A structural finding does not stop a
+grammar pass; prose corrections proceed independently.
 
 ## Output Format
 
 Provide the corrected text and an annotated list of changes with original,
-correction, and reason.
+correction, and reason. Number each correction `PR-<n>` so it can be
+referenced downstream:
+
+```
+1. PR-1 [location]: "original" → "correction" — [reason].
+2. PR-2 [location]: "original" → "correction" — [reason].
+```
+
+Structural handoff findings reuse the same numbering with a `[structural]`
+tag and a `→ defer verdict to spec-review` note (see Spec Mode).
+
+### Output Contract
+
+Always produce a searchable one-line status:
+
+```
+proofread passed. [scope] — N corrections, 0 structural findings deferred
+proofread FAILED. [scope] — M structural findings → session handed to spec-review
+```
+
+The `FAILED.` form is for when structural findings were detected;
+the prose pass is still completed and reported. The token is grep-able by
+`build-review` (as an `Evidence:` source) and `after-action-report`
+(follow-through register).
+
+## Edit audit trail
+
+Proofreading edits the file. Treat each correction as rollback-cost 1
+(git-reversible): every applied edit must be individually revertible.
+When run inside a build (spec-engineering-loop Phase 3 or a
+`build-review` step), emit an evidence line for the pass:
+
+```
+Evidence: proofread passed. <scope> — N corrections applied.
+```
+
+If any correction is reverted, record the revert and its reason in the
+change list rather than silently dropping it.
 
 ## Best Practices
 
