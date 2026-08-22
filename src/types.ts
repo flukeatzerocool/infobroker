@@ -46,6 +46,8 @@ export interface Config {
     max_chars: number;
     latency_window_size: number;
     verbose?: boolean;
+    fallback_depth: number;
+    max_redirect_hops: number;
   };
   fetch?: {
     allow_private_urls?: boolean;

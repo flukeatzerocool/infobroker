@@ -42,6 +42,22 @@ if (buildLiteral !== null) {
 const mcpVersion = grepVersion(indexPath, /^\s+version:\s*"([^"]+)"/m);
 ok = check("src/index.ts McpServer version", mcpVersion, rootVersion) && ok;
 
+const lockPath = join(root, "package-lock.json");
+const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+ok = check("package-lock.json version", lock.version ?? null, rootVersion) && ok;
+ok = check("package-lock.json packages[\"\"] version", lock.packages?.[""]?.version ?? null, rootVersion) && ok;
+
+const changelogPath = join(root, "CHANGELOG.md");
+const changelog = readFileSync(changelogPath, "utf-8");
+const dateRe = /^##\s+(\d{4})[.-](\d{2})[.-](\d{2})\b/gm;
+let maxDate = "";
+let m: RegExpExecArray | null;
+while ((m = dateRe.exec(changelog)) !== null) {
+  const date = `${m[1]}.${m[2]}.${m[3]}`;
+  if (date > maxDate) maxDate = date;
+}
+ok = check("CHANGELOG latest date", maxDate || null, rootVersion) && ok;
+
 if (!ok) {
   console.error("\nVersion sync FAILED. Update all version references to match root package.json.");
   console.error("Root package.json version:", rootVersion);

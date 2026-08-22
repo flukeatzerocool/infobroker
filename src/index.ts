@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -19,8 +19,6 @@ import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse
 
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
-const MAX_FALLBACK_DEPTH = 3;
-const MAX_REDIRECT_HOPS = 5;
 const BUILD_VERSION = readPackageVersion();
 let totalRequests = 0;
 
@@ -36,6 +34,8 @@ function readPackageVersion(): string {
 const requestLatencies: Record<string, { latencies: number[]; timestamps: number[] }> = {};
 const providerLastSuccess: Record<string, number> = {};
 const providerLastError: Record<string, { message: string; timestamp: number }> = {};
+const responseBytes: number[] = [];
+const RESPONSE_WINDOW = 100;
 
 loadConfig();
 configureAllProviders(getConfig());
@@ -118,7 +118,17 @@ function maybeTruncate(text: string, maxChars: number): { text: string; truncate
 }
 
 function json(data: unknown): string {
-  return JSON.stringify(data, null, 2);
+  const text = JSON.stringify(data, null, 2);
+  responseBytes.push(text.length);
+  if (responseBytes.length > RESPONSE_WINDOW) responseBytes.shift();
+  return text;
+}
+
+function medianResponseBytes(): number {
+  if (responseBytes.length === 0) return 0;
+  const sorted = [...responseBytes].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 async function startupHealthCheck(): Promise<void> {
@@ -280,10 +290,8 @@ async function doWebSearch(
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType };
   let lastError: ToolErrorResponse | null = null;
-  let depth = 0;
 
   for (const slug of chain) {
-    if (depth >= MAX_FALLBACK_DEPTH) break;
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) continue;
@@ -312,7 +320,6 @@ async function doWebSearch(
       increment(slug, config.providers[slug]?.rate_limit);
       trackRequest(slug, elapsed);
       providerLastSuccess[slug] = Date.now();
-      depth++;
 
       // REQ-031: an empty result set is a failure for chain advancement, not a
       // successful answer. Fall through to the next provider — but keep a
@@ -378,7 +385,7 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
           // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard
           // to each resolved location, so a public URL that redirects to a
           // private/internal target is refused rather than fetched.
-          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, MAX_REDIRECT_HOPS);
+          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, getConfig().output.max_redirect_hops);
         }
 
         const provider = resolveProvider(slug);
@@ -541,6 +548,15 @@ function doSpecHealth(): string {
 
   const toolCount = Object.keys((server as any)._registeredTools).length;
 
+  let toolSchemaBytes = 0;
+  const registered = (server as any)._registeredTools as Record<string, { inputSchema?: { shape?: { [k: string]: unknown } } }> | undefined;
+  if (registered) {
+    for (const tool of Object.values(registered)) {
+      const shape = tool?.inputSchema?.shape;
+      toolSchemaBytes += shape ? JSON.stringify(shape).length : 0;
+    }
+  }
+
   return `[OK] ${json({
     status: "ok",
     provider: "system",
@@ -549,6 +565,10 @@ function doSpecHealth(): string {
       provider_count: Object.keys(config.providers).filter(k => k !== "native_fetch").length,
       active_provider_count: activeCount,
       tool_count: toolCount,
+      token_footprint: {
+        tool_schema_bytes: toolSchemaBytes,
+        median_response_bytes: medianResponseBytes(),
+      },
       kb: kbStatsData ? {
         chunk_count: kbStatsData.chunk_count,
         collections: kbStatsData.collections,

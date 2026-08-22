@@ -226,7 +226,7 @@ produces clean Markdown optimized for LLM consumption. Falls back to native
 HTTP fetch if the selected renderer is throttled or errors. _Check:_ G0, G1.
 
 **REQ-021a — `fetch_page` network-target safety**
-WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
+WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
 
 **REQ-024 — `providers`**
 `providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
@@ -268,7 +268,7 @@ operate independently.
 Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider, respecting per-provider throttling; a blocked or non-parseable provider response SHALL count as a provider failure. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns an empty result set, the server SHALL return a successful empty result. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider, respecting per-provider throttling; a blocked or non-parseable provider response SHALL count as a provider failure. The maximum fallback depth SHALL be configurable in the configuration file. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns an empty result set, the server SHALL return a successful empty result. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -364,6 +364,9 @@ _Check:_ G3.
 
 **REQ-080 — Tool Default Consistency**
 Every tool parameter default declared in this specification SHALL be the value the tool applies when the parameter is omitted, and no code path SHALL apply a different value. Behavior configurable through the configuration file SHALL resolve entirely from the configuration, and source code SHALL NOT carry a divergent numeric fallback for a value the configuration supplies. Where a tool default and a configuration value describe the same limit, they SHALL match. Verification SHALL fail when any of these divergences is present. _Check:_ G3.
+
+**REQ-081 — Token Footprint Report**
+The `providers` spec action SHALL report a token-footprint record measuring the advertised tool surface and the server's typical response size. The record SHALL include the total byte size of the advertised tool schemas derived from live tool registration, and a byte measurement of recent tool responses. The measurements SHALL be derived from live registration and measured responses rather than static literals. _Check:_ G1.
 
 ### 4.9 Knowledge Base
 
@@ -737,11 +740,14 @@ is configurable via `corroboration.similarity_threshold`.
 
 - Each provider backend tested with mock HTTP responses (real responses recorded once, replayed in CI). Recorded fixtures SHALL be refreshed on a documented cadence so selector and format drift is caught before it reaches production.
 - Fallback chain: mock provider A fails → provider B called → results from B returned
+- Fallback depth: configure `output.fallback_depth` → verify the chain advances at most that many providers before reporting `all_providers_exhausted`
+- Redirect hops: configure `output.max_redirect_hops` → verify `fetch_page` follows at most that many redirect hops, re-applying the guard each hop
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
 - Normalizer: input from each provider format → verify common output shape
 - `corroborate`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
+- Token footprint: call `providers` spec action → verify `tool_schema_bytes` and `median_response_bytes` are present, numeric, and consistent with live registration
 - Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `web_search` returns mapped results through the dispatch chain
 - Generic provider malformed config: declare a generic provider with an invalid endpoint or result mapping → verify config validation rejects it on load and reload
 - Provider removal: disable a provider in the user configuration layer → verify it is skipped by dispatch and recommendations, and the disabled state survives reload and a simulated update
@@ -783,6 +789,9 @@ is configurable via `corroboration.similarity_threshold`.
   an output/error contract REQ (§4.1)
 - No REQ body contains a parameter type annotation, a standalone "Default:"
   clause, or a lifecycle description duplicated across multiple REQs
+- No REQ ID departs from the three-digit numeric form (`REQ-NNN` with an
+  optional single-letter sub-REQ suffix), and no REQ body is empty or begins
+  with a lowercase letter
 - The REQ manifest matches the REQ bodies in §4 exactly
 - Appendix B mechanical violations are errors; Appendix B judgment violations
   (what/how, red-team, EARS, readability, proofreading dimensions) are
@@ -840,6 +849,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
 | REQ-080 | Tool Default Consistency | 4.8 | G3 |
+| REQ-081 | Token Footprint Report | 4.8 | G1 |
 | REQ-060 | kb | 4.9 | G0, G1 |
 | REQ-060a | kb search action | 4.9 | G0, G1 |
 | REQ-060b | kb ingest action | 4.9 | G0, G1 |
@@ -1089,6 +1099,11 @@ and enforced as errors before commit:
 - Every REQ body ends with `_Check:` citing at least one gate.
 - No REQ body contains a standalone "Default:" clause.
 - No REQ body contains a parameter type annotation or zod schema.
+- Every REQ ID uses the three-digit numeric form (`REQ-NNN`) with an optional
+  single-letter sub-REQ suffix; a malformed numeric part (four digits, bare
+  digits) is a defect.
+- No REQ body is empty.
+- No REQ body begins with a lowercase letter (the truncated-lead signature).
 
 These rules are not advisory. A REQ violating any rule is a spec defect that
 blocks the gate. Split the REQ or move procedural content to the appropriate
@@ -1262,7 +1277,7 @@ secondary concerns rather than duplicating the REQ.
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
 | 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043 | G0, G1 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |

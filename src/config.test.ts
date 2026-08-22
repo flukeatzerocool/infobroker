@@ -24,7 +24,7 @@ const BASE: Config = {
   },
   dispatch: { general_web: ["duckduckgo"], privacy_critical: ["duckduckgo"] },
   corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_results: 10, similarity_threshold: 0.3 },
-  output: { max_chars: 50000, latency_window_size: 100 },
+  output: { max_chars: 50000, latency_window_size: 100, fallback_depth: 3, max_redirect_hops: 5 },
   kb: {
     storage_path: "~/.local/share/infobroker/knowledge-base",
     embedding_model: "tf-idf",
@@ -163,5 +163,23 @@ describe("configuration overlay", () => {
       },
     });
     expect(cfg.providers.my_search.endpoint).toBe("https://api.example.com/search");
+  });
+
+  it("rejects a non-positive fallback_depth", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { fallback_depth: 0 } })
+    ).rejects.toThrow(/fallback_depth/);
+  });
+
+  it("rejects a non-positive max_redirect_hops", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { max_redirect_hops: -1 } })
+    ).rejects.toThrow(/max_redirect_hops/);
+  });
+
+  it("honors a configured fallback_depth and max_redirect_hops", async () => {
+    const cfg = await loadWithOverlay(BASE, { output: { fallback_depth: 2, max_redirect_hops: 9 } });
+    expect(cfg.output.fallback_depth).toBe(2);
+    expect(cfg.output.max_redirect_hops).toBe(9);
   });
 });

@@ -124,6 +124,21 @@ const reqBodies: { id: string; body: string }[] = [];
   }
 }
 
+// --- REQ ID format check ---
+
+// A REQ token in §4 whose numeric part is not exactly three digits
+// (e.g. `REQ-0731`, `REQ-09`) is invisible to the canonical parser and
+// indicates a malformed or truncated identifier. Flag every occurrence.
+{
+  const malformedRe = /\bREQ-(\d+)([a-z]+)?\b/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = malformedRe.exec(body)) !== null) {
+    if (mm[1].length !== 3) {
+      error(`Malformed REQ ID "REQ-${mm[1]}${mm[2] ?? ""}" — REQ numbers must be exactly three digits`);
+    }
+  }
+}
+
 function bodyOf(i: number): string {
   return reqBodies[i].body;
 }
@@ -193,6 +208,14 @@ for (let i = 0; i < reqBodies.length; i++) {
   const bodyText = bodyOf(i).trim();
   const checkTailIdx = bodyText.indexOf("_Check:");
   const prose = (checkTailIdx >= 0 ? bodyText.slice(0, checkTailIdx) : bodyText).trim();
+
+  if (prose.length === 0) {
+    error(`${reqTag}: REQ body is empty — violates Appendix B mechanical limit`);
+  }
+
+  if (prose.length > 0 && /^[a-z]/.test(prose)) {
+    error(`${reqTag}: REQ body begins with a lowercase letter — likely a truncated lead clause`);
+  }
 
   if (prose.length > 800) {
     error(`${reqTag}: REQ body is ${prose.length} characters (>800) — violates Appendix B mechanical limit`);

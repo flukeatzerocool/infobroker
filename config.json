@@ -211,7 +211,9 @@
   "output": {
     "max_chars": 50000,
     "latency_window_size": 100,
-    "verbose": true
+    "verbose": true,
+    "fallback_depth": 3,
+    "max_redirect_hops": 5
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",

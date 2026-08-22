@@ -35,6 +35,15 @@ pkg.version = version;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 console.log(`  OK   package.json: → ${version}`);
 
+const lockPath = join(root, "package-lock.json");
+const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
+lock.version = version;
+if (lock.packages && lock.packages[""]) {
+  lock.packages[""].version = version;
+}
+writeFileSync(lockPath, JSON.stringify(lock, null, 2) + "\n");
+console.log(`  OK   package-lock.json: → ${version}`);
+
 const indexPath = join(root, "src", "index.ts");
 
 ok = replaceInFile(

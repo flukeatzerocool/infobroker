@@ -33,24 +33,27 @@ export function selectChain(
   getLatency: (slug: string) => number,
 ): string[] {
   const config = getConfig();
+  let selected = chain;
   if (priority === "privacy") {
     const privacyChain = getDispatchChain("privacy_critical");
-    if (privacyChain.length > 0) return privacyChain;
-    return chain;
-  }
-  if (priority === "free_only") {
+    if (privacyChain.length > 0) {
+      selected = privacyChain;
+    }
+  } else if (priority === "free_only") {
     const filtered = chain.filter((slug) => {
       const p = config.providers[slug];
       return p && p.tier !== "keyed_http" && p.tier !== "self_hosted_http";
     });
-    if (filtered.length > 0) return filtered;
-    return getDispatchChain("general_web").filter((slug) => {
-      const p = config.providers[slug];
-      return p && p.tier !== "keyed_http" && p.tier !== "self_hosted_http";
-    });
-  }
-  if (priority === "speed") {
-    return [...chain].sort((a, b) => {
+    if (filtered.length > 0) {
+      selected = filtered;
+    } else {
+      selected = getDispatchChain("general_web").filter((slug) => {
+        const p = config.providers[slug];
+        return p && p.tier !== "keyed_http" && p.tier !== "self_hosted_http";
+      });
+    }
+  } else if (priority === "speed") {
+    selected = [...chain].sort((a, b) => {
       const la = getLatency(a);
       const lb = getLatency(b);
       if (la === 0) return 1;
@@ -58,5 +61,5 @@ export function selectChain(
       return la - lb;
     });
   }
-  return chain;
+  return selected.slice(0, config.output.fallback_depth);
 }

@@ -1,13 +1,28 @@
 # Changelog
 
-## 2026.08.22 — fetch_page redirect safety fix
+## 2026.08.23 — Build tooling and spec-gate hardening
 
-- `fetch_page`'s native HTTP fallback now follows redirects hop-by-hop,
-  re-checking each resolved URL against the private-network guard, so a
-  public page that bounces to an internal address (169.254.169.254,
-  localhost, etc.) is refused rather than fetched. Previously the code
-  checked the redirect target but then fetched the original URL again,
-  so the redirect actually followed — and was fetched unguarded. (REQ-021a)
+- The version-bump tool now also updates `package-lock.json`, and the
+  version-check gate asserts both lockfile version fields match the root
+  version, so a version bump can no longer leave the dependency lockfile
+  silently stale. The current lockfile drift is corrected. (REQ-042)
+- The release gate now verifies the root version matches the latest dated
+  CHANGELOG entry, catching a release whose changelog and version have
+  drifted apart.
+- The spec-validation gate (G3) now rejects three spec-defect classes that
+  previously slipped through silently: malformed REQ IDs (a numeric part
+  that is not three digits), empty REQ bodies, and REQ bodies whose opening
+  clause was truncated (a leading lowercase letter). Each is a gate-blocking
+  error.
+- The fallback-chain depth and the maximum redirect hops are now
+  configurable via the `output` block, with the prior values (3 and 5) as
+  defaults, and validated on load. This removes the last hard-coded runtime
+  limits from the tool layer, extending the single-source-of-truth rule to
+  them. (REQ-031, REQ-021a, REQ-080)
+- The `providers` spec action now reports a token-footprint record — the
+  byte size of the advertised tool surface and the median recent response
+  size — derived from live registration rather than static literals.
+  (REQ-081)
 
 ## 2026.08.23 — Tool default consistency and drift gate
 
@@ -77,6 +92,15 @@
 - README: clarified that SearXNG is an optional self-hosted backend requiring
   nothing from the shipped server, and documented a "bring your own
   endpoint" generic-HTTP recipe.
+
+## 2026.08.22 — fetch_page redirect safety fix
+
+- `fetch_page`'s native HTTP fallback now follows redirects hop-by-hop,
+  re-checking each resolved URL against the private-network guard, so a
+  public page that bounces to an internal address (169.254.169.254,
+  localhost, etc.) is refused rather than fetched. Previously the code
+  checked the redirect target but then fetched the original URL again,
+  so the redirect actually followed — and was fetched unguarded. (REQ-021a)
 
 ## 2026.08.22 — Research-native defaults, priority routing, and convergence authority
 

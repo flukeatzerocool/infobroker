@@ -153,6 +153,13 @@ function validateConfig(config: Config): void {
     }
   }
 
+  if (typeof config.output.fallback_depth !== "number" || config.output.fallback_depth < 1) {
+    errors.push("output.fallback_depth must be a positive number");
+  }
+  if (typeof config.output.max_redirect_hops !== "number" || config.output.max_redirect_hops < 1) {
+    errors.push("output.max_redirect_hops must be a positive number");
+  }
+
   if (config.kb) {
     const kb = config.kb;
     if (typeof kb.chunk_size !== "number" || kb.chunk_size < 1) {

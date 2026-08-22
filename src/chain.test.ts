@@ -20,19 +20,19 @@ beforeEach(() => {
 describe("selectChain", () => {
   it("returns the default chain for quality or omitted priority", () => {
     const chain = ["brave", "duckduckgo", "marginalia"];
-    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {} } as any);
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     expect(selectChain(chain, "quality", () => 0)).toEqual(chain);
     expect(selectChain(chain, undefined, () => 0)).toEqual(chain);
   });
 
   it("routes privacy priority to the privacy_critical chain", () => {
-    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {} } as any);
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     vi.mocked(getDispatchChain).mockReturnValue(["duckduckgo", "searxng", "mojeek"]);
     expect(selectChain(["brave", "duckduckgo"], "privacy", () => 0)).toEqual(["duckduckgo", "searxng", "mojeek"]);
   });
 
   it("falls back to the given chain when privacy_critical is empty", () => {
-    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {} } as any);
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     vi.mocked(getDispatchChain).mockReturnValue([]);
     expect(selectChain(["brave", "duckduckgo"], "privacy", () => 0)).toEqual(["brave", "duckduckgo"]);
   });
@@ -46,15 +46,22 @@ describe("selectChain", () => {
         searxng: makeProvider("self_hosted_http"),
       },
       dispatch: { general_web: ["duckduckgo", "marginalia"] },
+      output: { fallback_depth: 10 },
     } as any);
     expect(selectChain(["brave", "duckduckgo", "marginalia", "searxng"], "free_only", () => 0))
       .toEqual(["duckduckgo", "marginalia"]);
   });
 
   it("speed orders providers by ascending latency", () => {
-    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {} } as any);
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     const latencies: Record<string, number> = { a: 500, b: 100, c: 300 };
     expect(selectChain(["a", "b", "c"], "speed", (s) => latencies[s] ?? 0)).toEqual(["b", "c", "a"]);
+  });
+
+  it("caps the chain at the configured fallback_depth", () => {
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 2 } } as any);
+    expect(selectChain(["brave", "duckduckgo", "marginalia", "mojeek"], undefined, () => 0))
+      .toEqual(["brave", "duckduckgo"]);
   });
 });
 
