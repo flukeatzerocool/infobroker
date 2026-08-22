@@ -23,8 +23,8 @@ const BASE: Config = {
     },
   },
   dispatch: { general_web: ["duckduckgo"], privacy_critical: ["duckduckgo"] },
-  corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8 },
-  output: { max_chars: 50000 },
+  corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_results: 10, similarity_threshold: 0.3 },
+  output: { max_chars: 50000, latency_window_size: 100 },
   kb: {
     storage_path: "~/.local/share/infobroker/knowledge-base",
     embedding_model: "tf-idf",
@@ -40,6 +40,8 @@ const BASE: Config = {
     },
     max_vocab_terms: 10000,
     maintenance_interval_minutes: 60,
+    kb_first_relevance_threshold: 0.3,
+    kb_first_confidence_threshold: 0.5,
   },
 };
 

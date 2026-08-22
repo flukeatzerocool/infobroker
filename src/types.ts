@@ -37,14 +37,14 @@ export interface Config {
     max_iterations: number;
     max_http_calls: number;
     confidence_threshold: number;
-    first_pass_max_results?: number;
-    similarity_threshold?: number;
+    first_pass_max_results: number;
+    similarity_threshold: number;
     authority_weights?: Record<string, number>;
     archive_sources?: boolean;
   };
   output: {
     max_chars: number;
-    latency_window_size?: number;
+    latency_window_size: number;
     verbose?: boolean;
   };
   fetch?: {
@@ -155,8 +155,8 @@ export interface KbConfig {
     auto_classify: boolean;
     default_tier: string;
   };
-  kb_first_relevance_threshold?: number;
-  kb_first_confidence_threshold?: number;
+  kb_first_relevance_threshold: number;
+  kb_first_confidence_threshold: number;
   max_vocab_terms: number;
   maintenance_interval_minutes: number;
 }

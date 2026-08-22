@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.08.23 — Tool default consistency and drift gate
+
+- New REQ-080 (Tool Default Consistency): a tool parameter default declared
+  in §4.3 is the value the tool applies when the parameter is omitted;
+  config-sourced values resolve entirely from the configuration; no code
+  path may carry a divergent numeric fallback. Enforced by G3.
+- Removed dead/divergent fallback literals from the tool layer:
+  `web_search` `max_results ?? 5` (zod already defaults 8), `kb`
+  `max_results ?? 8` (schema now defaults 8), corroborate `max_iterations`
+  and `confidence_threshold` `?? 5`/`?? 0.8`, the per-provider timeout
+  `?? 15000` (defaults inheritance already supplies 12000),
+  `first_pass_max_results ?? 8` (config carries 10),
+  `latency_window_size ?? 100`, and the KB-first thresholds `?? 0.3` /
+  `?? 0.5`. Config types for these values are now required, so the merged
+  config — not a code literal — is the single source.
+- `kb` search `max_results` default 5 → 8, matching `web_search`, and the
+  default is now declared in REQ-060a. `web_search` defaults (`8`, `safe_search
+  on`, `page 1`, `suggest false`, `content_type all`) restored to the REQ-020
+  tool signature. §8.1 pseudocode `first_pass_max_results` comment corrected
+  to the shipped 10.
+- `validate-spec` (G3) now errors on a numeric fallback on a config lookup
+  in the tool layer and on any spec/schema `max_results` divergence, so the
+  recurring efficiency sweep is caught mechanically (D-027).
+
 ## 2026.08.23 — Corroboration rename, generic HTTP tier, and audience-expansion capabilities
 
 - Renamed the multi-pass truth-finding tool `converge` to `corroborate`

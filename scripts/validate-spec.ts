@@ -55,7 +55,7 @@ while ((match = reqPattern.exec(specText)) !== null) {
 const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054"]);
 
 // Meta-REQs that describe the spec process itself
-const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078"]);
+const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080"]);
 
 // --- Collect @implements citations from source files ---
 
@@ -365,6 +365,47 @@ function checkArtifactContent(): void {
 }
 
 checkArtifactContent();
+
+// --- Tool default consistency (REQ-080) ---
+
+// A) No divergent numeric fallback on a config lookup: REQ-080 requires that a
+// value the configuration supplies is read from the configuration without a
+// substitute literal in source.
+const toolLayerFiles = ["index.ts", "corroborate.ts", "config.ts", "kb.ts"];
+for (const f of toolLayerFiles) {
+  const filePath = join(SRC, f);
+  if (!existsSync(filePath)) continue;
+  const text = readFileSync(filePath, "utf-8");
+  const re = /config\.[A-Za-z0-9_.()]+\s*\?\?\s*[0-9]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    error(`${f}: numeric fallback on a config lookup (${m[0].trim()}) — violates REQ-080`);
+  }
+}
+
+// B) The max_results default declared in the spec SHALL match the zod schema
+// default for web_search and kb (REQ-020, REQ-060a).
+const indexText = readFileSync(join(SRC, "index.ts"), "utf-8");
+function schemaDefault(slug: string, param: string, max: number): string | undefined {
+  const toolRe = new RegExp(`registerTool\\(\\s*"infobroker_${slug}"[\\s\\S]*?${param}:\\s*z\\.number\\(\\)\\.min\\(1\\)\\.max\\(${max}\\)\\.optional\\(\\)\\.default\\((\\d+)\\)`);
+  return toolRe.exec(indexText)?.[1];
+}
+function requireDefault(re: RegExp, label: string, schema: string | undefined): void {
+  const declared = re.exec(specText)?.[1];
+  if (declared === undefined) {
+    warn(`${label}: no default declared in spec`);
+    return;
+  }
+  if (schema === undefined) {
+    error(`${label}: schema default not found — REQ-080 check unable to reconcile`);
+    return;
+  }
+  if (schema !== declared) {
+    error(`${label}: schema default ${schema} diverges from spec-declared default ${declared} — violates REQ-080`);
+  }
+}
+requireDefault(/`max_results`\s+\(default\s+(\d+)\s*,/ , "REQ-020 web_search max_results", schemaDefault("web_search", "max_results", 30));
+requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a kb max_results", schemaDefault("kb", "max_results", 50));
 
 // --- Report ---
 

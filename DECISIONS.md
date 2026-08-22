@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-027: Tool Default Single-Source of Truth (2026.08.23)
+
+The recurring efficiency sweep surfaced a persistent class of drift: tool
+default values lived in three places — the zod `inputSchema` in
+`src/index.ts`, handler `?? N` fallback literals, and `config.json` — and
+disagreed (`web_search` `max_results` schema said 8 while the handler
+carried a dead `?? 5`; `kb` inverted the pair). REQ-080 makes the contract
+explicit: every tool default declared in §4.3 is the value the tool applies
+when the parameter is omitted, config-sourced values resolve entirely from
+the configuration, and no code path may carry a divergent numeric fallback.
+The single source of truth per value is fixed by class — a tool parameter
+default is declared in the §4.3 tool signature and applied by the zod
+schema; a tunable (timeout, first-pass breadth, verbosity, KB thresholds) is
+declared in `config.json`. `validate-spec` (G3) now enforces this: it errors
+on any `config.<field> ?? <number>` shadow literal in the tool layer
+(`index.ts`, `corroborate.ts`, `config.ts`, `kb.ts`) and on any divergence
+between the spec-declared `max_results` default and the zod default.
+Provider-internal over-fetch defaults (`?? 10` in duckduckgo, wikipedia,
+generic-http, yep; hardcoded 10 in tavily/arxiv) are deliberate — the server
+trims to the requested `max_results` — and are exempt, not shadowing a
+config value.
+
 ### D-024: `converge` Renamed to `corroborate` (2026.08.23)
 
 The multi-pass truth-finding tool was renamed from `converge` to
@@ -169,10 +191,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `ef44788e2208c87549494f72c8f8a819fe65e81561b88401fe9302152fb190b5`
-**Source hash:** `9fe93f0d1ddb75e931ca5a99191bf01714cadce10d6bfda572626030f50ec404`
+**Spec hash:** `9691176e11e297d964d90c5141fb8282824a096025d04b42f26ed5ca758b94cc`
+**Source hash:** `dac019951a6101e666c56903bd87019b2d257874fa61aed722066ea3428a1fd1`
 **Config hash:** `f9ee9acafe431c82b8b39e692726d1a85a518c93e5275a5b3a1694f6c81cc192`
-**Total fingerprint:** `090014a62e045497827812ff12900305f83e001cc5b5d5425c00b3664f8a8a38`
+**Total fingerprint:** `d60da560e53ddcfd86e82379dcc893c16a2f8c0ff33a1112a955e1b189221d77`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

@@ -201,7 +201,7 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 ### 4.3 Core Tools
 
 **REQ-020 — `web_search`**
-`web_search` is the unified search tool. Parameters: `query` (required), plus optional `provider`, `max_results`, `safe_search`, `time_range`, `page`, `priority`, `suggest`, `content_type`, and `region`. When `suggest` is true, the tool SHALL return query-autocomplete strings instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. The `content_type` filter SHALL be applied server-side over normalized URLs regardless of the serving provider. _Check:_ G0, G1.
+`web_search` is the unified search tool. Parameters: `query` (required), plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `content_type` (default all), and `region`. When `suggest` is true, the tool SHALL return query-autocomplete strings instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. The `content_type` filter SHALL be applied server-side over normalized URLs regardless of the serving provider. _Check:_ G0, G1.
 
 **REQ-020a — `web_search` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -362,13 +362,16 @@ The taxonomy SHALL be exhaustive: every tool and every §4 REQ SHALL appear in
 exactly one feature area. The client-facing README SHALL link to the taxonomy.
 _Check:_ G3.
 
+**REQ-080 — Tool Default Consistency**
+Every tool parameter default declared in this specification SHALL be the value the tool applies when the parameter is omitted, and no code path SHALL apply a different value. Behavior configurable through the configuration file SHALL resolve entirely from the configuration, and source code SHALL NOT carry a divergent numeric fallback for a value the configuration supplies. Where a tool default and a configuration value describe the same limit, they SHALL match. Verification SHALL fail when any of these divergences is present. _Check:_ G3.
+
 ### 4.9 Knowledge Base
 
 **REQ-060 — `kb`**
 `kb` manages the local knowledge base. Parameters: `action` (required: search, ingest, stats, delete) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-060a — `kb` search action**
-WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, and a matching snippet. The tool SHALL accept a maximum-results count, a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
+WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `kb` ingest action**
 WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title and collection. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
@@ -642,7 +645,7 @@ function corroborate(query, max_iterations=5, confidence_threshold=0.8, provider
 
   while iteration < max_iterations:
     // Phase 1: Broad search across all active providers (up to
-    // first_pass_max_results results per provider, default 8)
+    // first_pass_max_results results per provider, default 10)
     raw_results = parallel_search(query, providers)
     claims = extract_claims(raw_results)
 
@@ -836,6 +839,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
+| REQ-080 | Tool Default Consistency | 4.8 | G3 |
 | REQ-060 | kb | 4.9 | G0, G1 |
 | REQ-060a | kb search action | 4.9 | G0, G1 |
 | REQ-060b | kb ingest action | 4.9 | G0, G1 |
@@ -1261,7 +1265,7 @@ secondary concerns rather than duplicating the REQ.
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |
-| 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078 | G3 |
+| 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 
 Notes:
 

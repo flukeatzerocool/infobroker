@@ -275,8 +275,8 @@ export async function corroborate(
   const confidenceThreshold =
     options.confidence_threshold ?? config.corroboration.confidence_threshold;
   const maxCalls = config.corroboration.max_http_calls;
-  const firstPassMaxResults = config.corroboration.first_pass_max_results ?? 8;
-  const similarityThreshold = config.corroboration.similarity_threshold ?? 0.3;
+  const firstPassMaxResults = config.corroboration.first_pass_max_results;
+  const similarityThreshold = config.corroboration.similarity_threshold;
   const authorityWeights = config.corroboration.authority_weights;
   const searchers = options.searchers ?? SEARCHERS;
 

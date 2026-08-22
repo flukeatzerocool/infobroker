@@ -53,7 +53,7 @@ if (kbConfig) {
 function trackRequest(provider: string, latencyMs: number): void {
   totalRequests++;
   const config = getConfig();
-  const windowSize = config.output.latency_window_size ?? 100;
+  const windowSize = config.output.latency_window_size;
 
   if (!requestLatencies[provider]) {
     requestLatencies[provider] = { latencies: [], timestamps: [] };
@@ -233,8 +233,8 @@ async function doWebSearch(
     try {
       const kbResults = kbSearch(query, maxResults);
       if (kbResults.length > 0) {
-        const relevanceThreshold = config.kb?.kb_first_relevance_threshold ?? 0.3;
-        const confidenceThreshold = config.kb?.kb_first_confidence_threshold ?? 0.5;
+        const relevanceThreshold = config.kb!.kb_first_relevance_threshold;
+        const confidenceThreshold = config.kb!.kb_first_confidence_threshold;
         const sufficient = kbResults.some(
           (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
         );
@@ -297,7 +297,7 @@ async function doWebSearch(
 
       const doCall = async (): Promise<SearchResult[]> => provider.search(query, opts);
 
-      const timeoutMs = config.providers[slug]?.timeout ?? 15000;
+      const timeoutMs = config.providers[slug]?.timeout;
       const timedCall = async (): Promise<SearchResult[]> =>
         Promise.race([
           doCall(),
@@ -400,7 +400,7 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
 
       let content: string;
       try {
-        const timeoutMs = config.providers[slug]?.timeout ?? 15000;
+        const timeoutMs = config.providers[slug]?.timeout;
         const timedCall = async (): Promise<string> =>
           Promise.race([
             doCall(),
@@ -602,10 +602,10 @@ server.registerTool(
     const content = await doWebSearch(
       String(params.query),
       params.provider as string | undefined,
-      Number(params.max_results ?? 5),
+      Number(params.max_results),
       (params.safe_search as "on" | "off" | "strict") ?? "on",
       params.time_range as string | undefined,
-      Number(params.page ?? 1),
+      Number(params.page),
       params.priority as string | undefined,
       Boolean(params.suggest),
       params.content_type as string | undefined,
@@ -679,8 +679,8 @@ server.registerTool(
   async (params) => {
     try {
       const result = await corroborate(String(params.query), {
-        max_iterations: Number(params.max_iterations ?? 5),
-        confidence_threshold: Number(params.confidence_threshold ?? 0.8),
+        max_iterations: Number(params.max_iterations),
+        confidence_threshold: Number(params.confidence_threshold),
         providers: params.providers as string[] | undefined,
       });
       autoIndex(
@@ -721,7 +721,7 @@ server.registerTool(
       collection: z.string().optional().describe("Collection name"),
       source_type: z.string().optional().describe("Source type filter (for search action)"),
       source_url: z.string().optional().describe("Source URL filter (for delete action)"),
-      max_results: z.number().min(1).max(50).optional().default(5),
+      max_results: z.number().min(1).max(50).optional().default(8),
     },
   },
   async (params) => {
@@ -733,7 +733,7 @@ server.registerTool(
       if (action === "search") {
         const results = kbSearch(
           String(params.query ?? ""),
-      Number(params.max_results ?? 8),
+      Number(params.max_results),
           params.collection as string | undefined,
           params.source_type as string | undefined
         );
