@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.08.21 — Generic HTTP provider tier (spec)
+
+- New REQ-014 (Generic HTTP Provider Tier): a provider whose search behavior
+  is defined by configuration rather than a provider module, addable without
+  source changes via the user configuration layer. New REQ-015 (Provider
+  Removal by Disable): disabling a provider removes it from dispatch without
+  removing its entry or module, preserved across updates. (REQ-014, REQ-015)
+- Supporting spec edits: terminology and §5.3 tier union gain the
+  `generic_http` tier, a §A.7 recipe, an F12 failure mode, G1 test bullets,
+  manifest rows, and taxonomy placement for the two new REQs. Recorded as
+  forward-looking in DECISIONS.md D-019.
+
 ## 2026.08.21 — Self-contained skill suite
 
 - The client-artifact skills now ship self-contained in the repository, so a

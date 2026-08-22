@@ -45,12 +45,26 @@ not shipped in the repository. The CTI-modeled research workflow was
 renamed from `research-engineering-loop` to `analysis-loop`, naming its
 analytic-rigor focus rather than an engineering activity.
 
+### D-019: Generic HTTP Provider Tier as Forward-Looking Requirement (2026.08.21)
+
+REQ-014 (Generic HTTP Provider Tier) and REQ-015 (Provider Removal by
+Disable) are authored ahead of implementation. They define the user-facing
+capability — add a provider by configuration without source changes, and
+remove one by disabling it in the user layer — but no source file yet cites
+them, so `validate-spec` reports an uncited-REQ warning for each. This is
+the documented forward-looking pattern (precedent D-010, which recorded
+REQ-035/036/037 before their implementation). The generic provider resolves
+through the existing registration mapping (REQ-070) to a single shared
+implementation rather than a per-provider module; no per-tier tier constant
+is introduced to the provider-module interface beyond widening the tier
+union in §5.3.
+
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `a7dd1e92a6077074b1dc422024c637e1cc15f596238828a3cfdc309ff60ed80a`
+**Spec hash:** `1e7f81f763f6fb43567e2ae47adad72c88cbdb46c62083a7ea5c1876c4cfcd92`
 **Source hash:** `1a7ea738f3e3665829b074f4f8070c52a62d47fb6d556fa65a7468a230bf217a`
 **Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `e6c18e67ca3c5a3f22ac68b76dc12590884d35d9c88d341762d16f6aa89c31c9`
+**Total fingerprint:** `e86381614bfea790b8f3c2d1eb32008922052218921fb794133d9eff1765dba1`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

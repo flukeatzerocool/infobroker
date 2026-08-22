@@ -70,6 +70,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. `kb_stats` reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
+| F12 | Generic provider misconfiguration | Empty results or parse errors from a user-defined endpoint | Config validation rejects a malformed endpoint or result mapping (REQ-014); a provider whose mapping produces no results advances the fallback chain (REQ-031) |
 
 ---
 
@@ -133,7 +134,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | Term | Definition |
 |------|-----------|
 | **Provider** | A search or content-extraction backend (DuckDuckGo, Wikipedia, Brave, etc.) |
-| **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) |
+| **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
 | **Fallback chain** | Ordered list of providers tried in sequence on failure |
 | **Content renderer** | A provider that fetches and formats a URL (Jina Reader, native HTTP). Task type for dispatch: `content_fetch`. |
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `choose_provider` |
@@ -147,7 +148,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–013 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055, 077–078 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055, 077–078 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -186,6 +187,12 @@ The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, 
 
 **REQ-013 — Provider Discovery**
 On startup, the server SHALL log each configured provider's status: `active` (key present + reachable), `inactive` (key missing or unreachable), `degraded` (reachable but response latency exceeds a configurable threshold or the provider returns partial results). This status is exposed via `list_providers` and `provider_health`. _Check:_ G1.
+
+**REQ-014 — Generic HTTP Provider Tier**
+The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and referencing it from a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
+
+**REQ-015 — Provider Removal by Disable**
+A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appear in fallback chains or provider recommendations, and it SHALL be skipped by all provider-selection logic. Disabling a provider SHALL require only a configuration change in the user configuration layer, SHALL NOT remove its configuration entry or backend module, and SHALL NOT require source-code changes. The disabled state SHALL be preserved across software updates. _Check:_ G1.
 
 ### 4.3 Core Tools
 
@@ -443,7 +450,7 @@ Every provider implements:
 ```typescript
 interface Provider {
   slug: string;
-  tier: 'builtin' | 'free_http' | 'self_hosted_http' | 'keyed_http';
+  tier: 'builtin' | 'free_http' | 'self_hosted_http' | 'keyed_http' | 'generic_http';
   capabilities: ('web_search' | 'academic' | 'code' | 'encyclopedia' | 'news' | 'archive' | 'content_fetch')[];
   rateLimit: { perSecond?: number; perDay?: number; perMonth?: number };
   health(): Promise<{ status: "active" | "degraded" | "inactive"; avgLatencyMs: number }>;
@@ -455,13 +462,17 @@ interface Provider {
 
 Terminology tier names map to interface `tier` values: Built-in → `builtin`,
 Free HTTP → `free_http`, Self-hosted HTTP → `self_hosted_http`, Keyed HTTP →
-`keyed_http`.
+`keyed_http`, Generic HTTP → `generic_http`. A generic HTTP provider is not a
+distinct module per provider: every generic provider is a configuration
+instance resolved through the registration mapping (REQ-070) to a single
+shared implementation, so adding one requires no provider-module source
+change (REQ-014).
 
 ### 5.4 Build Phases
 
 1. **MCP Skeleton**: stdio transport, tool registration, config loader, env var reader.
 2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
-3. **Registration-tier & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily (API key required; see §A.4).
+3. **Registration-tier & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Convergence Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
@@ -682,6 +693,9 @@ pages are not).
 - Normalizer: input from each provider format → verify common output shape
 - `converge`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
+- Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `web_search` returns mapped results through the dispatch chain
+- Generic provider malformed config: declare a generic provider with an invalid endpoint or result mapping → verify config validation rejects it on load and reload
+- Provider removal: disable a provider in the user configuration layer → verify it is skipped by dispatch and recommendations, and the disabled state survives reload and a simulated update
 - Spec drift: parse all `@implements REQ-NNN` citations from `src/**/*.ts`
   and cross-reference against the REQ manifest in this specification. Report
   any REQ with zero citations (excluding §4.7 artifact REQs) as unimplemented;
@@ -738,6 +752,8 @@ pages are not).
 | REQ-011 | API Key Safety | 4.2 | G1 |
 | REQ-012 | Environment Variable Mapping | 4.2 | G1 |
 | REQ-013 | Provider Discovery | 4.2 | G1 |
+| REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
+| REQ-015 | Provider Removal by Disable | 4.2 | G1 |
 | REQ-020 | web_search | 4.3 | G0, G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
 | REQ-022 | search_suggestions | 4.3 | G0, G1 |
@@ -928,6 +944,34 @@ configuration layer is merged over it by the server (REQ-010).
 **Marginalia** — `https://search.marginalia.nu/search?query={query}`. Open-source search engine prioritizing non-commercial content. HTML scraping. Unknown rate limits — conservative 5s interval.
 
 **Mojeek** — `https://www.mojeek.com/search?q={query}`. Privacy-first search engine with independent index. HTML scraping. Unknown rate limits — conservative 5s interval.
+
+### A.7 Generic HTTP (User-Defined)
+
+A user adds a generic HTTP provider entirely in the user configuration layer
+(REQ-014) — no provider module is written. The entry declares the tier, the
+ability it serves (for dispatch), the endpoint and request it queries, and
+the mapping from response fields to the normalized result shape (REQ-003):
+
+```json
+{
+  "my_search": {
+    "tier": "generic_http",
+    "capabilities": ["web_search"],
+    "enabled": true,
+    "priority": 20,
+    "endpoint": "https://api.example.com/search",
+    "query_param": "q",
+    "results_path": "data.items",
+    "field_map": { "title": "name", "url": "link", "snippet": "summary" }
+  }
+}
+```
+
+The slug is then referenced from a dispatch chain so `web_search` and
+`choose_provider` pick it up. Removing the provider means setting `enabled`
+to `false`; the entry and its backend remain installed (REQ-015). A generic
+provider whose endpoint or result mapping is malformed is rejected by
+configuration validation (REQ-037, REQ-014).
 
 ---
 
@@ -1150,7 +1194,7 @@ secondary concerns rather than duplicating the REQ.
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
 | 1 | Core Retrieval | `web_search`, `fetch_page`, `search_suggestions` | REQ-003, REQ-004, REQ-020, REQ-021, REQ-022, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
-| 2 | Provider Intelligence | `choose_provider`, `list_providers`, `provider_health` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-023, REQ-024, REQ-025, REQ-070, REQ-071 | G0, G1 |
+| 2 | Provider Intelligence | `choose_provider`, `list_providers`, `provider_health` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-023, REQ-024, REQ-025, REQ-070, REQ-071 | G0, G1 |
 | 3 | Convergence | `converge` | REQ-026 | G0, G1 |
 | 4 | Knowledge Base | `kb_search`, `kb_ingest`, `kb_stats`, `kb_delete` | REQ-060, REQ-061, REQ-062, REQ-063, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
 | 5 | State & Operations | `reload_config`, `spec_health` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-041, REQ-042, REQ-043 | G0, G1 |
