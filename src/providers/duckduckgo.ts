@@ -1,4 +1,4 @@
-// @implements REQ-020 REQ-022
+// @implements REQ-020 REQ-020b
 import * as cheerio from "cheerio";
 import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";

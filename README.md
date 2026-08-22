@@ -334,7 +334,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-08-21.
+Last updated: 2026-08-22.
 
 ## Contribute
 
@@ -357,4 +357,4 @@ MIT.
 
 ## Spec
 
-Built from `infobroker.md` v2026.08.21.
+Built from `infobroker.md` v2026.08.22.
