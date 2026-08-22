@@ -6,23 +6,16 @@
 src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  →  src/normalizer.ts  →  src/providers/ (→ src/converge.ts)  →  src/index.ts
 ```
 
-## Tool Surface (13 tools)
+## Tool Surface (6 tools)
 
 | Tool | Purpose |
 |------|---------|
-| `infobroker_web_search` | Unified search across providers with fallback chain |
+| `infobroker_web_search` | Unified search across providers with fallback chain, task-type auto-selection, and suggestion mode |
 | `infobroker_fetch_page` | Fetch URL content via Jina Reader (default) or native HTTP |
-| `infobroker_search_suggestions` | Query autocomplete (DuckDuckGo) |
-| `infobroker_choose_provider` | Recommend best provider for a task type |
-| `infobroker_list_providers` | All configured providers with status and quota |
-| `infobroker_provider_health` | Detailed health for a specific provider |
 | `infobroker_converge` | Multi-pass truth-finding with cross-source verification |
+| `infobroker_providers` | Provider operational state: list, health, or spec actions |
+| `infobroker_kb` | Knowledge base: search, ingest, stats, or delete actions |
 | `infobroker_reload_config` | Hot-reload config.json without restart |
-| `infobroker_spec_health` | Build health: counts, uptime, request stats |
-| `infobroker_kb_search` | Semantic and keyword hybrid search over local knowledge base |
-| `infobroker_kb_ingest` | Ingest text or URL content into the knowledge base |
-| `infobroker_kb_stats` | Knowledge base operational metrics |
-| `infobroker_kb_delete` | Remove content from the knowledge base |
 
 ## Provider Backends
 

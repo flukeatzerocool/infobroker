@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-003 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
+// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
 export interface SearchResult {
   title: string;
   url: string;
@@ -23,14 +23,22 @@ export interface ProviderConfig {
 export interface Config {
   providers: Record<string, ProviderConfig>;
   dispatch: Record<string, string[]>;
+  defaults?: {
+    timeout?: number;
+    retry_count?: number;
+    retry_backoff_ms?: number;
+  };
   convergence: {
     max_iterations: number;
     max_http_calls: number;
     confidence_threshold: number;
+    first_pass_max_results?: number;
+    similarity_threshold?: number;
   };
   output: {
     max_chars: number;
     latency_window_size?: number;
+    verbose?: boolean;
   };
   kb?: KbConfig;
 }
@@ -59,7 +67,7 @@ export interface ToolOkResponse {
   status: "ok";
   provider: string;
   results: SearchResult[];
-  meta: ToolMeta;
+  meta?: ToolMeta;
   truncated?: boolean;
   output_path?: string;
 }
@@ -88,6 +96,7 @@ export interface ConvergenceFinding {
 export interface ConvergenceResult {
   findings: ConvergenceFinding[];
   agreement_map: { green: string[]; yellow: string[]; red: string[] };
+  synthesis: string;
   iteration_count: number;
   providers_used: string[];
   total_sources: number;
@@ -145,15 +154,11 @@ export interface KbChunk {
 }
 
 export interface KbSearchResult {
-  chunk_id: string;
-  text: string;
   score: number;
   freshness_score: number;
   freshness_tier: string;
   source_url: string;
   title: string;
-  provider: string;
-  collection: string;
   snippet: string;
 }
 

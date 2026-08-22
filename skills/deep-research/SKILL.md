@@ -36,7 +36,7 @@ Prefer primary source discovery over secondary reporting.
 
 **Infobroker Integration**: Prefer Infobroker `web_search` for multi-provider
 coverage (DuckDuckGo default, falls back through Marginalia → Brave).
-Use `choose_provider` to select the best search backend for the subtopic type
+Auto-selection routes the query to the best backend for the subtopic type
 (e.g., Semantic Scholar for academic, Stack Exchange for code).
 
 ### Phase 3: Verify & Triangulate

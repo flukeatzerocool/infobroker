@@ -64,11 +64,21 @@ function readJson(path: string): unknown {
 function loadConfigFromDisk(): Config {
   const base = readJson(getConfigPath()) as Config;
   const userPath = getUserConfigPath();
-  if (userPath && existsSync(userPath)) {
-    const user = readJson(userPath);
-    return mergeLayer(base, user);
+  const merged = userPath && existsSync(userPath)
+    ? mergeLayer(base, readJson(userPath))
+    : base;
+  return applyDefaults(merged);
+}
+
+function applyDefaults(config: Config): Config {
+  const defaults = config.defaults;
+  if (!defaults) return config;
+  for (const provider of Object.values(config.providers)) {
+    if (defaults.timeout !== undefined && provider.timeout === undefined) provider.timeout = defaults.timeout;
+    if (defaults.retry_count !== undefined && provider.retry_count === undefined) provider.retry_count = defaults.retry_count;
+    if (defaults.retry_backoff_ms !== undefined && provider.retry_backoff_ms === undefined) provider.retry_backoff_ms = defaults.retry_backoff_ms;
   }
-  return base;
+  return config;
 }
 
 function validateConfig(config: Config): void {
@@ -200,6 +210,9 @@ export function getDispatchChain(taskType: string): string[] {
   if (!chain) return [];
   return chain.filter((slug) => {
     const provider = config.providers[slug];
-    return provider && provider.enabled;
+    if (!provider || !provider.enabled) return false;
+    if (provider.tier === "keyed_http" && provider.auth_env && !process.env[provider.auth_env]) return false;
+    if (provider.tier === "self_hosted_http" && provider.url_env && !process.env[provider.url_env]) return false;
+    return true;
   });
 }

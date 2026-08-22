@@ -59,6 +59,7 @@ interface Source {
 export function reconcileClaims(
   findings: Map<string, ConvergenceFinding>,
   results: SearchResult[],
+  similarityThreshold = 0.3,
 ): void {
   for (const r of results) {
     if (!r.title) continue;
@@ -96,7 +97,7 @@ export function reconcileClaims(
     for (const source of sources) {
       let placed = false;
       for (const cluster of clusters) {
-        if (jaccardSimilarity(source.snippet, cluster.representative) >= 0.3) {
+        if (jaccardSimilarity(source.snippet, cluster.representative) >= similarityThreshold) {
           cluster.members.push(source);
           placed = true;
           break;
@@ -131,11 +132,26 @@ export function reconcileClaims(
   }
 }
 
+const MULTI_LABEL_TLDS = new Set([
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au",
+  "co.nz", "co.jp", "com.br", "com.mx", "co.in", "com.cn", "com.sg",
+]);
+
+function registrableDomain(hostname: string): string {
+  const labels = hostname.split(".").filter(Boolean);
+  if (labels.length <= 2) return hostname;
+  const lastTwo = labels.slice(-2).join(".");
+  if (MULTI_LABEL_TLDS.has(lastTwo) && labels.length >= 3) {
+    return labels.slice(-3).join(".");
+  }
+  return lastTwo;
+}
+
 export function computeConfidence(sources: Source[]): number {
   const uniqueDomains = new Set<string>();
   for (const s of sources) {
     try {
-      uniqueDomains.add(new URL(s.url).hostname);
+      uniqueDomains.add(registrableDomain(new URL(s.url).hostname));
     } catch {
       uniqueDomains.add(s.url);
     }
@@ -218,6 +234,8 @@ export async function converge(
   const confidenceThreshold =
     options.confidence_threshold ?? config.convergence.confidence_threshold;
   const maxCalls = config.convergence.max_http_calls;
+  const firstPassMaxResults = config.convergence.first_pass_max_results ?? 8;
+  const similarityThreshold = config.convergence.similarity_threshold ?? 0.3;
   const searchers = options.searchers ?? SEARCHERS;
 
   const providerList = options.providers
@@ -230,6 +248,7 @@ export async function converge(
     return {
       findings: [],
       agreement_map: { green: [], yellow: [], red: [] },
+      synthesis: "No claims were corroborated.",
       iteration_count: 0,
       providers_used: [],
       total_sources: 0,
@@ -256,7 +275,7 @@ export async function converge(
           const searcher = searchers[slug];
           if (!searcher) return null;
           const results = await retryWithBackoff(
-            async () => searcher(query, { max_results: 5 }),
+            async () => searcher(query, { max_results: firstPassMaxResults }),
             config.providers[slug]
           );
           return { slug, results };
@@ -271,7 +290,7 @@ export async function converge(
           totalCalls++;
           providersUsed.add(result.value.slug);
           increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-          reconcileClaims(findings, result.value.results);
+          reconcileClaims(findings, result.value.results, similarityThreshold);
         }
       }
     } else {
@@ -299,7 +318,7 @@ export async function converge(
           providersUsed.add(gapProvider);
           increment(gapProvider, config.providers[gapProvider]?.rate_limit);
 
-          reconcileClaims(findings, results);
+          reconcileClaims(findings, results, similarityThreshold);
         } catch {
           // skip
         }
@@ -320,14 +339,27 @@ export async function converge(
   const findingsArray = [...findings.values()];
   const agreementMap = buildAgreementMap(findingsArray, confidenceThreshold);
 
+  const condensed = findingsArray.map((f) => ({
+    ...f,
+    sources: f.sources.slice(0, 3),
+  }));
+
+  const confirmedCount = condensed.filter((f) => f.verdict === "confirmed").length;
+  const contestedCount = condensed.filter((f) => f.verdict === "contested").length;
+  const synthesis =
+    condensed.length === 0
+      ? "No claims were corroborated."
+      : `${confirmedCount} claim(s) confirmed, ${contestedCount} contested, ${condensed.length - confirmedCount - contestedCount} unverified across ${condensed.length} topic(s).`;
+
   return {
-    findings: findingsArray,
+    findings: condensed,
     agreement_map: agreementMap,
+    synthesis,
     iteration_count: iteration,
     providers_used: [...providersUsed],
-    total_sources: findingsArray.reduce((sum, f) => sum + f.sources.length, 0),
+    total_sources: condensed.reduce((sum, f) => sum + f.sources.length, 0),
     convergence:
-      findingsArray.length > 0 && findingsArray.every((f) => f.confidence >= confidenceThreshold)
+      condensed.length > 0 && condensed.every((f) => f.confidence >= confidenceThreshold)
         ? "complete"
         : "partial",
   };

@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
@@ -310,15 +310,11 @@ export function kbSearch(
     if (combinedScore > 0) {
       const freshnessScore = computeFreshnessScore(chunk.freshness_tier, chunk.ingested_at, now);
       results.push({
-        chunk_id: chunk.id,
-        text: chunk.text,
         score: combinedScore,
         freshness_score: freshnessScore,
         freshness_tier: chunk.freshness_tier,
         source_url: chunk.source_url,
         title: chunk.title,
-        provider: chunk.provider,
-        collection: chunk.collection,
         snippet: chunk.text.slice(0, 200),
       });
     }

@@ -32,8 +32,8 @@ metadata:
    peer-reviewed papers, archived transcripts, government records). Supplement
    with reputable fact-checking organizations.
 
-   **Infobroker Integration**: Use `choose_provider` to select the best search
-   backend for the claim type — Wikipedia for historical/definitional,
+   **Infobroker Integration**: Use Infobroker `web_search` auto-selection for
+   the best backend for the claim type — Wikipedia for historical/definitional,
    Semantic Scholar for scientific, Wikidata for statistical facts.
 
 4. **Cross-reference.** Check each claim against at least two independent

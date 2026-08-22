@@ -10,6 +10,22 @@ const ROOT = join(__dirname, "..");
 const SPEC = join(ROOT, "infobroker.md");
 const SRC = join(ROOT, "src");
 
+// Derive registered tool slugs (sans `infobroker_` prefix) from the live
+// registration calls in src/index.ts — the spec §D must document every
+// registered tool, so the tool list is never hardcoded here.
+function deriveToolSlugs(): string[] {
+  const indexPath = join(SRC, "index.ts");
+  if (!existsSync(indexPath)) return [];
+  const text = readFileSync(indexPath, "utf-8");
+  const slugs = new Set<string>();
+  const re = /registerTool\(\s*"infobroker_([a-z0-9_]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    slugs.add(m[1]);
+  }
+  return [...slugs].sort();
+}
+
 interface Violation {
   severity: "error" | "warning";
   message: string;
@@ -311,11 +327,7 @@ function checkFeatureTaxonomy(): void {
   }
   const appendix = specText.slice(taxIdx);
 
-  const toolSlugs = [
-    "web_search", "fetch_page", "search_suggestions", "choose_provider",
-    "list_providers", "provider_health", "converge", "reload_config",
-    "spec_health", "kb_search", "kb_ingest", "kb_stats", "kb_delete",
-  ];
+  const toolSlugs = deriveToolSlugs();
   for (const tool of toolSlugs) {
     if (!new RegExp(`\`${tool}\``).test(appendix)) {
       error(`Feature taxonomy (§D) is missing tool \`${tool}\``);
@@ -339,8 +351,8 @@ function checkArtifactContent(): void {
 
   if (existsSync(prefPath)) {
     const content = readFileSync(prefPath, "utf-8");
-    if (!/\bkb_search\b/.test(content)) {
-      warn("instructions/search-preferences.md: missing kb_search routing instruction");
+    if (!/\bkb\b|\bknowledge base\b/i.test(content)) {
+      warn("instructions/search-preferences.md: missing knowledge base routing instruction");
     }
   }
 

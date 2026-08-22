@@ -78,7 +78,7 @@ README DESIGN:
     document, or a changelog. The complete tool inventory lives in the
     feature taxonomy (§D of infobroker.md), which the README links to.
     Tool names appear in prose only as shorthand in backticks where a
-    feature is introduced (e.g. `kb_search`), never as a bare list.
+    feature is introduced (e.g. `kb`), never as a bare list.
 
   Validator. Rules marked "(validate-readme)" SHALL be checked by
     scripts/validate-readme.ts. Other rules are enforced by author/AI
@@ -158,7 +158,7 @@ Requirements: Node.js 20+.
 
 ## MCP Server
 
-Your research backend. Thirteen tools, eighteen providers, one
+Your research backend. Six tools, eighteen providers, one
 convergence engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
@@ -193,13 +193,11 @@ ready for summarization or analysis.
 > "Which source should I use to research the Death Star's weakness?"
 > "Show me all available sources and their quota status."
 
-The server knows its own capabilities. `choose_provider` recommends
-the best backend for your task, weighing capability, quota, and
-latency. `list_providers` surfaces every configured source with
-status, rate limits, quota, and supported task types.
-`provider_health` drills into a single provider's uptime and error
-history. No other search MCP server gives you operational visibility
-into every backend.
+The server knows its own capabilities. `web_search` auto-selects the
+best backend for your task, weighing capability, quota, and latency.
+`providers` surfaces every configured source and drills into a single
+provider's uptime and error history. No other search MCP server gives
+you operational visibility into every backend.
 
 ### Multi-Source Verification
 
@@ -222,13 +220,13 @@ sure it is.
 > "Ingest this article so it's cached for next time."
 
 Every search, fetch, and convergence run is cached in a local knowledge
-base. `kb_search` checks the cache before hitting external providers —
-only falling back to the network when the cached results aren't fresh
-enough or relevant enough. `kb_ingest` adds new text or a URL by hand;
-`kb_stats` reports what's cached; `kb_delete` removes it. Content is
-age-scored, expired on a freshness schedule, and deduplicated by source.
-Other search MCP servers re-fetch the same facts every session; Infobroker
-remembers and reuses what it already found.
+base. `kb` checks the cache before hitting external providers — only
+falling back to the network when the cached results aren't fresh enough
+or relevant enough. Its actions ingest new text or a URL by hand, report
+what's cached, and remove content. Content is age-scored, expired on a
+freshness schedule, and deduplicated by source. Other search MCP servers
+re-fetch the same facts every session; Infobroker remembers and reuses
+what it already found.
 
 ### Research Pipeline
 
@@ -254,8 +252,8 @@ produces finished work.
 Quota counters persist to disk and survive restarts. Rate limits are
 enforced per-provider, not globally. Configuration is hot-reloadable
 via `reload_config` — change providers, adjust chains, or tweak
-thresholds without dropping connections. `search_suggestions` provides
-DuckDuckGo query autocomplete. `spec_health` reports the server's build
+thresholds without dropping connections. `web_search` doubles as
+DuckDuckGo query autocomplete. `providers` reports the server's build
 health and request stats. You always know what your search server is
 doing and how much capacity remains.
 

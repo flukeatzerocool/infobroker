@@ -1,6 +1,8 @@
 # Provider Dispatch Map
 
-Quick reference for `choose_provider` recommendations.
+Quick reference for `web_search` auto-selection. The server classifies the
+query into a task type and routes to the primary provider of that type's
+dispatch chain, falling back in order.
 
 ## Task → Provider Table
 

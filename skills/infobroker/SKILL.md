@@ -33,7 +33,7 @@ Use this for reports, articles, documentation, and in-depth analysis.
 
 ```
 Phase 0: RECALL
-  Infobroker `kb_search` — check local knowledge base for previously indexed results
+  Infobroker `kb` (action search) — check local knowledge base for previously indexed results
   → If results found and freshness-adjusted scores are sufficient, skip to Phase 2
   → If results are empty or stale, continue to Phase 1 (SEARCH)
 
@@ -71,7 +71,7 @@ Phase 8: CITE
 Use this when the user wants to verify specific claims.
 
 ```
-0. RECALL: Infobroker `kb_search` on all claims — check if previously verified
+0. RECALL: Infobroker `kb` (action search) on all claims — check if previously verified
 1. EXTRACT claims from the user's input
 2. SEARCH each claim with Infobroker `web_search` (targeted, per-claim queries)
 3. CROSS-REFERENCE with Infobroker `converge` for multi-source verification
@@ -86,15 +86,15 @@ Use this when the user wants to verify specific claims.
 |--------|------|--------------|
 | Search web broadly | `web_search` | Auto-selected (default: DuckDuckGo) |
 | Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown) |
-| Autocomplete a query | `search_suggestions` | DuckDuckGo |
-| "Which tool should I use?" | `choose_provider` | Returns recommendation |
+| Autocomplete a query | `web_search` (`suggest: true`) | DuckDuckGo |
+| "Which tool should I use?" | `web_search` | Auto-selection returns serving provider |
 | Multi-source truth-finding | `converge` | Uses all active providers |
-| Check provider status | `list_providers` / `provider_health` | N/A |
+| Check provider status | `providers` (action list/health) | N/A |
 | Reload config at runtime | `reload_config` | N/A |
-| Search local knowledge base | `kb_search` | Semantic + keyword hybrid |
-| Ingest into knowledge base | `kb_ingest` | Text or URL |
-| Knowledge base stats | `kb_stats` | Operational metrics |
-| Delete from knowledge base | `kb_delete` | By collection or source URL |
+| Search local knowledge base | `kb` (action search) | Semantic + keyword hybrid |
+| Ingest into knowledge base | `kb` (action ingest) | Text or URL |
+| Knowledge base stats | `kb` (action stats) | Operational metrics |
+| Delete from knowledge base | `kb` (action delete) | By collection or source URL |
 | Translate findings | `translation` skill | Multilingual output |
 
 ## When to Escalate
@@ -113,4 +113,4 @@ path; `analysis-loop` runs the disciplined, gated path.
 - When writing output, route through the full pipeline (search → verify → summarize → write → polish)
 - Cite sources with URLs for every factual claim
 - Fall back to built-in `websearch`/`webfetch` only when Infobroker tools error
-- Check `provider_health` if searches return empty or slow — a provider may be exhausted
+- Check `providers` (action health) if searches return empty or slow — a provider may be exhausted

@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-021 REQ-022 REQ-023 REQ-024 REQ-025 REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-041 REQ-060 REQ-061 REQ-062 REQ-063 REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -72,18 +72,25 @@ function avgLatency(provider: string): number {
   return entry.latencies.reduce((a, b) => a + b, 0) / entry.latencies.length;
 }
 
+function compactMode(): boolean {
+  return getConfig().output.verbose === false;
+}
+
 function ok(provider: string, results: SearchResult[], meta: Record<string, unknown> = {}): ToolOkResponse {
-  return {
+  const base: ToolOkResponse = {
     status: "ok",
     provider,
     results,
-    meta: {
+  };
+  if (!compactMode()) {
+    base.meta = {
       query_time_ms: 0,
       fallback_used: false,
       quota_remaining: undefined,
       ...meta,
-    },
-  };
+    };
+  }
+  return base;
 }
 
 function err(provider: string, code: string, message: string, remediation: string): ToolErrorResponse {
@@ -113,6 +120,7 @@ function json(data: unknown): string {
 
 async function startupHealthCheck(): Promise<void> {
   const config = getConfig();
+  const checks: Promise<void>[] = [];
 
   for (const [slug, provider] of Object.entries(config.providers)) {
     if (!provider.enabled) continue;
@@ -133,24 +141,71 @@ async function startupHealthCheck(): Promise<void> {
       console.error(`[infobroker] ${slug}: active (no health check available)`);
       continue;
     }
-    try {
-      const h = await p.health();
-      console.error(`[infobroker] ${slug}: ${h.status} (${h.avgLatencyMs}ms)`);
-    } catch {
-      console.error(`[infobroker] ${slug}: inactive (health check failed)`);
-    }
+    checks.push(
+      (async () => {
+        try {
+          const h = await p.health();
+          console.error(`[infobroker] ${slug}: ${h.status} (${h.avgLatencyMs}ms)`);
+        } catch {
+          console.error(`[infobroker] ${slug}: inactive (health check failed)`);
+        }
+      })()
+    );
   }
+
+  await Promise.allSettled(checks);
+}
+
+const TASK_TYPE_KEYWORDS: Record<string, string[]> = {
+  "general_web": ["search", "find", "look up", "research", "information about"],
+  "small_web": ["blog", "personal", "non-commercial", "indie", "small web"],
+  "encyclopedia": ["encyclopedia", "wiki"],
+  "definition": ["definition", "define", "meaning", "etymology", "dictionary", "word"],
+  "structured_fact": ["date", "statistic", "identifier", "population", "birth", "death"],
+  "location": ["where is", "location", "map", "address", "city", "place", "geocode"],
+  "academic": ["paper", "study", "research paper", "academic", "scholar", "journal", "thesis"],
+  "code": ["code", "programming", "error", "debug", "function", "api", "docs", "stack overflow"],
+  "news": ["news", "recent", "latest", "today", "current"],
+  "archive": ["archive", "historical", "old", "past version"],
+  "semantic": ["like", "similar to", "semantic", "neural", "conceptual"],
+  "synthesis": ["synthesize", "comprehensive", "summarize sources", "rag"],
+  "privacy_critical": ["private", "anonymous", "no tracking", "self-host"],
+};
+
+function classifyTaskType(task: string): string {
+  const lower = task.toLowerCase();
+  for (const [type, keywords] of Object.entries(TASK_TYPE_KEYWORDS)) {
+    if (keywords.some((kw) => lower.includes(kw))) return type;
+  }
+  return "general_web";
 }
 
 async function doWebSearch(
   query: string,
   preferredProvider?: string,
-  maxResults = 10,
+  maxResults = 5,
   safeSearch: "on" | "off" = "on",
   timeRange?: string,
-  page = 1
+  page = 1,
+  priority?: string,
+  suggest = false
 ): Promise<string> {
   const config = getConfig();
+
+  if (suggest) {
+    try {
+      const ddg = PROVIDERS["duckduckgo"];
+      const suggestions = ddg?.suggest ? await ddg.suggest(query) : [];
+      return `[OK] ${json({
+        status: "ok",
+        provider: "duckduckgo",
+        results: suggestions.map((s) => ({ title: s, url: "", snippet: s })),
+        meta: { query_time_ms: 0, fallback_used: false },
+      })}`;
+    } catch (e) {
+      return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later"))}`;
+    }
+  }
 
   if (isKbConfigured()) {
     try {
@@ -180,17 +235,24 @@ async function doWebSearch(
     }
   }
 
+  const taskType = classifyTaskType(query);
   let chain: string[];
 
   if (preferredProvider && config.providers[preferredProvider]?.enabled) {
-    chain = [preferredProvider, ...getDispatchChain("general_web").filter((p) => p !== preferredProvider)];
+    chain = [preferredProvider, ...getDispatchChain(taskType).filter((p) => p !== preferredProvider)];
+  } else if (preferredProvider) {
+    chain = [preferredProvider, ...getDispatchChain(taskType)];
   } else {
+    chain = getDispatchChain(taskType);
+  }
+  if (chain.length === 0) {
     chain = getDispatchChain("general_web");
   }
 
   if (chain.length === 0) {
     return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
+  void priority;
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page };
   let lastError: ToolErrorResponse | null = null;
@@ -317,82 +379,6 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
   return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
 }
 
-async function doSearchSuggestions(query: string): Promise<string> {
-  try {
-    const ddg = PROVIDERS["duckduckgo"];
-    const suggestions = ddg?.suggest ? await ddg.suggest(query) : [];
-    return `[OK] ${json({
-      status: "ok",
-      provider: "duckduckgo",
-      results: suggestions.map((s) => ({ title: s, url: "", snippet: s })),
-    })}`;
-  } catch (e) {
-    return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later"))}`;
-  }
-}
-
-function doChooseProvider(task: string, priority?: string): string {
-  const config = getConfig();
-
-  const taskTypes: Record<string, string[]> = {
-    "general_web": ["search", "find", "look up", "research", "information about"],
-    "small_web": ["blog", "personal", "non-commercial", "indie", "small web"],
-    "encyclopedia": ["encyclopedia", "wiki"],
-    "definition": ["definition", "define", "meaning", "etymology", "dictionary", "word"],
-    "structured_fact": ["date", "statistic", "identifier", "population", "birth", "death"],
-    "location": ["where is", "location", "map", "address", "city", "place", "geocode"],
-    "academic": ["paper", "study", "research paper", "academic", "scholar", "journal", "thesis"],
-    "code": ["code", "programming", "error", "debug", "function", "api", "docs", "stack overflow"],
-    "news": ["news", "recent", "latest", "today", "current"],
-    "archive": ["archive", "historical", "old", "past version"],
-    "semantic": ["like", "similar to", "semantic", "neural", "conceptual"],
-    "synthesis": ["synthesize", "comprehensive", "summarize sources", "rag"],
-    "privacy_critical": ["private", "anonymous", "no tracking", "self-host"],
-  };
-
-  let matchedType = "general_web";
-  const lower = task.toLowerCase();
-  for (const [type, keywords] of Object.entries(taskTypes)) {
-    if (keywords.some((kw) => lower.includes(kw))) {
-      matchedType = type;
-      break;
-    }
-  }
-
-  const chain = getDispatchChain(matchedType);
-
-  const kbAvailable = isKbConfigured();
-  const kbHasContent = kbAvailable && (kbStats().chunk_count > 0);
-  const firstResort = kbHasContent ? "knowledge_base" : (chain.length > 0 ? chain[0] : null);
-
-  if (chain.length === 0 && !kbHasContent) {
-    return `[ERROR] ${json(err("none", "config_error", `No active providers for task type: ${matchedType}`, "Check config.json"))}`;
-  }
-
-  const recommended = chain.length > 0 ? chain[0] : "";
-  const recommendedPct = config.providers[recommended] ? checkQuota(recommended, config.providers[recommended].rate_limit) : null;
-  let effectiveRecommended = recommended;
-  if (recommendedPct?.exhausted || recommendedPct?.warning) {
-    effectiveRecommended = chain.length > 1 ? chain[1] : recommended;
-  }
-
-  const rationale = `Best match for "${matchedType}" task.${kbHasContent ? " Search the knowledge base first for cached results." : ""} ${chain.length > 1 ? `Fallback chain: ${chain.join(", ")}.` : "No fallback available."}`;
-
-  return `[OK] ${json({
-    status: "ok",
-    provider: effectiveRecommended,
-    results: [],
-    meta: {
-      recommended: effectiveRecommended,
-      first_resort: firstResort,
-      matched_type: matchedType,
-      rationale,
-      fallback_chain: chain,
-      priority: priority || "quality",
-    },
-  })}`;
-}
-
 function providerOperational(p: ProviderConfig): boolean {
   if (!p.enabled) return false;
   if (p.auth_env && !process.env[p.auth_env]) return false;
@@ -435,7 +421,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   const config = getConfig();
   const p = config.providers[providerSlug];
   if (!p) {
-    return `[ERROR] ${json(err(providerSlug, "invalid_input", `Provider "${providerSlug}" not found in config`, "Use list_providers to see available providers"))}`;
+    return `[ERROR] ${json(err(providerSlug, "invalid_input", `Provider "${providerSlug}" not found in config`, "Use the providers tool (action list) to see available providers"))}`;
   }
 
   const quota = checkQuota(providerSlug, p.rate_limit);
@@ -556,24 +542,28 @@ server.registerTool(
   "infobroker_web_search",
   {
     title: "Web Search",
-    description: "Unified search across configured providers. Falls back through chain on failure.",
+    description: "Unified provider search with task-type routing, fallback chain, and optional suggestions.",
     inputSchema: {
       query: z.string().describe("Search query"),
-      provider: z.string().optional().describe("Specific provider slug (auto-select if omitted)"),
-      max_results: z.number().min(1).max(50).optional().default(10),
+      provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
+      max_results: z.number().min(1).max(30).optional().default(5),
       safe_search: z.enum(["on", "off"]).optional().default("on"),
       time_range: z.enum(["day", "week", "month", "year"]).optional(),
       page: z.number().min(1).optional().default(1),
+      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional(),
+      suggest: z.boolean().optional().default(false),
     },
   },
   async (params) => {
     const content = await doWebSearch(
       String(params.query),
       params.provider as string | undefined,
-      Number(params.max_results ?? 10),
+      Number(params.max_results ?? 5),
       (params.safe_search as "on" | "off") ?? "on",
       params.time_range as string | undefined,
-      Number(params.page ?? 1)
+      Number(params.page ?? 1),
+      params.priority as string | undefined,
+      Boolean(params.suggest)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
@@ -584,7 +574,7 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch and extract the content of a URL. Uses Jina Reader by default, falls back to native HTTP.",
+    description: "Fetch and extract URL content. Jina Reader by default, native HTTP fallback.",
     inputSchema: {
       url: z.string().describe("URL to fetch"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional(),
@@ -597,67 +587,32 @@ server.registerTool(
   }
 );
 
-// --- search_suggestions ---
+// --- providers ---
 server.registerTool(
-  "infobroker_search_suggestions",
+  "infobroker_providers",
   {
-    title: "Search Suggestions",
-    description: "Query autocomplete using DuckDuckGo autocomplete endpoint.",
+    title: "Providers",
+    description: "Operational state over configured providers: list, health, or spec actions.",
     inputSchema: {
-      query: z.string().describe("Partial query to get suggestions for"),
+      action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
+      provider: z.string().optional().describe("Provider slug (required for health)"),
+      status: z.enum(["active", "all"]).optional().describe("Filter for list action"),
     },
   },
   async (params) => {
-    const content = await doSearchSuggestions(String(params.query));
-    return { content: [{ type: "text" as const, text: content }] };
-  }
-);
-
-// --- choose_provider ---
-server.registerTool(
-  "infobroker_choose_provider",
-  {
-    title: "Choose Provider",
-    description: "Recommend the best provider for a given task type with rationale and fallback chain.",
-    inputSchema: {
-      task: z.string().describe("Natural-language description of the task"),
-      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional(),
-    },
-  },
-  async (params) => {
-    const content = doChooseProvider(String(params.task), params.priority as string | undefined);
-    return { content: [{ type: "text" as const, text: content }] };
-  }
-);
-
-// --- list_providers ---
-server.registerTool(
-  "infobroker_list_providers",
-  {
-    title: "List Providers",
-    description: "List all configured providers with status, capabilities, and quota usage.",
-    inputSchema: {
-      status: z.enum(["active", "all"]).optional(),
-    },
-  },
-  async (params) => {
-    const content = doListProviders(params.status as string | undefined);
-    return { content: [{ type: "text" as const, text: content }] };
-  }
-);
-
-// --- provider_health ---
-server.registerTool(
-  "infobroker_provider_health",
-  {
-    title: "Provider Health",
-    description: "Detailed health report for a specific provider.",
-    inputSchema: {
-      provider: z.string().describe("Provider slug (e.g., duckduckgo, wikipedia)"),
-    },
-  },
-  async (params) => {
-    const content = await doProviderHealth(String(params.provider));
+    const action = params.action as "list" | "health" | "spec";
+    let content: string;
+    if (action === "list") {
+      content = doListProviders(params.status as string | undefined);
+    } else if (action === "health") {
+      if (!params.provider) {
+        content = `[ERROR] ${json(err("system", "invalid_input", "provider is required for health action", "Provide a provider slug"))}`;
+      } else {
+        content = await doProviderHealth(String(params.provider));
+      }
+    } else {
+      content = doSpecHealth();
+    }
     return { content: [{ type: "text" as const, text: content }] };
   }
 );
@@ -702,122 +657,76 @@ server.registerTool(
   }
 );
 
-// --- kb_search ---
+// --- kb ---
 server.registerTool(
-  "infobroker_kb_search",
+  "infobroker_kb",
   {
-    title: "Knowledge Base Search",
-    description: "Search the local knowledge base for previously indexed content before making external web requests. Contains cached results from web_search, fetch_page, and converge. Results include freshness-adjusted scores. Semantic and keyword hybrid search.",
+    title: "Knowledge Base",
+    description: "Manage the local knowledge base: search, ingest, stats, or delete.",
     inputSchema: {
-      query: z.string().describe("Search query"),
-      max_results: z.number().min(1).max(50).optional().default(10),
-      collection: z.string().optional().describe("Scope search to one collection"),
-      source_type: z.string().optional().describe("Filter by source type"),
-    },
-  },
-  async (params) => {
-    if (!isKbConfigured()) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
-    }
-    try {
-      const results = kbSearch(
-        String(params.query),
-        Number(params.max_results ?? 10),
-        params.collection as string | undefined,
-        params.source_type as string | undefined
-      );
-      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results })}` }] };
-    } catch (e) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
-    }
-  }
-);
-
-// --- kb_ingest ---
-server.registerTool(
-  "infobroker_kb_ingest",
-  {
-    title: "Knowledge Base Ingest",
-    description: "Ingest text or URL content into the knowledge base.",
-    inputSchema: {
-      text: z.string().optional().describe("Raw text to chunk and index"),
-      url: z.string().optional().describe("URL to fetch and index"),
+      action: z.enum(["search", "ingest", "stats", "delete"]).describe("Operation to perform"),
+      query: z.string().optional().describe("Search query (for search action)"),
+      text: z.string().optional().describe("Raw text to index (for ingest action)"),
+      url: z.string().optional().describe("URL to fetch and index (for ingest action)"),
       title: z.string().optional(),
-      collection: z.string().optional(),
+      collection: z.string().optional().describe("Collection name"),
+      source_type: z.string().optional().describe("Source type filter (for search action)"),
+      source_url: z.string().optional().describe("Source URL filter (for delete action)"),
+      max_results: z.number().min(1).max(50).optional().default(5),
     },
   },
   async (params) => {
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
-    const text = params.text as string | undefined;
-    const url = params.url as string | undefined;
-    if (!text && !url) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of text or url must be provided", "Provide text or url parameter"))}` }] };
-    }
+    const action = params.action as "search" | "ingest" | "stats" | "delete";
     try {
-      let content = text || "";
-      let sourceUrl = url || "";
-      if (url && !text) {
-        const fetched = await doFetchPage(url);
-        if (fetched.startsWith("[ERROR]")) {
-          return { content: [{ type: "text" as const, text: fetched }] };
-        }
-        const parsed = JSON.parse(fetched.slice(5));
-        content = parsed.results?.[0]?.snippet || "";
-        sourceUrl = url;
+      if (action === "search") {
+        const results = kbSearch(
+          String(params.query ?? ""),
+          Number(params.max_results ?? 5),
+          params.collection as string | undefined,
+          params.source_type as string | undefined
+        );
+        return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results })}` }] };
       }
-      const count = kbIngest(
-        content,
-        (params.title as string) || url || "untitled",
-        sourceUrl,
-        "explicit",
-        params.collection as string | undefined,
-        "explicit"
-      );
-      const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "ingested", url: sourceUrl, snippet: `${count} chunks ingested` }], meta: { chunks_ingested: count } });
-      return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
-    } catch (e) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
-    }
-  }
-);
-
-// --- kb_stats ---
-server.registerTool(
-  "infobroker_kb_stats",
-  {
-    title: "Knowledge Base Stats",
-    description: "Knowledge base operational metrics.",
-    inputSchema: {},
-  },
-  async () => {
-    const stats = kbStats();
-    return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [stats] })}` }] };
-  }
-);
-
-// --- kb_delete ---
-server.registerTool(
-  "infobroker_kb_delete",
-  {
-    title: "Knowledge Base Delete",
-    description: "Remove content from the knowledge base.",
-    inputSchema: {
-      collection: z.string().optional().describe("Remove all chunks in this collection"),
-      source_url: z.string().optional().describe("Remove all chunks from this source URL"),
-    },
-  },
-  async (params) => {
-    if (!isKbConfigured()) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
-    }
-    const collection = params.collection as string | undefined;
-    const sourceUrl = params.source_url as string | undefined;
-    if (!collection && !sourceUrl) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of collection or source_url must be provided", "Provide a filter parameter"))}` }] };
-    }
-    try {
+      if (action === "ingest") {
+        const text = params.text as string | undefined;
+        const url = params.url as string | undefined;
+        if (!text && !url) {
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of text or url must be provided", "Provide text or url parameter"))}` }] };
+        }
+        let content = text || "";
+        let sourceUrl = url || "";
+        if (url && !text) {
+          const fetched = await doFetchPage(url);
+          if (fetched.startsWith("[ERROR]")) {
+            return { content: [{ type: "text" as const, text: fetched }] };
+          }
+          const parsed = JSON.parse(fetched.slice(5));
+          content = parsed.results?.[0]?.snippet || "";
+          sourceUrl = url;
+        }
+        const count = kbIngest(
+          content,
+          (params.title as string) || url || "untitled",
+          sourceUrl,
+          "explicit",
+          params.collection as string | undefined,
+          "explicit"
+        );
+        const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "ingested", url: sourceUrl, snippet: `${count} chunks ingested` }], meta: { chunks_ingested: count } });
+        return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
+      }
+      if (action === "stats") {
+        const stats = kbStats();
+        return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [stats] })}` }] };
+      }
+      const collection = params.collection as string | undefined;
+      const sourceUrl = params.source_url as string | undefined;
+      if (!collection && !sourceUrl) {
+        return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of collection or source_url must be provided", "Provide a filter parameter"))}` }] };
+      }
       const count = kbDelete(collection, sourceUrl);
       const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "deleted", url: "", snippet: `${count} chunks removed` }], meta: { chunks_removed: count } });
       return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
@@ -832,7 +741,7 @@ server.registerTool(
   "infobroker_reload_config",
   {
     title: "Reload Configuration",
-    description: "Re-read config.json without restarting. Active connections are preserved.",
+    description: "Re-read config without restarting. Active connections are preserved.",
     inputSchema: {},
   },
   async () => {
@@ -855,20 +764,6 @@ server.registerTool(
         ],
       };
     }
-  }
-);
-
-// --- spec_health ---
-server.registerTool(
-  "infobroker_spec_health",
-  {
-    title: "Spec Health",
-    description: "Build health report: provider counts, uptime, request stats.",
-    inputSchema: {},
-  },
-  async () => {
-    const content = doSpecHealth();
-    return { content: [{ type: "text" as const, text: content }] };
   }
 );
 

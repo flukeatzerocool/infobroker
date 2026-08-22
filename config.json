@@ -1,221 +1,158 @@
 {
+  "defaults": {
+    "timeout": 10000,
+    "retry_count": 3,
+    "retry_backoff_ms": 1000
+  },
   "providers": {
     "duckduckgo": {
-      "type": "scraped",
       "tier": "builtin",
       "capabilities": ["web_search", "suggest"],
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
       "priority": 10,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "timeout": 10000
     },
     "jina": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["content_fetch"],
       "rate_limit": { "per_second": 1 },
       "enabled": true,
       "priority": 10,
       "timeout": 15000,
-      "retry_count": 3,
       "retry_backoff_ms": 1000
     },
     "wikipedia": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["encyclopedia"],
       "rate_limit": { "per_second": 5 },
       "enabled": true,
-      "priority": 20,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 20
     },
     "wiktionary": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["encyclopedia", "definition"],
       "rate_limit": { "per_second": 5 },
       "enabled": true,
-      "priority": 20,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 20
     },
     "wikidata": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["structured_fact"],
       "rate_limit": { "per_second": 5 },
       "enabled": true,
-      "priority": 20,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 20
     },
     "openstreetmap": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["location"],
       "rate_limit": { "per_second": 1 },
       "enabled": true,
-      "priority": 20,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 20
     },
     "internet_archive": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["archive"],
       "rate_limit": { "per_second": 1 },
       "enabled": true,
       "priority": 20,
-      "timeout": 15000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "timeout": 15000
     },
     "arxiv": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["academic"],
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
       "priority": 15,
-      "timeout": 15000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "timeout": 15000
     },
     "semantic_scholar": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["academic"],
       "rate_limit": { "per_second": 1 },
       "auth_env": "INFOBROKER_SEMANTIC_SCHOLAR_API_KEY",
       "enabled": true,
-      "priority": 25,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 25
     },
     "stack_exchange": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["code"],
       "rate_limit": { "per_second": 0.003 },
       "auth_env": "INFOBROKER_STACK_EXCHANGE_API_KEY",
       "enabled": true,
-      "priority": 15,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 15
     },
     "github": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["code"],
       "rate_limit": { "per_second": 0.017 },
       "auth_env": "INFOBROKER_GITHUB_API_KEY",
       "enabled": true,
-      "priority": 15,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 15
     },
     "core": {
-      "type": "free_http",
       "tier": "free_http",
       "capabilities": ["academic"],
       "rate_limit": { "per_second": 1 },
       "auth_env": "INFOBROKER_CORE_API_KEY",
       "enabled": true,
-      "priority": 15,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 15
     },
     "marginalia": {
-      "type": "scraped",
       "tier": "builtin",
       "capabilities": ["web_search", "small_web"],
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "timeout": 30000
     },
     "mojeek": {
-      "type": "scraped",
       "tier": "builtin",
       "capabilities": ["web_search"],
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "timeout": 30000
     },
     "brave": {
-      "type": "keyed_http",
       "tier": "keyed_http",
       "capabilities": ["web_search", "news", "semantic"],
       "rate_limit": { "per_month": 2000 },
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
-      "enabled": true,
-      "priority": 30,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "enabled": false,
+      "priority": 30
     },
     "exa": {
-      "type": "keyed_http",
       "tier": "keyed_http",
       "capabilities": ["semantic", "synthesis"],
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_EXA_API_KEY",
-      "enabled": true,
-      "priority": 30,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "enabled": false,
+      "priority": 30
     },
     "tavily": {
-      "type": "keyed_http",
       "tier": "keyed_http",
       "capabilities": ["synthesis"],
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_TAVILY_API_KEY",
-      "enabled": true,
-      "priority": 30,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "enabled": false,
+      "priority": 30
     },
     "searxng": {
-      "type": "self_hosted_http",
       "tier": "self_hosted_http",
       "capabilities": ["web_search", "privacy_critical"],
       "rate_limit": {},
       "url_env": "INFOBROKER_SEARXNG_URL",
       "enabled": false,
-      "priority": 40,
-      "timeout": 10000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "priority": 40
     },
     "native_fetch": {
-      "type": "builtin",
       "tier": "builtin",
       "capabilities": ["content_fetch"],
       "rate_limit": {},
       "enabled": true,
       "priority": 1,
-      "timeout": 30000,
-      "retry_count": 3,
-      "retry_backoff_ms": 1000
+      "timeout": 30000
     }
   },
   "dispatch": {
@@ -237,16 +174,19 @@
   "convergence": {
     "max_iterations": 5,
     "max_http_calls": 30,
-    "confidence_threshold": 0.8
+    "confidence_threshold": 0.8,
+    "first_pass_max_results": 8,
+    "similarity_threshold": 0.3
   },
   "output": {
     "max_chars": 50000,
-    "latency_window_size": 100
+    "latency_window_size": 100,
+    "verbose": true
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",
     "embedding_model": "tf-idf",
-    "chunk_size": 512,
+    "chunk_size": 1024,
     "chunk_overlap": 64,
     "auto_index": true,
     "default_collection": "default",

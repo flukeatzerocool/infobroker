@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026.08.21 — Tool consolidation and output economy
+
+- Consolidated the tool surface from 13 tools to 6. `web_search` absorbs
+  `choose_provider` (task-type auto-selection, REQ-020a) and
+  `search_suggestions` (suggestion mode, REQ-020b). `providers` unifies
+  `list_providers`, `provider_health`, and `spec_health` (REQ-024, REQ-024a–c).
+  `kb` unifies `kb_search`, `kb_ingest`, `kb_stats`, and `kb_delete`
+  (REQ-060, REQ-060a–d). Removed REQ-022, REQ-023, REQ-025, REQ-041,
+  REQ-061, REQ-062, REQ-063. The validate-spec tool list is now derived from
+  `src/index.ts` registrations rather than hardcoded.
+- New REQ-079 (Output Verbosity): configurable compact mode that omits
+  optional metadata beyond title, URL, and snippet while retaining the
+  REQ-001 envelope, defaulting to verbose. `web_search` and `kb` default
+  `max_results` reduced and capped; `kb` search results carry only the
+  contracted fields. `converge` caps corroborating sources at three per
+  finding and adds a synthesis statement (REQ-026).
+- REQ-031 fallback chains now exclude disabled or unauthenticated providers
+  (tier-aware: keyed/self-hosted only) and allow concurrent first-hop
+  dispatch; REQ-013 startup health no longer delays readiness.
+- REQ-010 config gains a `defaults` block inherited by providers that do not
+  override it; the redundant `type` field was removed from `config.json`;
+  keyed providers (`brave`, `exa`, `tavily`) now ship `enabled: false` per
+  DECISIONS.md D-005.
+- Convergence quality: `first_pass_max_results` and `similarity_threshold`
+  are configurable; source independence uses registrable domains rather than
+  raw hostnames (§8.2). Recorded G1 fixtures refresh on a documented cadence
+  (§9.2).
+
 ## 2026.08.21 — Generic HTTP provider tier (spec)
 
 - New REQ-014 (Generic HTTP Provider Tier): a provider whose search behavior

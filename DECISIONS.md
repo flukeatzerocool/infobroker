@@ -59,12 +59,36 @@ implementation rather than a per-provider module; no per-tier tier constant
 is introduced to the provider-module interface beyond widening the tier
 union in §5.3.
 
+### D-020: Tool Consolidation and Output Economy (2026.08.21)
+
+The 13-tool surface was consolidated to 6 tools to cut `tools/list` schema
+bloat and round-trips: `web_search` (task-type auto-selection + suggestion
+mode), `fetch_page`, `converge`, `providers` (list/health/spec), `kb`
+(search/ingest/stats/delete), and `reload_config`. `search_suggestions` and
+`choose_provider` folded into `web_search`; the four `kb_*` and three
+ops/spec tools folded into `kb` and `providers` respectively, expressed via
+sub-REQs (`020a`–`020b`, `024a`–`024c`, `060a`–`060d`). The validate-spec
+tool list is derived from `src/index.ts` registrations instead of a
+hardcoded array, matching the README validator's single-source-of-truth
+pattern (D-017).
+
+Output economy (REQ-079) adds a configurable compact verbosity that drops
+`meta` and non-contracted fields, and `converge` caps corroborating sources
+at three plus a synthesis statement. Keyed providers now ship `enabled:
+false` in `config.json`, finally matching the long-standing D-005 intent;
+free-HTTP providers with optional auth keys remain enabled because they
+operate without a key. The redundant `type` field was removed from
+`config.json` (tier is the single authority). A `defaults` block supplies
+provider timeout/retry inheritance. Convergence source independence now
+collapses to the registrable domain (eTLD+1 heuristic) and accepts
+configurable first-pass breadth and similarity threshold.
+
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `1e7f81f763f6fb43567e2ae47adad72c88cbdb46c62083a7ea5c1876c4cfcd92`
-**Source hash:** `1a7ea738f3e3665829b074f4f8070c52a62d47fb6d556fa65a7468a230bf217a`
-**Config hash:** `2bd8dad703161afb7ec9476ddb45fa11f061c22b7a2e87bf117c8615995b75d5`
-**Total fingerprint:** `e86381614bfea790b8f3c2d1eb32008922052218921fb794133d9eff1765dba1`
+**Spec hash:** `13c0b9cfd8fff28b4d9331a19d1f6118e8073a8077506bdf59803d01412a8c09`
+**Source hash:** `cfc46716cd9a159f4ebc8c03b925061e1f42fd2d5bd57ecac8e4d747bbdb02c8`
+**Config hash:** `31d25fef8f122dce22fb6a5c9ce7b9d21115fa731b2fd8e8edc1f4cc47c67f72`
+**Total fingerprint:** `6887ef61eb7440f8ceda9624b5ed223004d0bf34c2393eb9c61af08fc91fe76e`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

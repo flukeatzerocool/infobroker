@@ -14,7 +14,7 @@ the current src/ tree in your context from the prior step.
    is intact and `npm test` to confirm no regression.
 5. Run `npm run version-bump` to update the version in package.json and
    src/index.ts to today's date.
-6. Smoke test: start the server and call `infobroker_spec_health`. Verify:
+6. Smoke test: start the server and call `infobroker_providers` (action spec). Verify:
    - Tool count has not decreased from the baseline
    - Provider count matches config.json
    - No confidence scores below 50%

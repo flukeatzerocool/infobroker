@@ -68,7 +68,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
 | F8 | Convergence loop stalls | `converge` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
-| F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. `kb_stats` reports the event. |
+| F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `kb` stats action reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
 | F12 | Generic provider misconfiguration | Empty results or parse errors from a user-defined endpoint | Config validation rejects a malformed endpoint or result mapping (REQ-014); a provider whose mapping produces no results advances the fallback chain (REQ-031) |
 
@@ -80,7 +80,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 - **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
-- **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `provider_health` responses.
+- **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `providers` health responses.
 - **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE (all free HTTP, no API key required) provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
@@ -137,7 +137,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
 | **Fallback chain** | Ordered list of providers tried in sequence on failure |
 | **Content renderer** | A provider that fetches and formats a URL (Jina Reader, native HTTP). Task type for dispatch: `content_fetch`. |
-| **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `choose_provider` |
+| **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `web_search` auto-selection |
 | **Convergence** | The multi-pass truth-finding loop in `converge` |
 | **Synthesis** | The container format that presents search findings to writing skills |
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
@@ -148,7 +148,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–026 (core tools), 030–037 (rate limiting and resilience), 040–041 (state and configuration), 042–043 (deployment and update preservation), 050–055, 077–078 (client artifacts and spec integrity), 060–067, 072, 074–076 (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020b`, `024a`–`024c` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–055, 077–078 (client artifacts and spec integrity), 060, 064–067, 072, 074–076 and sub-REQs `060a`–`060d` (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -174,19 +174,23 @@ Tool outputs longer than the configured max length SHALL be truncated and writte
 
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
 
+**REQ-079 — Output Verbosity**
+
+The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. Default verbosity SHALL be verbose. _Check:_ G1.
+
 ### 4.2 Provider Configuration
 
 **REQ-010 — Config File**
-Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The configuration SHALL be composed of a shipped default configuration and a user configuration layer. Values in the user layer SHALL take precedence over values in the shipped default. The user configuration layer SHALL be preserved when the software is updated. The config declares each provider's type, auth, rate limits, and priority. _Check:_ G1.
+Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The configuration SHALL be composed of a shipped default configuration and a user configuration layer. Values in the user layer SHALL take precedence over values in the shipped default. The user configuration layer SHALL be preserved when the software is updated. The config declares each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section supplying values inherited by providers that do not override them. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
-API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `provider_health` responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
+API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
 
 **REQ-012 — Environment Variable Mapping**
 The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
-On startup, the server SHALL log each configured provider's status: `active` (key present + reachable), `inactive` (key missing or unreachable), `degraded` (reachable but response latency exceeds a configurable threshold or the provider returns partial results). This status is exposed via `list_providers` and `provider_health`. _Check:_ G1.
+The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), or `degraded` (latency above a configurable threshold or partial results). The assessment SHALL be exposed via the `providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
 
 **REQ-014 — Generic HTTP Provider Tier**
 The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and referencing it from a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
@@ -197,11 +201,13 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 ### 4.3 Core Tools
 
 **REQ-020 — `web_search`**
-Unified search across configured providers. Parameters: `query` (required), `provider` (optional, auto-select if omitted), `max_results` (default 10, max 50), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (pagination, default 1). Returns normalized results with source provenance. Falls back through the configured chain on failure. Providers SHALL accept all
-parameters without error. A provider that does not support a parameter (page,
-safe_search, time_range) SHALL return results as normal, ignoring the
-unsupported parameter. The server SHALL enforce `max_results` on the response
-even when the underlying provider ignores it. _Check:_ G0, G1.
+`web_search` is the unified search tool. Parameters: `query` (required), `provider` (optional; auto-selected when omitted per REQ-020a), `max_results` (default 5, max 30), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (default 1), `priority` (optional: speed, quality, privacy, free_only), `suggest` (optional boolean, default false). When `suggest` is true, the tool SHALL return query-autocomplete strings for `query` instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. _Check:_ G0, G1.
+
+**REQ-020a — `web_search` auto-selection**
+WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
+
+**REQ-020b — `web_search` suggestion mode**
+WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from the configured suggestion provider, presenting each as a result with a title and no URL. A suggestion-provider failure SHALL return an error per REQ-002 without fallback. _Check:_ G0, G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required),
@@ -211,26 +217,20 @@ chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which
 produces clean Markdown optimized for LLM consumption. Falls back to native
 HTTP fetch if the selected renderer is throttled or errors. _Check:_ G0, G1.
 
-**REQ-022 — `search_suggestions`**
-Query autocomplete. Parameters: `query` (required), `provider` (optional, defaults to DuckDuckGo autocomplete endpoint). Returns an array of suggestion strings. _Check:_ G0, G1.
+**REQ-024 — `providers`**
+`providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
-**REQ-023 — `choose_provider`**
-Recommend the best provider for a given task. Parameters: `task` (required, natural-language description of what the user wants to find), `priority` (optional: `speed`, `quality`, `privacy`, `free_only`). When the knowledge base is configured and contains indexed content, the recommendation SHALL include knowledge base search as a first-resort option. Returns: recommended provider slug, rationale, fallback chain, estimated latency, quota status. _Check:_ G0, G1.
+**REQ-024a — `providers` list action**
+WHEN action is list, the tool SHALL report every configured provider with its status, capabilities, rate limits, quota usage, and supported task types, with an optional filter selecting only active providers. _Check:_ G0, G1.
 
-**REQ-024 — `list_providers`**
-List all configured providers with their status, capabilities, rate limits, quota usage, and supported task types. Parameters: `status` (optional filter: `active`, `all`). _Check:_ G0, G1.
+**REQ-024b — `providers` health action**
+WHEN action is health, the tool SHALL perform a live connectivity check against the named provider and report its resulting status, average latency, current quota counters, and the timestamps of the most recent error and success from operational history. _Check:_ G0, G1.
 
-**REQ-025 — `provider_health`**
-Provider health report. Parameters: `provider` (required slug). When
-`provider_health` is invoked, the server SHALL perform a live connectivity
-check against the provider. The reported `status` and `avg_latency_ms`
-SHALL reflect the result of this live check. Quota fields SHALL report
-current counters. The `last_error` and `last_success` fields SHALL report
-the most recent error and successful request timestamps from operational
-history. _Check:_ G0, G1.
+**REQ-024c — `providers` spec action**
+WHEN action is spec, the tool SHALL report build identity, provider counts, uptime, cumulative request count, and paths to persistent state files; when the knowledge base is configured, the report SHALL also include chunk count, per-collection counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
 **REQ-026 — `converge`**
-Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). See §8 for the full convergence algorithm. _Check:_ G0, G1.
+Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full convergence algorithm. _Check:_ G0, G1.
 
 ### 4.4 Rate Limiting and Resilience
 
@@ -243,7 +243,7 @@ operate independently.
 Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain SHALL be ordered by provider priority in `config.json`. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain. When every provider in the fallback chain is exhausted, the server SHALL return an error with code `all_providers_exhausted` and remediation naming the chain that was attempted. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain, respecting per-provider throttling, and MAY dispatch the first providers concurrently, preferring the first successful result. When every provider in the fallback chain is exhausted, the server SHALL return an error with code `all_providers_exhausted` and remediation naming the chain attempted. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -253,7 +253,7 @@ Providers SHALL retry on transient errors before advancing to the next provider 
 Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counter state SHALL be durably written to disk such that quota enforcement survives server restarts. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). _Check:_ G1.
 
 **REQ-034 — Quota Warning Threshold**
-At 80% of quota usage, `provider_health` SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
+At 80% of quota usage, the `providers` health action SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
 
 **REQ-035 — Request Timeout**
 Each outbound provider call SHALL be bounded by a configurable timeout. A call
@@ -262,7 +262,7 @@ trigger fallback chain advancement. The timeout is configurable per provider in
 `config.json`. _Check:_ G1.
 
 **REQ-036 — Latency Tracking Window**
-Provider latency metrics reported via `provider_health` SHALL be computed over
+Provider latency metrics reported via the `providers` health action SHALL be computed over
 a bounded time window. The window strategy is configurable. All-time unbounded
 accumulation SHALL NOT be the sole computation strategy. _Check:_ G1.
 
@@ -277,9 +277,6 @@ configuration active without interruption. _Check:_ G1.
 
 **REQ-040 — Configuration Reload**
 The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned. _Check:_ G1.
-
-**REQ-041 — `spec_health`**
-Build health report. Returns the operational status of the server: build identity (version), provider summary (count, active count), uptime, cumulative request count, and paths to persistent state files. When the knowledge base is configured, the report SHALL include knowledge base status: total chunk count, collection names and their chunk counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
 ### 4.6 Provider Architecture
 
@@ -342,21 +339,20 @@ _Check:_ G3.
 
 ### 4.9 Knowledge Base
 
-**REQ-060 — `kb_search`**
+**REQ-060 — `kb`**
+`kb` manages the local knowledge base. Parameters: `action` (required: search, ingest, stats, delete) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
-Semantic and keyword hybrid search over the local knowledge base. Parameters: `query` (required), `max_results` (default 10, max 50), `collection` (optional — scope search to one collection), `source_type` (optional — filter by the origin of the indexed content). Returns chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, and matching snippet. If the knowledge base is not initialized, returns error with remediation. Returns zero results when the KB is empty or no matches are found. _Check:_ G0, G1.
+**REQ-060a — `kb` search action**
+WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, and a matching snippet. The tool SHALL accept a maximum-results count, a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
-**REQ-061 — `kb_ingest`**
+**REQ-060b — `kb` ingest action**
+WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title and collection. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
 
-Explicit ingestion of content into the knowledge base. Parameters: `text` (optional — raw text to chunk and index), `url` (optional — a URL to fetch and index using the default content renderer per REQ-021), `title` (optional), `collection` (optional). At least one of `text` or `url` must be provided. When `url` is given, the server fetches the page content before indexing; a fetch failure returns an error. Returns the number of chunks ingested and the source identifier. _Check:_ G0, G1.
+**REQ-060c — `kb` stats action**
+WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
 
-**REQ-062 — `kb_stats`**
-
-Knowledge base operational metrics. No required parameters. Returns: total chunk count, collection names and their chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage corruption recovery. _Check:_ G0, G1.
-
-**REQ-063 — `kb_delete`**
-
-Remove content from the knowledge base. Parameters: `collection` (optional), `source_url` (optional). At least one filter must be provided. If no filter is provided, the tool returns an error. Returns the count of removed chunks. _Check:_ G0, G1.
+**REQ-060d — `kb` delete action**
+WHEN action is delete, the tool SHALL remove chunks by collection or source URL, requiring at least one filter, and SHALL report the count of removed chunks. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
 
@@ -376,7 +372,7 @@ The knowledge base configuration SHALL reside within the server's main configura
 
 **REQ-072 — Knowledge Base Deduplication**
 
-Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. The chunk count reported by `kb_stats` SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
+Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. The chunk count reported by the `kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
 **REQ-074 — Freshness Classification**
 
@@ -423,10 +419,8 @@ requiring reconfiguration. _Check:_ G1.
 ### 5.2 Layered Architecture
 
 ```
-Layer 3: Tools                 web_search, fetch_page, converge, choose_provider,
-                               list_providers, provider_health, search_suggestions,
-                               reload_config, spec_health,
-                               kb_search, kb_ingest, kb_stats, kb_delete
+Layer 3: Tools                 web_search, fetch_page, converge, providers,
+                               kb, reload_config
 
 Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
@@ -478,7 +472,7 @@ change (REQ-014).
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
 7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
 8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
-9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `converge`, KB MCP tools (`kb_search`, `kb_ingest`, `kb_stats`, `kb_delete`), content expiry maintenance loop.
+9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `converge`, the `kb` MCP tool, content expiry maintenance loop.
 
 ### 5.5 Convergence Quality (Single Phase)
 
@@ -498,10 +492,9 @@ responses. The convergence loop validates against:
 ### 6.1 Tool Naming
 
 All tools use `snake_case`. Tool names are domain terminology: `web_search`,
-`fetch_page`, `search_suggestions`, `choose_provider`, `list_providers`,
-`provider_health`, `converge`, `reload_config`, `spec_health`, `kb_search`,
-`kb_ingest`, `kb_stats`, `kb_delete`. These logical names are registered with
-the MCP client under an `infobroker_` prefix (e.g., `infobroker_web_search`).
+`fetch_page`, `converge`, `providers`, `kb`, `reload_config`. These logical
+names are registered with the MCP client under an `infobroker_` prefix
+(e.g., `infobroker_web_search`).
 
 ### 6.2 Output Format
 
@@ -591,9 +584,9 @@ when Jina returns 429 or error.
 
 ### 7.3 Provider Deprioritization
 
-`choose_provider` SHALL consider current quota remaining when recommending.
-A provider at >80% usage is demoted one tier in the dispatch table. A provider
-at 100% is removed from recommendations until reset.
+`web_search` auto-selection SHALL consider current quota remaining when
+selecting. A provider at >80% usage is demoted one tier in the dispatch table.
+A provider at 100% is removed from selection until reset.
 
 ---
 
@@ -607,7 +600,8 @@ function converge(query, max_iterations=5, confidence_threshold=0.8, providers=[
   iteration = 0
 
   while iteration < max_iterations:
-    // Phase 1: Broad search across all active providers
+    // Phase 1: Broad search across all active providers (up to
+    // first_pass_max_results results per provider, default 8)
     raw_results = parallel_search(query, providers)
     claims = extract_claims(raw_results)
 
@@ -646,6 +640,7 @@ function converge(query, max_iterations=5, confidence_threshold=0.8, providers=[
   return {
     findings: [{topic, claim, confidence, verdict, sources, perspectives?}],
     agreement_map: {green: [...], yellow: [...], red: gaps},
+    synthesis: summary(findings),
     iteration_count: iteration,
     providers_used: [...],
     total_sources: count_total_sources(findings)
@@ -662,14 +657,17 @@ function converge(query, max_iterations=5, confidence_threshold=0.8, providers=[
 | 3+ (independent) | 0.9 | Well-corroborated |
 | 5+ including 1 primary | 1.0 | Established |
 
-Independence: Two sources are independent if they have different root domains
-(e.g., wikipedia.org and britannica.com are independent; two wikipedia.org
-pages are not).
+Independence: Two sources are independent if they have different registrable
+domains (e.g., wikipedia.org and britannica.com are independent; two pages on
+wikipedia.org, or two subdomains of the same registrable domain, are not).
+The similarity threshold at which claims are grouped into an agreement cluster
+is configurable via `convergence.similarity_threshold`.
 
 ### 8.3 Iteration Limits
 
 - `max_iterations` defaults to 5, capped at 10.
 - Max total HTTP calls per `converge` invocation: 30.
+- `first_pass_max_results` (default 8) bounds results fetched per provider in Phase 1.
 - If either limit is reached, return partial findings with `convergence: "partial"` flag.
 
 ---
@@ -686,7 +684,7 @@ pages are not).
 
 ### 9.2 G1 — Integration Tests
 
-- Each provider backend tested with mock HTTP responses (real responses recorded once, replayed in CI)
+- Each provider backend tested with mock HTTP responses (real responses recorded once, replayed in CI). Recorded fixtures SHALL be refreshed on a documented cadence so selector and format drift is caught before it reaches production.
 - Fallback chain: mock provider A fails → provider B called → results from B returned
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
@@ -706,7 +704,7 @@ pages are not).
 - KB auto-indexing: execute `web_search` with mock provider → verify store received results after response
 - KB collection scoping: insert content into two collections → query scoped to one → verify only scoped results returned
 - KB expiry: insert content with past timestamp → trigger maintenance → verify expired content removed; verify non-expired content retained
-- KB config validation: provide invalid KB config section → verify `kb_search` returns config error
+- KB config validation: provide invalid KB config section → verify `kb` search returns config error
 - KB deduplication: ingest URL with content → note chunk count → re-ingest same URL → verify count unchanged, content updated
 - Normalizer discard: normalize results with empty URL → verify zero results returned, max_results count preserved for downstream provider
 - Config overlay: load shipped default plus user configuration layer → verify user values take precedence over shipped values
@@ -748,6 +746,7 @@ pages are not).
 | REQ-003 | Result Format Normalization | 4.1 | G1 |
 | REQ-004 | Truncation | 4.1 | G1 |
 | REQ-073 | Minimum Viable Result | 4.1 | G1 |
+| REQ-079 | Output Verbosity | 4.1 | G1 |
 | REQ-010 | Config File | 4.2 | G1 |
 | REQ-011 | API Key Safety | 4.2 | G1 |
 | REQ-012 | Environment Variable Mapping | 4.2 | G1 |
@@ -755,11 +754,13 @@ pages are not).
 | REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
 | REQ-020 | web_search | 4.3 | G0, G1 |
+| REQ-020a | web_search auto-selection | 4.3 | G1 |
+| REQ-020b | web_search suggestion mode | 4.3 | G0, G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
-| REQ-022 | search_suggestions | 4.3 | G0, G1 |
-| REQ-023 | choose_provider | 4.3 | G0, G1 |
-| REQ-024 | list_providers | 4.3 | G0, G1 |
-| REQ-025 | provider_health | 4.3 | G0, G1 |
+| REQ-024 | providers | 4.3 | G0, G1 |
+| REQ-024a | providers list action | 4.3 | G0, G1 |
+| REQ-024b | providers health action | 4.3 | G0, G1 |
+| REQ-024c | providers spec action | 4.3 | G0, G1 |
 | REQ-026 | converge | 4.3 | G0, G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
@@ -770,7 +771,6 @@ pages are not).
 | REQ-036 | Latency Tracking Window | 4.4 | G1 |
 | REQ-037 | Config Validation | 4.4 | G1 |
 | REQ-040 | Configuration Reload | 4.5 | G1 |
-| REQ-041 | spec_health | 4.5 | G0, G1 |
 | REQ-070 | Provider Registration | 4.6 | G1 |
 | REQ-071 | Outbound HTTP Identification | 4.6 | G1 |
 | REQ-050 | search-preferences.md | 4.7 | G3 |
@@ -781,10 +781,11 @@ pages are not).
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
-| REQ-060 | kb_search | 4.9 | G0, G1 |
-| REQ-061 | kb_ingest | 4.9 | G0, G1 |
-| REQ-062 | kb_stats | 4.9 | G0, G1 |
-| REQ-063 | kb_delete | 4.9 | G0, G1 |
+| REQ-060 | kb | 4.9 | G0, G1 |
+| REQ-060a | kb search action | 4.9 | G0, G1 |
+| REQ-060b | kb ingest action | 4.9 | G0, G1 |
+| REQ-060c | kb stats action | 4.9 | G1 |
+| REQ-060d | kb delete action | 4.9 | G0, G1 |
 | REQ-064 | Auto-Indexing | 4.9 | G1 |
 | REQ-065 | Collection Scoping | 4.9 | G1 |
 | REQ-066 | Content Expiry | 4.9 | G1 |
@@ -885,11 +886,12 @@ configuration layer is merged over it by the server (REQ-010).
 |----------------------|-------------------|
 | `duckduckgo_web_search` | `web_search` — DuckDuckGo is still the default provider, with fallback |
 | `duckduckgo_get_page_content` | `fetch_page` — Jina Reader as default renderer, native fallback |
-| `duckduckgo_suggest_related_searches` | `search_suggestions` — DuckDuckGo autocomplete, same endpoint |
-| (none) | `choose_provider` — new capability |
+| `duckduckgo_suggest_related_searches` | `web_search` with `suggest` — DuckDuckGo autocomplete, same endpoint |
+| (none) | `web_search` auto-selection — task-type routing (was `choose_provider`) |
 | (none) | `converge` — multi-pass truth-finding |
-| (none) | `list_providers` + `provider_health` — operational visibility |
-| (none) | `reload_config` + `spec_health` — ops tooling |
+| (none) | `providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
+| (none) | `kb` — knowledge base search/ingest/stats/delete (was four `kb_*` tools) |
+| (none) | `reload_config` — ops tooling |
 | Client `websearch` | Infobroker is preferred; built-in is fallback |
 | Client `webfetch` | Infobroker `fetch_page` is preferred; built-in is fallback |
 
@@ -967,8 +969,8 @@ the mapping from response fields to the normalized result shape (REQ-003):
 }
 ```
 
-The slug is then referenced from a dispatch chain so `web_search` and
-`choose_provider` pick it up. Removing the provider means setting `enabled`
+The slug is then referenced from a dispatch chain so `web_search` picks it up.
+Removing the provider means setting `enabled`
 to `false`; the entry and its backend remain installed (REQ-015). A generic
 provider whose endpoint or result mapping is malformed is rejected by
 configuration validation (REQ-037, REQ-014).
@@ -1193,12 +1195,12 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page`, `search_suggestions` | REQ-003, REQ-004, REQ-020, REQ-021, REQ-022, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
-| 2 | Provider Intelligence | `choose_provider`, `list_providers`, `provider_health` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-023, REQ-024, REQ-025, REQ-070, REQ-071 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-021, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Convergence | `converge` | REQ-026 | G0, G1 |
-| 4 | Knowledge Base | `kb_search`, `kb_ingest`, `kb_stats`, `kb_delete` | REQ-060, REQ-061, REQ-062, REQ-063, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
-| 5 | State & Operations | `reload_config`, `spec_health` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-041, REQ-042, REQ-043 | G0, G1 |
-| 6 | Tool Surface & Contracts | (all 13 tools) | REQ-001, REQ-002 | G0 |
+| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043 | G0, G1 |
+| 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078 | G3 |
 
