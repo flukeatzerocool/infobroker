@@ -9,10 +9,11 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, reloadConfig, getConfig, getEnvVar, getDispatchChain } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
-import { PROVIDERS } from "./providers/index.js";
-import { retryWithBackoff } from "./retry.js";
-import { converge } from "./converge.js";
+import { PROVIDERS, resolveProvider } from "./providers/index.js";
+import { retryWithBackoff, ParseError } from "./retry.js";
+import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain } from "./chain.js";
+import { assertPublicUrl } from "./lib/url-guard.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex, flushKbWrites } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
@@ -137,7 +138,7 @@ async function startupHealthCheck(): Promise<void> {
       console.error(`[infobroker] ${slug}: inactive (no_url)`);
       continue;
     }
-    const p = PROVIDERS[slug];
+    const p = resolveProvider(slug);
     if (!p) {
       console.error(`[infobroker] ${slug}: active (no health check available)`);
       continue;
@@ -181,15 +182,35 @@ function classifyTaskType(task: string): string {
   return "general_web";
 }
 
+// Server-side content-type classification by URL pattern. Providers cannot all
+// honor a content_type filter natively, so Infobroker applies it as a
+// post-filter over normalized URLs.
+function classifyContentType(url: string): string {
+  const u = url.toLowerCase();
+  if (/(^|\/)(docs?\.|docs\/(.+))|developer|documentation/.test(u)) return "docs";
+  if (/\/issues?\/|github\.com\/[^/]+\/[^/]+\/issues|\/pull\/\d+/.test(u)) return "issue";
+  if (/changelog|release-notes|releases|what-?s-new/.test(u)) return "changelog";
+  if (/(^|\.)blog\.|(^|\/)(blog|posts|articles)(\/|$)/.test(u)) return "blog";
+  if (/\brfc\d+|\bspec\b|standard\b|w3\.org|ietf\.org/.test(u)) return "spec";
+  return "all";
+}
+
+function filterByContentType(results: SearchResult[], contentType: string): SearchResult[] {
+  if (!contentType || contentType === "all") return results;
+  return results.filter((r) => classifyContentType(r.url) === contentType);
+}
+
 async function doWebSearch(
   query: string,
   preferredProvider?: string,
   maxResults = 8,
-  safeSearch: "on" | "off" = "on",
+  safeSearch: "on" | "off" | "strict" = "on",
   timeRange?: string,
   page = 1,
   priority?: string,
-  suggest = false
+  suggest = false,
+  contentType?: string,
+  region?: string
 ): Promise<string> {
   const config = getConfig();
 
@@ -256,7 +277,7 @@ async function doWebSearch(
     return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
 
-  const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page };
+  const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType };
   let lastError: ToolErrorResponse | null = null;
   let depth = 0;
 
@@ -269,7 +290,7 @@ async function doWebSearch(
       await throttle(slug);
       const start = Date.now();
 
-      const provider = PROVIDERS[slug];
+      const provider = resolveProvider(slug);
       if (!provider?.search) {
         throw new Error(`Provider ${slug} has no search function`);
       }
@@ -292,28 +313,59 @@ async function doWebSearch(
       providerLastSuccess[slug] = Date.now();
       depth++;
 
-      autoIndex(results, slug, undefined, undefined, query, timeRange);
+      // REQ-031: an empty result set is a failure for chain advancement, not a
+      // successful answer. Fall through to the next provider — but keep a
+      // provider's empty as distinct from a total failure so the final
+      // all-empty case is reported as a legitimate zero-result answer.
+      if (results.length === 0) {
+        providerLastError[slug] = { message: "empty result set", timestamp: Date.now() };
+        continue;
+      }
 
-      return `[OK] ${json(ok(slug, results, {
+      const filtered = contentType ? filterByContentType(results, contentType) : results;
+      if (filtered.length === 0) {
+        providerLastError[slug] = { message: "content_type filter removed all results", timestamp: Date.now() };
+        continue;
+      }
+
+      autoIndex(filtered, slug, undefined, undefined, query, timeRange);
+
+      return `[OK] ${json(ok(slug, filtered, {
         query_time_ms: elapsed,
         fallback_used: lastError !== null,
         quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page }),
+        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
       }))}`;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       providerLastError[slug] = { message: msg, timestamp: Date.now() };
-      lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
+      if (e instanceof ParseError) {
+        lastError = err(slug, "parse_error", msg, "Trying next provider in fallback chain");
+      } else {
+        lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
+      }
     }
   }
 
-  return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration"))}`;
+  // A chain that ended on provider errors is a failure; a chain whose
+  // providers all returned empty is a legitimate zero-result answer.
+  if (lastError !== null) {
+    return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration"))}`;
+  }
+  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [] }))}`;
 }
 
 async function doFetchPage(url: string, renderer?: string, maxLength?: number): Promise<string> {
   const config = getConfig();
   const renderers = renderer ? [renderer] : getDispatchChain("content_fetch");
   const effectiveMax = maxLength ?? config.output.max_chars;
+
+  const allowPrivate = config.fetch?.allow_private_urls === true;
+  try {
+    assertPublicUrl(url, allowPrivate);
+  } catch (e) {
+    return `[ERROR] ${json(err("none", "invalid_input", e instanceof Error ? e.message : String(e), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+  }
 
   for (const slug of renderers) {
     try {
@@ -324,12 +376,22 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
         if (slug === "native_fetch") {
           const resp = await fetch(url, {
             headers: { "User-Agent": "Infobroker/1.0" },
+            redirect: "manual",
           });
+          if (resp.status >= 300 && resp.status < 400) {
+            const loc = resp.headers.get("location");
+            if (loc) {
+              assertPublicUrl(new URL(loc, url).toString(), allowPrivate);
+            }
+            const followed = await fetch(url, { headers: { "User-Agent": "Infobroker/1.0" } });
+            if (!followed.ok) throw new Error(`HTTP ${followed.status}`);
+            return await followed.text();
+          }
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           return await resp.text();
         }
 
-        const provider = PROVIDERS[slug];
+        const provider = resolveProvider(slug);
         if (!provider?.fetchPage) {
           throw new Error(`Provider ${slug} has no fetchPage function`);
         }
@@ -433,7 +495,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   let status = authOk ? "active" : "inactive";
 
   let avgLatencyMs: number | undefined;
-  const registeredProvider = PROVIDERS[providerSlug];
+  const registeredProvider = resolveProvider(providerSlug);
   if (registeredProvider && authOk) {
     try {
       const h = await registeredProvider.health();
@@ -514,7 +576,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.22",
+  version: "2026.08.23",
 });
 
 // --- web_search ---
@@ -527,11 +589,13 @@ server.registerTool(
       query: z.string().describe("Search query"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
       max_results: z.number().min(1).max(30).optional().default(8),
-      safe_search: z.enum(["on", "off"]).optional().default("on"),
+      safe_search: z.enum(["on", "off", "strict"]).optional().default("on"),
       time_range: z.enum(["day", "week", "month", "year"]).optional(),
       page: z.number().min(1).optional().default(1),
       priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional(),
       suggest: z.boolean().optional().default(false),
+      content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all"),
+      region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
     },
   },
   async (params) => {
@@ -539,11 +603,13 @@ server.registerTool(
       String(params.query),
       params.provider as string | undefined,
       Number(params.max_results ?? 5),
-      (params.safe_search as "on" | "off") ?? "on",
+      (params.safe_search as "on" | "off" | "strict") ?? "on",
       params.time_range as string | undefined,
       Number(params.page ?? 1),
       params.priority as string | undefined,
-      Boolean(params.suggest)
+      Boolean(params.suggest),
+      params.content_type as string | undefined,
+      params.region as string | undefined
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
@@ -597,11 +663,11 @@ server.registerTool(
   }
 );
 
-// --- converge ---
+// --- corroborate ---
 server.registerTool(
-  "infobroker_converge",
+  "infobroker_corroborate",
   {
-    title: "Converge (Multi-Source Truth-Finding)",
+    title: "Corroborate (Multi-Source Truth-Finding)",
     description: "Multi-pass truth-finding search with cross-source verification.",
     inputSchema: {
       query: z.string().describe("Search query"),
@@ -612,24 +678,27 @@ server.registerTool(
   },
   async (params) => {
     try {
-      const result = await converge(String(params.query), {
+      const result = await corroborate(String(params.query), {
         max_iterations: Number(params.max_iterations ?? 5),
         confidence_threshold: Number(params.confidence_threshold ?? 0.8),
         providers: params.providers as string[] | undefined,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
-        "converge",
+        "corroborate",
         undefined,
-        "converge"
+        "corroborate"
       );
+      if (compactMode()) {
+        delete result.provenance;
+      }
       return { content: [{ type: "text" as const, text: `[OK] ${json(result)}` }] };
     } catch (e) {
       return {
         content: [
           {
             type: "text" as const,
-            text: `[ERROR] ${json(err("none", "convergence_error", e instanceof Error ? e.message : String(e), "Retry with different query"))}`,
+            text: `[ERROR] ${json(err("none", "corroboration_error", e instanceof Error ? e.message : String(e), "Retry with different query"))}`,
           },
         ],
       };

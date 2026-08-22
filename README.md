@@ -110,7 +110,7 @@ Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
 behind a single tool surface. Fourteen zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Four more providers unlock with API keys or self-hosting. A built-in convergence engine cross-references independent
+configure. Four more providers unlock with API keys or self-hosting. A built-in corroboration engine cross-references independent
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
@@ -159,7 +159,7 @@ Requirements: Node.js 20+.
 ## MCP Server
 
 Your research backend. Six tools, eighteen providers, one
-convergence engine. The complete feature inventory is documented in the
+corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
 
@@ -205,7 +205,7 @@ gives you operational visibility into every backend.
 > "Verify whether the Empire really destroyed Alderaan."
 > "Find the consensus on who fired first — Han or Greedo."
 
-`converge` runs a multi-pass truth-finding loop: broad
+`corroborate` runs a multi-pass truth-finding loop: broad
 search across active providers, claim extraction, cross-source
 reconciliation, and targeted follow-up for gaps. Claims corroborated
 across independent sources score high confidence, weighted by each
@@ -221,7 +221,7 @@ Infobroker finds the truth and tells you how sure it is.
 > "Search what you already found about the Rebel Alliance fleet."
 > "Ingest this article so it's cached for next time."
 
-Every search, fetch, and convergence run is cached in a local knowledge
+Every search, fetch, and corroboration run is cached in a local knowledge
 base. `kb` checks the cache before hitting external providers — only
 falling back to the network when the cached results aren't fresh enough
 or relevant enough. Its actions ingest new text or a URL by hand, report
@@ -261,7 +261,7 @@ doing and how much capacity remains.
 
 ## Providers
 
-Eighteen providers. Fourteen work with zero configuration.
+Twenty providers. Fifteen work with zero configuration.
 
 | Provider | Tier | Type | Key Required |
 |----------|------|------|-------------|
@@ -279,14 +279,16 @@ Eighteen providers. Fourteen work with zero configuration.
 | CORE | Free HTTP | Open access | Optional |
 | Marginalia | Built-in | Small web | No |
 | Mojeek | Built-in | Independent index | No |
+| Wiby | Built-in | Small web | No |
 | Brave Search | Keyed HTTP | Web, News | Yes |
 | Exa | Keyed HTTP | Semantic | Yes |
 | Tavily | Keyed HTTP | Synthesis | Yes |
+| Yep | Keyed HTTP | Web, Semantic | Yes |
 | SearXNG | Self-hosted | Full privacy | Yes (self) |
 
 Built-in and free-HTTP providers are active out of the box. Keyed
-providers enable with an API key. Self-hosted providers point at your
-own instance:
+providers enable with an API key. Self-hosted providers point at a server
+you run yourself:
 
 ```bash
 export INFOBROKER_BRAVE_API_KEY="BSA-..."
@@ -294,6 +296,15 @@ export INFOBROKER_SEARXNG_URL="http://localhost:8080"
 ```
 
 Then set `"enabled": true` in `config.json` for the provider.
+
+SearXNG is the only shipped self-hosted provider, and it is optional
+through and through. Nothing in the server requires it, and nothing is
+bundled or installed on its behalf — SearXNG runs as a container you
+operate, and Infobroker queries its JSON endpoint like any other backend.
+Leave it disabled (the default) and you lose nothing: the
+privacy-critical chain still serves via DuckDuckGo and Mojeek. Enable it
+only when you want full query privacy, in which case only your own
+SearXNG instance sees your queries.
 
 ## Configuration
 
@@ -306,7 +317,7 @@ Then set `"enabled": true` in `config.json` for the provider.
 
 `config.json` ships with the repository and holds the defaults: which
 providers are enabled, their priority in fallback chains, rate limits,
-convergence parameters, and the task-to-provider dispatch table.
+corroboration parameters, and the task-to-provider dispatch table.
 Hot-reloadable via `reload_config` — edit the file, call the tool, and
 changes take effect without a restart.
 
@@ -316,6 +327,35 @@ This file is git-ignored, so pulling updates from the repository never
 overwrites your settings. Values in the user layer take precedence over
 the shipped defaults; anything left out falls back to `config.json`.
 
+### Bring your own endpoint
+
+Any HTTP search endpoint can become an Infobroker provider without
+touching the source tree. Declare it in `config.local.json` as a
+`generic_http` provider, then reference it from a dispatch chain:
+
+```json
+{
+  "providers": {
+    "my_search": {
+      "tier": "generic_http",
+      "capabilities": ["web_search"],
+      "enabled": true,
+      "priority": 20,
+      "endpoint": "https://api.example.com/search",
+      "query_param": "q",
+      "results_path": "data.items",
+      "field_map": { "title": "name", "url": "link", "snippet": "summary" }
+    }
+  },
+  "dispatch": { "general_web": ["my_search", "duckduckgo"] }
+}
+```
+
+The server GETs `endpoint?query_param=<query>`, walks `results_path`
+(dot-separated into the response JSON), and maps each result to the
+common shape using `field_map`. Add the slug to your `config.local.json`
+override and call `reload_config` to use it immediately.
+
 ## How It Compares
 
 | Tool name | What you're used to | How Infobroker differs |
@@ -323,13 +363,13 @@ the shipped defaults; anything left out falls back to `config.json`.
 | Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Fourteen zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
 | Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and twelve other providers work with zero configuration. Upgrade paths for Brave, Exa, and Tavily. Self-hosted SearXNG for full privacy. |
-| Other search MCP servers | Single-provider focus, no fallback, no convergence, no writing pipeline | Multi-provider with automatic fallback. Convergence engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
-| AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The convergence engine verifies facts across independent sources. |
+| Other search MCP servers | Single-provider focus, no fallback, no corroboration, no writing pipeline | Multi-provider with automatic fallback. Corroboration engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
+| AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The corroboration engine verifies facts across independent sources. |
 
 Every other search MCP server asks you to pick a provider and trust it.
 Infobroker gives you a fleet — and picks the right one for each task.
 When a provider fails, the next one takes over without you noticing.
-When a claim matters, the convergence engine finds agreement,
+When a claim matters, the corroboration engine finds agreement,
 contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.

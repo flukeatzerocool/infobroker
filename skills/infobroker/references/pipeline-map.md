@@ -7,7 +7,7 @@ flowchart TD
     U -->|"Research + Write"| RPMain
 
     subgraph RP["Research Professional Pipeline"]
-        RPMain["infobroker web_search / converge"] --> Extract["infobroker fetch_page"]
+        RPMain["infobroker web_search / corroborate"] --> Extract["infobroker fetch_page"]
         Extract --> Verify["deep-research Phase 3 + fact-checking"]
         Verify --> Summarize["summarization"]
         Summarize --> Write["technical-writing"]
@@ -19,7 +19,7 @@ flowchart TD
 
     subgraph FC["Fact-Check Pipeline"]
         FCMain["Extract claims from input"] --> FCSearch["infobroker web_search per claim"]
-        FCSearch --> FCCC["infobroker converge cross-reference"]
+        FCSearch --> FCCC["infobroker corroborate cross-reference"]
         FCCC --> FCVerdict["fact-checking — assign verdicts"]
         FCVerdict --> FCSum["summarization — executive summary"]
     end

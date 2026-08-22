@@ -38,7 +38,7 @@ metadata:
 
 4. **Cross-reference.** Check each claim against at least two independent
    sources. Note corroboration, contradiction, or partial support. Use
-   Infobroker `converge` for automated multi-source verification.
+   Infobroker `corroborate` for automated multi-source verification.
 
 5. **Assign verdicts.** Use: True, Mostly True, Half True, Mostly False,
    False, or Unverifiable. Include a confidence score (0.0–1.0) and a brief
@@ -66,6 +66,6 @@ metadata:
 ## Infobroker Integration
 
 This skill is the verdict engine in the Infobroker Fact-Check Pipeline.
-After Infobroker `web_search` and `converge` find and cross-reference
+After Infobroker `web_search` and `corroborate` find and cross-reference
 sources, this skill assigns confidence-scored verdicts. The pipeline then
 routes to `summarization` for the executive summary.

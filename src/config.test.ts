@@ -23,7 +23,7 @@ const BASE: Config = {
     },
   },
   dispatch: { general_web: ["duckduckgo"], privacy_critical: ["duckduckgo"] },
-  convergence: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8 },
+  corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8 },
   output: { max_chars: 50000 },
   kb: {
     storage_path: "~/.local/share/infobroker/knowledge-base",
@@ -117,5 +117,49 @@ describe("configuration overlay", () => {
     const cfg = mod.loadConfig();
     rmSync(dir, { recursive: true, force: true });
     expect(cfg.providers.duckduckgo.priority).toBe(10);
+  });
+
+  it("rejects a generic_http provider missing endpoint/query_param", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: { tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20 },
+        },
+      })
+    ).rejects.toThrow(/endpoint/);
+  });
+
+  it("rejects a generic_http provider with an invalid endpoint URL", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: {
+            tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "ftp://bad.example.com", query_param: "q",
+          },
+        },
+      })
+    ).rejects.toThrow(/endpoint/);
+  });
+
+  it("rejects generic-only fields on a non-generic provider", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: { duckduckgo: { endpoint: "https://x.example.com" } },
+      })
+    ).rejects.toThrow(/only valid for generic_http/);
+  });
+
+  it("accepts a valid generic_http provider configuration", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      providers: {
+        my_search: {
+          tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+          endpoint: "https://api.example.com/search", query_param: "q", results_path: "data.items",
+          field_map: { title: "name", url: "link", snippet: "summary" },
+        },
+      },
+    });
+    expect(cfg.providers.my_search.endpoint).toBe("https://api.example.com/search");
   });
 });

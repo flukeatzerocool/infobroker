@@ -9,7 +9,7 @@
 5. [§5 Build Process](#5-build-process)
 6. [§6 Runtime Conventions](#6-runtime-conventions)
 7. [§7 Provider Selection Dispatch](#7-provider-selection-dispatch)
-8. [§8 Convergence Loop](#8-convergence-loop)
+8. [§8 Corroboration Loop](#8-corroboration-loop)
 9. [§9 Verification](#9-verification)
 10. [§10 Artifacts and Handoff](#10-artifacts-and-handoff)
 11. [§A Appendix: Provider Catalog](#a-appendix-provider-catalog)
@@ -25,7 +25,7 @@ unified tool surface. Its design goals:
 1. **Free first, privacy always.** Zero-config default uses only free, no-auth-required providers that respect user privacy.
 2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, SearXNG) for higher throughput and specialized queries.
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
-4. **Truth by iteration.** A `converge` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
+4. **Truth by iteration.** A `corroborate` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
 5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, fact-checking, proofreading, and translation.
 6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
@@ -66,7 +66,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F5 | MCP protocol errors | tools/list returns wrong schema | G0 conformance gate catches schema drift |
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
-| F8 | Convergence loop stalls | `converge` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
+| F8 | Corroboration loop stalls | `corroborate` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `kb` stats action reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
@@ -85,7 +85,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Rate limit state persists.** Quota counters survive restarts via a JSON state file.
-- **SR-008 Convergence is bounded.** `converge` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
+- **SR-008 Corroboration is bounded.** `corroborate` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
 - **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
 - **SR-010 All tool input is validated server-side before any outbound call.** Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
 
@@ -138,7 +138,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Fallback chain** | Ordered list of providers tried in sequence on failure |
 | **Content renderer** | A provider that fetches and formats a URL (Jina Reader, native HTTP). Task type for dispatch: `content_fetch`. |
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `web_search` auto-selection |
-| **Convergence** | The multi-pass truth-finding loop in `converge` |
+| **Corroboration** | The multi-pass truth-finding loop in `corroborate` |
 | **Synthesis** | The container format that presents search findings to writing skills |
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
 | **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
@@ -162,10 +162,10 @@ REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (p
 Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
-Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `convergence_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
+Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
-All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date and source type. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
+All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, source type, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
 **REQ-004 — Truncation**
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
@@ -201,7 +201,7 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 ### 4.3 Core Tools
 
 **REQ-020 — `web_search`**
-`web_search` is the unified search tool. Parameters: `query` (required), `provider` (optional; auto-selected when omitted per REQ-020a), `max_results` (default 8, max 30), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (default 1), `priority` (optional: speed, quality, privacy, free_only), `suggest` (optional boolean, default false). When `suggest` is true, the tool SHALL return query-autocomplete strings for `query` instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. _Check:_ G0, G1.
+`web_search` is the unified search tool. Parameters: `query` (required), plus optional `provider`, `max_results`, `safe_search`, `time_range`, `page`, `priority`, `suggest`, `content_type`, and `region`. When `suggest` is true, the tool SHALL return query-autocomplete strings instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. The `content_type` filter SHALL be applied server-side over normalized URLs regardless of the serving provider. _Check:_ G0, G1.
 
 **REQ-020a — `web_search` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -215,7 +215,7 @@ Parameters: the `web_search` tool accepts `priority` with values `privacy`, `fre
 
 **REQ-020d — `web_search` parameter transparency**
 
-Parameters: the `web_search` tool accepts `time_range`, `page`, and `safe_search`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
+Parameters: the `web_search` tool accepts `time_range`, `page`, `safe_search`, `content_type`, and `region`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required),
@@ -224,6 +224,9 @@ Fetch and extract the content of a URL. Parameters: `url` (required),
 chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which
 produces clean Markdown optimized for LLM consumption. Falls back to native
 HTTP fetch if the selected renderer is throttled or errors. _Check:_ G0, G1.
+
+**REQ-021a — `fetch_page` network-target safety**
+WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
 
 **REQ-024 — `providers`**
 `providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
@@ -237,16 +240,22 @@ WHEN action is health, the tool SHALL perform a live connectivity check against 
 **REQ-024c — `providers` spec action**
 WHEN action is spec, the tool SHALL report build identity, provider counts, uptime, cumulative request count, and paths to persistent state files; when the knowledge base is configured, the report SHALL also include chunk count, per-collection counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
-**REQ-026 — `converge`**
-Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full convergence algorithm. _Check:_ G0, G1.
+**REQ-026 — `corroborate`**
+Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
-**REQ-026a — convergence source authority**
+**REQ-026a — corroboration source authority**
 
-When `converge` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
+When `corroborate` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
 
-**REQ-026b — convergence claim attribution**
+**REQ-026b — corroboration claim attribution**
 
-Each finding returned by `converge` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
+Each finding returned by `corroborate` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
+
+**REQ-026c — corroboration source preservation**
+WHEN source preservation is enabled in the configuration, `corroborate` SHALL best-effort capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
+
+**REQ-026d — corroboration provenance record**
+The `corroborate` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding, formatted so a downstream citation can document the analytic tooling used. The record SHALL be present in verbose output. _Check:_ G1.
 
 ### 4.4 Rate Limiting and Resilience
 
@@ -259,7 +268,7 @@ operate independently.
 Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider in the chain, respecting per-provider throttling, and MAY dispatch the first providers concurrently, preferring the first successful result. When every provider in the fallback chain is exhausted, the server SHALL return an error with code `all_providers_exhausted` and remediation naming the chain attempted. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider, respecting per-provider throttling; a blocked or non-parseable provider response SHALL count as a provider failure. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns an empty result set, the server SHALL return a successful empty result. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -372,7 +381,7 @@ WHEN action is delete, the tool SHALL remove chunks by collection or source URL,
 
 **REQ-064 — Auto-Indexing**
 
-Search results from `web_search`, rendered page content from `fetch_page`, and findings from `converge` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
+Search results from `web_search`, rendered page content from `fetch_page`, and findings from `corroborate` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
 
@@ -435,13 +444,13 @@ requiring reconfiguration. _Check:_ G1.
 ### 5.2 Layered Architecture
 
 ```
-Layer 3: Tools                 web_search, fetch_page, converge, providers,
+Layer 3: Tools                 web_search, fetch_page, corroborate, providers,
                                kb, reload_config
 
-Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, brave, searxng,
+Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
-                               github, jina, internet_archive, exa, tavily
+                               github, jina, internet_archive, exa, tavily, yep
 
 Layer 1.5: Knowledge Base      Chunking, embedding generation, vector store,
                                auto-indexing hooks, collection scoping, expiry
@@ -484,22 +493,22 @@ change (REQ-014).
 2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
 3. **Registration-tier & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
-5. **Convergence Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
+5. **Corroboration Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
 7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
 8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
-9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `converge`, the `kb` MCP tool, content expiry maintenance loop.
+9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `corroborate`, the `kb` MCP tool, content expiry maintenance loop.
 
-### 5.5 Convergence Quality (Single Phase)
+### 5.5 Corroboration Quality (Single Phase)
 
 Unlike Holonovel (which has a ruleset extraction phase), Infobroker has a single
 construction quality phase: tool schemas are author-declared and verified against
 the MCP specification at build time. Provider backends are tested with mock
-responses. The convergence loop validates against:
+responses. The corroboration loop validates against:
 - Every tool has a zod schema and a registered handler
 - Every provider implements the Provider interface
 - Fallback chains have at least one active provider
-- `converge` exits within max_iterations
+- `corroborate` exits within max_iterations
 
 ---
 
@@ -508,7 +517,7 @@ responses. The convergence loop validates against:
 ### 6.1 Tool Naming
 
 All tools use `snake_case`. Tool names are domain terminology: `web_search`,
-`fetch_page`, `converge`, `providers`, `kb`, `reload_config`. These logical
+`fetch_page`, `corroborate`, `providers`, `kb`, `reload_config`. These logical
 names are registered with the MCP client under an `infobroker_` prefix
 (e.g., `infobroker_web_search`).
 
@@ -547,8 +556,10 @@ Tool responses are JSON with this envelope:
 | SearXNG | User-configured (`/search?format=json`) | Requires Docker, JSON format must be enabled |
 | Marginalia | `https://search.marginalia.nu/search` | HTML scraping, open source |
 | Mojeek | `https://www.mojeek.com/search` | HTML scraping, independent index |
+| Wiby | `https://wiby.me/` | HTML scraping, curated small-web directory |
 | Exa | `https://api.exa.ai/search` | 1,000/mo free tier, neural search |
 | Tavily | `https://api.tavily.com/search` | 1,000/mo free credits |
+| Yep | `https://platform.yep.com/api/search` | 1,000 free requests, Ahrefs first-party index |
 | CORE | `https://api.core.ac.uk/v3/search/works` | Open access research |
 
 ### 6.4 Jina Reader
@@ -620,12 +631,12 @@ An explicit `provider` parameter takes precedence over priority routing.
 
 ---
 
-## §8 Convergence Loop
+## §8 Corroboration Loop
 
 ### 8.1 Algorithm
 
 ```
-function converge(query, max_iterations=5, confidence_threshold=0.8, providers=[...]):
+function corroborate(query, max_iterations=5, confidence_threshold=0.8, providers=[...]):
   findings = {}
   iteration = 0
 
@@ -698,14 +709,14 @@ Independence: Two sources are independent if they have different registrable
 domains (e.g., wikipedia.org and britannica.com are independent; two pages on
 wikipedia.org, or two subdomains of the same registrable domain, are not).
 The similarity threshold at which claims are grouped into an agreement cluster
-is configurable via `convergence.similarity_threshold`.
+is configurable via `corroboration.similarity_threshold`.
 
 ### 8.3 Iteration Limits
 
 - `max_iterations` defaults to 5, capped at 10.
-- Max total HTTP calls per `converge` invocation: 30.
+- Max total HTTP calls per `corroborate` invocation: 30.
 - `first_pass_max_results` (default 10) bounds results fetched per provider in Phase 1.
-- If either limit is reached, return partial findings with `convergence: "partial"` flag.
+- If either limit is reached, return partial findings with `corroboration: "partial"` flag.
 
 ---
 
@@ -726,7 +737,7 @@ is configurable via `convergence.similarity_threshold`.
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
 - Normalizer: input from each provider format → verify common output shape
-- `converge`: mock 3 providers with overlapping claims → verify agreement detection
+- `corroborate`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
 - Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `web_search` returns mapped results through the dispatch chain
 - Generic provider malformed config: declare a generic provider with an invalid endpoint or result mapping → verify config validation rejects it on load and reload
@@ -796,13 +807,16 @@ is configurable via `convergence.similarity_threshold`.
 | REQ-020c | web_search priority routing | 4.3 | G1 |
 | REQ-020d | web_search parameter transparency | 4.3 | G0, G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
+| REQ-021a | fetch_page network-target safety | 4.3 | G1 |
 | REQ-024 | providers | 4.3 | G0, G1 |
 | REQ-024a | providers list action | 4.3 | G0, G1 |
 | REQ-024b | providers health action | 4.3 | G0, G1 |
 | REQ-024c | providers spec action | 4.3 | G0, G1 |
-| REQ-026 | converge | 4.3 | G0, G1 |
-| REQ-026a | convergence source authority | 4.3 | G1 |
-| REQ-026b | convergence claim attribution | 4.3 | G1 |
+| REQ-026 | corroborate | 4.3 | G0, G1 |
+| REQ-026a | corroboration source authority | 4.3 | G1 |
+| REQ-026b | corroboration claim attribution | 4.3 | G1 |
+| REQ-026c | corroboration source preservation | 4.3 | G1 |
+| REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
@@ -929,7 +943,7 @@ configuration layer is merged over it by the server (REQ-010).
 | `duckduckgo_get_page_content` | `fetch_page` — Jina Reader as default renderer, native fallback |
 | `duckduckgo_suggest_related_searches` | `web_search` with `suggest` — DuckDuckGo autocomplete, same endpoint |
 | (none) | `web_search` auto-selection — task-type routing (was `choose_provider`) |
-| (none) | `converge` — multi-pass truth-finding |
+| (none) | `corroborate` — multi-pass truth-finding |
 | (none) | `providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
 | (none) | `kb` — knowledge base search/ingest/stats/delete (was four `kb_*` tools) |
 | (none) | `reload_config` — ops tooling |
@@ -982,11 +996,15 @@ configuration layer is merged over it by the server (REQ-010).
 
 **SearXNG** — User runs Docker container. MCP calls `POST /search?format=json` on the user's instance URL. Full privacy — all queries stay on user's machine. 274 search backends available. Requires `format: json` enabled in `settings.yml`.
 
+**Yep** — `https://platform.yep.com/api/search` (POST, JSON body, Bearer auth). First-party index built on AhrefsBot (100B+ pages, 8B crawled daily). 1,000 free requests, then pay-as-you-go. Native `content_type`, `location`, `language`, `safe_search`, and publication-date filters. `highlights` type returns query-relevant excerpts at no extra cost.
+
 ### A.6 Scraped (No Official API)
 
 **Marginalia** — `https://search.marginalia.nu/search?query={query}`. Open-source search engine prioritizing non-commercial content. HTML scraping. Unknown rate limits — conservative 5s interval.
 
 **Mojeek** — `https://www.mojeek.com/search?q={query}`. Privacy-first search engine with independent index. HTML scraping. Unknown rate limits — conservative 5s interval.
+
+**Wiby** — `https://wiby.me/?q={query}`. Curated directory of the non-commercial "small web". HTML scraping. Low volume, high signal; conservative 5s interval.
 
 ### A.7 Generic HTTP (User-Defined)
 
@@ -1191,7 +1209,7 @@ any file in `src/`. The check surfaces:
 
 **C.7 Risk-calibrated detail.** The level of detail in a REQ SHALL match the
 risk profile of the requirement:
-- **High risk** (API key handling, error taxonomy, convergence integrity):
+- **High risk** (API key handling, error taxonomy, corroboration integrity):
   precise contract language, explicit SHALL clauses, edge cases enumerated
 - **Medium risk** (rate limiting, quota tracking, fallback behavior):
   configurable thresholds cited, expected behavior stated, recovery paths named
@@ -1236,9 +1254,9 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-021a, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
-| 3 | Convergence | `converge` | REQ-026, REQ-026a, REQ-026b | G0, G1 |
+| 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
 | 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |

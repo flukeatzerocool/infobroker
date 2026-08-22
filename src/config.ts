@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
@@ -85,7 +85,7 @@ function validateConfig(config: Config): void {
   const errors: string[] = [];
 
   for (const [slug, provider] of Object.entries(config.providers)) {
-    if (!provider.tier || !["builtin", "free_http", "keyed_http", "self_hosted_http"].includes(provider.tier)) {
+    if (!provider.tier || !["builtin", "free_http", "keyed_http", "self_hosted_http", "generic_http"].includes(provider.tier)) {
       errors.push(`Provider "${slug}": missing or invalid "tier"`);
     }
     if (!Array.isArray(provider.capabilities)) {
@@ -107,6 +107,34 @@ function validateConfig(config: Config): void {
     if (provider.timeout !== undefined && (typeof provider.timeout !== "number" || provider.timeout < 0)) {
       errors.push(`Provider "${slug}": timeout must be a non-negative number`);
     }
+    if (provider.tier === "generic_http") {
+      if (typeof provider.endpoint !== "string" || !/^https?:\/\//i.test(provider.endpoint)) {
+        errors.push(`Provider "${slug}": generic_http requires an "endpoint" (http(s) URL)`);
+      }
+      if (typeof provider.query_param !== "string" || provider.query_param.length === 0) {
+        errors.push(`Provider "${slug}": generic_http requires "query_param"`);
+      }
+      if (provider.results_path !== undefined && (typeof provider.results_path !== "string" || provider.results_path.length === 0)) {
+        errors.push(`Provider "${slug}": "results_path" must be a non-empty string when present`);
+      }
+      if (provider.field_map !== undefined) {
+        if (typeof provider.field_map !== "object" || provider.field_map === null || Array.isArray(provider.field_map)) {
+          errors.push(`Provider "${slug}": "field_map" must be an object`);
+        } else {
+          for (const [k, v] of Object.entries(provider.field_map)) {
+            if (typeof v !== "string" || v.length === 0) {
+              errors.push(`Provider "${slug}": field_map.${k} must be a non-empty string`);
+            }
+          }
+        }
+      }
+    } else {
+      for (const key of ["endpoint", "query_param", "results_path", "field_map"] as const) {
+        if (provider[key as keyof ProviderConfig] !== undefined) {
+          errors.push(`Provider "${slug}": "${key}" is only valid for generic_http providers`);
+        }
+      }
+    }
   }
 
   for (const [taskType, chain] of Object.entries(config.dispatch)) {
@@ -117,10 +145,10 @@ function validateConfig(config: Config): void {
     }
   }
 
-  if (config.convergence?.authority_weights) {
-    for (const [sourceType, weight] of Object.entries(config.convergence.authority_weights)) {
+  if (config.corroboration?.authority_weights) {
+    for (const [sourceType, weight] of Object.entries(config.corroboration.authority_weights)) {
       if (typeof weight !== "number" || weight < 0) {
-        errors.push(`convergence.authority_weights.${sourceType} must be a non-negative number`);
+        errors.push(`corroboration.authority_weights.${sourceType} must be a non-negative number`);
       }
     }
   }

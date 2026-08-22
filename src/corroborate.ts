@@ -1,11 +1,24 @@
-// @implements REQ-026 REQ-026a REQ-026b
-import type { SearchResult, ConvergenceResult, ConvergenceFinding } from "./types.js";
-import { PROVIDERS } from "./providers/index.js";
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d
+import type { SearchResult, CorroborationResult, CorroborationFinding } from "./types.js";
+import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { getConfig, getActiveProviders } from "./config.js";
 import { throttle } from "./rate-limiter.js";
 import { checkQuota, increment } from "./quota.js";
 import { retryWithBackoff } from "./retry.js";
 import { getDomain } from "tldts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+
+function readVersion(): string {
+  try {
+    const pkgPath = join(fileURLToPath(import.meta.url), "..", "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 type Searcher = (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]>;
 
@@ -14,6 +27,14 @@ for (const [slug, provider] of Object.entries(PROVIDERS)) {
   if (provider.search) {
     SEARCHERS[slug] = provider.search as Searcher;
   }
+}
+
+export function resolveSearcher(
+  slug: string,
+  searchers: Record<string, Searcher> = SEARCHERS
+): Searcher | undefined {
+  if (searchers[slug]) return searchers[slug];
+  return resolveProvider(slug)?.search as Searcher | undefined;
 }
 
 const STOPWORDS = new Set([
@@ -57,10 +78,11 @@ interface Source {
   snippet: string;
   claim?: string;
   source_type?: string;
+  original_source?: string;
 }
 
 export function reconcileClaims(
-  findings: Map<string, ConvergenceFinding>,
+  findings: Map<string, CorroborationFinding>,
   results: SearchResult[],
   similarityThreshold = 0.3,
   authorityWeights?: Record<string, number>,
@@ -77,12 +99,12 @@ export function reconcileClaims(
         claim: r.snippet,
         confidence: 0.3,
         verdict: "unverified",
-        sources: [{ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type }],
+        sources: [{ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type, original_source: r.original_source }],
       });
     } else {
       const alreadyHasSource = existing.sources.some((s) => s.url === r.url);
       if (!alreadyHasSource) {
-        existing.sources.push({ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type });
+        existing.sources.push({ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type, original_source: r.original_source });
       }
     }
   }
@@ -185,7 +207,7 @@ export function computeConfidence(
 }
 
 function getGaps(
-  findings: Map<string, ConvergenceFinding>,
+  findings: Map<string, CorroborationFinding>,
   threshold: number
 ): string[] {
   return [...findings.entries()]
@@ -200,7 +222,7 @@ function deriveRefinedQuery(topic: string, originalQuery: string): string {
 }
 
 function buildAgreementMap(
-  findings: ConvergenceFinding[],
+  findings: CorroborationFinding[],
   threshold: number
 ): { green: string[]; yellow: string[]; red: string[] } {
   const map: { green: string[]; yellow: string[]; red: string[] } = {
@@ -236,7 +258,7 @@ function pickGapProvider(
   return null;
 }
 
-export async function converge(
+export async function corroborate(
   query: string,
   options: {
     max_iterations?: number;
@@ -244,25 +266,25 @@ export async function converge(
     providers?: string[];
     searchers?: Record<string, Searcher>;
   } = {}
-): Promise<ConvergenceResult> {
+): Promise<CorroborationResult> {
   const config = getConfig();
   const maxIterations = Math.min(
-    options.max_iterations ?? config.convergence.max_iterations,
+    options.max_iterations ?? config.corroboration.max_iterations,
     10
   );
   const confidenceThreshold =
-    options.confidence_threshold ?? config.convergence.confidence_threshold;
-  const maxCalls = config.convergence.max_http_calls;
-  const firstPassMaxResults = config.convergence.first_pass_max_results ?? 8;
-  const similarityThreshold = config.convergence.similarity_threshold ?? 0.3;
-  const authorityWeights = config.convergence.authority_weights;
+    options.confidence_threshold ?? config.corroboration.confidence_threshold;
+  const maxCalls = config.corroboration.max_http_calls;
+  const firstPassMaxResults = config.corroboration.first_pass_max_results ?? 8;
+  const similarityThreshold = config.corroboration.similarity_threshold ?? 0.3;
+  const authorityWeights = config.corroboration.authority_weights;
   const searchers = options.searchers ?? SEARCHERS;
 
   const providerList = options.providers
     || getActiveProviders()
          .filter(([, p]) => p.capabilities.includes("web_search"))
          .map(([slug]) => slug);
-  const availableProviders = providerList.filter((p) => searchers[p]);
+  const availableProviders = providerList.filter((p) => resolveSearcher(p, searchers));
 
   if (availableProviders.length === 0) {
     return {
@@ -272,11 +294,11 @@ export async function converge(
       iteration_count: 0,
       providers_used: [],
       total_sources: 0,
-      convergence: "partial",
+      corroboration: "partial",
     };
   }
 
-  const findings = new Map<string, ConvergenceFinding>();
+  const findings = new Map<string, CorroborationFinding>();
   let totalCalls = 0;
   let iteration = 0;
   const providersUsed = new Set<string>();
@@ -292,7 +314,7 @@ export async function converge(
         if (q.exhausted) return null;
         try {
           await throttle(slug);
-          const searcher = searchers[slug];
+          const searcher = resolveSearcher(slug, searchers);
           if (!searcher) return null;
           const results = await retryWithBackoff(
             async () => searcher(query, { max_results: firstPassMaxResults }),
@@ -329,7 +351,7 @@ export async function converge(
         try {
           await throttle(gapProvider);
           const doCall = async () => {
-            const searcher = searchers[gapProvider];
+            const searcher = resolveSearcher(gapProvider, searchers);
             if (!searcher) throw new Error(`No searcher for ${gapProvider}`);
             return await searcher(refinedQuery, { max_results: 3 });
           };
@@ -364,7 +386,19 @@ export async function converge(
     sources: f.sources.slice(0, 3),
   }));
 
+  if (config.corroboration.archive_sources === true) {
+    await archiveCondensedSources(condensed);
+  }
+
   const synthesis = buildSynthesis(condensed);
+
+  const sourceTypes: Record<string, number> = {};
+  for (const f of condensed) {
+    for (const s of f.sources) {
+      const t = s.source_type ?? "unknown";
+      sourceTypes[t] = (sourceTypes[t] ?? 0) + 1;
+    }
+  }
 
   return {
     findings: condensed,
@@ -373,14 +407,21 @@ export async function converge(
     iteration_count: iteration,
     providers_used: [...providersUsed],
     total_sources: condensed.reduce((sum, f) => sum + f.sources.length, 0),
-    convergence:
+    corroboration:
       condensed.length > 0 && condensed.every((f) => f.confidence >= confidenceThreshold)
         ? "complete"
         : "partial",
+    provenance: {
+      tool: "infobroker",
+      version: readVersion(),
+      max_iterations: maxIterations,
+      confidence_threshold: confidenceThreshold,
+      source_types: sourceTypes,
+    },
   };
 }
 
-function buildSynthesis(findings: ConvergenceFinding[]): string {
+function buildSynthesis(findings: CorroborationFinding[]): string {
   if (findings.length === 0) return "No claims were corroborated.";
 
   const sentences: string[] = [];
@@ -399,4 +440,50 @@ function buildSynthesis(findings: ConvergenceFinding[]): string {
 function truncateClaim(text: string): string {
   const t = (text || "").trim();
   return t.length > 140 ? `${t.slice(0, 140)}…` : t;
+}
+
+const ARCHIVE_CONCURRENCY = 4;
+const ARCHIVE_TIMEOUT_MS = 4000;
+
+async function archiveOne(url: string): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
+  try {
+    const resp = await fetch(`https://web.archive.org/save/${encodeURIComponent(url)}`, {
+      method: "GET",
+      redirect: "manual",
+      signal: controller.signal,
+      headers: { "User-Agent": "Infobroker/1.0" },
+    });
+    const loc = resp.headers.get("location");
+    if (!loc) return undefined;
+    return new URL(loc, "https://web.archive.org").toString();
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function archiveCondensedSources(findings: CorroborationFinding[]): Promise<void> {
+  const targets: Array<{ finding: CorroborationFinding; source: CorroborationFinding["sources"][number] }> = [];
+  for (const f of findings) {
+    for (const s of f.sources) {
+      if (!s.archived_url && /^https?:\/\//i.test(s.url)) {
+        targets.push({ finding: f, source: s });
+      }
+    }
+  }
+
+  let idx = 0;
+  async function worker(): Promise<void> {
+    while (idx < targets.length) {
+      const i = idx++;
+      const { source } = targets[i];
+      source.archived_url = await archiveOne(source.url);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(ARCHIVE_CONCURRENCY, targets.length) }, worker);
+  await Promise.allSettled(workers);
 }

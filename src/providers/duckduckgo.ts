@@ -2,7 +2,7 @@
 import * as cheerio from "cheerio";
 import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
-import { RetryableError } from "../retry.js";
+import { RetryableError, ParseError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 import { stripHtml } from "../lib/html.js";
 
@@ -11,18 +11,29 @@ const SUGGEST_URL = "https://duckduckgo.com/ac/";
 
 async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const maxResults = options?.max_results ?? 10;
-  const safeSearch = options?.safe_search === "off" ? "0" : "1";
+  const safeSearch = options?.safe_search === "strict"
+    ? "3"
+    : options?.safe_search === "off"
+      ? "0"
+      : "1";
+  const region = options?.region ?? "us-en";
   const timeRange = options?.time_range ? `&df=${mapTimeRange(options.time_range)}` : "";
 
   const params = new URLSearchParams({
     q: query,
-    kl: "us-en",
+    kl: region,
     kp: safeSearch,
   });
 
   const url = `${DDG_URL}?${params.toString()}${timeRange}`;
 
   const resp = await infobrokerFetch(url, { providerSlug: "duckduckgo" });
+
+  // HTTP 202 signals the anti-bot challenge page; treat as a parse failure
+  // so the fallback chain advances rather than reporting a silent empty.
+  if (resp.status === 202) {
+    throw new ParseError("DuckDuckGo returned an anti-bot challenge (HTTP 202)");
+  }
 
   if (!resp.ok) {
     throw new RetryableError(`DuckDuckGo returned HTTP ${resp.status}`, resp.status);

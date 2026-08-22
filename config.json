@@ -114,6 +114,14 @@
       "priority": 5,
       "timeout": 30000
     },
+    "wiby": {
+      "tier": "builtin",
+      "capabilities": ["web_search", "small_web"],
+      "rate_limit": { "per_second": 0.2 },
+      "enabled": true,
+      "priority": 5,
+      "timeout": 30000
+    },
     "brave": {
       "tier": "keyed_http",
       "capabilities": ["web_search", "news", "semantic"],
@@ -146,6 +154,14 @@
       "enabled": false,
       "priority": 40
     },
+    "yep": {
+      "tier": "keyed_http",
+      "capabilities": ["web_search", "semantic", "synthesis"],
+      "rate_limit": { "per_month": 1000 },
+      "auth_env": "INFOBROKER_YEP_API_KEY",
+      "enabled": false,
+      "priority": 30
+    },
     "native_fetch": {
       "tier": "builtin",
       "capabilities": ["content_fetch"],
@@ -157,7 +173,7 @@
   },
   "dispatch": {
     "general_web": ["brave", "duckduckgo", "marginalia", "mojeek"],
-    "small_web": ["marginalia", "mojeek", "duckduckgo"],
+    "small_web": ["marginalia", "mojeek", "wiby", "duckduckgo"],
     "encyclopedia": ["wikipedia", "duckduckgo"],
     "definition": ["wiktionary", "duckduckgo"],
     "structured_fact": ["wikidata", "wikipedia", "duckduckgo"],
@@ -171,12 +187,13 @@
     "privacy_critical": ["duckduckgo", "searxng", "mojeek"],
     "content_fetch": ["jina", "native_fetch"]
   },
-  "convergence": {
+  "corroboration": {
     "max_iterations": 5,
     "max_http_calls": 30,
     "confidence_threshold": 0.8,
     "first_pass_max_results": 10,
     "similarity_threshold": 0.3,
+    "archive_sources": false,
     "authority_weights": {
       "academic": 1.0,
       "encyclopedia": 1.0,

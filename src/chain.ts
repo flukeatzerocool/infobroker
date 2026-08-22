@@ -4,23 +4,26 @@ import { getDispatchChain, getConfig } from "./config.js";
 // Which of the filter-style options a provider actually honors. Used by
 // REQ-020d to report parameters silently dropped by the serving provider.
 // `max_results` is deliberately absent: it is enforced server-side.
+// `content_type` is a server-side post-filter (never honored by a provider).
 export const SUPPORTED_OPTIONS: Record<
   string,
-  { time_range?: boolean; page?: boolean; safe_search?: boolean }
+  { time_range?: boolean; page?: boolean; safe_search?: boolean; region?: boolean }
 > = {
-  duckduckgo: { time_range: true, safe_search: true },
-  brave: { time_range: true },
+  duckduckgo: { time_range: true, safe_search: true, region: true },
+  brave: { time_range: true, region: true },
 };
 
 export function ignoredParams(
   provider: string,
-  opts: { safe_search?: string; time_range?: string; page?: number },
+  opts: { safe_search?: string; time_range?: string; page?: number; content_type?: string; region?: string },
 ): string[] {
   const supported = SUPPORTED_OPTIONS[provider] ?? {};
   const ignored: string[] = [];
   if (opts.time_range && !supported.time_range) ignored.push("time_range");
   if (opts.page !== undefined && opts.page > 1 && !supported.page) ignored.push("page");
   if (opts.safe_search === "off" && !supported.safe_search) ignored.push("safe_search");
+  if (opts.region && !supported.region) ignored.push("region");
+  if (opts.content_type && opts.content_type !== "all") ignored.push("content_type");
   return ignored;
 }
 

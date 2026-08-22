@@ -2,11 +2,54 @@
 
 ## Active Decisions
 
+### D-024: `converge` Renamed to `corroborate` (2026.08.23)
+
+The multi-pass truth-finding tool was renamed from `converge` to
+`corroborate` to match the discipline it serves. "Convergence" is the
+algorithmic term for an iterative loop; the capability is cross-source
+verification — the wording the README and REQ-026 already used. The
+replacement is the OSINT/IC doctrine term (ATP 2-22.9's top validation tier
+is "corroborated" OSINT; the named technique is "cross-source
+corroboration"), and it is the single candidate understood natively across
+all intended audiences (CTI, journalists, market researchers, academics,
+engineers). "Triangulate" was the runner-up for its independence metaphor;
+"verify" and "truth-find" were rejected (collides with fact-checking,
+overclaims). The rename is a G0 tool-contract change taken pre-1.0 while the
+surface is small. Internal identifiers (`CorroborationResult`,
+`corroboration` config block, `corroboration_error`) follow the tool name
+for consistency.
+
+### D-025: Provider Additions and Startpage Rejection (2026.08.23)
+
+Two providers were added from the audience-expansion research: **Yep**
+(keyed_http) and **Wiby** (builtin scraper). Yep was confirmed a mature,
+first-party, documented API (`platform.yep.com/api/search`) with a 1,000-request
+free tier and native `content_type`/`location`/`language`/`safe_search`
+filters on an AhrefsBot 100B-page index — it is a stronger addition than the
+original "verify stability" hedge implied, and it natively serves the new
+`content_type`/`region` web_search parameters. Wiby is a curated small-web
+directory added to the `small_web` chain as a complement to Marginalia and
+Mojeek. **Startpage was rejected**: no official API, and HTML scraping is
+ToS-risky and actively CAPTCHA-blocked (F2 fragility with no fallback value
+beyond indexes already covered by Brave and Yep). Presearch, Gigablast,
+You.com, and Andi were likewise rejected (dormant, token-gated, or redundant
+with Tavily/Exa).
+
+### D-026: Corroboration Source Preservation Off by Default (2026.08.23)
+
+Corroboration source preservation (`archive_sources`) is implemented as a
+best-effort, non-blocking Wayback save with bounded concurrency, but ships
+disabled by default. It is doctrinally correct (ICS 206-01 "most stable and
+permanent location"; the OSINT compendium's "archive relevant pages in real
+time"), but default-on would POST every cited URL to a third party and add
+Save-Page-Now latency to every corroboration. Enabling it is a deliberate
+opt-in rather than a surprise.
+
 ### D-016: Feature Taxonomy as Verified Spec Artifact (2026.08.20)
 
 REQ-078 mandates a feature taxonomy appendix (§D) that groups every tool
 and every §4 REQ into eight thematic feature areas (Core Retrieval,
-Provider Intelligence, Convergence, Knowledge Base, State & Operations,
+Provider Intelligence, Corroboration, Knowledge Base, State & Operations,
 Tool Surface & Contracts, Client Artifacts, Spec Governance). The taxonomy
 is the canonical map for planning improvement sprints — each area names a
 self-contained REQ range and verification gate. It is enforced by
@@ -45,25 +88,25 @@ not shipped in the repository. The CTI-modeled research workflow was
 renamed from `research-engineering-loop` to `analysis-loop`, naming its
 analytic-rigor focus rather than an engineering activity.
 
-### D-019: Generic HTTP Provider Tier as Forward-Looking Requirement (2026.08.21)
+### D-019: Generic HTTP Provider Tier (2026.08.21, implemented 2026.08.23)
 
 REQ-014 (Generic HTTP Provider Tier) and REQ-015 (Provider Removal by
-Disable) are authored ahead of implementation. They define the user-facing
-capability — add a provider by configuration without source changes, and
-remove one by disabling it in the user layer — but no source file yet cites
-them, so `validate-spec` reports an uncited-REQ warning for each. This is
-the documented forward-looking pattern (precedent D-010, which recorded
-REQ-035/036/037 before their implementation). The generic provider resolves
-through the existing registration mapping (REQ-070) to a single shared
-implementation rather than a per-provider module; no per-tier tier constant
-is introduced to the provider-module interface beyond widening the tier
-union in §5.3.
+Disable) define the user-facing capability — add a provider by
+configuration without source changes, and remove one by disabling it in
+the user layer. REQ-014 was implemented 2026.08.23: `src/providers/generic-http.ts`
+provides a single shared factory (`createGenericProvider`) resolved through
+the registration mapping (REQ-070) via `resolveProvider` in
+`src/providers/index.ts`, honoring the design recorded when the requirement
+was authored. A generic provider declares `endpoint`, `query_param`,
+`results_path`, and `field_map` in the user config layer; dispatch and
+corroboration resolve it at runtime, and config validation (REQ-037)
+rejects a malformed entry on load and reload.
 
 ### D-020: Tool Consolidation and Output Economy (2026.08.21)
 
 The 13-tool surface was consolidated to 6 tools to cut `tools/list` schema
 bloat and round-trips: `web_search` (task-type auto-selection + suggestion
-mode), `fetch_page`, `converge`, `providers` (list/health/spec), `kb`
+mode), `fetch_page`, `corroborate`, `providers` (list/health/spec), `kb`
 (search/ingest/stats/delete), and `reload_config`. `search_suggestions` and
 `choose_provider` folded into `web_search`; the four `kb_*` and three
 ops/spec tools folded into `kb` and `providers` respectively, expressed via
@@ -73,13 +116,13 @@ hardcoded array, matching the README validator's single-source-of-truth
 pattern (D-017).
 
 Output economy (REQ-079) adds a configurable compact verbosity that drops
-`meta` and non-contracted fields, and `converge` caps corroborating sources
+`meta` and non-contracted fields, and `corroborate` caps corroborating sources
 at three plus a synthesis statement. Keyed providers now ship `enabled:
 false` in `config.json`, finally matching the long-standing D-005 intent;
 free-HTTP providers with optional auth keys remain enabled because they
 operate without a key. The redundant `type` field was removed from
 `config.json` (tier is the single authority). A `defaults` block supplies
-provider timeout/retry inheritance. Convergence source independence now
+provider timeout/retry inheritance. Corroboration source independence now
 collapses to the registrable domain (eTLD+1 heuristic) and accepts
 configurable first-pass breadth and similarity threshold.
 
@@ -100,11 +143,11 @@ from an audit of each provider's `search()` (DuckDuckGo honors
 `time_range`+`safe_search`; Brave honors `time_range`; the remainder honor
 none).
 
-### D-022: Convergence Authority Weighting, Claim Attribution, and Synthesis (2026.08.22)
+### D-022: Corroboration Authority Weighting, Claim Attribution, and Synthesis (2026.08.22)
 
-Convergence confidence now reflects source authority in addition to
+Corroboration confidence now reflects source authority in addition to
 independence (REQ-026a): each corroborating source contributes a
-`convergence.authority_weights` multiplier keyed by its `source_type`
+`corroboration.authority_weights` multiplier keyed by its `source_type`
 (absent/unknown `source_type` is neutral 1.0, preserving the §8.2
 domain-count baseline). Claim attribution (REQ-026b) adds a per-source
 `claim` field (the source's snippet) so every corroborating source is bound
@@ -126,10 +169,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `ffb4644015e5b7250f87173e1247e4f81050f8329bff6566275e38e8bfaaabea`
-**Source hash:** `ff931b738e3a4d27e0e3b5291cca178cf3eafb385badf3b0e1af34abc9f14787`
-**Config hash:** `9108adc0d7b99abe3ae48128b741df18088fa4a4c24e5cf9f6969b14d8bf3854`
-**Total fingerprint:** `f0df05ade9272d1ce0dc4c295e4aa2a6390183f8bfc0ff39e932b2f314c6a74d`
+**Spec hash:** `ef44788e2208c87549494f72c8f8a819fe65e81561b88401fe9302152fb190b5`
+**Source hash:** `9fe93f0d1ddb75e931ca5a99191bf01714cadce10d6bfda572626030f50ec404`
+**Config hash:** `f9ee9acafe431c82b8b39e692726d1a85a518c93e5275a5b3a1694f6c81cc192`
+**Total fingerprint:** `090014a62e045497827812ff12900305f83e001cc5b5d5425c00b3664f8a8a38`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -151,9 +194,9 @@ Marginalia and Mojeek use conservative rate limits (0.2 req/sec = 5s
 interval) because their rate limits are undocumented. DuckDuckGo uses
 3s minimum as documented.
 
-### D-004: Convergence Algorithm
+### D-004: Corroboration Algorithm
 
-The convergence loop executes Phase 1 (broad search) in parallel using
+The corroboration loop executes Phase 1 (broad search) in parallel using
 `Promise.allSettled` — per-provider throttles are independent so parallel
 dispatch is safe. Phase 3 (gap refinement) remains sequential because it
 depends on gap analysis from Phase 2. Claim reconciliation uses Jaccard
@@ -211,9 +254,9 @@ UTC for daily, month boundary for monthly. The 80% warning threshold
 and 100% exhaustion are computed per-provider. Counters without explicit
 limits (Infinity) never trigger warnings.
 
-### D-013: Convergence Reconciliation Approach (2026.08.10)
+### D-013: Corroboration Reconciliation Approach (2026.08.10)
 
-Claim reconciliation in `converge` uses token-based Jaccard similarity
+Claim reconciliation in `corroborate` uses token-based Jaccard similarity
 to detect agreement and disagreement between sources. This is a
 lightweight approach that requires no LLM or embedding model. Sources
 with Jaccard similarity ≥ 0.3 are grouped into agreement clusters.
@@ -222,9 +265,9 @@ When multiple clusters exist for a topic, the finding is marked
 representative snippet. This satisfies REQ-026's reconciliation
 requirements without external dependencies.
 
-### D-014: Convergence Provider Defaults (2026.08.10)
+### D-014: Corroboration Provider Defaults (2026.08.10)
 
-The `converge` tool's `providers` parameter defaults to all active
+The `corroborate` tool's `providers` parameter defaults to all active
 providers with `web_search` capability (as specified by REQ-026)
 rather than the general_web dispatch chain. Gap refinement uses
 round-robin provider selection to distribute follow-up queries
@@ -237,7 +280,7 @@ REQ-060 through REQ-067 (Knowledge Base) were authored during the
 similarity hybrid search approach. The embedding model ("tf-idf") runs
 in-process with zero external dependencies. The vector store persists to
 a JSON file at the configured storage path. Auto-indexing fires via
-`setImmediate` after successful `web_search`, `fetch_page`, and `converge`
+`setImmediate` after successful `web_search`, `fetch_page`, and `corroborate`
 calls — it never delays or errors the primary response. Content expiry
 runs on startup and at the configured maintenance interval. Collection
 scoping resolves from user-provided, env var, config default, then literal

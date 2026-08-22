@@ -7,6 +7,7 @@ Generated from `config.json`. Do not edit manually.
 | duckduckgo | builtin | None | — |
 | marginalia | builtin | None | — |
 | mojeek | builtin | None | — |
+| wiby | builtin | None | — |
 | native_fetch | builtin | None | — |
 | jina | free_http | None | — |
 | wikipedia | free_http | None | — |
@@ -22,4 +23,5 @@ Generated from `config.json`. Do not edit manually.
 | brave | keyed_http | API key | `INFOBROKER_BRAVE_API_KEY` |
 | exa | keyed_http | API key | `INFOBROKER_EXA_API_KEY` |
 | tavily | keyed_http | API key | `INFOBROKER_TAVILY_API_KEY` |
+| yep | keyed_http | API key | `INFOBROKER_YEP_API_KEY` |
 | searxng | self_hosted_http | Instance URL | `INFOBROKER_SEARXNG_URL` |

@@ -16,7 +16,7 @@ Use `infobroker_infobroker_fetch_page` instead of the built-in
 `webfetch` tool.
 Use `infobroker_infobroker_web_search` with `suggest: true` for query
 autocomplete (no built-in equivalent).
-Use `infobroker_infobroker_converge` for multi-source truth-finding and
+Use `infobroker_infobroker_corroborate` for multi-source truth-finding and
 deep research tasks.
 Use `infobroker_infobroker_providers` (action list or health) when unsure
 which search backend to use or to check provider status.

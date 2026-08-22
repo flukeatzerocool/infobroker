@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026.08.23 — Corroboration rename, generic HTTP tier, and audience-expansion capabilities
+
+- Renamed the multi-pass truth-finding tool `converge` to `corroborate`
+  (D-024): tool slug, config block `corroboration`, response field, error
+  code `corroboration_error`, `CorroborationResult/Finding` types, and §8
+  "Corroboration Loop". The name matches the OSINT/IC discipline term
+  ("cross-source corroboration"; ATP 2-22.9 "corroborated" OSINT) and reads
+  natively across CTI, journalism, market research, academic, and engineering
+  audiences.
+- Implemented REQ-014 (Generic HTTP Provider Tier): a `generic_http` provider
+  is defined entirely in `config.local.json` (`endpoint`, `query_param`,
+  `results_path`, `field_map`) and resolved at runtime through the
+  registration mapping; config validation rejects a malformed entry on load
+  and reload. REQ-015 receives its citation alongside.
+- New REQ-021a (network-target safety): `fetch_page` refuses loopback,
+  private, link-local, and metadata hosts by default, revalidating on
+  redirect, with a `fetch.allow_private_urls` opt-out.
+- New REQ-026c (source preservation): `corroborate` best-effort archives
+  corroborating source URLs via Wayback Save and reports `archived_url`
+  alongside each live URL, off by default (D-026), non-blocking and bounded.
+- New REQ-026d (provenance record): `corroborate` returns a `provenance`
+  block (tool, version, iteration limit, threshold, per-source-type counts)
+  in verbose output for downstream citation.
+- New REQ-003 field: the normalized result shape gains an optional
+  `original_source` when a provider declares the result is aggregated or
+  resold (the generic-http `field_map` can map it), surfacing provenance for
+  CAI-style transparency.
+- `web_search` gains `content_type` (server-side URL-pattern post-filter) and
+  `region` (passed to DuckDuckGo/Brave/Yep), and `safe_search` gains a
+  `strict` value. Extended REQ-020/REQ-020d and `meta.ignored_params`
+  transparency (REQ-020d).
+- DuckDuckGo now treats an HTTP 202 anti-bot challenge and non-parseable
+  responses as a `parse_error` failure rather than a silent empty, so the
+  fallback chain advances (REQ-031). Empty result sets also advance the
+  chain; a chain that ends on errors reports `all_providers_exhausted`, while
+  an all-empty chain reports a valid empty result.
+- Two new providers (D-025): **Yep** (keyed_http, Ahrefs first-party index,
+  1,000 free requests, native `content_type`/`location` filters) and **Wiby**
+  (builtin scraper, small-web directory, added to the `small_web` chain).
+  Startpage was evaluated and rejected (ToS/CAPTCHA fragility). Provider
+  count 18 → 20; fifteen now work with zero configuration.
+- README: clarified that SearXNG is an optional self-hosted backend requiring
+  nothing from the shipped server, and documented a "bring your own
+  endpoint" generic-HTTP recipe.
+
 ## 2026.08.22 — Research-native defaults, priority routing, and convergence authority
 
 - New REQ-020c (`web_search` priority routing): the previously ignored

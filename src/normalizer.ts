@@ -31,6 +31,7 @@ function normalizeOne(
   const snippet = pickString(raw, ...snippetKeys);
   const publishedDate = pickString(raw, "published_date", "date", "created", "publishedAt", "timestamp");
   const sourceType = pickString(raw, "source_type", "type", "category");
+  const originalSource = pickString(raw, "original_source", "origin", "source");
 
   if (!url) return null;
 
@@ -42,6 +43,7 @@ function normalizeOne(
 
   if (publishedDate) result.published_date = publishedDate;
   if (sourceType) result.source_type = sourceType;
+  if (originalSource) result.original_source = originalSource;
 
   return result;
 }

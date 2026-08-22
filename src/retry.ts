@@ -12,6 +12,13 @@ export class RetryableError extends Error {
   }
 }
 
+export class ParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ParseError";
+  }
+}
+
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   retryConfig?: { retry_count?: number; retry_backoff_ms?: number },

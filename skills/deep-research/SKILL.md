@@ -41,7 +41,7 @@ Auto-selection routes the query to the best backend for the subtopic type
 
 ### Phase 3: Verify & Triangulate
 
-Cross-check results from different sources. Use `converge` for multi-source
+Cross-check results from different sources. Use `corroborate` for multi-source
 truth-finding on contested claims. Flag contradictions explicitly rather than
 picking a side silently. Assign confidence scores based on source
 independence and overlap.

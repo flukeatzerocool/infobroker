@@ -234,7 +234,7 @@ function classifyFreshness(query?: string, timeRange?: string, provider?: string
   if (timeRange === "week") return "recent";
 
   if (provider === "wikipedia") return "evergreen";
-  if (sourceType === "converge") return "stable";
+  if (sourceType === "corroborate") return "stable";
   if (sourceType === "fetch_page") return "stable";
 
   if (query) {

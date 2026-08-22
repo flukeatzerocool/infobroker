@@ -82,4 +82,20 @@ describe("ignoredParams", () => {
   it("does not flag safe_search on", () => {
     expect(ignoredParams("wikipedia", { safe_search: "on" })).toEqual([]);
   });
+
+  it("flags content_type for all providers (server-side filter)", () => {
+    expect(ignoredParams("duckduckgo", { content_type: "docs" })).toEqual(["content_type"]);
+  });
+
+  it("does not flag content_type when it is 'all'", () => {
+    expect(ignoredParams("duckduckgo", { content_type: "all" })).toEqual([]);
+  });
+
+  it("flags region for providers that do not honor it", () => {
+    expect(ignoredParams("wikipedia", { region: "DE" })).toEqual(["region"]);
+  });
+
+  it("does not flag region for providers that honor it", () => {
+    expect(ignoredParams("duckduckgo", { region: "de-de" })).toEqual([]);
+  });
 });

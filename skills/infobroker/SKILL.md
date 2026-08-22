@@ -39,7 +39,7 @@ Phase 0: RECALL
 
 Phase 1: SEARCH
   Infobroker `web_search` (multi-provider, with fallback)
-  → Infobroker `converge` (if truth-finding or cross-source verification needed)
+  → Infobroker `corroborate` (if truth-finding or cross-source verification needed)
 
 Phase 2: EXTRACT
   Infobroker `fetch_page` on key URLs for full content (Jina Reader for clean Markdown)
@@ -74,7 +74,7 @@ Use this when the user wants to verify specific claims.
 0. RECALL: Infobroker `kb` (action search) on all claims — check if previously verified
 1. EXTRACT claims from the user's input
 2. SEARCH each claim with Infobroker `web_search` (targeted, per-claim queries)
-3. CROSS-REFERENCE with Infobroker `converge` for multi-source verification
+3. CROSS-REFERENCE with Infobroker `corroborate` for multi-source verification
 4. VERDICT: `fact-checking` skill — assign confidence score and justification
 5. SUMMARIZE: `summarization` skill — executive summary of findings
 6. CITE: Source URLs with every verdict
@@ -88,7 +88,7 @@ Use this when the user wants to verify specific claims.
 | Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown) |
 | Autocomplete a query | `web_search` (`suggest: true`) | DuckDuckGo |
 | "Which tool should I use?" | `web_search` | Auto-selection returns serving provider |
-| Multi-source truth-finding | `converge` | Uses all active providers |
+| Multi-source truth-finding | `corroborate` | Uses all active providers |
 | Check provider status | `providers` (action list/health) | N/A |
 | Reload config at runtime | `reload_config` | N/A |
 | Search local knowledge base | `kb` (action search) | Semantic + keyword hybrid |
@@ -109,7 +109,7 @@ path; `analysis-loop` runs the disciplined, gated path.
 ## Best Practices
 
 - Always use `web_search` before `fetch_page` — verify the URL exists
-- Use `converge` for claims where the truth might be contested; use `web_search` for simple lookups
+- Use `corroborate` for claims where the truth might be contested; use `web_search` for simple lookups
 - When writing output, route through the full pipeline (search → verify → summarize → write → polish)
 - Cite sources with URLs for every factual claim
 - Fall back to built-in `websearch`/`webfetch` only when Infobroker tools error

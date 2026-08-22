@@ -5,10 +5,11 @@ export interface SearchResult {
   snippet: string;
   published_date?: string;
   source_type?: string;
+  original_source?: string;
 }
 
 export interface ProviderConfig {
-  tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http";
+  tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http" | "generic_http";
   capabilities: string[];
   rate_limit: { per_second?: number; per_day?: number; per_month?: number };
   auth_env?: string;
@@ -18,6 +19,10 @@ export interface ProviderConfig {
   timeout?: number;
   retry_count?: number;
   retry_backoff_ms?: number;
+  endpoint?: string;
+  query_param?: string;
+  results_path?: string;
+  field_map?: { title?: string; url?: string; snippet?: string; published_date?: string; source_type?: string; original_source?: string };
 }
 
 export interface Config {
@@ -28,18 +33,22 @@ export interface Config {
     retry_count?: number;
     retry_backoff_ms?: number;
   };
-  convergence: {
+  corroboration: {
     max_iterations: number;
     max_http_calls: number;
     confidence_threshold: number;
     first_pass_max_results?: number;
     similarity_threshold?: number;
     authority_weights?: Record<string, number>;
+    archive_sources?: boolean;
   };
   output: {
     max_chars: number;
     latency_window_size?: number;
     verbose?: boolean;
+  };
+  fetch?: {
+    allow_private_urls?: boolean;
   };
   kb?: KbConfig;
 }
@@ -85,28 +94,37 @@ export interface ToolErrorResponse {
 
 export type ToolResponse = ToolOkResponse | ToolErrorResponse;
 
-export interface ConvergenceFinding {
+export interface CorroborationFinding {
   topic: string;
   claim: string;
   confidence: number;
   verdict: "confirmed" | "contested" | "unverified";
-  sources: Array<{ title: string; url: string; snippet: string; claim: string; source_type?: string }>;
+  sources: Array<{ title: string; url: string; snippet: string; claim: string; source_type?: string; archived_url?: string; original_source?: string }>;
   perspectives?: string[];
 }
 
-export interface ConvergenceResult {
-  findings: ConvergenceFinding[];
+export interface CorroborationResult {
+  findings: CorroborationFinding[];
   agreement_map: { green: string[]; yellow: string[]; red: string[] };
   synthesis: string;
   iteration_count: number;
   providers_used: string[];
   total_sources: number;
-  convergence: "complete" | "partial";
+  corroboration: "complete" | "partial";
+  provenance?: CorroborationProvenance;
+}
+
+export interface CorroborationProvenance {
+  tool: string;
+  version: string;
+  max_iterations: number;
+  confidence_threshold: number;
+  source_types: Record<string, number>;
 }
 
 export interface Provider {
   slug: string;
-  tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http";
+  tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http" | "generic_http";
   capabilities: string[];
   health(): Promise<{ status: string; avgLatencyMs: number }>;
   search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
@@ -116,9 +134,11 @@ export interface Provider {
 
 export interface SearchOptions {
   max_results?: number;
-  safe_search?: "on" | "off";
+  safe_search?: "on" | "off" | "strict";
   time_range?: "day" | "week" | "month" | "year";
   page?: number;
+  content_type?: string;
+  region?: string;
 }
 
 export interface KbConfig {
