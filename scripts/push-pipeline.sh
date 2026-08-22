@@ -13,7 +13,7 @@
 #   --dry-run        Assemble, check, typecheck — skip commit, push, tag.
 #   --yes (-y)       Skip confirmation prompt before commit/push.
 #   --resume         Skip steps already recorded complete in the state journal.
-#   --from=<step>    Start at a named step (readthrough|sync|scan|readme).
+#   --from=<step>    Start at a named step (readthrough|sync|changelog|scan|readme).
 #   --parallel       Run independent steps concurrently (scan ∥ readme; auth ∥ readthrough).
 #   --force-tag      Overwrite an existing version tag (otherwise abort).
 #   --force-push     Force push with lease (otherwise refuse if diverged).
@@ -50,7 +50,7 @@ for arg in "$@"; do
       printf '%s\n' "  --dry-run   Spec audit, read-through, sync, checks, scans — skip commit, push, tag."
       printf '%s\n' "  --yes (-y)  Skip confirmation prompt before commit/push."
       printf '%s\n' "  --resume    Skip steps already recorded complete."
-      printf '%s\n' "  --from=S    Start at step (readthrough|sync|scan|readme)."
+      printf '%s\n' "  --from=S    Start at step (readthrough|sync|changelog|scan|readme)."
       printf '%s\n' "  --parallel  Run independent steps concurrently."
       printf '%s\n' "  --force-tag Overwrite an existing version tag."
       printf '%s\n' "  --force-push Force-push with lease if diverged."
@@ -89,6 +89,7 @@ PROMPT_DIR="$SCRIPT_DIR/pipeline/prompts"
 # Per-step output files
 OUT_READTHROUGH="$PIPELINE_RUN_DIR/readthrough.txt"
 OUT_SYNC="$PIPELINE_RUN_DIR/sync.txt"
+OUT_CHANGELOG="$PIPELINE_RUN_DIR/changelog.txt"
 OUT_SCAN="$PIPELINE_RUN_DIR/scan.txt"
 OUT_README="$PIPELINE_RUN_DIR/readme.txt"
 
@@ -110,7 +111,7 @@ state_mark() {
     "$STATE_FILE" "$key" 2>/dev/null || true
 }
 # step_skip <key> — true if the step should be skipped (resume journal OR --from).
-STEP_ORDER="readthrough sync auth scan readme"
+STEP_ORDER="readthrough sync auth changelog scan readme"
 step_skip() {
   [[ "$RESUME" == "true" ]] && state_done "$1" && return 0
   if [[ -n "$START_STEP" ]]; then
@@ -283,7 +284,36 @@ else
 fi
 echo ""
 
-# ── steps 5 (scan) and 6 (readme) — parallelizable ──────────────────────────
+# ── step 5: changelog ────────────────────────────────────────────────────────
+info "═══════════════════════════════════════════════"
+info "Step 5: Changelog update"
+info "═══════════════════════════════════════════════"
+echo ""
+
+# Did the spec or server actually change? (unstaged mods + untracked files)
+CHANGELOG_DIRTY=$(git -C "$PROJECT_DIR" status --porcelain -- infobroker.md src/ 2>/dev/null)
+
+if step_skip changelog; then
+  info "Changelog update: SKIPPED (state journal)"
+else
+  warn "Launching changelog update session..."
+  run_pipeline_step "$PROMPT_DIR/changelog.md" "$OUT_CHANGELOG" --model "$PIPELINE_LIGHT_MODEL" --retry
+  CHANGELOG_RC=$OPC_RC
+  [[ $CHANGELOG_RC -ne 0 ]] && die "Changelog update FAILED. Check $OUT_CHANGELOG."
+
+  if grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null; then
+    info "Changelog update: ADDED"
+  else
+    info "Changelog update: NO CHANGE"
+    if [[ -n "$CHANGELOG_DIRTY" ]]; then
+      die "Spec or server changed but changelog reported no update (spec provenance requires a CHANGELOG entry — REQ changes)."
+    fi
+  fi
+  state_mark changelog
+fi
+echo ""
+
+# ── steps 6 (scan) and 7 (readme) — parallelizable ──────────────────────────
 if $PARALLEL; then
   # Run the scan in a FORKED session so it does not collide with the README
   # step, which continues the main session. Each writes disjoint files.
@@ -313,7 +343,7 @@ if $PARALLEL; then
   state_mark readme
 else
   info "═══════════════════════════════════════════════"
-  info "Step 5: Dead-data scan"
+  info "Step 6: Dead-data scan"
   info "═══════════════════════════════════════════════"
   echo ""
   if step_skip scan; then
@@ -332,7 +362,7 @@ else
   echo ""
 
   info "═══════════════════════════════════════════════"
-  info "Step 6: Update README.md and skill references"
+  info "Step 7: Update README.md and skill references"
   info "═══════════════════════════════════════════════"
   echo ""
   if step_skip readme; then
@@ -407,6 +437,7 @@ COMMIT_DATE=$(date +%Y-%m-%d)
 
 COMMIT_SUMMARY=""
 grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && COMMIT_SUMMARY="${COMMIT_SUMMARY}Server synced to spec. "
+grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && COMMIT_SUMMARY="${COMMIT_SUMMARY}Changelog updated. "
 [[ -n "$SCAN_FINDINGS" && "$SCAN_FINDINGS" != "?" ]] && COMMIT_SUMMARY="${COMMIT_SUMMARY}Dead-data scan: ${SCAN_FINDINGS} findings. "
 COMMIT_SUMMARY="${COMMIT_SUMMARY}Spec audited, README and references refreshed."
 
@@ -499,6 +530,7 @@ echo ""
 echo "  Spec audited and read-through complete."
 grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && echo "  Server synced to spec."
 echo "  Provider auth docs regenerated."
+grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && echo "  Changelog updated."
 echo "  Dead-data scan: ${SCAN_FINDINGS} finding(s)."
 echo "  README and skill references refreshed."
 echo "  Pushed to origin — v${VERSION}"

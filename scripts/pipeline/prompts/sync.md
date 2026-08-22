@@ -10,11 +10,20 @@ the current src/ tree in your context from the prior step.
    Auto-confirm all dispositions — this is a trusted automated pipeline.
 3. Implement all gaps where disposition is 'implement'. For each batch of
    changes, run `npm run typecheck` and fix any type errors before continuing.
-4. After all changes, run `npm run validate-spec` to confirm REQ coverage
+4. Load and apply the testing skill. For every newly implemented or modified
+   REQ, author or extend unit and integration tests covering its behavior —
+   scope to the REQs touched this run, do not expand blanket coverage.
+5. After all changes, run `npm run validate-spec` to confirm REQ coverage
    is intact and `npm test` to confirm no regression.
-5. Run `npm run version-bump` to update the version in package.json and
+6. Run `npm run version-bump` to update the version in package.json and
    src/index.ts to today's date.
-6. Smoke test: start the server and call `infobroker_providers` (action spec). Verify:
+7. Review: load and apply the code-review skill against the full sync diff
+   (`git diff` plus untracked source files). Review for bugs, security,
+   performance, readability, and maintainability with severity-tied feedback.
+   Fix all critical and high findings (auto-confirm — this is a trusted
+   automated pipeline), then re-run `npm run typecheck` and `npm test`. If any
+   critical finding cannot be fixed, report it as a failure.
+8. Smoke test: start the server and call `infobroker_providers` (action spec). Verify:
    - Tool count has not decreased from the baseline
    - Provider count matches config.json
    - No confidence scores below 50%
