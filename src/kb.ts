@@ -20,7 +20,6 @@ let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 const WRITE_INTERVAL_MS = 30_000;
 const modelAvailable = true;
-const modelName = "tf-idf";
 const CONFIG_ERROR_CODE = "config_error";
 const KB_UNINITIALIZED = "knowledge base not configured";
 
@@ -50,6 +49,25 @@ function computeTf(tokens: string[]): Record<string, number> {
 }
 
 function computeTfIdfVector(tokens: string[], idf: Record<string, number>, docCount: number): number[] {
+  return activeModel.vectorize(tokens, idf, docCount);
+}
+
+interface EmbeddingModel {
+  name: string;
+  vectorize(tokens: string[], idf: Record<string, number>, docCount: number): number[];
+}
+
+// The built-in, zero-dependency model. A richer model can be registered at
+// startup without changing call sites: assign `activeModel` to a new
+// implementation and report its `name` via kbStats (REQ-060c).
+const activeModel: EmbeddingModel = {
+  name: "tf-idf",
+  vectorize(tokens, idf, docCount) {
+    return tfIdfVectorize(tokens, idf, docCount);
+  },
+};
+
+function tfIdfVectorize(tokens: string[], idf: Record<string, number>, docCount: number): number[] {
   const tf = computeTf(tokens);
   const vocab = getSortedVocab();
   const cap = kbConfig?.max_vocab_terms;
@@ -420,7 +438,7 @@ export function kbStats(): KbStats {
     storage_size_bytes: sizeBytes,
     last_ingestion: lastIngestion ? new Date(lastIngestion).toISOString() : null,
     model_available: modelAvailable,
-    model_name: modelName,
+    model_name: activeModel.name,
     events: store?.events ?? [],
   };
 }

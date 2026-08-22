@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quot
 import { PROVIDERS } from "./providers/index.js";
 import { retryWithBackoff } from "./retry.js";
 import { converge } from "./converge.js";
+import { ignoredParams, selectChain } from "./chain.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex, flushKbWrites } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
@@ -183,7 +184,7 @@ function classifyTaskType(task: string): string {
 async function doWebSearch(
   query: string,
   preferredProvider?: string,
-  maxResults = 5,
+  maxResults = 8,
   safeSearch: "on" | "off" = "on",
   timeRange?: string,
   page = 1,
@@ -249,10 +250,11 @@ async function doWebSearch(
     chain = getDispatchChain("general_web");
   }
 
+  chain = selectChain(chain, priority, avgLatency);
+
   if (chain.length === 0) {
     return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
-  void priority;
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page };
   let lastError: ToolErrorResponse | null = null;
@@ -296,6 +298,7 @@ async function doWebSearch(
         query_time_ms: elapsed,
         fallback_used: lastError !== null,
         quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
+        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page }),
       }))}`;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -484,23 +487,6 @@ function doSpecHealth(): string {
   const activeCount = Object.entries(config.providers).filter(([, p]) => p.enabled).length;
   const kbStatsData = isKbConfigured() ? kbStats() : null;
 
-  const providerConfidence: Record<string, number> = {};
-  for (const [slug, p] of Object.entries(config.providers)) {
-    if (!p.enabled) { providerConfidence[slug] = 0; continue; }
-    if (p.tier === "builtin") providerConfidence[slug] = 95;
-    else if (p.tier === "free_http") providerConfidence[slug] = 85;
-    else if (p.tier === "keyed_http") {
-      providerConfidence[slug] = p.auth_env && !process.env[p.auth_env] ? 55 : 75;
-    } else if (p.tier === "self_hosted_http") {
-      providerConfidence[slug] = p.url_env && !process.env[p.url_env] ? 55 : 70;
-    } else {
-      providerConfidence[slug] = 60;
-    }
-  }
-  const scores = Object.values(providerConfidence).filter((s) => s > 0);
-  const avgConfidence = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-  const minConfidence = scores.length > 0 ? Math.min(...scores) : 0;
-
   const toolCount = Object.keys((server as any)._registeredTools).length;
 
   return `[OK] ${json({
@@ -511,12 +497,6 @@ function doSpecHealth(): string {
       provider_count: Object.keys(config.providers).filter(k => k !== "native_fetch").length,
       active_provider_count: activeCount,
       tool_count: toolCount,
-      provider_confidence: {
-        min: minConfidence,
-        max: scores.length > 0 ? Math.max(...scores) : 0,
-        avg: avgConfidence,
-        providers: providerConfidence,
-      },
       kb: kbStatsData ? {
         chunk_count: kbStatsData.chunk_count,
         collections: kbStatsData.collections,
@@ -546,7 +526,7 @@ server.registerTool(
     inputSchema: {
       query: z.string().describe("Search query"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
-      max_results: z.number().min(1).max(30).optional().default(5),
+      max_results: z.number().min(1).max(30).optional().default(8),
       safe_search: z.enum(["on", "off"]).optional().default("on"),
       time_range: z.enum(["day", "week", "month", "year"]).optional(),
       page: z.number().min(1).optional().default(1),
@@ -684,7 +664,7 @@ server.registerTool(
       if (action === "search") {
         const results = kbSearch(
           String(params.query ?? ""),
-          Number(params.max_results ?? 5),
+      Number(params.max_results ?? 8),
           params.collection as string | undefined,
           params.source_type as string | undefined
         );

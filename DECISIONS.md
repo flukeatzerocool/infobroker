@@ -83,12 +83,53 @@ provider timeout/retry inheritance. Convergence source independence now
 collapses to the registrable domain (eTLD+1 heuristic) and accepts
 configurable first-pass breadth and similarity threshold.
 
+### D-021: Priority Routing and Parameter Transparency (2026.08.22)
+
+The `web_search` `priority` parameter was previously accepted and ignored
+(`void priority`). It is now implemented (REQ-020c) as an intent-first
+selection: `privacy` routes to the `privacy_critical` chain, `free_only`
+drops keyed and self-hosted providers, `speed` reorders by recent average
+latency, and `quality` (or omission) preserves the task-type dispatch
+chain; an explicit `provider` parameter overrides all of these. Chain
+selection and ignored-parameter computation are extracted to `src/chain.ts`
+as pure, unit-tested helpers. Parameter transparency (REQ-020d) reports
+`meta.ignored_params` for `time_range`, `page`, and `safe_search` when the
+serving provider does not honor them; `max_results` is never reported
+because the server enforces it. The per-provider support map is seeded
+from an audit of each provider's `search()` (DuckDuckGo honors
+`time_range`+`safe_search`; Brave honors `time_range`; the remainder honor
+none).
+
+### D-022: Convergence Authority Weighting, Claim Attribution, and Synthesis (2026.08.22)
+
+Convergence confidence now reflects source authority in addition to
+independence (REQ-026a): each corroborating source contributes a
+`convergence.authority_weights` multiplier keyed by its `source_type`
+(absent/unknown `source_type` is neutral 1.0, preserving the §8.2
+domain-count baseline). Claim attribution (REQ-026b) adds a per-source
+`claim` field (the source's snippet) so every corroborating source is bound
+to its own claim text. The synthesis statement is now a deterministic
+narrative over confirmed, contested, and unverified findings rather than a
+count summary (REQ-026). Registrable-domain resolution moved from a
+hardcoded multi-label TLD list to the `tldts` public-suffix library, which
+adds one runtime dependency in exchange for correct domain independence
+for arbitrary TLDs.
+
+### D-023: Pluggable Embedding Model Interface (2026.08.22)
+
+The knowledge base exposes an in-process `EmbeddingModel` interface whose
+single built-in implementation is a zero-dependency TF-IDF vectorizer.
+`kbStats` reports the active model's name. A richer local model can be
+registered against the interface without changing call sites; REQ-067's
+"embedding model reference" and REQ-060c's availability reporting already
+bound the contract, so no new REQ was required (F9 covers unavailability).
+
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `13c0b9cfd8fff28b4d9331a19d1f6118e8073a8077506bdf59803d01412a8c09`
-**Source hash:** `cfc46716cd9a159f4ebc8c03b925061e1f42fd2d5bd57ecac8e4d747bbdb02c8`
-**Config hash:** `31d25fef8f122dce22fb6a5c9ce7b9d21115fa731b2fd8e8edc1f4cc47c67f72`
-**Total fingerprint:** `5d97c47f0eef32846a7d45b24a2c4e567de99c412f96f866035570825ec7f2ac`
+**Spec hash:** `ffb4644015e5b7250f87173e1247e4f81050f8329bff6566275e38e8bfaaabea`
+**Source hash:** `9ec010fa4214ca7d9d44638c28781a85b63f4bfdb3eb8f07b80ea23ba7fb4117`
+**Config hash:** `9108adc0d7b99abe3ae48128b741df18088fa4a4c24e5cf9f6969b14d8bf3854`
+**Total fingerprint:** `d98970fac63639f5287d8c11ef1cb2cc69353cd83dbc0210eacc6250b495268a`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
@@ -158,7 +199,7 @@ enforced at build time.
 ### D-008: Retry Strategy
 
 HTTP errors with status 429 or 503 are retried with exponential backoff.
-Default: 3 retries with 1s base delay (1s, 2s, 4s). Providers throw
+Default: 2 retries with 1s base delay (1s, 2s). Providers throw
 `RetryableError` with the HTTP status code. Non-retryable errors (4xx
 auth, 5xx server errors) fail immediately and trigger fallback chain
 advancement. Per-provider `retry_count` and `retry_backoff_ms` fields in

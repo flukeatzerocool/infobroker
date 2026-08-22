@@ -1,10 +1,11 @@
-// @implements REQ-026
+// @implements REQ-026 REQ-026a REQ-026b
 import type { SearchResult, ConvergenceResult, ConvergenceFinding } from "./types.js";
 import { PROVIDERS } from "./providers/index.js";
 import { getConfig, getActiveProviders } from "./config.js";
 import { throttle } from "./rate-limiter.js";
 import { checkQuota, increment } from "./quota.js";
 import { retryWithBackoff } from "./retry.js";
+import { getDomain } from "tldts";
 
 type Searcher = (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]>;
 
@@ -54,12 +55,15 @@ interface Source {
   title: string;
   url: string;
   snippet: string;
+  claim?: string;
+  source_type?: string;
 }
 
 export function reconcileClaims(
   findings: Map<string, ConvergenceFinding>,
   results: SearchResult[],
   similarityThreshold = 0.3,
+  authorityWeights?: Record<string, number>,
 ): void {
   for (const r of results) {
     if (!r.title) continue;
@@ -73,12 +77,12 @@ export function reconcileClaims(
         claim: r.snippet,
         confidence: 0.3,
         verdict: "unverified",
-        sources: [{ title: r.title, url: r.url, snippet: r.snippet }],
+        sources: [{ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type }],
       });
     } else {
       const alreadyHasSource = existing.sources.some((s) => s.url === r.url);
       if (!alreadyHasSource) {
-        existing.sources.push({ title: r.title, url: r.url, snippet: r.snippet });
+        existing.sources.push({ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type });
       }
     }
   }
@@ -112,18 +116,18 @@ export function reconcileClaims(
     const dominant = clusters[0];
 
     if (clusters.length === 1) {
-      finding.confidence = computeConfidence(dominant.members);
+      finding.confidence = computeConfidence(dominant.members, authorityWeights);
       if (dominant.members.length >= 2 && finding.confidence >= 0.5) {
         finding.verdict = "confirmed";
       } else {
         finding.verdict = "unverified";
       }
     } else if (dominant.members.length >= 2) {
-      finding.confidence = computeConfidence(dominant.members);
+      finding.confidence = computeConfidence(dominant.members, authorityWeights);
       finding.verdict = "confirmed";
     } else {
       finding.confidence = Math.max(
-        computeConfidence(dominant.members),
+        computeConfidence(dominant.members, authorityWeights),
         0.1
       );
       finding.verdict = "contested";
@@ -138,6 +142,8 @@ const MULTI_LABEL_TLDS = new Set([
 ]);
 
 function registrableDomain(hostname: string): string {
+  const domain = getDomain(hostname);
+  if (domain) return domain;
   const labels = hostname.split(".").filter(Boolean);
   if (labels.length <= 2) return hostname;
   const lastTwo = labels.slice(-2).join(".");
@@ -147,22 +153,35 @@ function registrableDomain(hostname: string): string {
   return lastTwo;
 }
 
-export function computeConfidence(sources: Source[]): number {
-  const uniqueDomains = new Set<string>();
+export function computeConfidence(
+  sources: Source[],
+  authorityWeights?: Record<string, number>,
+): number {
+  const uniqueDomains = new Map<string, string>();
   for (const s of sources) {
+    let domain: string;
     try {
-      uniqueDomains.add(registrableDomain(new URL(s.url).hostname));
+      domain = registrableDomain(new URL(s.url).hostname);
     } catch {
-      uniqueDomains.add(s.url);
+      domain = s.url;
+    }
+    if (!uniqueDomains.has(domain)) {
+      uniqueDomains.set(domain, s.source_type ?? s.url);
     }
   }
 
   const count = uniqueDomains.size;
-  if (count >= 5) return 1.0;
-  if (count >= 3) return 0.9;
-  if (count >= 2) return 0.7;
-  if (count === 1) return 0.3;
-  return 0.0;
+  let base: number;
+  if (count >= 5) base = 1.0;
+  else if (count >= 3) base = 0.9;
+  else if (count >= 2) base = 0.7;
+  else if (count === 1) base = 0.3;
+  else base = 0.0;
+
+  if (!authorityWeights) return base;
+  const weights = [...uniqueDomains.values()].map((st) => authorityWeights[st] ?? 1.0);
+  const avgWeight = weights.reduce((a, b) => a + b, 0) / weights.length;
+  return Math.min(1.0, base * avgWeight);
 }
 
 function getGaps(
@@ -236,6 +255,7 @@ export async function converge(
   const maxCalls = config.convergence.max_http_calls;
   const firstPassMaxResults = config.convergence.first_pass_max_results ?? 8;
   const similarityThreshold = config.convergence.similarity_threshold ?? 0.3;
+  const authorityWeights = config.convergence.authority_weights;
   const searchers = options.searchers ?? SEARCHERS;
 
   const providerList = options.providers
@@ -290,7 +310,7 @@ export async function converge(
           totalCalls++;
           providersUsed.add(result.value.slug);
           increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-          reconcileClaims(findings, result.value.results, similarityThreshold);
+          reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights);
         }
       }
     } else {
@@ -318,7 +338,7 @@ export async function converge(
           providersUsed.add(gapProvider);
           increment(gapProvider, config.providers[gapProvider]?.rate_limit);
 
-          reconcileClaims(findings, results, similarityThreshold);
+          reconcileClaims(findings, results, similarityThreshold, authorityWeights);
         } catch {
           // skip
         }
@@ -344,12 +364,7 @@ export async function converge(
     sources: f.sources.slice(0, 3),
   }));
 
-  const confirmedCount = condensed.filter((f) => f.verdict === "confirmed").length;
-  const contestedCount = condensed.filter((f) => f.verdict === "contested").length;
-  const synthesis =
-    condensed.length === 0
-      ? "No claims were corroborated."
-      : `${confirmedCount} claim(s) confirmed, ${contestedCount} contested, ${condensed.length - confirmedCount - contestedCount} unverified across ${condensed.length} topic(s).`;
+  const synthesis = buildSynthesis(condensed);
 
   return {
     findings: condensed,
@@ -363,4 +378,25 @@ export async function converge(
         ? "complete"
         : "partial",
   };
+}
+
+function buildSynthesis(findings: ConvergenceFinding[]): string {
+  if (findings.length === 0) return "No claims were corroborated.";
+
+  const sentences: string[] = [];
+  for (const f of findings) {
+    if (f.verdict === "confirmed") {
+      sentences.push(`${f.sources.length} independent source(s) confirm ${f.topic}: ${truncateClaim(f.claim)}`);
+    } else if (f.verdict === "contested" && f.perspectives && f.perspectives.length >= 2) {
+      sentences.push(`Sources disagree on ${f.topic}: ${truncateClaim(f.perspectives[0])} versus ${truncateClaim(f.perspectives[1])}`);
+    } else {
+      sentences.push(`Unverified: ${f.topic}.`);
+    }
+  }
+  return sentences.join(" ");
+}
+
+function truncateClaim(text: string): string {
+  const t = (text || "").trim();
+  return t.length > 140 ? `${t.slice(0, 140)}…` : t;
 }

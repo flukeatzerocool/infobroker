@@ -194,10 +194,11 @@ ready for summarization or analysis.
 > "Show me all available sources and their quota status."
 
 The server knows its own capabilities. `web_search` auto-selects the
-best backend for your task, weighing capability, quota, and latency.
-`providers` surfaces every configured source and drills into a single
-provider's uptime and error history. No other search MCP server gives
-you operational visibility into every backend.
+best backend for your task, weighing capability, quota, and latency —
+or routes by your intent when you ask for privacy, speed, or free-only
+sources. `providers` surfaces every configured source and drills into a
+single provider's uptime and error history. No other search MCP server
+gives you operational visibility into every backend.
 
 ### Multi-Source Verification
 
@@ -207,12 +208,13 @@ you operational visibility into every backend.
 `converge` runs a multi-pass truth-finding loop: broad
 search across active providers, claim extraction, cross-source
 reconciliation, and targeted follow-up for gaps. Claims corroborated
-across independent sources score high confidence. Contradictions are
-surfaced with all perspectives. Gaps trigger refined queries. You get a
-structured report — confirmed, contested, and unverified findings —
-with source provenance and confidence scores. Every other search tool
-returns a list of links; Infobroker finds the truth and tells you how
-sure it is.
+across independent sources score high confidence, weighted by each
+source's authority; every source is bound to the claim it supports.
+Contradictions are surfaced with all perspectives. Gaps trigger refined
+queries. You get a structured report — confirmed, contested, and
+unverified findings — with source provenance, per-source claims, and
+confidence scores. Every other search tool returns a list of links;
+Infobroker finds the truth and tells you how sure it is.
 
 ### Knowledge Base
 

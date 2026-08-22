@@ -167,6 +167,42 @@ describe("computeConfidence", () => {
       { title: "b", url: "https://example.com/b", snippet: "x" },
     ])).toBe(0.3);
   });
+
+  it("applies authority weighting by source_type", () => {
+    const weights = { academic: 1.0, web_search: 0.7 };
+    const academic = (url: string) => ({ title: "a", url, snippet: "x", source_type: "academic" });
+    const web = (url: string) => ({ title: "w", url, snippet: "x", source_type: "web_search" });
+
+    expect(computeConfidence([academic("https://a.com/1"), academic("https://b.com/2")], weights)).toBeCloseTo(0.7);
+    expect(computeConfidence([web("https://a.com/1"), web("https://b.com/2")], weights)).toBeCloseTo(0.7 * 0.7);
+    expect(computeConfidence([academic("https://a.com/1"), academic("https://b.com/2"), academic("https://c.com/3")], weights)).toBeCloseTo(0.9);
+  });
+
+  it("does not exceed 1.0 with high authority weights", () => {
+    const weights = { academic: 2.0 };
+    const s = (url: string) => ({ title: "a", url, snippet: "x", source_type: "academic" });
+    expect(computeConfidence([
+      s("https://a.com/1"), s("https://b.com/2"), s("https://c.com/3"),
+      s("https://d.com/4"), s("https://e.com/5"),
+    ], weights)).toBe(1.0);
+  });
+
+  it("treats unknown source_type as neutral weight 1.0", () => {
+    const weights = { academic: 1.0 };
+    const s = (url: string) => ({ title: "a", url, snippet: "x" });
+    expect(computeConfidence([s("https://a.com/1"), s("https://b.com/2")], weights)).toBeCloseTo(0.7);
+  });
+
+  it("collapses subdomains to the registrable domain via tldts", () => {
+    expect(computeConfidence([
+      { title: "a", url: "https://www.example.co.uk/1", snippet: "x" },
+      { title: "b", url: "https://example.co.uk/2", snippet: "x" },
+    ])).toBe(0.3);
+    expect(computeConfidence([
+      { title: "a", url: "https://sub.example.io/1", snippet: "x" },
+      { title: "b", url: "https://example.io/2", snippet: "x" },
+    ])).toBe(0.3);
+  });
 });
 
 describe("reconcileClaims", () => {
@@ -243,6 +279,29 @@ describe("reconcileClaims", () => {
       expect(f.perspectives!.length).toBeGreaterThanOrEqual(2);
     }
   });
+
+  it("associates each source with its own claim text (REQ-026b)", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, [
+      makeResult("AI Safety", "https://a.com/1", "red teaming reduces model risk"),
+      makeResult("AI Safety", "https://b.com/2", "red teaming is essential for model safety"),
+    ]);
+    const f = [...findings.values()][0];
+    expect(f.sources.length).toBe(2);
+    for (const s of f.sources) {
+      expect(s.claim).toBeTruthy();
+    }
+    expect(f.sources[0].claim).toBe("red teaming reduces model risk");
+  });
+
+  it("carries source_type into sources", () => {
+    const findings = new Map<string, CF>();
+    const r = makeResult("AI Safety", "https://a.com/1", "red teaming reduces model risk");
+    r.source_type = "academic";
+    reconcileClaims(findings, [r]);
+    const f = [...findings.values()][0];
+    expect(f.sources[0].source_type).toBe("academic");
+  });
 });
 
 describe("converge", () => {
@@ -286,6 +345,25 @@ describe("converge", () => {
     expect(mainFinding.confidence).toBeGreaterThanOrEqual(0.7);
     expect(mainFinding.verdict).toBe("confirmed");
     expect(result.providers_used.length).toBe(3);
+  });
+
+  it("produces a narrative synthesis statement", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["encyclopedia", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+    });
+    const result = await converge("quantum computing error correction", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Quantum Computing Error Correction Study", "https://a.com/1", "quantum computing makes rapid progress in error correction")],
+        wikipedia: async () => [makeResult("Quantum Computing Error Correction Advances", "https://b.com/2", "quantum computing advances in error correction are accelerating")],
+      },
+    });
+    expect(result.synthesis).toBeTruthy();
+    expect(result.synthesis).not.toContain("claim(s) confirmed");
+    expect(result.synthesis.toLowerCase()).toContain("confirm");
   });
 
   it("respects max_iterations limit", async () => {

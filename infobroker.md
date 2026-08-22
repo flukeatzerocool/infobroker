@@ -148,7 +148,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020b`, `024a`–`024c` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–055, 077–078 (client artifacts and spec integrity), 060, 064–067, 072, 074–076 and sub-REQs `060a`–`060d` (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020d`, `024a`–`024c`, `026a`–`026b` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–055, 077–078 (client artifacts and spec integrity), 060, 064–067, 072, 074–076 and sub-REQs `060a`–`060d` (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -201,13 +201,21 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 ### 4.3 Core Tools
 
 **REQ-020 — `web_search`**
-`web_search` is the unified search tool. Parameters: `query` (required), `provider` (optional; auto-selected when omitted per REQ-020a), `max_results` (default 5, max 30), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (default 1), `priority` (optional: speed, quality, privacy, free_only), `suggest` (optional boolean, default false). When `suggest` is true, the tool SHALL return query-autocomplete strings for `query` instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. _Check:_ G0, G1.
+`web_search` is the unified search tool. Parameters: `query` (required), `provider` (optional; auto-selected when omitted per REQ-020a), `max_results` (default 8, max 30), `safe_search` (on/off, default on), `time_range` (optional: day/week/month/year), `page` (default 1), `priority` (optional: speed, quality, privacy, free_only), `suggest` (optional boolean, default false). When `suggest` is true, the tool SHALL return query-autocomplete strings for `query` instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. _Check:_ G0, G1.
 
 **REQ-020a — `web_search` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
 
 **REQ-020b — `web_search` suggestion mode**
 WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from the configured suggestion provider, presenting each as a result with a title and no URL. A suggestion-provider failure SHALL return an error per REQ-002 without fallback. _Check:_ G0, G1.
+
+**REQ-020c — `web_search` priority routing**
+
+Parameters: the `web_search` tool accepts `priority` with values `privacy`, `free_only`, `speed`, and `quality`. WHEN a caller supplies `priority`, the tool SHALL route the query through a chain honoring that value: `privacy` SHALL prefer providers that do not forward queries to third parties, `free_only` SHALL exclude providers requiring an API key or self-hosted instance, `speed` SHALL prefer providers with the lowest recent latency, and `quality` SHALL use the default dispatch chain. The response SHALL identify the serving provider. _Check:_ G1.
+
+**REQ-020d — `web_search` parameter transparency**
+
+Parameters: the `web_search` tool accepts `time_range`, `page`, and `safe_search`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required),
@@ -231,6 +239,14 @@ WHEN action is spec, the tool SHALL report build identity, provider counts, upti
 
 **REQ-026 — `converge`**
 Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full convergence algorithm. _Check:_ G0, G1.
+
+**REQ-026a — convergence source authority**
+
+When `converge` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
+
+**REQ-026b — convergence claim attribution**
+
+Each finding returned by `converge` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
 
 ### 4.4 Rate Limiting and Resilience
 
@@ -588,6 +604,20 @@ when Jina returns 429 or error.
 selecting. A provider at >80% usage is demoted one tier in the dispatch table.
 A provider at 100% is removed from selection until reset.
 
+### 7.4 Priority Routing
+
+The `web_search` `priority` parameter (REQ-020c) overrides the task-type
+chain with an intent-first selection:
+
+| Priority | Routing behavior |
+|----------|------------------|
+| `privacy` | Use the `privacy_critical` chain (DuckDuckGo, SearXNG if configured, Mojeek); fall back to the task chain if empty |
+| `free_only` | Exclude `keyed_http` and `self_hosted_http` providers from the selected chain |
+| `speed` | Order the selected chain by lowest recent average latency; providers with no recorded latency retain configuration priority order |
+| `quality` | Use the default task-type dispatch chain (unchanged) |
+
+An explicit `provider` parameter takes precedence over priority routing.
+
 ---
 
 ## §8 Convergence Loop
@@ -657,6 +687,13 @@ function converge(query, max_iterations=5, confidence_threshold=0.8, providers=[
 | 3+ (independent) | 0.9 | Well-corroborated |
 | 5+ including 1 primary | 1.0 | Established |
 
+The default `confidence_threshold` of 0.8 therefore gates `green` on the 0.9
+tier (three or more independent sources); the 0.7 tier (two independent
+sources) reports as `yellow`. Source authority (REQ-026a) scales the
+independence-based confidence above by a per-source-type weight, so a finding
+backed only by generic web pages scores below one backed by scholarly or
+encyclopedia sources at the same source count.
+
 Independence: Two sources are independent if they have different registrable
 domains (e.g., wikipedia.org and britannica.com are independent; two pages on
 wikipedia.org, or two subdomains of the same registrable domain, are not).
@@ -667,7 +704,7 @@ is configurable via `convergence.similarity_threshold`.
 
 - `max_iterations` defaults to 5, capped at 10.
 - Max total HTTP calls per `converge` invocation: 30.
-- `first_pass_max_results` (default 8) bounds results fetched per provider in Phase 1.
+- `first_pass_max_results` (default 10) bounds results fetched per provider in Phase 1.
 - If either limit is reached, return partial findings with `convergence: "partial"` flag.
 
 ---
@@ -756,12 +793,16 @@ is configurable via `convergence.similarity_threshold`.
 | REQ-020 | web_search | 4.3 | G0, G1 |
 | REQ-020a | web_search auto-selection | 4.3 | G1 |
 | REQ-020b | web_search suggestion mode | 4.3 | G0, G1 |
+| REQ-020c | web_search priority routing | 4.3 | G1 |
+| REQ-020d | web_search parameter transparency | 4.3 | G0, G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
 | REQ-024 | providers | 4.3 | G0, G1 |
 | REQ-024a | providers list action | 4.3 | G0, G1 |
 | REQ-024b | providers health action | 4.3 | G0, G1 |
 | REQ-024c | providers spec action | 4.3 | G0, G1 |
 | REQ-026 | converge | 4.3 | G0, G1 |
+| REQ-026a | convergence source authority | 4.3 | G1 |
+| REQ-026b | convergence claim attribution | 4.3 | G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
@@ -1195,9 +1236,9 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-021, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
-| 3 | Convergence | `converge` | REQ-026 | G0, G1 |
+| 3 | Convergence | `converge` | REQ-026, REQ-026a, REQ-026b | G0, G1 |
 | 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |

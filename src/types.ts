@@ -34,6 +34,7 @@ export interface Config {
     confidence_threshold: number;
     first_pass_max_results?: number;
     similarity_threshold?: number;
+    authority_weights?: Record<string, number>;
   };
   output: {
     max_chars: number;
@@ -89,7 +90,7 @@ export interface ConvergenceFinding {
   claim: string;
   confidence: number;
   verdict: "confirmed" | "contested" | "unverified";
-  sources: Array<{ title: string; url: string; snippet: string }>;
+  sources: Array<{ title: string; url: string; snippet: string; claim: string; source_type?: string }>;
   perspectives?: string[];
 }
 

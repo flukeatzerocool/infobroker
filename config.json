@@ -1,7 +1,7 @@
 {
   "defaults": {
-    "timeout": 10000,
-    "retry_count": 3,
+    "timeout": 12000,
+    "retry_count": 2,
     "retry_backoff_ms": 1000
   },
   "providers": {
@@ -175,8 +175,21 @@
     "max_iterations": 5,
     "max_http_calls": 30,
     "confidence_threshold": 0.8,
-    "first_pass_max_results": 8,
-    "similarity_threshold": 0.3
+    "first_pass_max_results": 10,
+    "similarity_threshold": 0.3,
+    "authority_weights": {
+      "academic": 1.0,
+      "encyclopedia": 1.0,
+      "archive": 1.0,
+      "structured_fact": 1.0,
+      "definition": 1.0,
+      "location": 1.0,
+      "code": 0.9,
+      "semantic": 0.9,
+      "synthesis": 0.9,
+      "news": 0.8,
+      "web_search": 0.7
+    }
   },
   "output": {
     "max_chars": 50000,

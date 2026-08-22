@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.08.22 — Research-native defaults, priority routing, and convergence authority
+
+- New REQ-020c (`web_search` priority routing): the previously ignored
+  `priority` parameter now routes queries by intent — `privacy` to the
+  privacy-critical chain, `free_only` excluding keyed/self-hosted providers,
+  `speed` by recent latency, `quality` (default) to the task-type chain.
+  New REQ-020d (parameter transparency): the response reports in
+  `meta.ignored_params` which of `time_range`, `page`, or `safe_search` the
+  serving provider dropped. Chain selection and ignored-param logic are
+  extracted to `src/chain.ts` and unit-tested.
+- New REQ-026a (source authority): `converge` confidence now weighs
+  corroborating sources by `source_type` via configurable
+  `convergence.authority_weights`, so scholarly/encyclopedia/primary sources
+  outrank generic web pages at equal source count. New REQ-026b (claim
+  attribution): each finding binds every source to its own claim text.
+  The `converge` synthesis statement is now a deterministic narrative over
+  confirmed/contested/unverified findings rather than a count summary.
+- Registrable-domain resolution moved from a hardcoded multi-label TLD list
+  to the `tldts` public-suffix library (one runtime dependency), fixing
+  domain-independence drift for arbitrary TLDs. The knowledge base now
+  exposes an in-process `EmbeddingModel` interface (tf-idf remains the
+  built-in) so a richer model can be dropped in without interface changes.
+- Removed the fabricated `provider_confidence` block from the `providers`
+  spec action, which reported an unspecified metric.
+- Default tuning: `web_search` `max_results` default 5 → 8; `defaults.timeout`
+  10000 → 12000 ms; `defaults.retry_count` 3 → 2 (backoff 1s/2s); convergence
+  `first_pass_max_results` 8 → 10. §8.2 documents that the default confidence
+  threshold of 0.8 gates `green` on the three-or-more-independent-sources tier.
+
 ## 2026.08.21 — Tool consolidation and output economy
 
 - Consolidated the tool surface from 13 tools to 6. `web_search` absorbs

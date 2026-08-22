@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
@@ -113,6 +113,14 @@ function validateConfig(config: Config): void {
     for (const slug of chain) {
       if (!config.providers[slug]) {
         errors.push(`Dispatch chain "${taskType}" references undeclared provider "${slug}"`);
+      }
+    }
+  }
+
+  if (config.convergence?.authority_weights) {
+    for (const [sourceType, weight] of Object.entries(config.convergence.authority_weights)) {
+      if (typeof weight !== "number" || weight < 0) {
+        errors.push(`convergence.authority_weights.${sourceType} must be a non-negative number`);
       }
     }
   }
