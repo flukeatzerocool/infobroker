@@ -108,9 +108,9 @@ README DESIGN:
 
 Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
-behind a single tool surface. Fourteen zero-config providers ship in the
+behind a single tool surface. Fifteen zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Four more providers unlock with API keys or self-hosting. A built-in corroboration engine cross-references independent
+configure. Five more providers unlock with API keys or self-hosting. A built-in corroboration engine cross-references independent
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
@@ -158,7 +158,7 @@ Requirements: Node.js 20+.
 
 ## MCP Server
 
-Your research backend. Six tools, eighteen providers, one
+Your research backend. Six tools, twenty providers, one
 corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
@@ -360,9 +360,9 @@ override and call `reload_config` to use it immediately.
 
 | Tool name | What you're used to | How Infobroker differs |
 |-----------|--------------------|-----------------------|
-| Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Fourteen zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
+| Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Fifteen zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
-| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and twelve other providers work with zero configuration. Upgrade paths for Brave, Exa, and Tavily. Self-hosted SearXNG for full privacy. |
+| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and thirteen other providers work with zero configuration. Upgrade paths for Brave, Exa, and Tavily. Self-hosted SearXNG for full privacy. |
 | Other search MCP servers | Single-provider focus, no fallback, no corroboration, no writing pipeline | Multi-provider with automatic fallback. Corroboration engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
 | AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The corroboration engine verifies facts across independent sources. |
 

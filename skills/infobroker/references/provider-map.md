@@ -9,7 +9,7 @@ dispatch chain, falling back in order.
 | Task type | Primary | Fallback 1 | Fallback 2 |
 |-----------|---------|-----------|-----------|
 | General web search | Brave (if keyed) | DuckDuckGo | Marginalia, Mojeek |
-| Small web / blogs / non-commercial | Marginalia | Mojeek | DuckDuckGo |
+| Small web / blogs / non-commercial | Marginalia | Mojeek | Wiby, DuckDuckGo |
 | Encyclopedia article | Wikipedia | DuckDuckGo | — |
 | Word definition / etymology | Wiktionary | DuckDuckGo | — |
 | Structured fact (dates, stats) | Wikidata | Wikipedia | DuckDuckGo |
@@ -30,6 +30,7 @@ dispatch chain, falling back in order.
 | DuckDuckGo | Yes | — | Yes | — | Yes | — | — | No |
 | Marginalia | Yes | — | — | — | — | — | — | No |
 | Mojeek | Yes | — | — | — | — | — | — | No |
+| Wiby | Yes | — | — | — | — | — | — | No |
 | Wikipedia | — | — | — | Yes | — | — | — | No |
 | Wiktionary | — | — | — | Defs | — | — | — | No |
 | Wikidata | — | — | — | Facts | — | — | — | No |
@@ -43,6 +44,7 @@ dispatch chain, falling back in order.
 | Brave | Yes | — | — | — | Yes | — | — | Yes |
 | Exa | Yes | — | — | — | — | — | — | Yes |
 | Tavily | Yes | — | — | — | — | — | — | Yes |
+| Yep | Yes | — | — | — | — | — | — | Yes |
 | CORE | — | Yes | — | — | — | — | — | No* |
 | SearXNG | Yes | Yes | Yes | Yes | Yes | — | — | No* |
 

@@ -13,13 +13,14 @@ import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain } from "./chain.js";
-import { assertPublicUrl } from "./lib/url-guard.js";
+import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex, flushKbWrites } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
 const MAX_FALLBACK_DEPTH = 3;
+const MAX_REDIRECT_HOPS = 5;
 const BUILD_VERSION = readPackageVersion();
 let totalRequests = 0;
 
@@ -374,21 +375,10 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
 
       const doCall = async (): Promise<string> => {
         if (slug === "native_fetch") {
-          const resp = await fetch(url, {
-            headers: { "User-Agent": "Infobroker/1.0" },
-            redirect: "manual",
-          });
-          if (resp.status >= 300 && resp.status < 400) {
-            const loc = resp.headers.get("location");
-            if (loc) {
-              assertPublicUrl(new URL(loc, url).toString(), allowPrivate);
-            }
-            const followed = await fetch(url, { headers: { "User-Agent": "Infobroker/1.0" } });
-            if (!followed.ok) throw new Error(`HTTP ${followed.status}`);
-            return await followed.text();
-          }
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          return await resp.text();
+          // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard
+          // to each resolved location, so a public URL that redirects to a
+          // private/internal target is refused rather than fetched.
+          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, MAX_REDIRECT_HOPS);
         }
 
         const provider = resolveProvider(slug);
@@ -576,7 +566,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.23",
+  version: "2026.08.22",
 });
 
 // --- web_search ---

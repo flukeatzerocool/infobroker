@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.08.22 — fetch_page redirect safety fix
+
+- `fetch_page`'s native HTTP fallback now follows redirects hop-by-hop,
+  re-checking each resolved URL against the private-network guard, so a
+  public page that bounces to an internal address (169.254.169.254,
+  localhost, etc.) is refused rather than fetched. Previously the code
+  checked the redirect target but then fetched the original URL again,
+  so the redirect actually followed — and was fetched unguarded. (REQ-021a)
+
 ## 2026.08.23 — Tool default consistency and drift gate
 
 - New REQ-080 (Tool Default Consistency): a tool parameter default declared

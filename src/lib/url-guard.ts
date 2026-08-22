@@ -53,3 +53,41 @@ export function assertPublicUrl(rawUrl: string, allowPrivate: boolean): void {
     throw new Error(`Refused private/internal network target "${parsed.hostname}"`);
   }
 }
+
+export type FetchLike = (
+  url: string,
+  init?: { redirect?: "manual"; headers?: Record<string, string> },
+) => Promise<{
+  status: number;
+  ok: boolean;
+  headers: { get(name: string): string | null };
+  text(): Promise<string>;
+}>;
+
+export async function fetchFollowRedirects(
+  url: string,
+  allowPrivate: boolean,
+  fetchImpl: FetchLike,
+  maxHops = 5,
+  userAgent = "Infobroker/1.0",
+): Promise<string> {
+  assertPublicUrl(url, allowPrivate);
+  let current = url;
+  for (let hop = 0; hop < maxHops; hop++) {
+    const resp = await fetchImpl(current, {
+      redirect: "manual",
+      headers: { "User-Agent": userAgent },
+    });
+    if (resp.status >= 300 && resp.status < 400) {
+      const loc = resp.headers.get("location");
+      if (!loc) throw new Error(`HTTP ${resp.status} with no Location header`);
+      current = new URL(loc, current).toString();
+      // REQ-021a: re-apply the SSRF guard to each redirect hop.
+      assertPublicUrl(current, allowPrivate);
+      continue;
+    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.text();
+  }
+  throw new Error(`Too many redirects for ${url}`);
+}
