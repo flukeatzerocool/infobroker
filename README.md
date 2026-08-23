@@ -448,8 +448,16 @@ Last updated: 2026-08-23.
 
 ## License
 
-MIT.
+MIT. Free to use, modify, and redistribute. The bundled client skills and
+instruction files ship under the same license, so the full research pipeline
+— server, skills, and documentation — is freely reusable in commercial and
+open-source work alike. Third-party providers remain subject to their own
+terms and API keys.
 
 ## Spec
 
-Built from `infobroker.md` v2026.08.23.
+The server is built from a single source specification, `infobroker.md`
+(v2026.08.23), which defines every requirement and the gates that verify it.
+Each requirement traces to an implementation file, and `npm run check`
+reconciles the code, the spec, and this README so what is documented is what
+the server actually delivers.

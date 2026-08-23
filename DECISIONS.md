@@ -19,10 +19,11 @@ is always vector-searchable. On load, when the store's recorded model differs
 from the active model (including a legacy `tf-idf` store), every chunk is
 re-embedded from its stored text and the reconciliation is recorded as a status
 event — this satisfies the REQ-082 reconciliation contract on embedding-model
-change. `max_vocab_terms` is retained as a legacy config key for schema
-compatibility but no longer bounds vector size under the hashing model.
-This amends D-023 (the built-in model is no longer vocab-indexed TF-IDF) and
-D-011 (the retrieval approach is hashed TF-IDF + cosine, still zero-dependency).
+change. The now-unused `max_vocab_terms` config key is removed from the schema
+(same commit series); the historical CHANGELOG entry noting its 10,000 default
+remains as provenance. This amends D-023 (the built-in model is no longer
+vocab-indexed TF-IDF) and D-011 (the retrieval approach is hashed TF-IDF +
+cosine, still zero-dependency).
 
 ### D-030: Imperative Completion Tokens and Skill Auto-Selection (2026.08.22)
 
@@ -277,9 +278,9 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 ### D-012: Build Fingerprint (auto-generated)
 
 **Spec hash:** `3a756d84af46a8a0542e9b360d2405deb67695abb3fa598bfe08ff39d3907097`
-**Source hash:** `2e3afbb885e453b1334e2f0a91044fbb06701b4afc766ee884c4fec40989f803`
-**Config hash:** `39fe11f297a331125d67804d60f3cdb56d349dcf9d92ece13bee59110300d776`
-**Total fingerprint:** `3b532bb1749a42674c78f9e8e0d4387c76128f7a8c805e3730b044370eee71af`
+**Source hash:** `ef0940a989f847be62b7c88696c6121d763c3268349beb834f99254fd871cdee`
+**Config hash:** `31ab15938d80298db8caf1ffb2da4f1319545981256c29d2bb146eb1c1af7ba8`
+**Total fingerprint:** `1974f1f9317800d8a0f27498af0b240ccdf48150eeb836d2328e8acedb2ac36e`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

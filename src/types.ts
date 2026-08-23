@@ -159,7 +159,6 @@ export interface KbConfig {
   };
   kb_first_relevance_threshold: number;
   kb_first_confidence_threshold: number;
-  max_vocab_terms: number;
   maintenance_interval_minutes: number;
 }
 

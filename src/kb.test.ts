@@ -17,7 +17,7 @@ function makeConfig(overrides: Record<string, unknown> = {}): KbConfig {
     auto_index: false,
     default_collection: "default",
     max_results: 50,
-    max_vocab_terms: 10000,
+
     maintenance_interval_minutes: 60,
     kb_first_relevance_threshold: 0.3,
     kb_first_confidence_threshold: 0.5,

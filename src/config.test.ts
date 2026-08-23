@@ -38,7 +38,7 @@ const BASE: Config = {
       auto_classify: true,
       default_tier: "stable",
     },
-    max_vocab_terms: 10000,
+
     maintenance_interval_minutes: 60,
     kb_first_relevance_threshold: 0.3,
     kb_first_confidence_threshold: 0.5,
