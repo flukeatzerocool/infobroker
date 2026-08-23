@@ -23,13 +23,20 @@ README DESIGN:
     actually run; broken prompts are a README defect.
 
   Structure: Hero → North Star → Quick Start → MCP Server (§3 features) →
-    Providers → Configuration → How It Compares → Contribute →
+    Skills → Providers → Configuration → How It Compares → Contribute →
     License → Spec. No other ordering. Canonical h2 headings are enforced
     by validate-readme.
 
   Audience split: §2 is for developers who want to start the server.
-    §3 describes what users can do with it. §4-5 are configuration.
-    §6 is competitive context. §7-9 are contributor/license/spec.
+    §3 describes what users can do with it. The Skills section (§3.5)
+    describes the bundled client skills and instructions. §4-5 are
+    configuration. §6 is competitive context. §7-9 are
+    contributor/license/spec.
+
+  Skills section: Prose only — no tables, no blockquotes, no feature
+    bullet lists. Lists the six bundled skills and the workflow shapes the
+    orchestrator routes to, with analysis-loop as the escalation shape.
+    Cross-links to the skill references (pipeline-map.md, workflows.md).
 
   No repetition. One story vector per section. Don't explain the same
     concept in two places — the validator flags near-duplicate sentences.
@@ -133,6 +140,15 @@ Add this to your OpenCode config (`~/.config/opencode/opencode.json`):
 
 ```json
 {
+  "instructions": [
+    "<path-to-Infobroker>/instructions/search-preferences.md"
+  ],
+  "skills": {
+    "paths": [
+      "<path-to-Infobroker>/skills",
+      "<path-to-opencode-config>/skills"
+    ]
+  },
   "mcp": {
     "infobroker": {
       "type": "local",
@@ -145,6 +161,10 @@ Add this to your OpenCode config (`~/.config/opencode/opencode.json`):
   }
 }
 ```
+
+The `mcp` block starts the server; the `instructions` and `skills` blocks
+are what activate the bundled client skills. Without them the skills ship
+in the repository but stay inert.
 
 Free providers work immediately. API-keyed providers — Brave, Exa,
 Tavily, SearXNG — unlock higher throughput and specialized search:
@@ -235,16 +255,14 @@ what it already found.
 > "Research the construction of the Death Star, then draft a summary."
 > "Fact-check these claims about Darth Vader's origin."
 
-Infobroker is a search backend — but it ships with bundled client
-skills that chain its tools into writing pipelines. The orchestrator
-skill classifies the request into a workflow shape — research-and-write,
-fact-checking, competitive evaluation, literature review, monitoring,
-red-team, or vetting — then routes through summarization before handing
-off to technical-writing, proofreading, and translation. Every skill
-lives in the repository — no external paths needed. For high-stakes
-questions requiring gated analytic rigor, the analysis-loop skill
-escalates to a confidence-scored, source-graded workflow. Other search
-MCP servers produce search results; Infobroker produces finished work.
+Infobroker doesn't stop at search results. Bundled client skills chain
+its tools into writing pipelines, routing every request through a solved
+workflow shape and the writing sub-skills until a finished document comes
+out the other end. Everything lives in the repository — no external paths
+or separate install. The full pipeline — the six skills, the workflow
+shapes, and the escalation path — is detailed in the [Skills
+section](#skills). Other search MCP servers produce search results;
+Infobroker produces finished work.
 
 ### Operational Visibility
 
@@ -258,6 +276,43 @@ thresholds without dropping connections. `web_search` doubles as
 DuckDuckGo query autocomplete. `providers` reports the server's build
 health and request stats. You always know what your search server is
 doing and how much capacity remains.
+
+## Skills
+
+The MCP server is one half of the product. The bundled skills are the
+other. Six client skills ship in the repository — no external dependency,
+no separate install — and they turn raw research into finished work.
+
+The orchestrator skill (`infobroker`) opens with a classify gate that
+maps your request to a workflow shape: research-and-write, fact-check,
+deep-dive, competitive evaluation, literature review, monitoring,
+red-team, vetting, or gated analysis. Each shape composes the same
+primitives — recall from the knowledge base, search, extract, verify,
+write, and cite — into its own sequence and ends with a grep-able
+completion token so you can confirm the outcome. Four writing sub-skills
+execute the writing phases: `summarization` condenses findings before
+writing, `technical-writing` drafts reports and docs, `proofreading`
+polishes language, and `translation` produces multilingual output.
+
+Gated analysis is the escalation shape. When a question is high-stakes or
+decision-driving, the classify gate routes to the `analysis-loop` skill —
+a disciplined path with confidence-scored findings, source-reliability
+grading, and structured analytic techniques — rather than the lighter
+research-and-write route. It shares the same primitives and Infobroker
+tools but runs its own gated workflow, so you get the rigor without
+leaving the pipeline.
+
+A single instruction file, `search-preferences.md`, routes your client
+toward these tools: the knowledge base first, external providers only
+when the cache falls short. Wire it and the skills directory into your
+OpenCode config once — the Quick Start above shows the exact snippet —
+and every research request follows the pipeline automatically.
+
+Write your own skill into `skills/` to add a workflow shape of your own.
+The pipeline diagram lives in `references/pipeline-map.md` and the
+workflow-shape definitions in `references/workflows.md`. Other search MCP
+servers return links; Infobroker ships the writers that turn them into
+documented answers.
 
 ## Providers
 

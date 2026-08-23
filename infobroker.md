@@ -1287,5 +1287,6 @@ Notes:
 - **Group 7** and **Group 8** are build-and-spec concerns with no runtime tool
   surface; they are verified by file presence and by the G3 drift detector
   rather than by live tool calls.
-- The README documents Groups 1–5 as the user-facing feature tour; Groups 7–8
-  are maintainer concerns surfaced only in this spec.
+- The README documents Groups 1–5 as the user-facing feature tour and
+  surfaces Group 7 (Client Artifacts) in its Skills section; Group 8 is a
+  maintainer concern surfaced only in this spec.

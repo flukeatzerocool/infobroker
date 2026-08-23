@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-23 — Skills and instructions promoted in the README
+
+- The bundled client skills now get their own top-level Skills section,
+  documenting the six skills, the workflow shapes the orchestrator routes
+  to, and analysis-loop as the escalation shape for high-stakes questions.
+- The Quick Start `opencode.json` snippet now wires the `instructions` and
+  `skills` paths alongside the MCP server, so a fresh install actually
+  activates the skills instead of shipping them inert.
+- The pipeline-map reference now records that the orchestrator routes to
+  `analysis-loop` through its Phase 0 classify gate rather than treating it
+  as a separate, unrouted sibling.
+
 ## 2026.08.23 — Dead-code scan broadened across project, git, and server source
 
 - The push-pipeline dead-data scan (step 6) is now a dead-code scan across

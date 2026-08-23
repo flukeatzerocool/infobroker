@@ -28,7 +28,11 @@ hardcoded count in prose).
    slugs, tiers, capabilities, and enabled status match config.json.
 7. Update skills/infobroker/references/pipeline-map.md — verify tool-to-
    provider mappings are still accurate.
-8. Update the 'Last updated' line with 'Last updated: YYYY-MM-DD.' (with
+8. Verify the '## Skills' section reconciles with the skills/ directory —
+   six skills, the workflow shapes, and the analysis-loop escalation — and
+   that the Quick Start opencode.json snippet still wires instructions and
+   skills paths.
+9. Update the 'Last updated' line with 'Last updated: YYYY-MM-DD.' (with
    period). Match existing format if present.
 
 Run `npm run validate-readme` after changes and fix any failures.

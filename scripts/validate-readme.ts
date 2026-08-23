@@ -66,6 +66,7 @@ function checkHeadingOrder(text: string): Issue[] {
     { level: 2, title: "North Star" },
     { level: 2, title: "Quick Start" },
     { level: 2, title: "MCP Server" },
+    { level: 2, title: "Skills" },
     { level: 2, title: "Providers" },
     { level: 2, title: "Configuration" },
     { level: 2, title: "How It Compares" },

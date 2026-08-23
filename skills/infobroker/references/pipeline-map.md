@@ -75,8 +75,8 @@ infobroker (orchestrator + router)
   ├── proofreading (sub-skill: polish output)
   └── translation (sub-skill: multilingual output)
 
-analysis-loop (sibling — escalate for gated analytic rigor)
-  └── consumed directly by Infobroker tools, not by the orchestrator
+analysis-loop (sibling — routed by the orchestrator's Phase 0 classify gate
+  when the shape is Gated Analysis; consumed directly by Infobroker tools)
 
 All sub-skills can be used standalone.
 infobroker skill provides the pipeline orchestration and workflow routing.
