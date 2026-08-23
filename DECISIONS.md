@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-028: Orchestrator as Workflow Router and Skill Consolidation (2026.08.23)
+
+The skill suite gained five research workflow capabilities without adding
+skills. Instead of a new SKILL.md per capability, the orchestrator
+(`skills/infobroker/SKILL.md`) now opens with a Phase 0 Classify gate that
+maps intent to one of nine workflow shapes, and a new reference
+`skills/infobroker/references/workflows.md` defines each shape compactly
+(trigger, tool sequence, grepable output token, escalation). This mirrors
+the existing `provider-map.md`/`pipeline-map.md` reference pattern: shape
+definitions load only when routed, so the always-on cost is a single
+broadened orchestrator description, not nine competing descriptions.
+Deep-dive and fact-checking became workflow shapes rather than standalone
+skills, folding their procedures (deep-research's scope→parallel-search→
+triangulate→synthesize and fact-checking's verdict taxonomy) into the
+shape layer and deleting the two SKILL.md files — the suite drops from
+eight bundled skills to six plus the analysis-loop escalation, per REQ-052.
+The four writing sub-skills (summarization, technical-writing,
+proofreading, translation) stay standalone: merging them would save only
+~80 always-on words while destroying MIT-licensed standalone utility. A
+token-footprint trade: always-on ~325 → ~270 words, per-task cost down via
+sectional shape reads.
+
 ### D-027: Tool Default Single-Source of Truth (2026.08.23)
 
 The recurring efficiency sweep surfaced a persistent class of drift: tool
@@ -191,10 +213,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `359548ec3979a9f4271f9422138729756c1a98ffdd400c4a56ef822bc57f0f8a`
+**Spec hash:** `8f9a88d2264f01de84f72c8cd49334b116f2792943d32e379eefe04663c7d687`
 **Source hash:** `b9268937bd9f7c6ee59cb88eb346e127e7a4e6e21af15ded78e66053fcd6165a`
 **Config hash:** `ffe771042b9bec3334be003429cb55a61af73b9c31b2278533a5f6715290084d`
-**Total fingerprint:** `0847438a9d065eb80e8f1ab7bcab076387230da6a0d5fdf640a009d1cd53a2e5`
+**Total fingerprint:** `88b46b2d00a4ed18cf8036f4abdd9e90ea9d559d6706796876874da7ba287a3b`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

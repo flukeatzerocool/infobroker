@@ -12,7 +12,7 @@ license: MIT
 metadata:
   author: awesome-ai-agent-skills contributors (adapted for Opencode)
   source: https://github.com/seb1n/awesome-ai-agent-skills
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Proofreading
@@ -80,6 +80,21 @@ severity here.
    citation. If a correction would, flag it as `PR-<n> [structural]`
    (below) and do not apply the edit.
 
+4. **Modal-term consistency** — verify RFC 2119 keyword spelling and
+   capitalization is consistent within the file ("SHALL" vs "shall",
+   "MUST" vs "must") per the project's stated convention. This is a
+   style-consistency fix. Do not adjudicate modal *meaning* here —
+   a SHOULD used where MUST is intended is a strength issue, not a
+   casing issue: flag it as `PR-<n> [structural]` and defer to
+   spec-review.
+
+5. **Bad-word / weak-predicate list** — in spec prose, treat "etc.,"
+   "and/or," "TBD," "TBS," "support(s)," "provide(s)," "handle(s),"
+   "as appropriate," and "if needed" as word-choice issues; suggest a
+   concrete replacement. In a REQ body, these are ambiguity findings,
+   not grammar: emit `PR-<n> [structural]` and defer to spec-review
+   rather than applying a prose fix.
+
 ### Structural handoff (owned by spec-review)
 
 When the file matches a spec convention, scan for the following and
@@ -94,6 +109,13 @@ report each as a **handoff finding** — detected, never graded here:
   undefined in Terminology.
 - Golden transcript coverage — parser commands / error categories in
   REQs but never exercised in the transcript.
+- Check-restatement / vacuous verification — a `_Check:_` citation or
+  acceptance criterion that restates the REQ in other words rather than
+  naming a distinct observable condition. Defer to spec-review
+  (Testability).
+- Unmet promised capability — a capability promised in the intro,
+  mission statement, or reading guide with no corresponding REQ. Defer
+  to spec-review (Completeness/Coherence).
 
 For each, emit:
 
@@ -106,6 +128,23 @@ The finding carries a `PR-<n>` ID for downstream tracking. It assigns no
 Critical/Major/Minor tier — `spec-review` grades severity and
 `spec-engineering-loop` fixes. A structural finding does not stop a
 grammar pass; prose corrections proceed independently.
+
+### Standards reference
+
+The structural handoff items map to these criteria; name the criterion
+when emitting a `[structural]` finding to keep detection grounded:
+
+| Handoff item | Criterion |
+|---|---|
+| REQ block hygiene, check-restatement | IEEE 29148 *verifiable* |
+| Manifest / test ID consistency | IEEE 29148 *consistent*, *traceable* |
+| Term definition hygiene | IEEE 29148 *unambiguous*, *understandable* |
+| Unmet promised capability | IEEE 29148 *complete*, *traceable*; OpenSpec "what's missing" |
+| Golden transcript coverage | OpenSpec scenario-exercises-requirement |
+| Modal-term / bad-word checks | RFC 2119; requirements-writing ambiguity lists |
+
+The discipline is unchanged: proofreading *detects* these and defers
+their verdict to `spec-review`, which owns severity grading.
 
 ## Output Format
 
@@ -204,7 +243,7 @@ spec pattern, running both grammar checks and structural validation.
 
 ## Infobroker Integration
 
-This skill is Phase 6 (final pass) of the Infobroker Research Professional
-pipeline. It polishes output from `technical-writing`.
-All factual content was verified upstream by `deep-research` and
-`fact-checking` — this phase handles only language quality.
+This skill is the polish step of the Infobroker Research & Write pipeline.
+It polishes output from `technical-writing`.
+All factual content was verified upstream by the workflow's verify phase —
+this phase handles only language quality.

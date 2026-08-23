@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.08.23 — Workflow routing and skill consolidation
+
+- The orchestrator skill (`skills/infobroker/SKILL.md`) now opens with a
+  Phase 0 Classify gate that maps intent to one of nine workflow shapes,
+  and a new reference `skills/infobroker/references/workflows.md` defines
+  each shape (trigger, tool sequence, grepable output token, escalation).
+  Five workflow capabilities were added without adding skills: competitive
+  evaluation, literature review, monitoring/delta, adversarial/red-team,
+  and vetting/due-diligence. (REQ-051, REQ-052, REQ-053)
+- `deep-research` and `fact-checking` were consolidated into workflow
+  shapes rather than standalone skills: deep-dive and fact-check procedures
+  moved into the shape layer, and the two SKILL.md files were deleted. The
+  bundled suite drops from six to four pipeline skills (plus the
+  analysis-loop escalation). REQ-052 updated to reference four skills by
+  name; REQ-053 gained the workflows.md reference. (D-028)
+- `instructions/search-preferences.md` folded the built-in fallback clause
+  into its opening paragraph. The `pipeline-map.md` reference now diagrams
+  the routing-first entry point. (REQ-050)
+
 ## 2026.08.23 — Build tooling and spec-gate hardening
 
 - The version-bump tool now also updates `package-lock.json`, and the

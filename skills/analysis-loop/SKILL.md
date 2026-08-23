@@ -17,8 +17,8 @@ description: >
   2025-2026. Confidence-scored findings with citations."
   </example>
 
-  Do not use for simple factual questions or when the infobroker or
-  deep-research skill is already loaded.
+  Do not use for simple factual questions or when the infobroker skill
+  is already loaded and has routed the request to a lighter workflow.
 metadata:
   version: "1.0"
   category: research
@@ -34,8 +34,9 @@ completes its full cycle before the next starts.
 
 - Single-source factual lookup — use `web_search` directly.
 - The user wants the AI's internal knowledge, not web research.
-- The `infobroker` or `deep-research` skill is already loaded — those handle
-  lighter research. This skill is for when rigor matters.
+- The `infobroker` skill is already loaded and routed the request to a
+  lighter workflow shape — those handle lighter research. This skill is for
+  when rigor matters.
 
 ## Phase 0 — Question Scoping
 

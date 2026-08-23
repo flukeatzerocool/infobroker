@@ -59,6 +59,6 @@ metadata:
 
 ## Infobroker Integration
 
-This skill is Phase 4 of the Infobroker Research Professional pipeline.
-It condenses findings from `deep-research` and `fact-checking` into a
-concise digest before `technical-writing` produces the final output.
+This skill is the condense step of the Infobroker Research & Write and
+Fact-Check pipelines. It condenses verified findings into a concise digest
+before `technical-writing` produces the final output.

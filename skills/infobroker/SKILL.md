@@ -2,9 +2,12 @@
 name: infobroker
 description: >
   Use when the user asks to research a topic, fact-check claims, find
-  information from multiple sources, or produce written output backed by
-  web research. Orchestrates: Infobroker MCP tools → deep-research →
-  fact-checking → summarization → technical-writing → proofreading →
+  information from multiple sources, compare or evaluate options, do a
+  literature review or state-of-the-art survey, monitor or track a topic
+  over time, red-team or stress-test a plan, vet or run due diligence on a
+  person or organization, or produce written output backed by web research.
+  Routes the request to the matching workflow shape, then orchestrates
+  Infobroker MCP tools → summarization → technical-writing → proofreading →
   translation. For high-stakes questions requiring gated analytic rigor,
   escalate to analysis-loop.
 ---
@@ -18,6 +21,11 @@ description: >
 - User asks to find and synthesize information from multiple sources
 - User asks to verify technical claims with authoritative sources
 - User asks to find code solutions or evaluate technical answers from the web
+- User asks to compare or evaluate options, tools, vendors, or approaches
+- User asks for a literature review, state-of-the-art survey, or related work
+- User asks to monitor, track, or watch a topic and report what changed
+- User asks to red-team or stress-test a plan, product, or conclusion
+- User asks to vet or run due diligence on a person, organization, or product
 - User asks to translate findings or produce multilingual output
 - User asks a complex question that benefits from multi-provider web search
 
@@ -27,58 +35,65 @@ description: >
 - Purely conversational questions with no research component
 - Tasks that require only the AI's internal knowledge, no web lookup
 
-## Pipeline: Research Professional
+## Phase 0: Classify
 
-Use this for reports, articles, documentation, and in-depth analysis.
+Map the request to one workflow shape before any search. Consult
+`references/workflows.md` for the full definition of the chosen shape.
+
+| Intent marker | Workflow shape |
+|---------------|----------------|
+| "research/write a report/article", general | Research & Write |
+| "fact-check / verify / is it true" | Fact-Check |
+| "deep dive / comprehensive / thesis" | Deep-Dive |
+| "compare / evaluate / which is best / X vs Y" | Competitive Evaluation |
+| "literature review / state of the art / related work" | Literature Review |
+| "what changed / monitor / track / brief me since" | Monitoring / Delta |
+| "red-team / stress-test / what could go wrong" | Adversarial / Red-Team |
+| "vet / background check / due diligence / is it legit" | Vetting |
+| high-stakes, decision-driving, needs rigor | Gated Analysis (escalate to `analysis-loop`) |
+
+The default is Research & Write. Escalate to `analysis-loop` when the
+question is high-stakes and requires source-reliability grading and
+structured analytic techniques.
+
+## Pipeline: Research & Write
+
+Default shape for reports, articles, documentation, and analysis.
 
 ```
-Phase 0: RECALL
-  Infobroker `kb` (action search) — check local knowledge base for previously indexed results
-  → If results found and freshness-adjusted scores are sufficient, skip to Phase 2
-  → If results are empty or stale, continue to Phase 1 (SEARCH)
-
-Phase 1: SEARCH
-  Infobroker `web_search` (multi-provider, with fallback)
-  → Infobroker `corroborate` (if truth-finding or cross-source verification needed)
-
-Phase 2: EXTRACT
-  Infobroker `fetch_page` on key URLs for full content (Jina Reader for clean Markdown)
-
-Phase 3: VERIFY
-  `deep-research` skill — Phase 3 (verify & triangulate) and Phase 4 (synthesize)
-  `fact-checking` skill — for specific claims that need confidence-scored verdicts
-
-Phase 4: SUMMARIZE
-  `summarization` skill — condense findings before writing
-
-Phase 5: WRITE
-  `technical-writing` skill — for reports, documentation, tutorials, specs
-
-Phase 6: POLISH
-  `proofreading` skill — grammar, spelling, style, clarity, tone verification
-
-Phase 7: TRANSLATE
-  `translation` skill — produce multilingual output when findings are
-  requested in a language other than English
-
-Phase 8: CITE
-  Include source URLs from Phase 1/2 with every factual claim.
-  Use the `evidence-based-reporting` instruction pattern.
+RECALL     Infobroker `kb` (action search) — previously indexed results first
+SEARCH     Infobroker `web_search`; `corroborate` for contested claims
+EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown)
+VERIFY     cross-reference, score confidence, flag contradictions
+SUMMARIZE  `summarization` skill — condense findings before writing
+WRITE      `technical-writing` skill — reports, docs, tutorials, specs
+POLISH     `proofreading` skill — grammar, spelling, style, clarity, tone
+TRANSLATE  `translation` skill — when output is not English
+CITE       source URLs with every claim (see `instructions/search-preferences.md`)
 ```
 
 ## Pipeline: Fact-Check
 
-Use this when the user wants to verify specific claims.
+Use when the user wants to verify specific claims.
 
 ```
-0. RECALL: Infobroker `kb` (action search) on all claims — check if previously verified
-1. EXTRACT claims from the user's input
-2. SEARCH each claim with Infobroker `web_search` (targeted, per-claim queries)
-3. CROSS-REFERENCE with Infobroker `corroborate` for multi-source verification
-4. VERDICT: `fact-checking` skill — assign confidence score and justification
-5. SUMMARIZE: `summarization` skill — executive summary of findings
-6. CITE: Source URLs with every verdict
+RECALL       Infobroker `kb` (action search) on all claims first
+EXTRACT      claims from the user's input
+SEARCH       each claim with Infobroker `web_search` (per-claim queries)
+CROSS-CHECK  Infobroker `corroborate` for multi-source verification
+VERDICT      assign True→Unverifiable + confidence + justification
+SUMMARIZE    `summarization` skill — executive summary
+CITE         source URLs with every verdict
 ```
+
+## Other Workflow Shapes
+
+Competitive Evaluation, Literature Review, Monitoring/Delta,
+Adversarial/Red-Team, and Vetting/Due-Diligence are defined in
+`references/workflows.md`. Route to the matching shape after Phase 0
+classification; each shape composes the same primitives (recall → search →
+extract → verify → write → polish → cite) into its own sequence and ends
+with a grepable status token.
 
 ## Tool Selection Quick Guide
 

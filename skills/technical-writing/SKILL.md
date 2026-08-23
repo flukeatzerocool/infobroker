@@ -28,8 +28,8 @@ metadata:
 2. **Gather source material.** Collect code, schemas, existing docs, design
    documents, and commit history. Identify authoritative sources.
 
-   **Infobroker Integration**: Source material comes from Phase 1–3 of the
-   Infobroker pipeline — `web_search`, `fetch_page`, and `deep-research`.
+   **Infobroker Integration**: Source material comes from the extract and
+   verify phases of the Infobroker pipeline — `web_search` and `fetch_page`.
    Use `fetch_page` with Jina Reader for clean Markdown of web sources.
 
 3. **Design the structure.** Create an outline that follows conventions for
@@ -64,7 +64,6 @@ metadata:
 
 ## Infobroker Integration
 
-This skill is Phase 5 of the Infobroker Research Professional pipeline.
+This skill is the write step of the Infobroker Research & Write pipeline.
 Input material comes from Infobroker search and extraction tools, processed
-through `deep-research` and `summarization`. Output is then polished by
-`proofreading`.
+through `summarization`. Output is then polished by `proofreading`.
