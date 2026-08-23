@@ -1,5 +1,13 @@
 # Search Preferences
 
+For research, fact-checking, comparison, literature review, monitoring,
+red-teaming, vetting, or writing tasks, load the `infobroker` skill (via
+the skill tool) and follow it before invoking tools directly. It
+classifies the request into a workflow shape and routes through the
+writing pipeline. For high-stakes, decision-driving questions, it
+escalates to the `analysis-loop` skill. Simple factual lookups may use
+`infobroker_infobroker_web_search` directly without loading a skill.
+
 Infobroker tools provide multi-provider search with fallback chains,
 quota tracking, and cross-source verification. Prefer them over
 built-in `websearch`/`webfetch` equivalents. If an Infobroker tool returns

@@ -114,6 +114,20 @@ At minimum, every new REQ must pass:
 When implementation behavior changes, update the corresponding REQ in
 the same commit. `npm run validate-spec` must pass before committing.
 
+## Skill Authoring
+
+Bundled skills (`skills/*/SKILL.md`) are client artifacts, verified by the
+G3 content checks for REQ-050/051/052/053. When authoring a skill that
+declares a grep-able completion token, the token must be stated as an
+*imperative* "always emit" instruction inside the workflow/pipeline steps
+— e.g. "End your reply with the token, verbatim, as the final line" — not
+as a declarative note in a reference file. Declarative tokens (a `Token:`
+line in `references/workflows.md` with no emit-instruction in the
+orchestrator) do not surface in natural use: the agent does the work but
+never writes the token, so downstream gates cannot observe the outcome.
+`skills/infobroker/SKILL.md` and `skills/analysis-loop/SKILL.md` are the
+reference examples of the imperative form.
+
 ## Gates
 
 Run before committing or after any change to `infobroker.md` or `src/`:

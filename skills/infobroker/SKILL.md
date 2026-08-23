@@ -1,15 +1,16 @@
 ---
 name: infobroker
 description: >
-  Use when the user asks to research a topic, fact-check claims, find
-  information from multiple sources, compare or evaluate options, do a
-  literature review or state-of-the-art survey, monitor or track a topic
-  over time, red-team or stress-test a plan, vet or run due diligence on a
-  person or organization, or produce written output backed by web research.
-  Routes the request to the matching workflow shape, then orchestrates
-  Infobroker MCP tools → summarization → technical-writing → proofreading →
-  translation. For high-stakes questions requiring gated analytic rigor,
-  escalate to analysis-loop.
+  Use this skill for any of the following research intents: research a
+  topic, fact-check claims, find information from multiple sources, compare
+  or evaluate options, do a literature review or state-of-the-art survey,
+  monitor or track a topic over time, red-team or stress-test a plan, vet or
+  run due diligence on a person or organization, or produce written output
+  backed by web research. Load it and follow it BEFORE invoking tools
+  directly. Routes the request to the matching workflow shape, then
+  orchestrates Infobroker MCP tools → summarization → technical-writing →
+  proofreading → translation. For high-stakes questions requiring gated
+  analytic rigor, escalate to analysis-loop.
 ---
 
 # Infobroker — Research & Writing Professional
@@ -68,8 +69,19 @@ VERIFY     cross-reference, score confidence, flag contradictions
 SUMMARIZE  `summarization` skill — condense findings before writing
 WRITE      `technical-writing` skill — reports, docs, tutorials, specs
 POLISH     `proofreading` skill — grammar, spelling, style, clarity, tone
-TRANSLATE  `translation` skill — when output is not English
+TRANSLATE  load and apply the `translation` skill — when the user asked for a
+           non-English output; end that step with its `translation complete.`
+           token
 CITE       source URLs with every claim (see `instructions/search-preferences.md`)
+```
+
+Run every pipeline step that applies to the request before emitting the
+token — do not stop at the core research step (e.g., if the user asked for
+a non-English output, run TRANSLATE). End your reply with the shape's
+completion token, verbatim, as the final line:
+
+```
+research complete. <N> sources | <K> findings | <gap> gaps noted
 ```
 
 ## Pipeline: Fact-Check
@@ -86,14 +98,27 @@ SUMMARIZE    `summarization` skill — executive summary
 CITE         source URLs with every verdict
 ```
 
+Run every pipeline step that applies to the request before emitting the
+token. End your reply with the shape's completion token, verbatim, as the
+final line:
+
+```
+fact-check complete. <N> claims | <T/M/H/MF/F/U> verdicts
+```
+
 ## Other Workflow Shapes
 
 Competitive Evaluation, Literature Review, Monitoring/Delta,
 Adversarial/Red-Team, and Vetting/Due-Diligence are defined in
 `references/workflows.md`. Route to the matching shape after Phase 0
 classification; each shape composes the same primitives (recall → search →
-extract → verify → write → polish → cite) into its own sequence and ends
-with a grepable status token.
+extract → verify → write → polish → cite) into its own sequence.
+
+Always end your reply with the chosen shape's `Token:` line from
+`references/workflows.md`, verbatim, as the final line. The token is a
+required part of the deliverable, not an optional summary. Run every
+pipeline step the shape defines before emitting the token — do not stop
+early.
 
 ## Tool Selection Quick Guide
 

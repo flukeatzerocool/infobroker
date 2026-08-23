@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### D-030: Imperative Completion Tokens and Skill Auto-Selection (2026.08.22)
+
+A researcher-style test run (18 scenarios exercising every workflow shape
+through realistic, non-leading utterances) exposed two defects the
+component suite could not. First, the workflow-shape completion tokens
+(`research complete.`, `fact-check complete.`, `evaluation complete.`, and
+the rest) fired zero times in natural use: they are declared as `Token:`
+notes in `references/workflows.md` but no instruction in the orchestrator
+tells the agent to emit them, so the agent completes the research and never
+writes the token. Second, skill auto-selection is unreliable — roughly half
+the scenarios satisfied the request with raw Infobroker tool calls and
+never loaded the `infobroker` orchestrator, because `search-preferences.md`
+routed to tools only, not skills. The fix makes the tokens imperative in
+the orchestrator's pipeline steps (mirroring `analysis-loop`'s proven form)
+and adds a skill-loading directive to `search-preferences.md` plus a
+sharper orchestrator description. The completion token is now a permanent,
+grep-able part of every research deliverable, not a test-only artifact.
+The component suite (`test-skills`) is reframed as a contract-emission
+check; the new `test-research` suite covers end-to-end routing and quality.
+
 ### D-029: Proofreading De-spec'd and Skill Test Harness (2026.08.22)
 
 The `proofreading` skill is now a pure prose-polish skill. Its prior "spec
@@ -237,7 +257,7 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 **Spec hash:** `5f88ffc3127a51af9255849b888ed310d11fb1092dc016228738ccb0af5826fa`
 **Source hash:** `b9268937bd9f7c6ee59cb88eb346e127e7a4e6e21af15ded78e66053fcd6165a`
 **Config hash:** `ffe771042b9bec3334be003429cb55a61af73b9c31b2278533a5f6715290084d`
-**Total fingerprint:** `c4e1bb17c28f27a53fc333cffffa698114aaf8297c480ea7f3c91670bcae3d06`
+**Total fingerprint:** `9ca9b8a8950f7cac10884d59b22d98d62eb7ba23206827a6d855007ee587be1b`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-23 — Skill completion tokens made imperative; researcher-style test suite
+
+- A researcher-style integration suite (`npm run test-research`) exercises all
+  eight workflow routes through the live orchestrator with realistic,
+  non-leading user utterances, and gates on routing tokens, required
+  sections, tool-audit, and citation integrity. It exposed two defects the
+  component suite could not: the workflow-shape completion tokens fired zero
+  times in natural use, and the orchestrator was bypassed in favor of raw
+  tool calls roughly half the time. (D-030)
+- The workflow-shape completion tokens are now *imperative*: the
+  orchestrator's pipelines instruct the agent to end with the shape token
+  verbatim, matching `analysis-loop`'s proven form. Tokens are a permanent,
+  grep-able part of every deliverable.
+- Skill auto-selection is strengthened: `search-preferences.md` now directs
+  the client to load the `infobroker` skill for research intents before
+  invoking tools, and the orchestrator description is more directive.
+- `analysis-loop` Phase 3 now requires emitting the completion token before
+  offering any follow-up; the orchestrator's TRANSLATE step was reworded to
+  remove a "when output is not English" ambiguity that dropped translation.
+- The component suite (`npm run test-skills`) is reframed as a
+  contract-emission check (skill invoked by name, told to end with its
+  token) rather than a claim that skills work in natural use.
+- Known limitation: composed downstream steps in the orchestrator are less
+  reliable than the core research step — the TRANSLATE tail of a
+  "research and translate" request was dropped in 2 of 3 live runs even
+  after the step wording was strengthened. The run transcripts and
+  `test-fixtures/research/README.md` document the finding.
+
 ## 2026-08-23 — Version-sync gate catches out-of-order changelog entries
 
 - The version-sync check now also asserts that the top CHANGELOG entry is

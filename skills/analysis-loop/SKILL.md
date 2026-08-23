@@ -242,7 +242,10 @@ request deeper sourcing. Each round:
 3. **Expand.** New question surfaced? Return to Phase 0 for a fresh cycle.
 
 Continue until all "Must answer" EEIs reach at least medium confidence, or
-the user explicitly accepts remaining uncertainty.
+the user explicitly accepts remaining uncertainty. When the user closes the
+loop or accepts remaining gaps, end your reply with the completion token
+below, verbatim, as the final line — do not offer a follow-up before
+emitting it.
 
 ```
 analysis-loop complete. <N> findings | Confidence: <H>/<M>/<L> |

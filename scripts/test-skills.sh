@@ -3,6 +3,12 @@
 # opencode session against the real Infobroker MCP, then evaluate each run
 # against the skill's output contract (grep-able completion tokens).
 #
+# Scope: this is a CONTRACT-EMISSION check. Each skill is invoked BY NAME and
+# told to end with its completion token, so a passing run proves the skill's
+# instructions produce the documented token when loaded — not that the skill
+# is reached or behaves correctly in natural researcher use. For end-to-end
+# routing and deliverable-quality coverage, see `npm run test-research`.
+#
 # Usage:
 #   ./scripts/test-skills.sh [--from=<skill>] [--resume] [--grade]
 #                            [--model <m>] [--retry] [--help]
@@ -214,4 +220,4 @@ if [[ "$fails" != "0" ]]; then
   error "FAILED: ${fails} skill(s) did not emit their completion tokens."
   exit 1
 fi
-info "All skills passed."
+info "All skills emitted their completion tokens (contract-emission check)."
