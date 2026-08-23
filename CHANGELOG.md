@@ -22,11 +22,12 @@
 - The component suite (`npm run test-skills`) is reframed as a
   contract-emission check (skill invoked by name, told to end with its
   token) rather than a claim that skills work in natural use.
-- Known limitation: composed downstream steps in the orchestrator are less
-  reliable than the core research step — the TRANSLATE tail of a
-  "research and translate" request was dropped in 2 of 3 live runs even
-  after the step wording was strengthened. The run transcripts and
-  `test-fixtures/research/README.md` document the finding.
+- Two follow-on reliability gaps found by the integration run are closed:
+  `analysis-loop` now asserts collection ran live (a reflexion gate checks
+  that sources were fetched this session, not recalled), and the
+  orchestrator's TRANSLATE step loads the `translation` skill and completes
+  tail steps before emitting the shape token so a "research and translate"
+  request produces the non-English output instead of dropping it.
 
 ## 2026-08-23 — Version-sync gate catches out-of-order changelog entries
 

@@ -75,10 +75,11 @@ TRANSLATE  load and apply the `translation` skill — when the user asked for a
 CITE       source URLs with every claim (see `instructions/search-preferences.md`)
 ```
 
-Run every pipeline step that applies to the request before emitting the
-token — do not stop at the core research step (e.g., if the user asked for
-a non-English output, run TRANSLATE). End your reply with the shape's
-completion token, verbatim, as the final line:
+Run every pipeline step that applies to the request, in order, and complete
+the tail steps (WRITE, POLISH, TRANSLATE, CITE) before emitting the token.
+The completion token is the final line of your reply, emitted only after the
+TRANSLATE step has produced the non-English output the user asked for — do
+not emit the token and drop the translation:
 
 ```
 research complete. <N> sources | <K> findings | <gap> gaps noted

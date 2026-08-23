@@ -203,9 +203,9 @@
     "mode": "positive",
     "utterance": "Research the significance of the Large Hadron Collider's discovery program over the last decade, write a brief report, and translate the report into German.",
     "followups": [],
-    "tokens": ["research complete.", "translation complete."],
+    "tokens": ["research complete."],
     "absent": [],
-    "sections": [],
+    "sections": ["Standardmodell"],
     "tool_audit": { "kb_before_search": true, "corroborate": false, "uses_infobroker": true },
     "citation_sample": 3,
     "rubric": [

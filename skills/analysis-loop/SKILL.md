@@ -89,6 +89,11 @@ and Processing.
 
 ### Collection
 
+Collection is executed with live lookups, never from model memory. Every
+finding must trace to a source fetched this session — including when the
+user answers scoping questions with "proceed with defaults" or closes a gap:
+you still run the collection tools for that scope before analyzing.
+
 1. **Query plan.** For each EEI, generate 2–3 variant search queries with
    different angles. A question about Rust kernel adoption should also be
    searched as "Rust kernel limitations challenges" (critical angle).
@@ -131,6 +136,9 @@ independent sources."
 
 Before analysis, self-check:
 
+- Did I actually call the search/fetch tools this session, or did I answer
+  from memory? If no collection tool produced the sources, return to
+  collection — findings from memory are not admissible.
 - Did I search every EEI with at least 2 query angles?
 - Did I fetch full pages for key sources, not just rely on snippets?
 - Did I grade every source for reliability and credibility?
