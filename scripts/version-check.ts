@@ -51,12 +51,15 @@ const changelogPath = join(root, "CHANGELOG.md");
 const changelog = readFileSync(changelogPath, "utf-8");
 const dateRe = /^##\s+(\d{4})[.-](\d{2})[.-](\d{2})\b/gm;
 let maxDate = "";
+let firstDate: string | null = null;
 let m: RegExpExecArray | null;
 while ((m = dateRe.exec(changelog)) !== null) {
   const date = `${m[1]}.${m[2]}.${m[3]}`;
+  if (firstDate === null) firstDate = date;
   if (date > maxDate) maxDate = date;
 }
 ok = check("CHANGELOG latest date", maxDate || null, rootVersion) && ok;
+ok = check("CHANGELOG top entry date", firstDate, rootVersion) && ok;
 
 if (!ok) {
   console.error("\nVersion sync FAILED. Update all version references to match root package.json.");

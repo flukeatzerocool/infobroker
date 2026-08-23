@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-23 — Version-sync gate catches out-of-order changelog entries
+
+- The version-sync check now also asserts that the top CHANGELOG entry is
+  dated with the root version, not just that some entry somewhere matches.
+  A stale entry accidentally written at the top of CHANGELOG.md is now
+  caught instead of silently passing while out of reverse-chronological
+  order.
+
 ## 2026-08-23 — Skills and instructions promoted in the README
 
 - The bundled client skills now get their own top-level Skills section,
