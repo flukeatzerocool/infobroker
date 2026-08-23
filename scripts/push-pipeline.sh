@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # push-pipeline.sh — Full rebuild, audit, and push pipeline: spec read-through,
-# server sync, provider auth sync, dead-data scan, README/refs update, commit,
-# push.
+# server sync, provider auth sync, dead-code scan (project folder + git repo +
+# MCP server source), README/refs update, commit, push.
 #
 # This is the deep-clean — full from-scratch server rebuild against the
-# current spec, dead-data audit, and documentation refresh.
+# current spec, dead-code audit, and documentation refresh.
 #
 # Usage:
 #   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--resume] [--from=<step>]
@@ -91,6 +91,7 @@ OUT_READTHROUGH="$PIPELINE_RUN_DIR/readthrough.txt"
 OUT_SYNC="$PIPELINE_RUN_DIR/sync.txt"
 OUT_CHANGELOG="$PIPELINE_RUN_DIR/changelog.txt"
 OUT_SCAN="$PIPELINE_RUN_DIR/scan.txt"
+OUT_SCAN_GIT="$PIPELINE_RUN_DIR/scan-git.txt"
 OUT_README="$PIPELINE_RUN_DIR/readme.txt"
 
 # Default timeout per opencode subprocess (seconds, 0 = no timeout)
@@ -98,8 +99,8 @@ OPC_TIMEOUT="${OPC_TIMEOUT:-1800}"
 # Model tiering: full model for sync, light model for review-only steps.
 PIPELINE_MODEL="${PIPELINE_MODEL:-}"
 PIPELINE_LIGHT_MODEL="${PIPELINE_LIGHT_MODEL:-${PIPELINE_MODEL:-}}"
-# Dead-data scan directories (space-separated, relative to repo root)
-SCAN_DIRS="${SCAN_DIRS:-src}"
+# Dead-code scan directories (space-separated, relative to repo root)
+SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
 
 : > "$PIPELINE_LOG_FILE"
 
@@ -121,6 +122,21 @@ step_skip() {
     [[ " $before " == *" $1 "* ]] && return 0
   fi
   return 1
+}
+
+# scan_findings — sum `findings` across all per-dir scan-*.json and the
+# git scan summary. Prints "?" if no summary file is parseable.
+scan_findings() {
+  local total=0 found=false f count
+  for f in "$PIPELINE_RUN_DIR"/scan-*.json "$PIPELINE_RUN_DIR"/scan-git.json; do
+    [[ -f "$f" ]] || continue
+    count=$(json_from_file "$f" findings)
+    if [[ "$count" =~ ^[0-9]+$ ]]; then
+      total=$((total + count))
+      found=true
+    fi
+  done
+  if $found; then echo "$total"; else echo "?"; fi
 }
 
 # ── pre-flight checks ────────────────────────────────────────────────────────
@@ -318,8 +334,6 @@ if $PARALLEL; then
   # Run the scan in a FORKED session so it does not collide with the README
   # step, which continues the main session. Each writes disjoint files.
   info "Running scan and README update in parallel..."
-  sed -e "s|<SCAN_DIR>|${SCAN_DIRS%% *}|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan.json|g" \
-    "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
   (
     # The scan runs in its own session so it does not collide with the README
     # step, which continues the main session. Ensure it bootstraps a fresh
@@ -329,34 +343,44 @@ if $PARALLEL; then
     PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-scan"
     ensure_session
     for d in $SCAN_DIRS; do
+      sed -e "s|<SCAN_DIR>|$d|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-${d}.json|g" \
+        "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
       run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
       [[ $OPC_RC -ne 0 ]] && exit 1
     done
+    sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
+      "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
+    run_pipeline_step "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" --model "$PIPELINE_LIGHT_MODEL" --retry
+    [[ $OPC_RC -ne 0 ]] && exit 1
   ) &
   SCAN_PID=$!
   run_pipeline_step "$PROMPT_DIR/readme.md" "$OUT_README" --model "$PIPELINE_LIGHT_MODEL" --retry
   README_RC=$OPC_RC
   wait "$SCAN_PID"; SCAN_RC=$?
-  [[ $SCAN_RC -ne 0 ]] && die "Dead-data scan FAILED. Check $OUT_SCAN."
+  [[ $SCAN_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN / $OUT_SCAN_GIT."
   [[ $README_RC -ne 0 ]] && die "README update FAILED. Check $OUT_README."
   state_mark scan
   state_mark readme
 else
   info "═══════════════════════════════════════════════"
-  info "Step 6: Dead-data scan"
+  info "Step 6: Dead-code scan (project folder + git repo + MCP server source)"
   info "═══════════════════════════════════════════════"
   echo ""
   if step_skip scan; then
-    info "Dead-data scan: SKIPPED (state journal)"
+    info "Dead-code scan: SKIPPED (state journal)"
   else
     for d in $SCAN_DIRS; do
-      sed -e "s|<SCAN_DIR>|$d|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan.json|g" \
+      sed -e "s|<SCAN_DIR>|$d|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-${d}.json|g" \
         "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
       run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
-      [[ $OPC_RC -ne 0 ]] && die "Dead-data scan FAILED. Check $OUT_SCAN."
+      [[ $OPC_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN."
     done
+    sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
+      "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
+    run_pipeline_step "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" --model "$PIPELINE_LIGHT_MODEL" --retry
+    [[ $OPC_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN_GIT."
     echo ""
-    info "Dead-data scan: DONE — $(json_from_file "$PIPELINE_RUN_DIR/scan.json" findings) finding(s)"
+    info "Dead-code scan: DONE — $(scan_findings) finding(s)"
     state_mark scan
   fi
   echo ""
@@ -376,7 +400,7 @@ else
   fi
 fi
 
-SCAN_FINDINGS=$(json_from_file "$PIPELINE_RUN_DIR/scan.json" findings)
+SCAN_FINDINGS=$(scan_findings)
 
 # validate-readme as a post-session shell gate
 warn "Validating README..."
@@ -423,7 +447,7 @@ if [[ -n "$SECRETS" ]]; then
   fi
 fi
 
-[[ "$SCAN_FINDINGS" != "0" && "$SCAN_FINDINGS" != "?" ]] && warn "Dead-data scan: ${SCAN_FINDINGS} finding(s) — review before commit."
+[[ "$SCAN_FINDINGS" != "0" && "$SCAN_FINDINGS" != "?" ]] && warn "Dead-code scan: ${SCAN_FINDINGS} finding(s) — review before commit."
 
 # ── commit ──────────────────────────────────────────────────────────────────
 info "═══════════════════════════════════════════════"
@@ -438,7 +462,7 @@ COMMIT_DATE=$(date +%Y-%m-%d)
 COMMIT_SUMMARY=""
 grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && COMMIT_SUMMARY="${COMMIT_SUMMARY}Server synced to spec. "
 grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && COMMIT_SUMMARY="${COMMIT_SUMMARY}Changelog updated. "
-[[ -n "$SCAN_FINDINGS" && "$SCAN_FINDINGS" != "?" ]] && COMMIT_SUMMARY="${COMMIT_SUMMARY}Dead-data scan: ${SCAN_FINDINGS} findings. "
+[[ -n "$SCAN_FINDINGS" && "$SCAN_FINDINGS" != "?" ]] && COMMIT_SUMMARY="${COMMIT_SUMMARY}Dead-code scan: ${SCAN_FINDINGS} findings. "
 COMMIT_SUMMARY="${COMMIT_SUMMARY}Spec audited, README and references refreshed."
 
 if git -C "$PROJECT_DIR" diff --staged --quiet 2>/dev/null; then
@@ -531,7 +555,7 @@ echo "  Spec audited and read-through complete."
 grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && echo "  Server synced to spec."
 echo "  Provider auth docs regenerated."
 grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && echo "  Changelog updated."
-echo "  Dead-data scan: ${SCAN_FINDINGS} finding(s)."
+echo "  Dead-code scan: ${SCAN_FINDINGS} finding(s)."
 echo "  README and skill references refreshed."
 echo "  Pushed to origin — v${VERSION}"
 echo "  Logs: $PIPELINE_RUN_DIR"
