@@ -9,6 +9,7 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test-skills": "bash scripts/test-skills.sh",
     "validate-spec": "npx tsx scripts/validate-spec.ts",
     "validate-readme": "npx tsx scripts/validate-readme.ts",
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",

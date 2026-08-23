@@ -2,6 +2,27 @@
 
 ## Active Decisions
 
+### D-029: Proofreading De-spec'd and Skill Test Harness (2026.08.22)
+
+The `proofreading` skill is now a pure prose-polish skill. Its prior "spec
+mode" detected structural problems in specification files (REQ block
+hygiene, manifest completeness, test-ID consistency, term-definition
+hygiene, golden-transcript coverage) and handed verdicts to `spec-review`
+via a `proofread FAILED.` token. That split ownership blurred the skill's
+identity and added a spec-specific surface that contradicted the rest of
+the prose workflow, so it was removed: the frontmatter trigger, the Spec
+Mode section, the structural-handoff output format, and the `proofread
+FAILED.` form are gone. The skill now ends only with `proofread passed.
+[scope] — N corrections`. The push pipeline's read-through step
+(`scripts/pipeline/prompts/readthrough.md`) still performs the authoring
+audit, but as direct prompt instructions alongside a prose pass — the
+mechanical `validate-spec` gate (Step 1) remains the structural backstop.
+Separately, an agentic test harness now exercises every bundled skill live:
+a manifest-driven `npm run test-skills` runs each skill through headless
+opencode against the real Infobroker MCP and asserts its completion token
+in order, with an optional `--grade` rubric pass. This makes skill
+regressions catchable without a human invoking each skill by hand.
+
 ### D-028: Orchestrator as Workflow Router and Skill Consolidation (2026.08.23)
 
 The skill suite gained five research workflow capabilities without adding
@@ -216,7 +237,7 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 **Spec hash:** `8f9a88d2264f01de84f72c8cd49334b116f2792943d32e379eefe04663c7d687`
 **Source hash:** `b9268937bd9f7c6ee59cb88eb346e127e7a4e6e21af15ded78e66053fcd6165a`
 **Config hash:** `ffe771042b9bec3334be003429cb55a61af73b9c31b2278533a5f6715290084d`
-**Total fingerprint:** `88b46b2d00a4ed18cf8036f4abdd9e90ea9d559d6706796876874da7ba287a3b`
+**Total fingerprint:** `ab63bb48a6bed8c0fa003ac6e7a4d74f432f3d79a7da5e362560f946afcfe005`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

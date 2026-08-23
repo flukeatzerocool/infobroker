@@ -1,0 +1,18 @@
+{
+  "skill": "summarization",
+  "prompt": "Load the summarization skill and apply it to the source text at the input path below. Produce a concise summary preserving the source's numbers, proper nouns, and causal claims, at a detail level appropriate for an executive briefing.\n\nInput file: ./input.txt\n\nYou MUST end your final reply with the completion line exactly as specified in the skill's Output Contract.",
+  "inputs": [
+    "summarization-source.txt"
+  ],
+  "expected_tokens": [
+    "summarization complete."
+  ],
+  "rubric": [
+    "Summary is materially shorter than the source",
+    "Numerical facts are preserved (e.g. 1-second interval, 202, three providers)",
+    "Proper nouns and key terms preserved (MCP, HTTP 202, knowledge base)",
+    "No information introduced that is absent from the source",
+    "Completion line present"
+  ],
+  "time_limit": "none"
+}

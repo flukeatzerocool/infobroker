@@ -51,6 +51,19 @@ metadata:
 - Handle pluralization rules of the target language.
 - Avoid literal translation of idioms.
 
+## Output Contract
+
+Always end with a searchable one-line status:
+
+```
+translation complete. <target language> | <N> segments | structure preserved
+```
+
+`<N> segments` is the number of translated units. Replace
+`structure preserved` with a list of any structure differences (omitted or
+duplicated sentences, altered tags or placeholders) that the review
+detected.
+
 ## Edge Cases
 
 - **Untranslatable terms:** Keep established technical terms in English and note

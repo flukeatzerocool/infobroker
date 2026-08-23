@@ -49,6 +49,18 @@ metadata:
 - For multi-document summaries, organize by theme rather than by source.
 - Flag contradictions rather than choosing one side.
 
+## Output Contract
+
+Always end with a searchable one-line status:
+
+```
+summarization complete. <N> key points | source facts preserved: <pass/flag>
+```
+
+`<pass/flag>` is `pass` when the summary preserves the source's numbers,
+proper nouns, and causal claims, otherwise `flag` with the discrepancy
+noted.
+
 ## Edge Cases
 
 - **Contradictory source:** Highlight the contradiction in the summary.

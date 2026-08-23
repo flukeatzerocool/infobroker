@@ -1,0 +1,19 @@
+{
+  "skill": "proofreading",
+  "prompt": "Load the proofreading skill and apply it to the file at the input path below. Follow the skill's workflow (grammar, spelling, punctuation, style, clarity, tone), edit the file in place, and produce an annotated change list numbered PR-<n>. Do NOT treat it as a specification or run any structural checks — this is a plain prose document.\n\nInput file: ./input.txt\n\nYou MUST end your final reply with the completion line exactly as specified in the skill's Output Contract (the prose form).",
+  "inputs": [
+    "proofreading-flawed.txt"
+  ],
+  "expected_tokens": [
+    "PR-1",
+    "proofread passed."
+  ],
+  "rubric": [
+    "Subject-verb agreement errors corrected (e.g. 'have' -> 'has')",
+    "Homophones corrected (there/their/they're, its/it's, principle/principal, recieve/receive, of/have)",
+    "Edits applied in place to the file",
+    "Change list uses PR-<n> numbering",
+    "Completion line present in prose form"
+  ],
+  "time_limit": "none"
+}

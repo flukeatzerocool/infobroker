@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026.08.23 — Dead-code scan broadened across project, git, and server source
+
+- The push-pipeline dead-data scan (step 6) is now a dead-code scan across
+  three surfaces: the whole project folder (formerly just `src/`), the git
+  repository (stale branches/tags, deleted-but-referenced files, stale
+  cross-ref identifiers across all refs), and the Infobroker MCP server
+  source (tool-surface reconciliation, provider drift, dead exports, and
+  hardcoded version/count drift). A new prompt
+  `scripts/pipeline/prompts/scan-git.md` drives the git + server pass.
+  Findings are aggregated across all per-directory summaries rather than
+  last-write-wins, and the parallel-mode scan loop now substitutes each
+  directory's own path (it previously scanned only the first directory).
+
+## 2026.08.22 — Skill test harness and proofreading de-spec
+
+- A live, agentic test harness (`npm run test-skills`) now runs every
+  bundled skill through a headless opencode session against the real
+  Infobroker MCP and gates each run on the skill's grep-able completion
+  token. `test-fixtures/skills/<skill>.json` manifests define the test
+  prompt, expected tokens (asserted in order), and an optional rubric for
+  the `--grade` LLM pass. Six skills, six tokens, evaluated end to end.
+- The three writing skills that lacked an output contract gained a
+  grep-able completion line: `summarization complete.`, `technical-writing
+  complete.`, and `translation complete.`. All six skills are now
+  mechanically testable.
+- The `proofreading` skill was de-spec'd: it is now a pure prose-polish
+  skill. Spec-mode structural detection and its `proofread FAILED.` handoff
+  token were removed, so structural spec assessment is no longer this
+  skill's job. The push pipeline's read-through prompt was reworded to run
+  the authoring audit as direct instructions alongside a prose pass rather
+  than invoking a now-removed spec mode. (D-029)
+
 ## 2026.08.23 — Workflow routing and skill consolidation
 
 - The orchestrator skill (`skills/infobroker/SKILL.md`) now opens with a

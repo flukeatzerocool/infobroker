@@ -54,6 +54,19 @@ metadata:
 - Write scannable content with headings, tables, and lists.
 - Version the documentation alongside the software.
 
+## Output Contract
+
+Always end with a searchable one-line status:
+
+```
+technical-writing complete. <doc type> | <N> sections | no placeholders
+```
+
+`<doc type>` is the document type identified in step 1 (API reference,
+tutorial, user guide, changelog, or architecture doc). Replace
+`no placeholders` with a list of any placeholder text the review could
+not resolve.
+
 ## Edge Cases
 
 - **Undocumented behavior:** Document it as "current behavior" and flag it for

@@ -1,0 +1,9 @@
+The MCP server normalizes provider response into a common result shape.
+Providers return title, URL, and snippet fields; the normalizer discards
+results whose URLs are empty. Rate limiting is enforced per provider on a
+1-second interval, and quota counters are written to disk at intervals
+rather than on every increment. When a provider returns an HTTP 202
+response, the server treats it as a parse error and advances the fallback
+chain, which is capped at three providers deep. A knowledge base stores
+previously indexed results and is queried before external web search, so a
+fresh hit can satisfy a query without leaving the local store.

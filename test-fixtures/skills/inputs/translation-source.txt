@@ -1,0 +1,8 @@
+The application must reject any request that fails validation before it
+reaches the backend. Each request contains a payload with a user identifier
+and a list of items. When the list is empty, the server returns a 400 error
+with a message describing the problem. The system supports two languages,
+English and German, and the interface renders all labels in the active
+language. Passwords are hashed before they are stored, and the digest is
+never written to the log. The service is available twenty-four hours a day
+and will restart automatically after an unexpected failure.

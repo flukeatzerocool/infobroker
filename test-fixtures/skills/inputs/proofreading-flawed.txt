@@ -1,0 +1,8 @@
+The team have finished there analysis of the data. Each of the researchers were
+asked to submit they're findings before Friday. The report, which covers the
+results of the study are being reviewed by management. Its clear that the
+conclusion need to be revised, and the data should of been checked more
+carefully. The principle investigator will recieve the final draft. There is
+also a number of issues with the methodology that need to be address. The
+software's behavior are not consistent across platforms, so we will recommend
+that the system be tested on all of there environments before deployment.

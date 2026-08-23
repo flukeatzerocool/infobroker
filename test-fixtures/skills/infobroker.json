@@ -1,0 +1,14 @@
+{
+  "skill": "infobroker",
+  "prompt": "Load the infobroker skill and apply it to the following request. Classify the request into a workflow shape (Phase 0), then execute the shape's pipeline using the Infobroker tools.\n\nRequest: Research and write a short report on the significance of the ALIA (Australia's Large Array) radio telescope project, citing your sources with URLs.\n\nYou MUST end your final reply with the completion token for the workflow shape you selected, exactly as defined in skills/infobroker/references/workflows.md.",
+  "expected_tokens": [
+    "research complete."
+  ],
+  "rubric": [
+    "A workflow shape was classified and named",
+    "Sources are cited with URLs",
+    "The report draws on fetched/verified material rather than assertion alone",
+    "The completion token matches the workflow shape"
+  ],
+  "time_limit": "none"
+}
