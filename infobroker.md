@@ -417,6 +417,10 @@ Knowledge base search results SHALL include a freshness-adjusted score that acco
 
 When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
 
+**REQ-082 — KB Retrieval Consistency**
+
+The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
+
 ### 4.10 Deployment and Updates
 
 **REQ-042 — Source Distribution**
@@ -756,6 +760,7 @@ is configurable via `corroboration.similarity_threshold`.
   any REQ with zero citations (excluding §4.7 artifact REQs) as unimplemented;
   report any source file without citations as undocumented.
 - KB search: mock vector store with known embeddings; query → verify results ranked by relevance
+- KB retrieval consistency: ingest content across multiple calls so the vocabulary grows between calls; query for a term present only in the earliest content → verify it is returned and ranked (REQ-082)
 - KB ingestion: provide text content → verify chunks created and stored
 - KB deletion: add content then issue delete → verify correct count removed
 - KB auto-indexing: execute `web_search` with mock provider → verify store received results after response
@@ -863,6 +868,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-074 | Freshness Classification | 4.9 | G1 |
 | REQ-075 | Confidence Decay | 4.9 | G1 |
 | REQ-076 | KB-First Sufficiency | 4.9 | G1 |
+| REQ-082 | KB Retrieval Consistency | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 
@@ -1273,7 +1279,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-021a, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
-| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076 | G0, G1 |
+| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |

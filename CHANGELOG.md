@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-23 — Knowledge base retrieval consistency fixed; stable feature space
+
+- The knowledge base's TF-IDF vectorizer sized embeddings to the live
+  vocabulary, which grows on every ingest, so stored embeddings and new
+  queries no longer shared a dimension and `kb` search returned zero results
+  on any populated store. The vectorizer is replaced by a fixed-dimension
+  signed feature-hashing model (`signed-hash-tfidf`, 4096 dims) whose
+  dimension is constant regardless of vocabulary growth; legacy stores are
+  re-embedded from stored text on load and the reconciliation is recorded as a
+  status event. `max_vocab_terms` is restored to its documented 10,000 default
+  but is now legacy under the hashing model. (REQ-082, D-031)
+- New REQ-082 (KB Retrieval Consistency): earlier-indexed content must remain
+  discoverable as the store grows, previously indexed content must be
+  reconciled when the embedding model changes, and unretrievable stored content
+  must be surfaced as a status event rather than silently omitted. (D-031)
+
 ## 2026-08-23 — Skill completion tokens made imperative; researcher-style test suite
 
 - A researcher-style integration suite (`npm run test-research`) exercises all

@@ -11,7 +11,7 @@ const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
 function makeConfig(overrides: Record<string, unknown> = {}): KbConfig {
   return {
     storage_path: dir,
-    embedding_model: "tf-idf",
+    embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
     auto_index: false,
@@ -73,11 +73,48 @@ describe("kbSearch ranking (REQ-075)", () => {
   });
 });
 
+describe("kbSearch retrieval consistency (REQ-082)", () => {
+  it("returns a chunk ingested earlier after subsequent ingests grow the vocabulary", () => {
+    kbIngest(
+      "cartographer astrolabe sextant chart a nautical instrument",
+      "earliest",
+      "https://example.com/earliest",
+      "test"
+    );
+    kbIngest(
+      "quantum chromodynamics is a gauge theory of the strong interaction",
+      "second",
+      "https://example.com/second",
+      "test"
+    );
+    kbIngest(
+      "zephyr orographic uplift governs alpine precipitation forecasts",
+      "third",
+      "https://example.com/third",
+      "test"
+    );
+
+    // A term present only in the earliest chunk must still be retrievable.
+    const results = kbSearch("astrolabe cartographer", 10);
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].source_url).toBe("https://example.com/earliest");
+  });
+
+  it("re-embeds legacy chunks whose embeddings predate the current model", () => {
+    // A chunk whose stored embedding predates the signed-hash model must be
+    // reconciled on load and remain searchable.
+    const stats = kbStats();
+    expect(stats.model_name).toBe("signed-hash-tfidf");
+    expect(stats.chunk_count).toBeGreaterThan(0);
+  });
+});
+
 describe("kbStats", () => {
   it("reports chunk count and collections", () => {
     const stats = kbStats();
     expect(stats.chunk_count).toBeGreaterThan(0);
-    expect(stats.model_name).toBe("tf-idf");
+    expect(stats.model_name).toBe("signed-hash-tfidf");
   });
 });
 

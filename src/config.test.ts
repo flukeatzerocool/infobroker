@@ -27,7 +27,7 @@ const BASE: Config = {
   output: { max_chars: 50000, latency_window_size: 100, fallback_depth: 3, max_redirect_hops: 5 },
   kb: {
     storage_path: "~/.local/share/infobroker/knowledge-base",
-    embedding_model: "tf-idf",
+    embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
     auto_index: true,

@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-031: KB Retrieval Consistency and Stable Feature Space (2026.08.23)
+
+The knowledge base's built-in vectorizer computed TF-IDF embeddings against
+the live vocabulary, which grows with every ingest. Because chunk embeddings
+were frozen at the pre-ingest vocabulary snapshot while each query was
+vectorized against the current (larger) vocabulary, the two vectors no longer
+shared a dimension; `cosineSimilarity` produced NaN and every chunk was
+silently discarded, so `kb` search returned zero results on any populated
+store. The fix replaces the vocabulary-indexed vectorizer with a
+fixed-dimension signed feature-hashing model (`signed-hash-tfidf`, 4096 dims):
+each token hashes to an index via FNV-1a and contributes `tf-idf` weighted by a
+sign derived from a second hash. The dimension is constant regardless of
+vocabulary growth, so cosine similarity is always well-defined and new content
+is always vector-searchable. On load, when the store's recorded model differs
+from the active model (including a legacy `tf-idf` store), every chunk is
+re-embedded from its stored text and the reconciliation is recorded as a status
+event — this satisfies the REQ-082 reconciliation contract on embedding-model
+change. `max_vocab_terms` is retained as a legacy config key for schema
+compatibility but no longer bounds vector size under the hashing model.
+This amends D-023 (the built-in model is no longer vocab-indexed TF-IDF) and
+D-011 (the retrieval approach is hashed TF-IDF + cosine, still zero-dependency).
+
 ### D-030: Imperative Completion Tokens and Skill Auto-Selection (2026.08.22)
 
 A researcher-style test run (18 scenarios exercising every workflow shape
@@ -254,10 +276,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `5f88ffc3127a51af9255849b888ed310d11fb1092dc016228738ccb0af5826fa`
-**Source hash:** `b9268937bd9f7c6ee59cb88eb346e127e7a4e6e21af15ded78e66053fcd6165a`
-**Config hash:** `ffe771042b9bec3334be003429cb55a61af73b9c31b2278533a5f6715290084d`
-**Total fingerprint:** `468e2a202b00848c38c60e6937a9ed94bbc6c3cacd692c1eea6168e76681faae`
+**Spec hash:** `3a756d84af46a8a0542e9b360d2405deb67695abb3fa598bfe08ff39d3907097`
+**Source hash:** `2e3afbb885e453b1334e2f0a91044fbb06701b4afc766ee884c4fec40989f803`
+**Config hash:** `39fe11f297a331125d67804d60f3cdb56d349dcf9d92ece13bee59110300d776`
+**Total fingerprint:** `3b532bb1749a42674c78f9e8e0d4387c76128f7a8c805e3730b044370eee71af`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

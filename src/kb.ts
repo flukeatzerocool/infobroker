@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ interface VectorStore {
   idf: Record<string, number>;
   docCount: number;
   events: string[];
-  sortedVocab?: string[];
+  model?: string;
 }
 
 let store: VectorStore | null = null;
@@ -60,8 +60,27 @@ interface EmbeddingModel {
 // The built-in, zero-dependency model. A richer model can be registered at
 // startup without changing call sites: assign `activeModel` to a new
 // implementation and report its `name` via kbStats (REQ-060c).
+const HASH_DIMS = 4096;
+
+function hashIndex(token: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < token.length; i++) {
+    h ^= token.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+function hashSign(token: string): number {
+  let h = 5381;
+  for (let i = 0; i < token.length; i++) {
+    h = ((h << 5) + h) ^ token.charCodeAt(i);
+  }
+  return h >>> 0;
+}
+
 const activeModel: EmbeddingModel = {
-  name: "tf-idf",
+  name: "signed-hash-tfidf",
   vectorize(tokens, idf, docCount) {
     return tfIdfVectorize(tokens, idf, docCount);
   },
@@ -69,29 +88,16 @@ const activeModel: EmbeddingModel = {
 
 function tfIdfVectorize(tokens: string[], idf: Record<string, number>, docCount: number): number[] {
   const tf = computeTf(tokens);
-  const vocab = getSortedVocab();
-  const cap = kbConfig?.max_vocab_terms;
-  const effectiveVocab = cap && cap > 0 && cap < vocab.length ? vocab.slice(0, cap) : vocab;
-  const vec: number[] = new Array(effectiveVocab.length).fill(0);
   const nDocs = docCount || 1;
-  for (let i = 0; i < effectiveVocab.length; i++) {
-    const term = effectiveVocab[i];
-    const tfVal = tf[term] || 0;
+  const vec: number[] = new Array(HASH_DIMS).fill(0);
+  for (const term of Object.keys(tf)) {
     const idfVal = Math.log((nDocs + 1) / ((idf[term] || 0) + 1)) + 1;
-    vec[i] = tfVal * idfVal;
+    const weight = tf[term] * idfVal;
+    const idx = hashIndex(term) % HASH_DIMS;
+    const sign = (hashSign(term) & 1) === 0 ? 1 : -1;
+    vec[idx] += sign * weight;
   }
   return vec;
-}
-
-function getSortedVocab(): string[] {
-  if (store?.sortedVocab?.length) return store.sortedVocab;
-  if (!store) return [];
-  store.sortedVocab = Object.keys(store.idf).sort();
-  return store.sortedVocab;
-}
-
-function invalidateVocab(): void {
-  if (store) store.sortedVocab = undefined;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -126,7 +132,6 @@ function loadStore(): void {
       const raw = JSON.parse(readFileSync(fpath, "utf-8"));
       if (raw && Array.isArray(raw.chunks) && typeof raw.idf === "object") {
         const loaded: VectorStore = raw;
-        loaded.sortedVocab = undefined;
         store = loaded;
         return;
       }
@@ -283,10 +288,25 @@ export function initKb(config: KbConfig): void {
     loadStore();
   }
 
-  getSortedVocab();
+  ensureStableEmbeddings();
   runMaintenance();
   if (maintenanceTimer) clearInterval(maintenanceTimer);
   maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+}
+
+function ensureStableEmbeddings(): void {
+  if (!store) return;
+  if (store.model === activeModel.name) return;
+  let reembedded = 0;
+  for (const chunk of store.chunks) {
+    chunk.embedding = activeModel.vectorize(tokenize(chunk.text), store.idf, store.docCount);
+    reembedded++;
+  }
+  store.model = activeModel.name;
+  store.events.push(
+    `Embedding model reconciled at ${new Date().toISOString()}: "${activeModel.name}", ${reembedded} chunk(s) re-embedded`
+  );
+  saveStore();
 }
 
 export function flushKbWrites(): void {
@@ -395,7 +415,6 @@ export function kbIngest(
     updateIdf(tokenize(chunkText));
   }
 
-  invalidateVocab();
   scheduleWrite();
   return chunks.length;
 }
@@ -477,7 +496,6 @@ function rebuildIdf(): void {
     }
     store.docCount++;
   }
-  invalidateVocab();
 }
 
 export function autoIndex(

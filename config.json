@@ -217,12 +217,13 @@
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",
-    "embedding_model": "tf-idf",
+    "embedding_model": "signed-hash-tfidf",
     "chunk_size": 1024,
     "chunk_overlap": 64,
     "auto_index": true,
     "default_collection": "default",
     "max_results": 50,
+    "max_vocab_terms": 10000,
     "freshness": {
       "tiers": {
         "ephemeral": { "decay_hours": 24, "expiry_hours": 168 },
