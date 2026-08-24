@@ -344,12 +344,51 @@ version_only_diff() {
   done < <(diff_content "$@")
   return 0
 }
+# spec_req_change — true when the infobroker.md diff touches a REQ body. C.10
+# "Provenance" requires a CHANGELOG entry only when a REQ is modified; a
+# narrative edit (§1–§3, §5–§8 prose, block-reservation summaries, appendix
+# tables) is not a REQ change and must NOT demand a CHANGELOG entry. A REQ body
+# is a `**REQ-### — Title**` header and its immediately-following paragraph
+# (single paragraph, occasionally with a blank line after the header). Detect
+# a REQ-body edit by scanning the diff with enough context that a body edit is
+# always adjacent to its header.
+spec_req_change() {
+  git -C "$PROJECT_DIR" diff --unified=4 -- infobroker.md 2>/dev/null \
+    | awk '
+      /^@@/ { body_left = 0; next }
+      /^(\+\+\+|---)/ { next }
+      {
+        marker = substr($0, 1, 1)
+        body = substr($0, 2)
+        # A changed line that is itself a REQ header → REQ change.
+        if ((marker == "+" || marker == "-") && body ~ /\*\*REQ-/) { print "REQ"; exit }
+        # A REQ body is the paragraph immediately after its header, possibly
+        # with one intervening blank line. body_left counts the buffer.
+        if ((marker == "+" || marker == "-") && body_left > 0 && body ~ /[^[:space:]]/) { print "REQ"; exit }
+        # Any REQ header (context or changed) arms the body buffer.
+        if (body ~ /\*\*REQ-/) { body_left = 2; next }
+        # A blank line consumes one slot; a non-blank non-header line ends the
+        # buffer (the body paragraph has ended and this is narrative).
+        if (body_left > 0) {
+          if (body ~ /[^[:space:]]/) { body_left = 0 }
+          else { body_left-- }
+        }
+      }' \
+    | grep -q 'REQ'
+}
 CHANGELOG_DIRTY=""
-if ! whitespace_only_diff infobroker.md src/; then
-  if ! version_only_diff infobroker.md src/; then
+# Behavior changes under src/ are always semantic (unless version-only).
+if ! whitespace_only_diff src/; then
+  if ! version_only_diff src/; then
     CHANGELOG_DIRTY=1
   fi
-elif [[ -n "$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard -- infobroker.md src/ 2>/dev/null)" ]]; then
+fi
+# infobroker.md is semantic only when a REQ body changed.
+if [[ -z "$CHANGELOG_DIRTY" ]] && spec_req_change; then
+  CHANGELOG_DIRTY=1
+fi
+# Untracked files are always semantic.
+if [[ -z "$CHANGELOG_DIRTY" ]] && [[ -n "$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard -- infobroker.md src/ 2>/dev/null)" ]]; then
   CHANGELOG_DIRTY=1
 fi
 

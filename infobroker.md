@@ -148,7 +148,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020d`, `024a`–`024c`, `026a`–`026b` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–055, 077–078 (client artifacts and spec integrity), 060, 064–067, 072, 074–076 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020d`, `021a`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–086 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
