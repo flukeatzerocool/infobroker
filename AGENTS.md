@@ -161,3 +161,17 @@ Shell scripts (`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`) are
 gate-checked with `bash -n`. Running `shellcheck` on them before committing
 is recommended but not required — it is not installed as a devDependency and
 is not part of `npm run check`.
+
+## Newsletter
+
+A weekly digest is generated every Wednesday (GitHub Actions cron,
+`.github/workflows/newsletter.yml`) and committed to `newsletter/drafts/`.
+
+- `outline.json` lists the sections and which are enabled. The three
+  always-on sections (`shipped`, `upcoming`, `spotlight`) are the minimum;
+  add, remove, or reorder sections by editing that file — no code changes.
+- The `upcoming` section renders `ROADMAP.md` verbatim. When planning a
+  release, update `ROADMAP.md` (1–3 lines per upcoming item, newest first);
+  remove entries once they ship to `CHANGELOG.md`.
+- `scripts/newsletter-push.ts` pushes the latest draft to Buttondown as a
+  *draft* (never sends); a human reviews and sends from the dashboard.
