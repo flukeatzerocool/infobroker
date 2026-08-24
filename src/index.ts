@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -14,7 +14,8 @@ import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain } from "./chain.js";
 import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
+import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
@@ -753,9 +754,11 @@ server.registerTool(
   "infobroker_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete. Use ingest with source_type 'report' and save_to 'kb' (default) to archive generated reports; use list/get to revisit them.",
+    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete. Use ingest with source_type 'report' and save_to 'kb' (default) to archive generated reports; use list/get to revisit them. Use the 'encryption' action to enable/disable at-rest encryption, generate or back up a key, verify a key, or re-key the store.",
     inputSchema: {
-      action: z.enum(["search", "ingest", "list", "get", "stats", "delete"]).describe("Operation to perform"),
+      action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption"]).describe("Operation to perform"),
+      operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
+      key_file: z.string().optional().describe("Path to a key file (generate_key writes here; rekey reads the target key from here). Never pass the secret itself — only a file path."),
       query: z.string().optional().describe("Search query (for search action)"),
       text: z.string().optional().describe("Raw text to index (for ingest action)"),
       url: z.string().optional().describe("URL to fetch and index (for ingest action)"),
@@ -773,12 +776,77 @@ server.registerTool(
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
-    const lock = getKbLockError();
-    if (lock) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", lock.code, lock.message, lock.remediation))}` }] };
+    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete" | "encryption";
+    // The encryption action is the recovery surface: it must remain reachable
+    // even when the store is locked so the user can verify a key, restore a
+    // backup, or re-key. All other actions honor the lock.
+    if (action !== "encryption") {
+      const lock = getKbLockError();
+      if (lock) {
+        return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", lock.code, lock.message, lock.remediation))}` }] };
+      }
     }
-    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete";
     try {
+      if (action === "encryption") {
+        const op = (params.operation as string) || "status";
+        const keyFile = params.key_file as string | undefined;
+
+        if (op === "status") {
+          const status = kbEncryptionStatus();
+          return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [status] })}` }] };
+        }
+
+        if (op === "generate_key") {
+          if (!keyFile) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "key_file path is required for generate_key", "Provide a writeable key file path"))}` }] };
+          }
+          const path = generateKeyFile(keyFile);
+          const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "key generated", url: `file://${path}`, snippet: `Key written to ${path}. Back it up now — without it the store is unrecoverable.` }] });
+          return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
+        }
+
+        if (op === "verify") {
+          const ok = verifyStoreKey();
+          const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: ok ? "key verified" : "key mismatch", url: "", snippet: ok ? "The configured key opens the store." : "The configured key does not open the store (or no key is configured / store is not encrypted). The store has not been modified." }] });
+          return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
+        }
+
+        if (op === "backup") {
+          if (!keyFile) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "key_file path is required for backup (destination)", "Provide a backup file path; the active key is copied there"))}` }] };
+          }
+          const path = backupKeyFile(keyFile);
+          if (!path) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "No file-based key to back up", "The active key source is not kb.encryption.key_file, so nothing was copied. Back up INFOBROKER_KB_KEY / INFOBROKER_KB_PASSPHRASE manually."))}` }] };
+          }
+          const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "key backed up", url: `file://${path}`, snippet: `Key copied to ${path}. Keep this file somewhere safe and separate from the store.` }] });
+          return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
+        }
+
+        if (op === "rekey") {
+          if (!keyFile) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "key_file path is required for rekey (new target key file)", "Generate a new key file first (generate_key), then pass its path here"))}` }] };
+          }
+          let target: ResolvedKey | null = null;
+          try {
+            target = { kind: "raw", dek: readKeyFile(keyFile) };
+          } catch {
+            target = null;
+          }
+          if (!target) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "Could not read the target key file", "Ensure the key file exists and contains a valid key"))}` }] };
+          }
+          const result = rekeyStoreTo(null, target);
+          if (!result) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "Store is not encrypted or no source key is loaded", "Re-key requires an encrypted store and an active key"))}` }] };
+          }
+          const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "re-keyed", url: "", snippet: "Store re-keyed to the new key file. Update kb.encryption.key_file in config.local.json to point at the new key, then reload." }] });
+          return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
+        }
+
+        return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", `Unknown encryption operation "${op}"`, "Use one of: status, generate_key, verify, backup, rekey"))}` }] };
+      }
+
       if (action === "search") {
         const results = kbSearch(
           String(params.query ?? ""),
@@ -891,8 +959,15 @@ server.registerTool(
         console.error("[infobroker] Knowledge base re-initialized");
       }
       const lock = getKbLockError();
+      const state = getKbEncryptionState();
+      const guidance =
+        state === "enabled"
+          ? " Enabling encryption makes the store unrecoverable without the key — back up your key now (kb 'encryption' action, 'backup')."
+          : state === "disabled"
+            ? " Encryption disabled. If the store was previously encrypted it is now decrypted on disk; remove the key material only after confirming (kb 'encryption' action, 'status')."
+            : "";
       const message =
-        `Configuration reloaded. Knowledge base encryption: ${getKbEncryptionState()}.` +
+        `Configuration reloaded. Knowledge base encryption: ${state}.${guidance}` +
         (lock ? ` Knowledge base LOCKED: ${lock.message}` : "");
       return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message, provider_count: Object.keys(newConfig.providers).length }] })}` }] };
     } catch (e) {

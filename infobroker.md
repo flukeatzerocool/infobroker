@@ -439,6 +439,10 @@ The knowledge base SHALL support optional at-rest encryption of its stored conte
 
 WHEN the knowledge base store cannot be read — because the encryption key is unavailable, decryption fails, or the file format is unrecognized or newer than supported — the server SHALL NOT modify, overwrite, rename, or delete the store file, SHALL NOT persist new content, and SHALL report the failure as an error per REQ-002, leaving the store unchanged for recovery. The server SHALL persist knowledge-base content only through atomic writes such that a crash leaves either the previous complete store or the new complete store, never a partial file. A store written in an unrecognized or newer format SHALL NOT be rewritten by this version. _Check:_ G1.
 
+**REQ-086 — KB Encryption Transitions and Recovery**
+
+The knowledge base SHALL support enable and disable of at-rest encryption (REQ-084) as explicit, immediate transitions. WHEN encryption is enabled while the store is plaintext, the server SHALL encrypt the store in place; WHEN encryption is disabled while the store is encrypted and the secret is available, the server SHALL decrypt the store in place. Each transition SHALL commit atomically and verify the result before replacing the store. WHEN the store is locked, the server SHALL expose the encryption state, the on-disk format, and a recovery directive through a knowledge-base operation that remains reachable while locked. The server SHALL support verifying a candidate secret against the store and re-keying the store to a new secret without loss of stored content. _Check:_ G1.
+
 ### 4.10 Deployment and Updates
 
 **REQ-042 — Source Distribution**
@@ -892,6 +896,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-083 | Report Storage | 4.9 | G1 |
 | REQ-084 | KB At-Rest Encryption | 4.9 | G1 |
 | REQ-085 | KB Data Preservation | 4.9 | G1 |
+| REQ-086 | KB Encryption Transitions and Recovery | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 
@@ -1302,7 +1307,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-021a, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
-| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085 | G0, G1 |
+| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |

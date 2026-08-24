@@ -1,11 +1,12 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085
-import { randomUUID } from "node:crypto";
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086
+import { randomUUID, randomBytes } from "node:crypto";
 import {
   readFileSync,
   writeSync,
   existsSync,
   mkdirSync,
   renameSync,
+  copyFileSync,
   openSync,
   closeSync,
   fsyncSync,
@@ -224,7 +225,7 @@ function loadStore(): void {
         code: "config_error",
         message: "Knowledge base is encrypted but no key is configured",
         remediation:
-          "Set INFOBROKER_KB_KEY or INFOBROKER_KB_PASSPHRASE, or point kb.encryption.key_file at a key file. Data is preserved and untouched.",
+          "Set INFOBROKER_KB_KEY or INFOBROKER_KB_PASSPHRASE, or point kb.encryption.key_file at a key file, then reload. Data is preserved and untouched. If the key is lost, restore it from a backup (see kb encryption 'backup' action) — without the key the store is unrecoverable by design.",
       };
       return;
     }
@@ -243,7 +244,7 @@ function loadStore(): void {
         code: "config_error",
         message: "Knowledge base could not be decrypted (wrong key or tampered store)",
         remediation:
-          "Verify the key matches the one used to encrypt the store. The store file has not been modified; fix the key and restart.",
+          "Verify the key matches the one used to encrypt the store (see kb encryption 'verify' action). The store file has not been modified; fix the key and restart. If the key was lost, restore it from a backup or re-key from a known secret (kb encryption 'rekey').",
       };
       return;
     }
@@ -486,6 +487,7 @@ export function initKb(config: KbConfig): void {
   // Resolve the encryption key after load so the in-hand key is registered for
   // subsequent writes. Warn loudly when encryption was just enabled.
   const newlyEnabled = config.encryption?.enabled && !wasEncrypted;
+  const newlyDisabled = wasEncrypted && !(config.encryption?.enabled ?? false);
   if (config.encryption?.enabled && !resolvedKey && store !== null) {
     resolvedKey = resolveKeySource(config.encryption?.key_file) ?? null;
   }
@@ -515,6 +517,19 @@ export function initKb(config: KbConfig): void {
       // Eager migration: encrypt the legacy plaintext store immediately so no
       // plaintext copy lingers on disk.
       if (store !== null && resolvedKey) saveStore();
+    }
+  }
+
+  // Disabling encryption is an explicit, immediate transition: the store is
+  // already decrypted in memory (loadStore requires the key regardless of the
+  // enabled flag), so flush it to plaintext now rather than deferring to the
+  // next write. This is the reverse of the eager migrate-on-enable above.
+  if (newlyDisabled && store !== null) {
+    try {
+      saveStore();
+      console.warn("[infobroker] Knowledge base encryption has been disabled. The store has been decrypted to plaintext on disk.");
+    } catch (e) {
+      console.error(`[infobroker] decryption-on-disable failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -909,30 +924,22 @@ export function sealReportBytes(clear: Buffer): Buffer {
 }
 
 /**
- * Re-key the store from one secret to another (REQ-084 "change the secret
- * without loss of stored content"). Reads the rekey source/target from the
- * environment, re-seals the store atomically, and records the operation in the
- * store events. Returns a human-readable result, or null when no rekey is
- * requested or the store is not encrypted.
+ * Re-seal an on-disk encrypted store from one key to another without loss of
+ * stored content (REQ-084 "change the secret"). Verifies the result before the
+ * atomic commit. Returns a human-readable result, or null when the store is not
+ * encrypted. Supports null `from` (use the currently-resolved/in-hand key) for
+ * in-tool re-key where the source secret is already loaded.
  */
-export function rekeyStore(): string | null {
-  const fromEnv = rawKeyFromString(process.env["INFOBROKER_KB_REKEY_FROM"])
-    ?? passphraseKey(process.env["INFOBROKER_KB_REKEY_FROM_PASSPHRASE"]);
-  const toFromKeyFile = process.env["INFOBROKER_KB_REKEY_TO_KEY_FILE"]
-    ? { kind: "raw", dek: readKeyFile(process.env["INFOBROKER_KB_REKEY_TO_KEY_FILE"]) } as ResolvedKey
-    : null;
-  const to = rawKeyFromString(process.env["INFOBROKER_KB_REKEY_TO"])
-    ?? passphraseKey(process.env["INFOBROKER_KB_REKEY_TO_PASSPHRASE"])
-    ?? toFromKeyFile;
-
-  if (!fromEnv || !to) return null;
-
+export function rekeyStoreTo(from: ResolvedKey | null, to: ResolvedKey): string | null {
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return null;
   const bytes = readStoreBytes()!;
   if (!isEncryptedEnvelope(bytes)) return null;
 
-  const plain = openEnvelope(fromEnv, bytes);
+  const src = from ?? resolvedKey;
+  if (!src) return null;
+
+  const plain = openEnvelope(src, bytes);
   const sealed = sealEnvelope(to, plain);
   const rechecked = openEnvelope(to, sealed);
   if (!rechecked.equals(plain)) throw new Error("rekey self-verify failed");
@@ -955,4 +962,114 @@ export function rekeyStore(): string | null {
     // Leave re-keyed file in place; memory state refreshes on next load.
   }
   return "knowledge base re-keyed";
+}
+
+/**
+ * Re-key the store from one secret to another (REQ-084 "change the secret
+ * without loss of stored content"). Reads the rekey source/target from the
+ * environment; wraps rekeyStoreTo, which re-seals the store atomically and
+ * records the operation in the store events. Returns a human-readable result,
+ * or null when no rekey is requested or the store is not encrypted.
+ */
+export function rekeyStore(): string | null {
+  const fromEnv = rawKeyFromString(process.env["INFOBROKER_KB_REKEY_FROM"])
+    ?? passphraseKey(process.env["INFOBROKER_KB_REKEY_FROM_PASSPHRASE"]);
+  const toFromKeyFile = process.env["INFOBROKER_KB_REKEY_TO_KEY_FILE"]
+    ? { kind: "raw", dek: readKeyFile(process.env["INFOBROKER_KB_REKEY_TO_KEY_FILE"]) } as ResolvedKey
+    : null;
+  const to = rawKeyFromString(process.env["INFOBROKER_KB_REKEY_TO"])
+    ?? passphraseKey(process.env["INFOBROKER_KB_REKEY_TO_PASSPHRASE"])
+    ?? toFromKeyFile;
+
+  if (!fromEnv || !to) return null;
+  return rekeyStoreTo(fromEnv, to);
+}
+
+/**
+ * Write a fresh 32-byte raw key (base64) to `path` with 0600 permissions and
+ * return the path. Never returns the secret material — the caller learns only
+ * where the key lives and that it must be backed up.
+ */
+export function generateKeyFile(path: string): string {
+  const key = randomBytes(32).toString("base64");
+  const dir = dirname(path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  atomicWriteFile(path, Buffer.from(`${key}\n`, "utf-8"));
+  return path;
+}
+
+/**
+ * Verify the currently-resolved (or explicitly provided) secret against the
+ * on-disk store without writing anything. Returns true when the secret opens
+ * the envelope to a valid store, false otherwise (missing store, plaintext
+ * store, wrong key, or tampered store).
+ */
+export function verifyStoreKey(key?: ResolvedKey): boolean {
+  const fpath = storeFilePath();
+  if (!fpath || !existsSync(fpath)) return false;
+  const bytes = readStoreBytes()!;
+  if (!isEncryptedEnvelope(bytes)) return false;
+  const candidate = key ?? resolveKeySource(kbConfig?.encryption?.key_file) ?? resolvedKey;
+  if (!candidate) return false;
+  try {
+    const plain = openEnvelope(candidate, bytes).toString("utf-8");
+    const raw = JSON.parse(plain);
+    return !!raw && Array.isArray(raw.chunks) && typeof raw.idf === "object";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copy the currently-resolved key file to a backup path (0600) so the user has
+ * a recovery artifact. Returns the backup path. The secret itself is never
+ * returned. If the active key source is not a file, returns null.
+ */
+export function backupKeyFile(backupPath: string): string | null {
+  const keyFile = kbConfig?.encryption?.key_file;
+  const resolved = resolveKeySource(keyFile);
+  if (!keyFile || !resolved || resolved.kind !== "raw") return null;
+  const src = resolvePath(keyFile);
+  if (!existsSync(src)) return null;
+  const dir = dirname(backupPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  copyFileSync(src, backupPath);
+  chmodSync(backupPath, 0o600);
+  if (store) store.events.push(`Encryption key backed up at ${new Date().toISOString()}: ${backupPath}`);
+  return backupPath;
+}
+
+/** On-disk format of the store at rest: "encrypted", "plaintext", or "none". */
+export function kbStoreFormat(): "encrypted" | "plaintext" | "none" {
+  const fpath = storeFilePath();
+  if (!fpath || !existsSync(fpath)) return "none";
+  const bytes = readStoreBytes()!;
+  return isEncryptedEnvelope(bytes) ? "encrypted" : "plaintext";
+}
+
+/**
+ * Structured encryption status for the client-facing `encryption` action:
+ * current state, on-disk format, active key-source kind, whether the key
+ * currently resolves, and (when locked) the lock error with its remediation.
+ */
+export function kbEncryptionStatus(): {
+  state: "enabled" | "disabled" | "locked";
+  on_disk_format: "encrypted" | "plaintext" | "none";
+  key_source: "key_file" | "raw_env" | "passphrase" | "none";
+  key_resolvable: boolean;
+  lock: { code: string; message: string; remediation: string } | null;
+} {
+  const keyFile = kbConfig?.encryption?.key_file;
+  const resolved = resolveKeySource(keyFile);
+  let keySource: "key_file" | "raw_env" | "passphrase" | "none" = "none";
+  if (keyFile) keySource = "key_file";
+  else if (process.env["INFOBROKER_KB_KEY"]) keySource = "raw_env";
+  else if (process.env["INFOBROKER_KB_PASSPHRASE"]) keySource = "passphrase";
+  return {
+    state: getKbEncryptionState(),
+    on_disk_format: kbStoreFormat(),
+    key_source: keySource,
+    key_resolvable: resolved !== null,
+    lock: lockError,
+  };
 }

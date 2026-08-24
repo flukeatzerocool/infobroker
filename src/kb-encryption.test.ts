@@ -1,10 +1,10 @@
-// @implements REQ-084 REQ-085
+// @implements REQ-084 REQ-085 REQ-086
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, utimesSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbStats, kbGet, kbSearch, flushKbWrites, getKbLockError, getKbEncryptionState, runTruncSweep, rekeyStore } from "./kb.js";
-import { openEnvelope, type ResolvedKey } from "./kb-crypto.js";
+import { initKb, kbIngest, kbStats, kbGet, kbSearch, flushKbWrites, getKbLockError, getKbEncryptionState, runTruncSweep, rekeyStore, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
+import { openEnvelope, readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { KbConfig } from "./types.js";
 
 const KEY = "0123456789abcdef0123456789abcdef";
@@ -222,6 +222,131 @@ function requireKeyMatches(sealed: Buffer, keyB64: string, shouldOpen: boolean):
     expect(() => openEnvelope(key, sealed)).toThrow();
   }
 }
+
+describe("KB encryption user journey (enable/disable/recover)", () => {
+  it("decrypts to plaintext immediately on disable, not on the next write", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-odis-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+    const fpath = join(dir, "vector-store.json");
+    expect(readFileSync(fpath, "utf-8").startsWith("INFOKB1")).toBe(true);
+
+    // Disable with the key still resolvable (env): decrypt happens on init,
+    // before any future write.
+    initKb(makeConfig(dir, undefined));
+    expect(readFileSync(fpath, "utf-8").startsWith("INFOKB1")).toBe(false);
+    expect(kbGet("https://example.com/s")?.text).toContain("content");
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("locks (does not silently reset) when disabled while the store is still encrypted and the key is gone", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-olock-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+    const fpath = join(dir, "vector-store.json");
+    const before = readFileSync(fpath);
+
+    cleanEnv();
+    // Disable encryption AND drop the key in one step: store is still encrypted
+    // on disk with no key, so it locks with a recovery directive — never reset.
+    initKb(makeConfig(dir, undefined));
+    expect(getKbEncryptionState()).toBe("locked");
+    expect(getKbLockError()).not.toBeNull();
+    expect(getKbLockError()!.remediation).toMatch(/backup|unrecoverable/i);
+    expect(readFileSync(fpath).equals(before)).toBe(true);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("generateKeyFile writes a 0600 key file and never returns the secret", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-keygen-"));
+    const keyPath = join(dir, "sub", "kb.key");
+    const returned = generateKeyFile(keyPath);
+    expect(returned).toBe(keyPath);
+    expect(returned).not.toMatch(/[A-Za-z0-9+/]{40,}/);
+    const key = readKeyFile(keyPath);
+    expect(key.length).toBe(32);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("verifyStoreKey reports match/mismatch without modifying the store", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-verify-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+    const fpath = join(dir, "vector-store.json");
+    const before = readFileSync(fpath);
+
+    expect(verifyStoreKey()).toBe(true);
+
+    const wrong: ResolvedKey = { kind: "raw", dek: Buffer.from("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "utf-8") };
+    expect(verifyStoreKey(wrong)).toBe(false);
+    expect(readFileSync(fpath).equals(before)).toBe(true);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("kbEncryptionStatus reflects state, format, and key resolvability", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-status-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+
+    const status = kbEncryptionStatus();
+    expect(status.state).toBe("enabled");
+    expect(status.on_disk_format).toBe("encrypted");
+    expect(status.key_source).toBe("raw_env");
+    expect(status.key_resolvable).toBe(true);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("rekeyStoreTo re-keys from the in-hand key to a new file-provided key", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-rkeyto-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+    const fpath = join(dir, "vector-store.json");
+    const before = readFileSync(fpath);
+
+    const newKeyPath = join(dir, "new.key");
+    generateKeyFile(newKeyPath);
+    const newKey: ResolvedKey = { kind: "raw", dek: readKeyFile(newKeyPath) };
+    const result = rekeyStoreTo(null, newKey);
+    expect(result).toBe("knowledge base re-keyed");
+
+    const after = readFileSync(fpath);
+    expect(after.equals(before)).toBe(false);
+    expect(kbGet("https://example.com/s")?.text).toContain("content");
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("backupKeyFile copies the active key file to a backup path", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-bkp-"));
+    const keyPath = join(dir, "kb.key");
+    generateKeyFile(keyPath);
+    initKb(makeConfig(dir, { enabled: true, key_file: keyPath }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+
+    const backupPath = join(dir, "backup", "kb.key.bak");
+    const backed = backupKeyFile(backupPath);
+    expect(backed).toBe(backupPath);
+    expect(existsSync(backupPath)).toBe(true);
+    expect(readKeyFile(backupPath).equals(readKeyFile(keyPath))).toBe(true);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
 
 describe("trunc-file TTL sweep", () => {
   it("removes stale trunc files but preserves other files", () => {

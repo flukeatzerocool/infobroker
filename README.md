@@ -420,6 +420,30 @@ passphrase means the store is unrecoverable by design). Second, the server
 never writes a partial file: every save is atomic, and an unrecognized or
 newer store format is never overwritten.
 
+The `kb` tool's `encryption` action is the day-to-day surface for this
+journey, and it never echoes secret material — `generate_key` and `backup`
+return file paths, and `rekey` reads a key file rather than a raw key.
+
+**Enable** by generating a key, backing it up, adding the `kb.encryption`
+block, and reloading; the store is encrypted in place immediately.
+**Disable** by removing the block and reloading; the store is decrypted to
+plaintext immediately (keep the key available during the transition so the
+server can read the store to decrypt it). **Recover** a locked store with
+`status` to see the state, `verify` to confirm a candidate key before
+committing it, `backup` to restore a copy of your key file, and `rekey` to
+move to a new key without losing content.
+
+```
+infobroker_kb action=encryption operation=generate_key key_file=~/.config/infobroker/kb.key
+infobroker_kb action=encryption operation=backup    key_file=~/.backup/kb.key.bak
+infobroker_reload_config
+```
+
+Add the `kb.encryption` block to `config.local.json` before reloading to
+enable, or remove it before reloading to disable. When the store is locked,
+`status`, `verify`, and `rekey` remain reachable so you can recover without
+first unlocking.
+
 ### Bring your own endpoint
 
 Any HTTP search endpoint can become an Infobroker provider without

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-23 — Encryption user journey: enable, disable, and recover
+
+- The `kb` tool gains an `encryption` action with `status`, `generate_key`,
+  `verify`, `backup`, and `rekey` operations, giving the encryption journey an
+  in-tool surface instead of shell-only rituals. Key operations take key *file
+  paths* and return paths, never secret material. (REQ-086)
+- Enabling and disabling encryption are now explicit, immediate transitions:
+  disabling an encrypted store decrypts it in place at once (the reverse of the
+  existing eager migrate-on-enable) instead of deferring to the next write.
+  (REQ-086)
+- Recovery is reachable while locked: the `encryption` action bypasses the
+  knowledge-base lock, so a locked store can still be inspected (`status`),
+  have a candidate key verified without writing (`verify`), or be re-keyed to a
+  new key without loss. Lock remediations now name these recovery options.
+  (REQ-085, REQ-086)
+
 ## 2026-08-23 — Knowledge base at-rest encryption and data-preservation hardening
 
 - The knowledge base and disk-saved reports now support optional, off-by-default

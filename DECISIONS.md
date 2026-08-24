@@ -2,6 +2,35 @@
 
 ## Active Decisions
 
+### D-033: KB Encryption Transitions and Recovery Journey (2026.08.23)
+
+D-032 added the encryption primitives (envelope, key source chain, lock
+semantics) but left the user journey implicit: enabling required hand-rolled
+`openssl` keygen plus a config edit, disabling was an undocumented deferred
+side effect of the next write, and recovery was operator-shell-only (rekey via
+`INFOBROKER_KB_REKEY_*` env vars plus a restart). D-033 (REQ-086) makes the
+transitions explicit and reachable through the client-facing `kb` tool via an
+`encryption` action (`status`, `generate_key`, `verify`, `backup`, `rekey`).
+
+Three journey decisions:
+
+- **Enable/disable are explicit, immediate transitions**, mirroring each
+  other. Enable already eagerly re-encrypted the legacy plaintext store at
+  init; disable now eagerly re-decrypts an encrypted store at init rather
+  than deferring to the next write. Disabling while the store is still
+  encrypted and the key is gone locks the store (never resets), matching
+  D-032's "on-disk magic is authoritative" rule.
+- **Secrets never cross tool parameters.** The tool accepts key *file paths*
+  only; `generate_key` and `backup` return paths, never key material. This
+  avoids writing secrets into client conversation logs while still giving
+  agents a path to stage and back up keys.
+- **The recover surface stays reachable while locked.** All other `kb`
+  actions honor the lock; `encryption` does not, so an agent can inspect
+  state, verify a candidate key, restore a backup, or re-key without first
+  unlocking. Recovery remains bounded by REQ-085 (a lost key is
+  unrecoverable by design), but the path to a backup or re-key is now a tool
+  call rather than a shell ritual.
+
 ### D-032: KB At-Rest Encryption and Data-Preservation Invariants (2026.08.23)
 
 The knowledge base stores user-generated reports alongside auto-indexed web
@@ -304,10 +333,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `102b54e9edc0a5db74e6721529fb4375c2b1b0280889717175a2d419cd8ab806`
-**Source hash:** `4471a1ec4f700fc62d45a7b1e6ecc2f321bcb2e93a1cc53e7b5124b439eef645`
+**Spec hash:** `06df433a0a466f75c0cc1d80589e5a26debee14f28a673e41191ff9ed75ca0a2`
+**Source hash:** `ef6911c1bbed32d209e44cbe787c31d650739b33568c6627a314ed3834217f69`
 **Config hash:** `52fb1250a329c0f898c31acb7f5380a3d733eae219d6aeb9d92a6e3e17e31ff5`
-**Total fingerprint:** `e31494e32e83347a88e2980dabfaa3d2b126c13551cdce41b37dbb8df2fc5479`
+**Total fingerprint:** `90084d5715494d154940fa432b4261389c69d2f38c949970836b286ccd200348`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
