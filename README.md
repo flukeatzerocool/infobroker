@@ -382,6 +382,11 @@ This file is git-ignored, so pulling updates from the repository never
 overwrites your settings. Values in the user layer take precedence over
 the shipped defaults; anything left out falls back to `config.json`.
 
+The knowledge base ships empty. By default it writes to a user-scoped
+path (`~/.local/share/infobroker/knowledge-base`) outside the repository,
+so the content you research and cache stays on your machine and is never
+committed. Each deployed instance accumulates its own store.
+
 ### Bring your own endpoint
 
 Any HTTP search endpoint can become an Infobroker provider without

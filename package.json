@@ -17,7 +17,7 @@
     "version-bump": "npx tsx scripts/version-bump.ts",
     "version-sync": "npx tsx scripts/version-check.ts",
     "push": "bash scripts/push-pipeline.sh",
-    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run test",
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run test && npx tsx scripts/check-shipped-kb-empty.ts",
     "hash": "npx tsx scripts/hash-manifest.ts"
   },
   "keywords": [

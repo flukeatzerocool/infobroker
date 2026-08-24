@@ -53,6 +53,12 @@ npm run typecheck   # tsc --noEmit
 ## State Model
 
 - **Config**: `config.json` (shipped default) — provider config, dispatch tables, limits, hot-reloadable. A user layer at `config.local.json` (or `INFOBROKER_CONFIG_LOCAL`) is merged over the shipped default; user values take precedence and survive updates (REQ-010, REQ-042, REQ-043). `config.local.json` is git-ignored.
+- **KB**: the repository ships an **empty** knowledge base. The vector store
+  lives at the user-scoped `storage_path` (`~/.local/share/infobroker/knowledge-base`
+  by default), outside the repo tree, and is never committed. Personal KB
+  content belongs only to the deploying instance's local store. The
+  `scripts/check-shipped-kb-empty.ts` gate (part of `npm run check`) fails if
+  any KB artifact or an in-repo `storage_path` is present.
 - **Quota**: `$TMPDIR/infobroker/quota.json` — daily/monthly counters, persists across restarts.
 - **Truncation**: `$TMPDIR/infobroker/trunc-*.txt` — full content of truncated responses.
 
@@ -144,6 +150,7 @@ This runs:
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run test`       | Vitest unit and integration tests                  |
+| `scripts/check-shipped-kb-empty.ts` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
 REQs with no waiver in DECISIONS.md, undocumented source files, Appendix B

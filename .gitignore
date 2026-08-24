@@ -3,3 +3,7 @@ dist/
 *.log
 .DS_Store
 config.local.json
+knowledge-base/
+*.vector-store.json
+vector-store*.json
+.infobroker/
