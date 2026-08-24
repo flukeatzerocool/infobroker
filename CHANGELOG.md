@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-08-23 — Knowledge base at-rest encryption and data-preservation hardening
+
+- The knowledge base and disk-saved reports now support optional, off-by-default
+  at-rest encryption via `kb.encryption`. The key is resolved from an ordered
+  source chain — `kb.encryption.key_file` (the reliable cross-client primary),
+  `INFOBROKER_KB_KEY` (raw 32-byte key), or `INFOBROKER_KB_PASSPHRASE`
+  (scrypt-wrapped). Enabling encryption migrates a legacy plaintext store in
+  place; the `stats` action reports the encryption state. (REQ-084)
+- Data-preservation invariants protect the store from destruction: a missing or
+  wrong key, a decryption failure, or an unrecognized/newer format locks the
+  knowledge base with a REQ-002 error and leaves the store byte-identical —
+  never a backup-and-reset. All persistence is an atomic temp+fsync+rename
+  (fixing a latent torn-write bug in the plaintext path), and every encrypted
+  write self-verifies before commit. Cross-process concurrent writes surface a
+  status event rather than silently overwriting. (REQ-085)
+- Truncated-response spill files are now written 0600 and swept with a seven-day
+  TTL at startup; disk-saved reports are written owner-only.
+
 ## 2026-08-23 — Reports archived in the knowledge base as a distinct content class
 
 - The `kb` tool now stores and retrieves generated reports as a first-class

@@ -2,6 +2,33 @@
 
 ## Active Decisions
 
+### D-032: KB At-Rest Encryption and Data-Preservation Invariants (2026.08.23)
+
+The knowledge base stores user-generated reports alongside auto-indexed web
+content in a single plaintext JSON file exposed to file-level exfiltration
+(device theft without full-disk encryption, backup/cloud-sync leaks, other
+local users). D-032 adds optional, off-by-default at-rest encryption
+(REQ-084) and a set of data-preservation invariants (REQ-085). Encryption is
+the `INFOKB1` versioned envelope: AES-256-GCM with the header bound as
+associated data, a fresh random nonce per write, and a key resolved from an
+ordered source chain — `kb.encryption.key_file` (the required primary source,
+robust to MCP clients that do not propagate shell environment variables) →
+`INFOBROKER_KB_KEY` (raw 32-byte key) → `INFOBROKER_KB_PASSPHRASE`
+(scrypt N=2^17/r=8/p=1 wrapping a random 256-bit DEK, so a passphrase change
+re-wraps the DEK without re-encrypting the store). Safe defaults and failure
+semantics follow SQLCipher and the `age` tool: the on-disk magic header is
+authoritative; a missing/wrong key, decryption failure, or a newer format is a
+hard error that leaves the store byte-identical and locks the KB with a
+REQ-002 error — never a backup-and-reset. All persistence is an atomic
+temp+fsync+rename (which also fixes a latent torn-write bug in the plaintext
+path), every encrypted write is self-verified by an encrypt→decrypt→compare
+round-trip before rename, migrations and re-key use staged verify-before-commit,
+and unknown/newer formats are never rewritten. Cross-process concurrent writes
+are surfaced via a save-time fingerprint detect-and-warn rather than silently
+merged. This defers OS-keychain integration (native dependency + headless
+Linux libsecret/dbus absence) in favor of the key file, and leaves the
+default-off cleartext mode as a documented, accepted risk.
+
 ### D-031: KB Retrieval Consistency and Stable Feature Space (2026.08.23)
 
 The knowledge base's built-in vectorizer computed TF-IDF embeddings against
@@ -277,10 +304,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `fb6513dcd8d6663f3bae5f2ae477e12f53a2927e693fc724ceb670e1fc65e7ea`
-**Source hash:** `133d430f15ce10559ee1901c3da9e23001a6a058827d1275de29fae7e77b2090`
+**Spec hash:** `102b54e9edc0a5db74e6721529fb4375c2b1b0280889717175a2d419cd8ab806`
+**Source hash:** `4471a1ec4f700fc62d45a7b1e6ecc2f321bcb2e93a1cc53e7b5124b439eef645`
 **Config hash:** `52fb1250a329c0f898c31acb7f5380a3d733eae219d6aeb9d92a6e3e17e31ff5`
-**Total fingerprint:** `c5ace1d1e59d4169d9ca81c813135bfa4cc4c61315e3200848cce5f1ca776061`
+**Total fingerprint:** `e31494e32e83347a88e2980dabfaa3d2b126c13551cdce41b37dbb8df2fc5479`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

@@ -390,6 +390,36 @@ path (`~/.local/share/infobroker/knowledge-base`) outside the repository,
 so the content you research and cache stays on your machine and is never
 committed. Each deployed instance accumulates its own store.
 
+### Knowledge base encryption
+
+Research reports and cached pages can be sensitive, and the knowledge
+base stores them in a single file in your home directory. Enable optional
+at-rest encryption by adding a `kb.encryption` block and supplying a key:
+
+```json
+{
+  "kb": {
+    "encryption": { "enabled": true, "key_file": "~/.config/infobroker/kb.key" }
+  }
+}
+```
+
+The key file (plain, 0600) is the most reliable source across MCP clients
+and operating systems; `INFOBROKER_KB_KEY` (a 32-byte key) or
+`INFOBROKER_KB_PASSPHRASE` (a passphrase) also work. Generate a key with
+`openssl rand -base64 32`. Encryption protects the store and disk-saved
+reports from anyone who obtains the files without the key — device theft,
+backup or cloud-sync leaks, other local accounts. It does not protect
+against a malicious MCP client on the same machine, or malware, which
+full-disk encryption covers.
+
+Two rules keep this safe. First, encryption is your opt-in: if the key is
+missing or wrong, the knowledge base locks and reports an error rather
+than touching your data — so back up the key (a forgotten key or
+passphrase means the store is unrecoverable by design). Second, the server
+never writes a partial file: every save is atomic, and an unrecognized or
+newer store format is never overwritten.
+
 ### Bring your own endpoint
 
 Any HTTP search endpoint can become an Infobroker provider without

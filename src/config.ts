@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074
+// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
@@ -214,6 +214,18 @@ function validateConfig(config: Config): void {
     }
     if (kb.kb_first_confidence_threshold !== undefined && typeof kb.kb_first_confidence_threshold !== "number") {
       errors.push("kb.kb_first_confidence_threshold must be a number");
+    }
+    if (kb.encryption !== undefined) {
+      if (typeof kb.encryption !== "object" || kb.encryption === null || Array.isArray(kb.encryption)) {
+        errors.push("kb.encryption must be an object");
+      } else {
+        if (typeof kb.encryption.enabled !== "boolean") {
+          errors.push("kb.encryption.enabled must be a boolean");
+        }
+        if (kb.encryption.key_file !== undefined && (typeof kb.encryption.key_file !== "string" || kb.encryption.key_file.length === 0)) {
+          errors.push("kb.encryption.key_file must be a non-empty string when present");
+        }
+      }
     }
   }
 

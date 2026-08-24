@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076
+// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-084 REQ-085
 export interface SearchResult {
   title: string;
   url: string;
@@ -162,6 +162,12 @@ export interface KbConfig {
   kb_first_relevance_threshold: number;
   kb_first_confidence_threshold: number;
   maintenance_interval_minutes: number;
+  encryption?: KbEncryptionConfig;
+}
+
+export interface KbEncryptionConfig {
+  enabled: boolean;
+  key_file?: string;
 }
 
 export interface KbChunk {
@@ -210,4 +216,5 @@ export interface KbStats {
   model_available: boolean;
   model_name: string;
   events: string[];
+  encryption?: "enabled" | "disabled" | "locked";
 }

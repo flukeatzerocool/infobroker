@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -14,7 +14,7 @@ import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain } from "./chain.js";
 import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, autoIndex, flushKbWrites } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
@@ -114,6 +114,11 @@ function maybeTruncate(text: string, maxChars: number): { text: string; truncate
   const fname = `trunc-${Date.now()}.txt`;
   const fpath = join(tmpDir, fname);
   writeFileSync(fpath, text);
+  try {
+    chmodSync(fpath, 0o600);
+  } catch {
+    // best effort
+  }
   return { text: text.slice(0, maxChars) + "...", truncated: true, outputPath: fpath };
 }
 
@@ -128,11 +133,19 @@ function slugify(title: string): string {
 function saveReportToDisk(title: string, text: string, format: string): string {
   const base = getConfig().kb?.reports_dir || join(homedir(), "Infobroker", "reports");
   const dir = base.startsWith("~/") ? join(homedir(), base.slice(2)) : base;
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   const ext = format === "json" ? "json" : "md";
   const date = new Date().toISOString().slice(0, 10);
   const fpath = join(dir, `${date}-${slugify(title)}.${ext}`);
-  writeFileSync(fpath, text);
+  // Reports are the sensitive class: encrypt them at rest when encryption is
+  // enabled (REQ-084), and always restrict permissions to the owner.
+  const bytes = sealReportBytes(Buffer.from(text, "utf-8"));
+  writeFileSync(fpath, bytes);
+  try {
+    chmodSync(fpath, 0o600);
+  } catch {
+    // best effort
+  }
   return fpath;
 }
 
@@ -760,6 +773,10 @@ server.registerTool(
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
+    const lock = getKbLockError();
+    if (lock) {
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", lock.code, lock.message, lock.remediation))}` }] };
+    }
     const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete";
     try {
       if (action === "search") {
@@ -873,7 +890,11 @@ server.registerTool(
         initKb(newConfig.kb);
         console.error("[infobroker] Knowledge base re-initialized");
       }
-      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message: "Configuration reloaded.", provider_count: Object.keys(newConfig.providers).length }] })}` }] };
+      const lock = getKbLockError();
+      const message =
+        `Configuration reloaded. Knowledge base encryption: ${getKbEncryptionState()}.` +
+        (lock ? ` Knowledge base LOCKED: ${lock.message}` : "");
+      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message, provider_count: Object.keys(newConfig.providers).length }] })}` }] };
     } catch (e) {
       return {
         content: [

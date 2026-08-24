@@ -1,9 +1,32 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import {
+  readFileSync,
+  writeSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  openSync,
+  closeSync,
+  fsyncSync,
+  unlinkSync,
+  readdirSync,
+  statSync,
+  chmodSync,
+} from "node:fs";
+import { join, dirname, basename } from "node:path";
+import { homedir, tmpdir } from "node:os";
 import type { KbConfig, KbChunk, KbSearchResult, KbListEntry, KbStats } from "./types.js";
+import {
+  sealEnvelope,
+  openEnvelope,
+  isEncryptedEnvelope,
+  resolveKeySource,
+  rawKeyFromString,
+  passphraseKey,
+  readKeyFile,
+  type ResolvedKey,
+} from "./kb-crypto.js";
 
 interface VectorStore {
   chunks: KbChunk[];
@@ -18,10 +41,16 @@ let kbConfig: KbConfig | null = null;
 let storagePath: string | null = null;
 let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
+let resolvedKey: ResolvedKey | null = null;
+let lockError: { code: string; message: string; remediation: string } | null = null;
+let loadedStat: { mtimeMs: number; size: number } | null = null;
 const WRITE_INTERVAL_MS = 30_000;
 const modelAvailable = true;
 const CONFIG_ERROR_CODE = "config_error";
 const KB_UNINITIALIZED = "knowledge base not configured";
+const TRUNC_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const STORE_FILENAME = "vector-store.json";
 
 function resolvePath(p: string): string {
   if (p.startsWith("~/")) return join(homedir(), p.slice(2));
@@ -124,21 +153,127 @@ function keywordScore(regexes: RegExp[], text: string): number {
   return score / (text.length || 1);
 }
 
-function loadStore(): void {
-  if (!storagePath) return;
-  const fpath = join(storagePath, "vector-store.json");
-  if (existsSync(fpath)) {
+function storeFilePath(): string | null {
+  return storagePath ? join(storagePath, STORE_FILENAME) : null;
+}
+
+function atomicWriteFile(fpath: string, bytes: Buffer): void {
+  const dir = dirname(fpath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const tmp = join(dir, `.${basename(fpath)}.tmp-${randomUUID()}`);
+  try {
+    const fd = openSync(tmp, "w", 0o600);
     try {
-      const raw = JSON.parse(readFileSync(fpath, "utf-8"));
-      if (raw && Array.isArray(raw.chunks) && typeof raw.idf === "object") {
-        const loaded: VectorStore = raw;
-        store = loaded;
-        return;
+      writeSync(fd, bytes);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    chmodSync(tmp, 0o600);
+    renameSync(tmp, fpath);
+    // Best-effort directory fsync for rename durability (POSIX); harmless where
+    // unsupported (Windows, some FUSE filesystems).
+    try {
+      const dfd = openSync(dir, "r");
+      try {
+        fsyncSync(dfd);
+      } finally {
+        closeSync(dfd);
       }
     } catch {
-      backupCorruptStore();
+      // ignore
+    }
+  } catch (e) {
+    try {
+      if (existsSync(tmp)) unlinkSync(tmp);
+    } catch {
+      // ignore
+    }
+    throw e;
+  }
+}
+
+function readStoreBytes(): Buffer | null {
+  const fpath = storeFilePath();
+  if (!fpath || !existsSync(fpath)) return null;
+  return readFileSync(fpath, null);
+}
+
+function loadStore(): void {
+  lockError = null;
+  loadedStat = null;
+  const fpath = storeFilePath();
+  if (!fpath || !existsSync(fpath)) {
+    store = { chunks: [], idf: {}, docCount: 0, events: [] };
+    return;
+  }
+
+  const st = statSync(fpath);
+  loadedStat = { mtimeMs: st.mtimeMs, size: st.size };
+
+  const bytes = readStoreBytes()!;
+  const encrypted = isEncryptedEnvelope(bytes);
+
+  if (encrypted) {
+    // The on-disk state is authoritative: an encrypted store requires a key
+    // regardless of the current `enabled` flag. Never rename, never reset.
+    const key = resolveKeySource(kbConfig?.encryption?.key_file);
+    if (!key) {
+      store = null;
+      lockError = {
+        code: "config_error",
+        message: "Knowledge base is encrypted but no key is configured",
+        remediation:
+          "Set INFOBROKER_KB_KEY or INFOBROKER_KB_PASSPHRASE, or point kb.encryption.key_file at a key file. Data is preserved and untouched.",
+      };
+      return;
+    }
+    try {
+      const plain = openEnvelope(key, bytes).toString("utf-8");
+      const raw = JSON.parse(plain);
+      if (raw && Array.isArray(raw.chunks) && typeof raw.idf === "object") {
+        resolvedKey = key;
+        store = raw as VectorStore;
+        return;
+      }
+      throw new Error("decrypted store is not a valid knowledge base");
+    } catch {
+      store = null;
+      lockError = {
+        code: "config_error",
+        message: "Knowledge base could not be decrypted (wrong key or tampered store)",
+        remediation:
+          "Verify the key matches the one used to encrypt the store. The store file has not been modified; fix the key and restart.",
+      };
+      return;
     }
   }
+
+  // Plaintext (legacy) store.
+  try {
+    const raw = JSON.parse(bytes.toString("utf-8"));
+    if (raw && Array.isArray(raw.chunks) && typeof raw.idf === "object") {
+      store = raw as VectorStore;
+      return;
+    }
+  } catch {
+    // fall through to corruption handling below
+  }
+
+  // The file is plaintext but unreadable as a store.
+  if (kbConfig?.encryption?.enabled) {
+    // When encryption is enabled we must not guess or reset: leave the file
+    // untouched for recovery.
+    store = null;
+    lockError = {
+      code: "config_error",
+      message: "Knowledge base store is unreadable; enabled encryption prevents automatic recovery",
+      remediation: "Inspect vector-store.json; restore a backup or disable encryption to enable legacy recovery.",
+    };
+    return;
+  }
+
+  backupCorruptStore();
   store = { chunks: [], idf: {}, docCount: 0, events: [] };
 }
 
@@ -155,6 +290,8 @@ function flushWrite(): void {
     clearTimeout(writeTimer);
     writeTimer = null;
     saveStore();
+  } else {
+    saveStore();
   }
 }
 
@@ -162,22 +299,75 @@ process.on("beforeExit", () => flushWrite());
 process.on("exit", () => flushWrite());
 
 function saveStore(): void {
-  if (!storagePath || !store) return;
+  const fpath = storeFilePath();
+  if (!fpath || !store) return;
+
+  // Detect-and-warn: if another process wrote the store since we loaded it,
+  // surface the hazard rather than silently overwriting (single-writer model).
+  if (loadedStat) {
+    try {
+      const st = statSync(fpath);
+      if (st.mtimeMs !== loadedStat.mtimeMs || st.size !== loadedStat.size) {
+        store.events.push(
+          `Concurrent-write detected at ${new Date().toISOString()}: the store changed on disk since it was loaded; this process's pending changes may overwrite those of another instance`
+        );
+        loadedStat = { mtimeMs: st.mtimeMs, size: st.size };
+      }
+    } catch {
+      // file vanished; loadedStat reset on next load
+    }
+  }
+
+  let bytes: Buffer;
+  const clearJson = Buffer.from(JSON.stringify(store), "utf-8");
+
+  if (kbConfig?.encryption?.enabled) {
+    const key = resolvedKey ?? resolveKeySource(kbConfig?.encryption?.key_file);
+    if (!key) {
+      // Should not happen after a successful load, but never write plaintext
+      // when encryption is enabled.
+      lockError = {
+        code: "config_error",
+        message: "Knowledge base encryption key unavailable at write time",
+        remediation: "Reconfigure the key and restart; no data was written.",
+      };
+      return;
+    }
+    try {
+      const sealed = sealEnvelope(key, clearJson);
+      // Self-verify before rename: the sealed blob must round-trip to the same
+      // plaintext, otherwise the atomic rename is skipped and the old file
+      // remains intact.
+      const rechecked = openEnvelope(key, sealed).toString("utf-8");
+      if (rechecked !== clearJson.toString("utf-8")) {
+        throw new Error("encryption self-verify failed");
+      }
+      bytes = sealed;
+      resolvedKey = key;
+    } catch (e) {
+      store.events.push(`Encryption write failed at ${new Date().toISOString()}: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+  } else {
+    bytes = clearJson;
+  }
+
   try {
-    if (!existsSync(storagePath)) mkdirSync(storagePath, { recursive: true });
-    writeFileSync(join(storagePath, "vector-store.json"), JSON.stringify(store));
+    atomicWriteFile(fpath, bytes);
+    const st = statSync(fpath);
+    loadedStat = { mtimeMs: st.mtimeMs, size: st.size };
   } catch {
     // fail silently — will retry on next write
   }
 }
 
 function backupCorruptStore(): void {
-  if (!storagePath) return;
-  const fpath = join(storagePath, "vector-store.json");
-  if (!existsSync(fpath)) return;
+  const fpath = storeFilePath();
+  if (!fpath || !existsSync(fpath)) return;
   try {
-    const backup = join(storagePath, `vector-store.corrupt.${Date.now()}.json`);
+    const backup = join(storagePath!, `vector-store.corrupt.${Date.now()}.json`);
     renameSync(fpath, backup);
+    chmodSync(backup, 0o600);
     if (store) store.events.push(`Storage corruption detected at ${new Date().toISOString()}. Backup: ${backup}`);
   } catch {
     // best effort
@@ -264,6 +454,7 @@ function computeFreshnessScore(tier: string, ingestedAt: number, now: number): n
 
 export function initKb(config: KbConfig): void {
   const raw = resolvePath(config.storage_path);
+  const wasEncrypted = storagePath !== null && (kbConfig?.encryption?.enabled ?? false);
 
   // If the storage path changes (e.g. an update alters the shipped default, or
   // a user overlay stops overriding it), flush any pending in-memory writes to
@@ -274,6 +465,8 @@ export function initKb(config: KbConfig): void {
     const oldPath = storagePath;
     kbConfig = config;
     storagePath = raw;
+    resolvedKey = null;
+    lockError = null;
     if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
     loadStore();
     const event =
@@ -285,10 +478,49 @@ export function initKb(config: KbConfig): void {
     kbConfig = config;
     storagePath = raw;
     if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
+    resolvedKey = null;
+    lockError = null;
     loadStore();
   }
 
-  ensureStableEmbeddings();
+  // Resolve the encryption key after load so the in-hand key is registered for
+  // subsequent writes. Warn loudly when encryption was just enabled.
+  const newlyEnabled = config.encryption?.enabled && !wasEncrypted;
+  if (config.encryption?.enabled && !resolvedKey && store !== null) {
+    resolvedKey = resolveKeySource(config.encryption?.key_file) ?? null;
+  }
+  // Re-key runs as a one-shot at init (operator shell, not a client) when the
+  // rekey source/target environment variables are present. rekeyStore re-seals
+  // the file and updates the in-memory store directly, so no reload is needed.
+  try {
+    const result = rekeyStore();
+    if (result) {
+      console.warn(`[infobroker] ${result}`);
+    }
+  } catch (e) {
+    console.error(`[infobroker] rekey failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (newlyEnabled && config.encryption?.enabled) {
+    if (!resolvedKey && !lockError) {
+      lockError = {
+        code: "config_error",
+        message: "Knowledge base encryption is enabled but no key is available",
+        remediation: "Set INFOBROKER_KB_KEY / INFOBROKER_KB_PASSPHRASE or kb.encryption.key_file, then reload.",
+      };
+      store = null;
+    } else {
+      console.warn(
+        "[infobroker] Knowledge base encryption has been enabled. Enabling encryption makes the store unrecoverable without the key — back up your key now."
+      );
+      // Eager migration: encrypt the legacy plaintext store immediately so no
+      // plaintext copy lingers on disk.
+      if (store !== null && resolvedKey) saveStore();
+    }
+  }
+
+  runTruncSweep();
+
+  if (store) ensureStableEmbeddings();
   runMaintenance();
   if (maintenanceTimer) clearInterval(maintenanceTimer);
   maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
@@ -315,6 +547,46 @@ export function flushKbWrites(): void {
 
 export function isKbConfigured(): boolean {
   return kbConfig !== null;
+}
+
+/** The lock state when the store could not be loaded (REQ-085), else null. */
+export function getKbLockError(): { code: string; message: string; remediation: string } | null {
+  return lockError;
+}
+
+export function getKbEncryptionState(): "enabled" | "disabled" | "locked" {
+  if (lockError) return "locked";
+  return kbConfig?.encryption?.enabled ? "enabled" : "disabled";
+}
+
+/**
+ * Sweep stale truncated-response spill files from $TMPDIR/infobroker. Content
+ * that exceeds the output length limit is written there in plaintext; these
+ * files are transient and never cleaned elsewhere, so age them out here without
+ * ever touching quota.json or any other persistent state.
+ */
+export function runTruncSweep(ttlMs: number = TRUNC_TTL_MS): number {
+  const dir = join(tmpdir(), "infobroker");
+  let removed = 0;
+  try {
+    if (!existsSync(dir)) return 0;
+    const now = Date.now();
+    for (const name of readdirSync(dir)) {
+      if (!name.startsWith("trunc-") || !name.endsWith(".txt")) continue;
+      const fpath = join(dir, name);
+      try {
+        if (now - statSync(fpath).mtimeMs > ttlMs) {
+          unlinkSync(fpath);
+          removed++;
+        }
+      } catch {
+        // best effort
+      }
+    }
+  } catch {
+    // best effort
+  }
+  return removed;
 }
 
 export function getKbConfig(): KbConfig | null {
@@ -448,9 +720,9 @@ export function kbStats(): KbStats {
   }
 
   let sizeBytes = 0;
-  if (storagePath && existsSync(join(storagePath, "vector-store.json"))) {
+  if (storagePath && existsSync(join(storagePath, STORE_FILENAME))) {
     try {
-      sizeBytes = readFileSync(join(storagePath, "vector-store.json")).length;
+      sizeBytes = readFileSync(join(storagePath, STORE_FILENAME)).length;
     } catch {
       // ignore
     }
@@ -465,6 +737,7 @@ export function kbStats(): KbStats {
     model_available: modelAvailable,
     model_name: activeModel.name,
     events: store?.events ?? [],
+    encryption: getKbEncryptionState(),
   };
 }
 
@@ -616,4 +889,70 @@ export function runMaintenance(): void {
     scheduleWrite();
     store.events.push(`Maintenance at ${new Date().toISOString()}: removed ${removed} expired chunks`);
   }
+}
+
+/**
+ * Encrypt report bytes for disk save when encryption is enabled. Returns the
+ * sealed envelope bytes, or the plaintext bytes when encryption is disabled
+ * (or no key is resolved).
+ */
+export function sealReportBytes(clear: Buffer): Buffer {
+  if (kbConfig?.encryption?.enabled) {
+    const key = resolvedKey ?? resolveKeySource(kbConfig.encryption.key_file);
+    if (key) {
+      const sealed = sealEnvelope(key, clear);
+      const rechecked = openEnvelope(key, sealed);
+      if (rechecked.equals(clear)) return sealed;
+    }
+  }
+  return clear;
+}
+
+/**
+ * Re-key the store from one secret to another (REQ-084 "change the secret
+ * without loss of stored content"). Reads the rekey source/target from the
+ * environment, re-seals the store atomically, and records the operation in the
+ * store events. Returns a human-readable result, or null when no rekey is
+ * requested or the store is not encrypted.
+ */
+export function rekeyStore(): string | null {
+  const fromEnv = rawKeyFromString(process.env["INFOBROKER_KB_REKEY_FROM"])
+    ?? passphraseKey(process.env["INFOBROKER_KB_REKEY_FROM_PASSPHRASE"]);
+  const toFromKeyFile = process.env["INFOBROKER_KB_REKEY_TO_KEY_FILE"]
+    ? { kind: "raw", dek: readKeyFile(process.env["INFOBROKER_KB_REKEY_TO_KEY_FILE"]) } as ResolvedKey
+    : null;
+  const to = rawKeyFromString(process.env["INFOBROKER_KB_REKEY_TO"])
+    ?? passphraseKey(process.env["INFOBROKER_KB_REKEY_TO_PASSPHRASE"])
+    ?? toFromKeyFile;
+
+  if (!fromEnv || !to) return null;
+
+  const fpath = storeFilePath();
+  if (!fpath || !existsSync(fpath)) return null;
+  const bytes = readStoreBytes()!;
+  if (!isEncryptedEnvelope(bytes)) return null;
+
+  const plain = openEnvelope(fromEnv, bytes);
+  const sealed = sealEnvelope(to, plain);
+  const rechecked = openEnvelope(to, sealed);
+  if (!rechecked.equals(plain)) throw new Error("rekey self-verify failed");
+
+  atomicWriteFile(fpath, sealed);
+  const st = statSync(fpath);
+  loadedStat = { mtimeMs: st.mtimeMs, size: st.size };
+
+  // Load the re-keyed content directly (no file re-read, so the new key need
+  // not be resolvable from config yet) and register the new key for writes.
+  try {
+    const parsed = JSON.parse(plain.toString("utf-8"));
+    if (parsed && Array.isArray(parsed.chunks) && typeof parsed.idf === "object") {
+      store = parsed as VectorStore;
+      resolvedKey = to;
+      lockError = null;
+      store.events.push(`Encryption key changed at ${new Date().toISOString()}`);
+    }
+  } catch {
+    // Leave re-keyed file in place; memory state refreshes on next load.
+  }
+  return "knowledge base re-keyed";
 }
