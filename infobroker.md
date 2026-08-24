@@ -824,6 +824,10 @@ is configurable via `corroboration.similarity_threshold`.
   optional single-letter sub-REQ suffix), and no REQ body is empty or begins
   with a lowercase letter
 - The REQ manifest matches the REQ bodies in §4 exactly
+- A REQ body that defines a status/outcome through "or"-joined normative
+  branches, or gates a behavior on a "when … declares" conditional, carries a
+  named clause tag per branch in a test file
+  (`// @implements REQ-NNN <branch-slug>`), so no branch ships untested
 - Appendix B mechanical violations are errors; Appendix B judgment violations
   (what/how, red-team, EARS, readability, proofreading dimensions) are
   warnings; Appendix C violations are errors

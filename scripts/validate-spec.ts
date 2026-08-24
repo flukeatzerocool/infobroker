@@ -2,6 +2,8 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
+import { execSync } from "node:child_process";
 
 // @implements REQ-055
 
@@ -256,9 +258,64 @@ for (let i = 0; i < reqBodies.length; i++) {
   }
 }
 
+// --- Clause-coverage gate (normative multi-branch definitions) ---
+//
+// A REQ whose body defines a status/outcome with "or"-joined branches, or a
+// "when...declares" conditional, shipped in the past with only one branch
+// implemented or the condition never triggered (REQ-013's degraded "or"
+// definition; REQ-003's "when ... declares ... aggregated or resold"). The
+// bare `@implements REQ-NNN` citation satisfied the whole REQ while a branch
+// was dead. This gate requires such REQs to carry a named clause tag per
+// branch in a test file (`// @implements REQ-NNN <branch-slug>`), so each
+// branch must be consciously declared and tested before the change can pass.
+
+// Collect clause tags from test files (recursively under src/): `REQ-NNN
+// <slug>` pairs beyond the bare REQ ID.
+const clauseTagsByReq = new Map<string, Set<string>>();
+{
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith(".test.ts")) {
+        const text = readFileSync(full, "utf-8");
+        const re = /@implements\s+(.+)/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(text)) !== null) {
+          for (const [req, tags] of clauseTagsFromPayload(m[1])) {
+            if (!clauseTagsByReq.has(req)) clauseTagsByReq.set(req, new Set());
+            for (const t of tags) clauseTagsByReq.get(req)!.add(t);
+          }
+        }
+      }
+    }
+  };
+  walk(join(ROOT, "src"));
+}
+
+for (const rb of reqBodies) {
+  if (artifactReqs.has(rb.id) || metaReqs.has(rb.id)) continue;
+  const prose = rb.body.trim();
+  if (prose.length === 0) continue;
+
+  const req = detectClauseRequirements(prose);
+  const taggedCount = clauseTagsByReq.get(rb.id)?.size ?? 0;
+  const violation = evaluateClauseCoverage(rb.id, req, taggedCount);
+
+  if (violation?.kind === "or-branches") {
+    error(
+      `${rb.id}: defines "or"-joined normative branches but tests tag fewer than 2 clause tags (found: ${[...(clauseTagsByReq.get(rb.id) ?? [])].join(", ") || "none"}) — add an inline clause tag per branch, e.g. \`// @implements ${rb.id} <branch-slug>\``
+    );
+  } else if (violation?.kind === "conditional") {
+    error(
+      `${rb.id}: contains a "when ... declares" conditional but no test tags a clause for it (found: none) — add an inline clause tag exercising the conditional, e.g. \`// @implements ${rb.id} <branch-slug>\``
+    );
+  }
+}
+
 // --- Generated auth reference staleness check ---
 
-import { execSync } from "node:child_process";
 
 function checkGeneratedAuthStale(): void {
   const authPath = join(ROOT, "skills", "infobroker", "references", "provider-auth.md");

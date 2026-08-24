@@ -1,4 +1,4 @@
-// @implements REQ-014
+// @implements REQ-014 REQ-003 original-source
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createGenericProvider } from "./generic-http.js";
 import type { ProviderConfig } from "../types.js";
@@ -122,5 +122,24 @@ describe("generic-http provider", () => {
 
     expect(results).toHaveLength(1);
     expect(results[0].original_source).toBe("https://primary.example.com/source");
+  });
+
+  it("omits original_source when the field_map does not declare it", async () => {
+    mockFetch.mockImplementation(async () =>
+      jsonResponse({
+        items: [
+          { name: "First-party", link: "https://primary.example.com/x", summary: "origin is the page" },
+        ],
+      })
+    );
+
+    const p = createGenericProvider(
+      "my_search",
+      cfg({ results_path: "items", field_map: { title: "name", url: "link", snippet: "summary" } })
+    );
+    const results = await p.search("test");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].original_source).toBeUndefined();
   });
 });

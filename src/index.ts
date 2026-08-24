@@ -17,6 +17,7 @@ import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
+import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
@@ -556,14 +557,15 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   const quota = checkQuota(providerSlug, p.rate_limit);
   const keyEnv = p.auth_env;
   const authOk = keyEnv ? !!process.env[keyEnv] : true;
-  let status = authOk ? "active" : "inactive";
+  let status: HealthStatus = authOk ? "active" : "inactive";
 
   let avgLatencyMs: number | undefined;
   const registeredProvider = resolveProvider(providerSlug);
   if (registeredProvider && authOk) {
     try {
       const h = await registeredProvider.health();
-      status = h.status;
+      const base = h.status as "active" | "degraded" | "inactive";
+      status = base;
       // REQ-036: report the server's bounded time-window latency when a local
       // history exists, falling back to the provider's own live measurement
       // (e.g. first call, no recorded requests yet).
@@ -579,18 +581,13 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
     avgLatencyMs = avgLatency(providerSlug) || 0;
   }
 
-  if (quota.exhausted) {
-    status = "exhausted";
-  } else if (quota.warning && status === "active") {
-    status = "degraded";
-  }
-
-  // REQ-013: a provider whose recent latency exceeds its (per-provider, or
-  // output-level fallback) threshold is degraded even when reachable.
-  const degradedThreshold = p.degraded_latency_ms ?? config.output.degraded_latency_ms;
-  if (status === "active" && degradedThreshold !== undefined && avgLatencyMs !== undefined && avgLatencyMs > degradedThreshold) {
-    status = "degraded";
-  }
+  status = resolveHealthStatus({
+    baseStatus: status,
+    quotaExhausted: quota.exhausted,
+    quotaWarning: quota.warning,
+    avgLatencyMs,
+    degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
+  });
 
   const report: HealthReport = {
     status: status as HealthReport["status"],

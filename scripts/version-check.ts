@@ -72,6 +72,19 @@ while ((m = dateRe.exec(changelog)) !== null) {
 ok = check("CHANGELOG latest date", maxDate || null, rootVersion) && ok;
 ok = check("CHANGELOG top entry date", firstDate, rootVersion) && ok;
 
+// When the CHANGELOG top entry date diverges from the package version, give
+// the author an actionable path instead of a bare mismatch. The package
+// version is the calendar date the release was cut; a CHANGELOG entry dated
+// "today" (which may be a later calendar date) must be re-stamped to match.
+if (firstDate !== null && firstDate !== rootVersion) {
+  console.error("");
+  console.error(`    The CHANGELOG top entry is dated ${firstDate} but package.json is ${rootVersion}.`);
+  console.error("    To add a release dated today, run `npm run version-bump` (updates package.json,");
+  console.error("    package-lock.json, src/index.ts, and server.json to today) — it seeds a matching");
+  console.error("    CHANGELOG entry header, or: press on with a CHANGELOG entry dated");
+  console.error(`    ${rootVersion} to match the current package version.`);
+}
+
 // server.json is the MCP Registry manifest. Its version follows semver
 // (leading zeros stripped), derived from package.json's calendar-date
 // spelling. Verify both the top-level and the first package's version.

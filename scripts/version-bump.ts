@@ -79,5 +79,33 @@ if (!ok) {
   process.exit(1);
 }
 
+// Seed a CHANGELOG entry header dated with the new version, so the version
+// and the CHANGELOG top entry stay in lockstep (version-sync asserts the top
+// entry date equals package.json). An author who forgets to hand-write the
+// CHANGELOG no longer stalls the commit on a date mismatch.
+const changelogPath = join(root, "CHANGELOG.md");
+try {
+  const changelog = readFileSync(changelogPath, "utf-8");
+  const header = `## ${version} — \n`;
+  const headerRe = /^## /m;
+  if (changelog.match(new RegExp(`^## ${version}`, "m"))) {
+    console.log("  OK   CHANGELOG: entry for this version already exists");
+  } else if (headerRe.test(changelog)) {
+    writeFileSync(changelogPath, changelog.replace(headerRe, `${header}\n## `));
+    console.log(`  OK   CHANGELOG: seeded ${version} entry header`);
+  } else {
+    writeFileSync(changelogPath, `# Changelog\n\n${header}\n`);
+    console.log(`  OK   CHANGELOG: created with ${version} entry header`);
+  }
+} catch {
+  console.error("  FAIL  CHANGELOG: could not read or write — seed the entry manually");
+  ok = false;
+}
+
+if (!ok) {
+  console.error("\nVersion bump FAILED.");
+  process.exit(1);
+}
+
 console.log(`\nAll version references bumped to ${version}.`);
 process.exit(0);

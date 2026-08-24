@@ -120,6 +120,22 @@ At minimum, every new REQ must pass:
 When implementation behavior changes, update the corresponding REQ in
 the same commit. `npm run validate-spec` must pass before committing.
 
+A REQ whose body defines a status/outcome with "or"-joined branches (e.g.
+`degraded (latency above a threshold or partial results)`) or a "when …
+declares" conditional (e.g. "return `original_source` when the provider
+declares the result aggregated or resold") must carry a named clause tag per
+branch in a test file:
+
+```
+// @implements REQ-013 latency-threshold
+// @implements REQ-013 partial-results
+```
+
+The G3 gate fails when such a REQ has fewer clause tags than branches — the
+guard that would have caught an unimplemented/dead branch instead of letting a
+bare `@implements REQ-NNN` satisfy the whole REQ. Add the tags in the same
+commit as the REQ change. See `src/clause-coverage.ts` for the detector.
+
 ## Skill Authoring
 
 Bundled skills (`skills/*/SKILL.md`) are client artifacts, verified by the
