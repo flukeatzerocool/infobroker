@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.flukeatzerocool/infobroker",
+  "description": "Multi-provider research MCP server — unified web search, fact-checking, and a personal knowledge base.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/flukeatzerocool/infobroker",
+    "source": "github"
+  },
+  "version": "2026.08.23",
+  "packages": [
+    {
+      "registry_type": "npm",
+      "registry_base_url": "https://registry.npmjs.org",
+      "identifier": "infobroker",
+      "version": "2026.08.23",
+      "transport": {
+        "type": "stdio"
+      },
+      "environment_variables": []
+    }
+  ]
+}
