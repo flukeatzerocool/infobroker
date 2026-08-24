@@ -533,6 +533,62 @@ git -C "$PROJECT_DIR" push origin "v${VERSION}"
 info "Tag v${VERSION}: DONE"
 echo ""
 
+# ── Mirror sync: push the canonical origin (git.gay) to the GitHub mirror ──
+info "═══════════════════════════════════════════════"
+info "Mirror sync (github)"
+info "═══════════════════════════════════════════════"
+if git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
+  git -C "$PROJECT_DIR" push github main || warn "Mirror push (main) FAILED — GitHub mirror is behind origin."
+  git -C "$PROJECT_DIR" push github "v${VERSION}" || warn "Mirror tag push FAILED."
+  info "Mirror sync: DONE"
+else
+  warn "No 'github' remote configured — skipping mirror sync (run 'git remote add github <url>')."
+fi
+echo ""
+
+# ── npm publish (version-gated: publish only when this version is not live) ──
+info "═══════════════════════════════════════════════"
+info "npm publish (version-gated)"
+info "═══════════════════════════════════════════════"
+if npm whoami >/dev/null 2>&1; then
+  PUBLISHED_VERSION=$(npm view "$(node -e 'console.log(require("./package.json").name)')" version 2>/dev/null || echo "")
+  if [[ "$PUBLISHED_VERSION" == "$VERSION" ]]; then
+    info "npm: version ${VERSION} already published — skipping publish."
+  else
+    warn "Publishing ${VERSION} to npm..."
+    if npm publish --access public; then
+      info "npm publish: DONE (${VERSION})"
+    else
+      error "npm publish FAILED — registry listing will be stale."
+    fi
+  fi
+else
+  warn "npm not authenticated (npm whoami failed) — skipping publish. Run 'npm login'."
+fi
+echo ""
+
+# ── MCP Registry publish (version-gated; requires mcp-publisher + login) ──
+info "═══════════════════════════════════════════════"
+info "MCP Registry publish (version-gated)"
+info "═══════════════════════════════════════════════"
+if command -v mcp-publisher >/dev/null 2>&1; then
+  MCPNAME=$(node -e 'console.log(require("./package.json").mcpName || "io.github.flukeatzerocool/infobroker")')
+  REGISTERED_VERSION=$(mcp-publisher get "$MCPNAME" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).latestVersion||"")}catch{console.log("")}})' 2>/dev/null || echo "")
+  if [[ "$REGISTERED_VERSION" == "$VERSION" ]]; then
+    info "MCP Registry: version ${VERSION} already published — skipping."
+  else
+    warn "Publishing ${VERSION} to the MCP Registry..."
+    if mcp-publisher publish; then
+      info "MCP Registry publish: DONE (${VERSION})"
+    else
+      warn "MCP Registry publish FAILED — re-run 'mcp-publisher login' then publish manually."
+    fi
+  fi
+else
+  warn "mcp-publisher not installed — skipping MCP Registry publish. See modelcontextprotocol.io/registry."
+fi
+echo ""
+
 git -C "$PROJECT_DIR" ls-remote origin HEAD >/dev/null 2>&1
 info "Remote check: OK"
 echo ""
