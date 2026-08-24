@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026.08.24 — 
+
 ## 2026-08-23 — Provider health threshold and result provenance
 
 - The `providers` health action now marks a provider `degraded` when its

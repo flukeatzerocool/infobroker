@@ -313,18 +313,42 @@ echo ""
 # content. `git diff --unified=0` yields just the changed lines; strip the
 # +/- markers and test for any non-space char. Blank-line-only or intra-line
 # whitespace edits produce no match. Untracked files are always semantic.
-whitespace_only_diff() {
+# diff_content <paths...> — emit only added/removed lines (markers stripped).
+diff_content() {
   git -C "$PROJECT_DIR" diff --unified=0 -- "$@" 2>/dev/null \
     | grep -E '^[+-]' \
     | grep -vE '^(\+\+\+|---)' \
-    | sed -E 's/^[+-]//' \
-    | grep -q '[^[:space:]]'
-  # grep -q returns 1 when no non-whitespace content found → whitespace-only
-  [[ $? -eq 1 ]]
+    | sed -E 's/^[+-]//'
+}
+# whitespace_only_diff — true when the diff carries no non-whitespace content.
+whitespace_only_diff() {
+  ! diff_content "$@" | grep -q '[^[:space:]]'
+}
+# version-only_diff — true when the diff's only non-blank content is version
+# literals. `npm run version-bump` re-stamps the CalVer version to today across
+# package.json, package-lock.json, server.json, and the `version:` literal in
+# src/index.ts. A run where nothing else changed must NOT require a CHANGELOG
+# entry: there is no REQ or behavior change. Return true when no line outside
+# the version literals carries non-whitespace content.
+version_only_diff() {
+  local line
+  while IFS= read -r line; do
+    # JSON version line (top-level or nested): "version": "2026.08.24".
+    [[ "$line" =~ ^[[:space:]]*\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"[[:space:]]*,?[[:space:]]*$ ]] && continue
+    # The McpServer version literal in index.ts:   version: "2026.08.24",
+    [[ "$line" =~ ^[[:space:]]*version:[[:space:]]*\"[^\"]*\"[[:space:]]*,?[[:space:]]*$ ]] && continue
+    # Any remaining non-whitespace content is a real change.
+    if [[ "$line" =~ [^[:space:]] ]]; then
+      return 1
+    fi
+  done < <(diff_content "$@")
+  return 0
 }
 CHANGELOG_DIRTY=""
 if ! whitespace_only_diff infobroker.md src/; then
-  CHANGELOG_DIRTY=1
+  if ! version_only_diff infobroker.md src/; then
+    CHANGELOG_DIRTY=1
+  fi
 elif [[ -n "$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard -- infobroker.md src/ 2>/dev/null)" ]]; then
   CHANGELOG_DIRTY=1
 fi
