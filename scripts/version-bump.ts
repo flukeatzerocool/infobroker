@@ -15,6 +15,12 @@ function today(): string {
 
 const version = today();
 
+// server.json follows semver (leading zeros disallowed); derive it from the
+// calendar-date spelling. Idempotent: an already-semver input is unchanged.
+function normalizeSemver(v: string): string {
+  return v.split(".").map((seg) => String(Number(seg))).join(".");
+}
+
 function replaceInFile(filePath: string, pattern: RegExp, replacement: string, label: string): boolean {
   const content = readFileSync(filePath, "utf-8");
   if (!content.match(pattern)) {
@@ -52,6 +58,21 @@ ok = replaceInFile(
   `$1"${version}"`,
   "src/index.ts McpServer version"
 ) && ok;
+
+const serverJsonPath = join(root, "server.json");
+try {
+  const serverManifest = JSON.parse(readFileSync(serverJsonPath, "utf-8"));
+  const semver = normalizeSemver(version);
+  serverManifest.version = semver;
+  if (Array.isArray(serverManifest.packages) && serverManifest.packages.length > 0) {
+    serverManifest.packages[0].version = semver;
+  }
+  writeFileSync(serverJsonPath, JSON.stringify(serverManifest, null, 2) + "\n");
+  console.log(`  OK   server.json: → ${semver}`);
+} catch {
+  console.error(`  FAIL  server.json: missing or unparseable — leaving unchanged`);
+  ok = false;
+}
 
 if (!ok) {
   console.error("\nVersion bump FAILED.");

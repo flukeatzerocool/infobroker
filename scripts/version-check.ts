@@ -23,6 +23,17 @@ function check(label: string, value: string | null, expected: string): boolean {
   return false;
 }
 
+// The MCP Registry server.json manifest follows semantic versioning, which
+// forbids leading zeros (package.json uses a calendar-date spelling, e.g.
+// "2026.08.23"). normalizeSemver derives the semver form ("2026.8.23") by
+// stripping leading zeros from each numeric segment. Idempotent.
+function normalizeSemver(version: string): string {
+  return version
+    .split(".")
+    .map((seg) => String(Number(seg)))
+    .join(".");
+}
+
 let ok = true;
 
 const indexPath = join(root, "src", "index.ts");
@@ -60,6 +71,21 @@ while ((m = dateRe.exec(changelog)) !== null) {
 }
 ok = check("CHANGELOG latest date", maxDate || null, rootVersion) && ok;
 ok = check("CHANGELOG top entry date", firstDate, rootVersion) && ok;
+
+// server.json is the MCP Registry manifest. Its version follows semver
+// (leading zeros stripped), derived from package.json's calendar-date
+// spelling. Verify both the top-level and the first package's version.
+const serverJsonPath = join(root, "server.json");
+try {
+  const serverManifest = JSON.parse(readFileSync(serverJsonPath, "utf-8"));
+  const expectedSemver = normalizeSemver(rootVersion);
+  ok = check("server.json version", serverManifest.version ?? null, expectedSemver) && ok;
+  const pkgVersion = (serverManifest.packages ?? [])[0]?.version ?? null;
+  ok = check("server.json packages[0].version", pkgVersion, expectedSemver) && ok;
+} catch {
+  console.error("  FAIL  server.json version: missing or unparseable server.json");
+  ok = false;
+}
 
 if (!ok) {
   console.error("\nVersion sync FAILED. Update all version references to match root package.json.");

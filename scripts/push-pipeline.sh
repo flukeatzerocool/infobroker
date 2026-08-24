@@ -306,8 +306,28 @@ info "Step 5: Changelog update"
 info "═══════════════════════════════════════════════"
 echo ""
 
-# Did the spec or server actually change? (unstaged mods + untracked files)
-CHANGELOG_DIRTY=$(git -C "$PROJECT_DIR" status --porcelain -- infobroker.md src/ 2>/dev/null)
+# Did the spec or server actually change semantically? Whitespace-only edits
+# (e.g. the read-through step's blank-line normalization) do NOT count — the
+# changelog step correctly skips them, so the guard must ignore them too.
+# A change is "semantic" when any added/removed line carries non-whitespace
+# content. `git diff --unified=0` yields just the changed lines; strip the
+# +/- markers and test for any non-space char. Blank-line-only or intra-line
+# whitespace edits produce no match. Untracked files are always semantic.
+whitespace_only_diff() {
+  git -C "$PROJECT_DIR" diff --unified=0 -- "$@" 2>/dev/null \
+    | grep -E '^[+-]' \
+    | grep -vE '^(\+\+\+|---)' \
+    | sed -E 's/^[+-]//' \
+    | grep -q '[^[:space:]]'
+  # grep -q returns 1 when no non-whitespace content found → whitespace-only
+  [[ $? -eq 1 ]]
+}
+CHANGELOG_DIRTY=""
+if ! whitespace_only_diff infobroker.md src/; then
+  CHANGELOG_DIRTY=1
+elif [[ -n "$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard -- infobroker.md src/ 2>/dev/null)" ]]; then
+  CHANGELOG_DIRTY=1
+fi
 
 if step_skip changelog; then
   info "Changelog update: SKIPPED (state journal)"
@@ -428,7 +448,7 @@ echo ""
 git -C "$PROJECT_DIR" diff --name-only | grep -q '^node_modules/' && die "node_modules in diff — aborting commit."
 
 # Stage explicit root files (skip missing without error).
-for f in infobroker.md README.md CHANGELOG.md AGENTS.md package.json tsconfig.json config.json; do
+for f in infobroker.md README.md CHANGELOG.md AGENTS.md package.json tsconfig.json config.json server.json; do
   [[ -f "$f" ]] && git -C "$PROJECT_DIR" add "$f"
 done
 # Stage everything under these directories — INCLUDING new untracked files,
