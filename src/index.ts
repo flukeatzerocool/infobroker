@@ -549,7 +549,7 @@ async function doFetchPage(
         ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
         : {};
 
-      autoIndex([{ title: new URL(url).hostname, url, snippet: content }], slug, undefined, "fetch_page");
+      autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
 
       if (question) {
         const passages = rankPassages(content, question, effectivePassageSize ?? 100, effectiveMaxPassages ?? 1);
@@ -948,6 +948,7 @@ server.registerTool(
       collection: z.string().optional().describe("Collection name"),
       source_type: z.string().optional().describe("Source type (tag on ingest; filter on search/list)"),
       freshness_tier: z.string().optional().describe("Freshness tier tag on ingest (e.g. 'report', 'evergreen')"),
+      last_updated: z.string().optional().describe("Source last-updated date to store (e.g. '2026-08-24'); auto-detected from fetched URLs when omitted"),
       save_to: z.enum(["kb", "disk", "both"]).optional().describe("Where to save (ingest action): kb, disk, or both. Default kb"),
       format: z.enum(["markdown", "text", "json"]).optional().default("markdown").describe("File format for disk save"),
       source_url: z.string().optional().describe("Source URL filter (get/delete action) or identity for ingest"),
@@ -1063,6 +1064,7 @@ server.registerTool(
           return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of text or url must be provided", "Provide text or url parameter"))}` }] };
         }
         let content = text || "";
+        let sourceUpdatedAt = (params.last_updated as string) || undefined;
         if (url && !text) {
           const fetched = await doFetchPage(url);
           if (fetched.startsWith("[ERROR]")) {
@@ -1070,6 +1072,9 @@ server.registerTool(
           }
           const parsed = JSON.parse(fetched.slice(5));
           content = parsed.results?.[0]?.snippet || "";
+          if (!sourceUpdatedAt && parsed.last_updated) {
+            sourceUpdatedAt = parsed.last_updated;
+          }
         }
 
         const title = (params.title as string) || url || "untitled";
@@ -1095,7 +1100,8 @@ server.registerTool(
           "explicit",
           collection,
           sourceType,
-          freshnessTier
+          freshnessTier,
+          sourceUpdatedAt
         );
         const msg = json({
           status: "ok",

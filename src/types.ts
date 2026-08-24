@@ -194,6 +194,7 @@ export interface KbChunk {
   source_type: string;
   freshness_tier: string;
   ingested_at: number;
+  source_updated_at?: string;
 }
 
 export interface KbSearchResult {
@@ -207,6 +208,7 @@ export interface KbSearchResult {
   provider: string;
   source_type: string;
   ingested_at: number;
+  source_updated_at?: string;
 }
 
 export interface KbListEntry {
@@ -217,6 +219,7 @@ export interface KbListEntry {
   freshness_tier: string;
   chunk_count: number;
   ingested_at: number;
+  source_updated_at?: string;
 }
 
 export interface KbStats {

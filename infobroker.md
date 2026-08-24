@@ -149,7 +149,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–027 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–086 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–027 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -385,7 +385,7 @@ The `providers` spec action SHALL report a token-footprint record measuring the 
 WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, source type, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `kb` ingest action**
-WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, source type, freshness tier, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
+WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, source type, freshness tier, source last-updated date, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
 
 **REQ-060c — `kb` stats action**
 WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
@@ -394,7 +394,7 @@ WHEN action is stats, the tool SHALL report total chunk count, per-collection ch
 WHEN action is delete, the tool SHALL remove chunks by collection or source URL, requiring at least one filter, and SHALL report the count of removed chunks. _Check:_ G0, G1.
 
 **REQ-060e — `kb` list action**
-WHEN action is list, the tool SHALL enumerate stored documents as distinct entries with title, source URL, collection, source type, freshness tier, chunk count, and ingest timestamp, ordered newest first, and SHALL accept a collection filter and a source-type filter. _Check:_ G1.
+WHEN action is list, the tool SHALL enumerate stored documents as distinct entries with title, source URL, collection, source type, freshness tier, chunk count, ingest timestamp, and stored source last-updated date, ordered newest first, and SHALL accept a collection filter and a source-type filter. _Check:_ G1.
 
 **REQ-060f — `kb` get action**
 WHEN action is get, the tool SHALL return a stored document in full by source URL, reassembling its chunks in order, and SHALL return an error when no document matches the source URL. _Check:_ G1.
@@ -454,6 +454,10 @@ WHEN the knowledge base store cannot be read — because the encryption key is u
 **REQ-086 — KB Encryption Transitions and Recovery**
 
 The knowledge base SHALL support enable and disable of at-rest encryption (REQ-084) as explicit, immediate transitions. WHEN encryption is enabled while the store is plaintext, the server SHALL encrypt the store in place; WHEN encryption is disabled while the store is encrypted and the secret is available, the server SHALL decrypt the store in place. Each transition SHALL commit atomically and verify the result before replacing the store. WHEN the store is locked, the server SHALL expose the encryption state, the on-disk format, and a recovery directive through a knowledge-base operation that remains reachable while locked. The server SHALL support verifying a candidate secret against the store and re-keying the store to a new secret without loss of stored content. _Check:_ G1.
+
+**REQ-087 — KB Source Date Preservation**
+
+WHEN knowledge-base ingest knows a source's last-updated date, whether supplied by the caller or determined from a fetched URL per REQ-021c, the tool SHALL store that date with the ingested content. The list, get, and search actions SHALL report the stored source date alongside their other fields. WHEN no date is known, the actions SHALL omit the date field rather than guess. Re-ingesting a source SHALL preserve a previously stored date when the new ingest supplies none. _Check:_ G1.
 
 ### 4.10 Deployment and Updates
 
@@ -918,6 +922,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-084 | KB At-Rest Encryption | 4.9 | G1 |
 | REQ-085 | KB Data Preservation | 4.9 | G1 |
 | REQ-086 | KB Encryption Transitions and Recovery | 4.9 | G1 |
+| REQ-087 | KB Source Date Preservation | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 
@@ -1329,7 +1334,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `web_search`, `fetch_page`, `cite` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
-| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086 | G0, G1 |
+| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |

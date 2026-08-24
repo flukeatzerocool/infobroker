@@ -2,6 +2,11 @@
 
 ## 2026.08.24 — 
 
+- The `kb` ingest action now stores a source's last-updated date — supplied
+  directly or auto-detected from a fetched URL — and the `list`, `get`, and
+  `search` actions report it, so an archived report carries its source dates
+  and the refresh journey can compare stored versus live source dates instead
+  of treating every snapshot as equally stale. (REQ-087)
 - `fetch_page` supports question-grounded reading: pass a `question` to get the
   ranked passages that address it (scored, sentence-bounded), so reading a page
   to answer a specific question returns the relevant text instead of the whole

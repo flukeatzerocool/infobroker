@@ -1,4 +1,4 @@
-// @implements REQ-075 REQ-082 REQ-060e REQ-060f
+// @implements REQ-075 REQ-082 REQ-060e REQ-060f REQ-087
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -195,6 +195,29 @@ describe("report storage and retrieval (REQ-060e, REQ-060f)", () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].source_type).toBe("report");
     expect(results[0].collection).toBe("reports");
+  });
+
+  it("report source date reported and preserved (REQ-087)", () => {
+    kbIngest("a dated source report", "Dated Report", "https://example.com/dated", "test", "reports", "report", "report", "2026-08-24");
+
+    expect(kbGet("https://example.com/dated")?.source_updated_at).toBe("2026-08-24");
+
+    const list = kbList("reports", "report");
+    expect(list.find((e) => e.source_url === "https://example.com/dated")?.source_updated_at).toBe("2026-08-24");
+
+    const search = kbSearch("dated source", 10, "reports", "report");
+    expect(search.find((r) => r.source_url === "https://example.com/dated")?.source_updated_at).toBe("2026-08-24");
+  });
+
+  it("omits source_updated_at when no date is known (REQ-087)", () => {
+    kbIngest("an undated report", "Undated", "https://example.com/undated", "test", undefined, "report", "report");
+    expect(kbGet("https://example.com/undated")?.source_updated_at).toBeUndefined();
+  });
+
+  it("preserves a previously stored date when a re-ingest supplies none (REQ-087)", () => {
+    kbIngest("the first version", "Versioned", "https://example.com/versioned", "test", undefined, "report", "report", "2026-08-01");
+    kbIngest("the second version without a date", "Versioned", "https://example.com/versioned", "test", undefined, "report", "report");
+    expect(kbGet("https://example.com/versioned")?.source_updated_at).toBe("2026-08-01");
   });
 
   it("resolveCollection honors explicit > env var > config default > literal default (REQ-065)", () => {

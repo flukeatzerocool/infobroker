@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087
 import { randomUUID, randomBytes } from "node:crypto";
 import {
   readFileSync,
@@ -656,6 +656,7 @@ export function kbSearch(
         provider: chunk.provider,
         source_type: chunk.source_type,
         ingested_at: chunk.ingested_at,
+        ...(chunk.source_updated_at ? { source_updated_at: chunk.source_updated_at } : {}),
       });
     }
   }
@@ -671,7 +672,8 @@ export function kbIngest(
   provider: string,
   collection?: string,
   sourceType?: string,
-  freshnessTier?: string
+  freshnessTier?: string,
+  sourceUpdatedAt?: string
 ): number {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!store) return 0;
@@ -690,6 +692,12 @@ export function kbIngest(
   const now = Date.now();
 
   if (sourceUrl) {
+    // Preserve a previously stored source date when the re-ingest supplies none
+    // (REQ-087), so a transient detection miss does not discard known recency.
+    if (!sourceUpdatedAt) {
+      const existing = s.chunks.find((c) => c.source_url === sourceUrl);
+      if (existing?.source_updated_at) sourceUpdatedAt = existing.source_updated_at;
+    }
     s.chunks = s.chunks.filter((c) => c.source_url !== sourceUrl);
   }
 
@@ -712,6 +720,7 @@ export function kbIngest(
       source_type: resolvedSourceType,
       freshness_tier: resolvedTier,
       ingested_at: now,
+      ...(sourceUpdatedAt ? { source_updated_at: sourceUpdatedAt } : {}),
     });
   });
 
@@ -789,6 +798,7 @@ export function kbList(collection?: string, sourceType?: string): KbListEntry[] 
         freshness_tier: chunk.freshness_tier,
         chunk_count: 1,
         ingested_at: chunk.ingested_at,
+        ...(chunk.source_updated_at ? { source_updated_at: chunk.source_updated_at } : {}),
       });
     }
   }
@@ -796,7 +806,7 @@ export function kbList(collection?: string, sourceType?: string): KbListEntry[] 
   return [...bySource.values()].sort((a, b) => b.ingested_at - a.ingested_at);
 }
 
-export function kbGet(sourceUrl: string): { title: string; source_url: string; collection: string; source_type: string; freshness_tier: string; ingested_at: number; text: string } | null {
+export function kbGet(sourceUrl: string): { title: string; source_url: string; collection: string; source_type: string; freshness_tier: string; ingested_at: number; text: string; source_updated_at?: string } | null {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!store) return null;
 
@@ -815,6 +825,7 @@ export function kbGet(sourceUrl: string): { title: string; source_url: string; c
     freshness_tier: first.freshness_tier,
     ingested_at: matches.reduce((m, c) => Math.max(m, c.ingested_at), 0),
     text: matches.map((c) => c.text).join("\n"),
+    ...(first.source_updated_at ? { source_updated_at: first.source_updated_at } : {}),
   };
 }
 
@@ -868,7 +879,7 @@ function rebuildIdf(): void {
 }
 
 export function autoIndex(
-  results: Array<{ title: string; url: string; snippet: string }>,
+  results: Array<{ title: string; url: string; snippet: string; source_updated_at?: string }>,
   provider: string,
   collection?: string,
   sourceType?: string,
@@ -886,7 +897,7 @@ export function autoIndex(
         if (!r.snippet && !r.title) continue;
         const text = r.snippet || r.title;
         const sourceUrl = r.url || "";
-        totalChunks += kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider, tier);
+        totalChunks += kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider, tier, r.source_updated_at);
       }
       if (totalChunks > 0) flushWrite();
     } catch {
