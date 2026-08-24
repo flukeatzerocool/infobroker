@@ -454,6 +454,8 @@ Last updated: 2026-08-23.
   [Jina Reader](https://jina.ai/reader) ·
   [Wikipedia API](https://en.wikipedia.org/w/api.php)
 
+Canonical origin: [git.gay/flukeatzerocool/Infobroker](https://git.gay/flukeatzerocool/Infobroker). This GitHub repository is a read-only mirror.
+
 ## License
 
 MIT. Free to use, modify, and redistribute. The bundled client skills and

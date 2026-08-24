@@ -280,7 +280,7 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 **Spec hash:** `fb6513dcd8d6663f3bae5f2ae477e12f53a2927e693fc724ceb670e1fc65e7ea`
 **Source hash:** `133d430f15ce10559ee1901c3da9e23001a6a058827d1275de29fae7e77b2090`
 **Config hash:** `52fb1250a329c0f898c31acb7f5380a3d733eae219d6aeb9d92a6e3e17e31ff5`
-**Total fingerprint:** `f31a597802910d8f84030e245f3dd4a0991848b77090dd41a47be6fbcc4ac207`
+**Total fingerprint:** `c5ace1d1e59d4169d9ca81c813135bfa4cc4c61315e3200848cce5f1ca776061`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through
