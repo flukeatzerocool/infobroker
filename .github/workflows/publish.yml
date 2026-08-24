@@ -1,0 +1,53 @@
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "src/**"
+      - "bin/**"
+      - "tsconfig*.json"
+      - "server.json"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - run: npm ci
+      - name: Determine if version is already published
+        id: check
+        run: |
+          LOCAL_VERSION=$(node -e "console.log(require('./package.json').version)")
+          PUBLISHED_VERSION=$(npm view infobroker version 2>/dev/null || echo "")
+          echo "local=$LOCAL_VERSION"
+          echo "published=$PUBLISHED_VERSION"
+          if [ "$LOCAL_VERSION" = "$PUBLISHED_VERSION" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Already published — skipping."
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build
+        run: npm run build
+      - name: Publish to npm
+        if: steps.check.outputs.should_publish == 'true'
+        run: npm publish --provenance --access public
+      - name: Publish to MCP Registry
+        if: steps.check.outputs.should_publish == 'true'
+        run: |
+          # mcp-publisher is a pre-built binary; install then publish.
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.0.0/mcp-publisher_1.0.0_linux_amd64.tar.gz" | tar xz mcp-publisher
+          chmod +x mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
