@@ -35,7 +35,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   if (!resp.ok) throw new RetryableError(`Brave returned HTTP ${resp.status}`, resp.status);
 
   const data = (await resp.json()) as {
-    web?: { results?: Array<{ title: string; url: string; description: string; page_age?: string }> };
+    web?: { results?: Array<{ title: string; url: string; description: string; page_age?: string; meta_url?: { hostname?: string }; profile?: { name?: string; long_name?: string } }> };
   };
 
   const raw = (data.web?.results || []).map((item) => ({
@@ -44,6 +44,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     snippet: item.description,
     published_date: item.page_age,
     source_type: "web_search",
+    original_source: item.profile?.long_name || item.profile?.name || (item.meta_url?.hostname ? `https://${item.meta_url.hostname}` : undefined),
   }));
 
   return normalize(raw, "brave");

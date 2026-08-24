@@ -475,6 +475,21 @@ The server GETs `endpoint?query_param=<query>`, walks `results_path`
 common shape using `field_map`. Add the slug to your `config.local.json`
 override and call `reload_config` to use it immediately.
 
+### Per-provider status and provenance
+
+Two optional keys tune per-provider behavior in `config.json`:
+
+- `degraded_latency_ms` — a provider whose recent average latency exceeds
+  this many milliseconds is reported `degraded` by the `providers` health
+  action, even while reachable. A global `output.degraded_latency_ms` acts
+  as the fallback when a provider omits its own.
+- `resells` — set `true` on aggregator/reseller backends (search engines
+  that surface other publishers' pages, like DuckDuckGo, Brave, or
+  SearXNG). The server reports each result's `original_source` where the
+  backing API exposes one (e.g. Brave's `profile` name); first-party
+  sources (Wikipedia, arXiv) leave it empty because the page is the
+  origin.
+
 ## How It Compares
 
 | Tool name | What you're used to | How Infobroker differs |

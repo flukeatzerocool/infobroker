@@ -11,7 +11,8 @@
       "rate_limit": { "per_second": 0.33 },
       "enabled": true,
       "priority": 10,
-      "timeout": 10000
+      "timeout": 10000,
+      "resells": true
     },
     "jina": {
       "tier": "free_http",
@@ -104,7 +105,8 @@
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000
+      "timeout": 30000,
+      "resells": true
     },
     "mojeek": {
       "tier": "builtin",
@@ -112,7 +114,8 @@
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000
+      "timeout": 30000,
+      "resells": true
     },
     "wiby": {
       "tier": "builtin",
@@ -120,7 +123,8 @@
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 5,
-      "timeout": 30000
+      "timeout": 30000,
+      "resells": true
     },
     "brave": {
       "tier": "keyed_http",
@@ -128,7 +132,8 @@
       "rate_limit": { "per_month": 2000 },
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "resells": true
     },
     "exa": {
       "tier": "keyed_http",
@@ -136,7 +141,8 @@
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_EXA_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "resells": true
     },
     "tavily": {
       "tier": "keyed_http",
@@ -144,7 +150,8 @@
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_TAVILY_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "resells": true
     },
     "searxng": {
       "tier": "self_hosted_http",
@@ -152,7 +159,8 @@
       "rate_limit": {},
       "url_env": "INFOBROKER_SEARXNG_URL",
       "enabled": false,
-      "priority": 40
+      "priority": 40,
+      "resells": true
     },
     "yep": {
       "tier": "keyed_http",
@@ -160,7 +168,8 @@
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_YEP_API_KEY",
       "enabled": false,
-      "priority": 30
+      "priority": 30,
+      "resells": true
     },
     "native_fetch": {
       "tier": "builtin",
@@ -213,7 +222,8 @@
     "latency_window_size": 100,
     "verbose": true,
     "fallback_depth": 3,
-    "max_redirect_hops": 5
+    "max_redirect_hops": 5,
+    "degraded_latency_ms": 2000
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",

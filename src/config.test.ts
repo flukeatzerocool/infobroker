@@ -182,4 +182,30 @@ describe("configuration overlay", () => {
     expect(cfg.output.fallback_depth).toBe(2);
     expect(cfg.output.max_redirect_hops).toBe(9);
   });
+
+  it("rejects a negative per-provider degraded_latency_ms", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { duckduckgo: { degraded_latency_ms: -1 } } })
+    ).rejects.toThrow(/degraded_latency_ms/);
+  });
+
+  it("rejects a negative output degraded_latency_ms", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { degraded_latency_ms: -1 } })
+    ).rejects.toThrow(/degraded_latency_ms/);
+  });
+
+  it("rejects a non-boolean provider resells flag", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { duckduckgo: { resells: "yes" } } })
+    ).rejects.toThrow(/resells/);
+  });
+
+  it("accepts per-provider degraded_latency_ms and resells", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      providers: { duckduckgo: { degraded_latency_ms: 1500, resells: true } },
+    });
+    expect(cfg.providers.duckduckgo.degraded_latency_ms).toBe(1500);
+    expect(cfg.providers.duckduckgo.resells).toBe(true);
+  });
 });

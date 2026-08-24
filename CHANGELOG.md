@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-23 — Provider health threshold and result provenance
+
+- The `providers` health action now marks a provider `degraded` when its
+  recent bounded-window latency exceeds a per-provider `degraded_latency_ms`
+  (with an `output.degraded_latency_ms` fallback), closing the latency leg of
+  the `degraded` assessment. (REQ-013)
+- Aggregator/reseller providers declare `resells: true` in `config.json`, and
+  the keyed providers (Brave, Yep) now surface each result's `original_source`
+  from the backing API's origin field, completing the provenance conditional of
+  result normalization. Tavily/Exa and the scraped providers serve their own
+  index, so their result URL is the origin and `original_source` stays empty.
+  (REQ-003)
+
 ## 2026-08-23 — REQ-contract conformance fixes
 
 - The `kb` tool's `encryption` action (status/generate_key/verify/backup/rekey)

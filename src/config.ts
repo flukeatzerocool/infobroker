@@ -107,6 +107,12 @@ function validateConfig(config: Config): void {
     if (provider.timeout !== undefined && (typeof provider.timeout !== "number" || provider.timeout < 0)) {
       errors.push(`Provider "${slug}": timeout must be a non-negative number`);
     }
+    if (provider.degraded_latency_ms !== undefined && (typeof provider.degraded_latency_ms !== "number" || provider.degraded_latency_ms < 0)) {
+      errors.push(`Provider "${slug}": degraded_latency_ms must be a non-negative number`);
+    }
+    if (provider.resells !== undefined && typeof provider.resells !== "boolean") {
+      errors.push(`Provider "${slug}": resells must be a boolean`);
+    }
     if (provider.tier === "generic_http") {
       if (typeof provider.endpoint !== "string" || !/^https?:\/\//i.test(provider.endpoint)) {
         errors.push(`Provider "${slug}": generic_http requires an "endpoint" (http(s) URL)`);
@@ -158,6 +164,9 @@ function validateConfig(config: Config): void {
   }
   if (typeof config.output.max_redirect_hops !== "number" || config.output.max_redirect_hops < 1) {
     errors.push("output.max_redirect_hops must be a positive number");
+  }
+  if (config.output.degraded_latency_ms !== undefined && (typeof config.output.degraded_latency_ms !== "number" || config.output.degraded_latency_ms < 0)) {
+    errors.push("output.degraded_latency_ms must be a non-negative number");
   }
 
   if (config.kb) {

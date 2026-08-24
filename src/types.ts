@@ -19,6 +19,8 @@ export interface ProviderConfig {
   timeout?: number;
   retry_count?: number;
   retry_backoff_ms?: number;
+  degraded_latency_ms?: number;
+  resells?: boolean;
   endpoint?: string;
   query_param?: string;
   results_path?: string;
@@ -48,6 +50,7 @@ export interface Config {
     verbose?: boolean;
     fallback_depth: number;
     max_redirect_hops: number;
+    degraded_latency_ms?: number;
   };
   fetch?: {
     allow_private_urls?: boolean;

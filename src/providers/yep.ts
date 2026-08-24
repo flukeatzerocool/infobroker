@@ -45,7 +45,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   if (!resp.ok) throw new RetryableError(`Yep returned HTTP ${resp.status}`, resp.status);
 
   const data = (await resp.json()) as {
-    results?: Array<{ title?: string; url?: string; description?: string; highlights?: string[]; published_date?: string }>;
+    results?: Array<{ title?: string; url?: string; description?: string; highlights?: string[]; published_date?: string; source?: { site?: string; name?: string; url?: string } }>;
   };
 
   const raw = (data.results || []).map((item) => ({
@@ -54,6 +54,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     snippet: item.description || item.highlights?.join(" ") || "",
     published_date: item.published_date,
     source_type: "web_search",
+    original_source: item.source?.url || item.source?.site || item.source?.name,
   }));
 
   return normalize(raw, "yep");

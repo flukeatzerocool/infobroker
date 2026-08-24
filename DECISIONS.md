@@ -2,6 +2,30 @@
 
 ## Active Decisions
 
+### D-034: Per-Provider Health Threshold and Reseller Provenance (2026.08.23)
+
+Two latent REQ legs were closed without new REQ IDs. REQ-013's `degraded`
+definition is an "or" of two triggers; the shipped server implemented only the
+"partial results" branch (non-OK/timed-out health probe, quota warning) and had
+no latency threshold. D-034 adds a per-provider `degraded_latency_ms` config key
+with an `output.degraded_latency_ms` global fallback; `doProviderHealth` now
+flips `active → degraded` when the bounded-window average latency exceeds the
+effective threshold. The per-provider scope reuses the existing per-provider
+config lookup, so it adds no new plumbing.
+
+REQ-003 requires each result to carry an `original_source` "when the serving
+provider or its configuration declares the result is aggregated or resold." The
+normalizer already surfaced `original_source` and the generic tier already
+mapped it via `field_map`, but no built-in provider declared the condition, so
+the clause was dead code. D-034 adds a `resells: true` flag on the aggregator/
+reseller providers (DuckDuckGo, Brave, Marginalia, Mojeek, Wiby, SearXNG, Yep,
+Tavily, Exa) and populates `original_source` where the API exposes a distinct
+origin — Brave (its `profile` name/`meta_url` host) and Yep (its `source`
+object). Tavily, Exa, and the scraped providers serve their own index, so the
+result URL is already the origin; forcing a DuckDuckGo redirect-chase was
+rejected as fragile. First-party sources (Wikipedia, arXiv, etc.) correctly
+leave `resells` unset.
+
 ### D-033: KB Encryption Transitions and Recovery Journey (2026.08.23)
 
 D-032 added the encryption primitives (envelope, key source chain, lock
@@ -334,9 +358,9 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 ### D-012: Build Fingerprint (auto-generated)
 
 **Spec hash:** `30bc2900b35a60ddc6d9c09c91b14560364a71bed27e792274f91c58dd93f1d8`
-**Source hash:** `8ebeecf82dae96c3e6df3efcef32e8db7f28eb043d2e84d07eff1d79418066d4`
-**Config hash:** `52fb1250a329c0f898c31acb7f5380a3d733eae219d6aeb9d92a6e3e17e31ff5`
-**Total fingerprint:** `2a79c097e4e34e86aac98234782e97ae428e97f3cd00953e04668604fb8db016`
+**Source hash:** `eb1955a25978853ecb17084694119741e0472ef527c5a4df1efb3c5e7e47abae`
+**Config hash:** `632cc155c348f8169348f62272b7a78241bfb62f7476456e0848b287a220edac`
+**Total fingerprint:** `038d1b2bede5d7096437dde78c9aeb9c87379008e5ddaf23f8fb7bb735f37fdb`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

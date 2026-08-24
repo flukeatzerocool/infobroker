@@ -585,6 +585,13 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
     status = "degraded";
   }
 
+  // REQ-013: a provider whose recent latency exceeds its (per-provider, or
+  // output-level fallback) threshold is degraded even when reachable.
+  const degradedThreshold = p.degraded_latency_ms ?? config.output.degraded_latency_ms;
+  if (status === "active" && degradedThreshold !== undefined && avgLatencyMs !== undefined && avgLatencyMs > degradedThreshold) {
+    status = "degraded";
+  }
+
   const report: HealthReport = {
     status: status as HealthReport["status"],
     slug: providerSlug,
