@@ -33,7 +33,7 @@ json_from_file() {
 scan_staged_for_secrets() {
   git -C "$PROJECT_DIR" diff --staged --unified=0 | grep -E \
     '^\+(.*(sk-[A-Za-z0-9]{20,}|api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9]{16,}|password[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']+["'"'"']|INFOBROKER_[A-Z_]+_API_KEY[[:space:]]*=[^[:space:]]+))' \
-    | grep -v '^\+\+\+' || true
+    | grep -v '^+++' || true
 }
 
 # ── git identity guard ───────────────────────────────────────────────────────

@@ -317,7 +317,7 @@ echo ""
 diff_content() {
   git -C "$PROJECT_DIR" diff --unified=0 -- "$@" 2>/dev/null \
     | grep -E '^[+-]' \
-    | grep -vE '^(\+\+\+|---)' \
+    | grep -vE '^[+]{3}|^---' \
     | sed -E 's/^[+-]//'
 }
 # whitespace_only_diff — true when the diff carries no non-whitespace content.
