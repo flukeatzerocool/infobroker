@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086
 import { randomUUID, randomBytes } from "node:crypto";
 import {
   readFileSync,
@@ -608,6 +608,17 @@ export function getKbConfig(): KbConfig | null {
   return kbConfig;
 }
 
+// REQ-065: resolve the active collection from the most-specific specifier —
+// a tool-provided parameter, then INFOBROKER_KB_COLLECTION, then the
+// configured default, then the literal "default".
+export function resolveCollection(explicit?: string): string {
+  if (explicit && explicit.length > 0) return explicit;
+  const env = process.env["INFOBROKER_KB_COLLECTION"];
+  if (env && env.length > 0) return env;
+  if (kbConfig?.default_collection) return kbConfig.default_collection;
+  return "default";
+}
+
 export function kbSearch(
   query: string,
   maxResults: number = 10,
@@ -666,7 +677,7 @@ export function kbIngest(
   if (!store) return 0;
   const s = store;
 
-  const resolvedCollection = collection || kbConfig.default_collection || "default";
+  const resolvedCollection = resolveCollection(collection);
   const resolvedSourceType = sourceType || "web_search";
   const resolvedTier = freshnessTier || kbConfig?.freshness?.default_tier || "stable";
   const chunks = chunkText(text, title);

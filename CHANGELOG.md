@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-08-23 — REQ-contract conformance fixes
+
+- The `kb` tool's `encryption` action (status/generate_key/verify/backup/rekey)
+  is now documented in the contract as sub-REQ `060g`, reconciling the live
+  tool surface with REQ-060. (REQ-060, REQ-060g)
+- `providers` health reports now carry a `quota_warning` flag when quota usage
+  crosses 80%, and health action latency uses the bounded tracking window when
+  it exists. (REQ-034, REQ-036)
+- Knowledge-base collection scoping now honors the `INFOBROKER_KB_COLLECTION`
+  environment variable, falling back through the configured default to the
+  literal `"default"`, and applies the active collection to `kb` search and
+  list when the caller omits it. (REQ-065)
+- Providers at quota warning are demoted below non-warning providers in
+  auto-selection. (REQ-020a)
+- The `all_providers_exhausted` error now reports each exhausted provider's
+  remaining daily quota rather than a hardcoded zero. (REQ-031)
+- The `providers` spec action now reports the knowledge-base storage path and
+  the truncation directory among persistent-state-file paths. (REQ-024c)
+- `corroborate` findings now report a per-finding source-type contribution, and
+  KB-first search results report their true `source_type` rather than their
+  freshness tier. (REQ-026d, REQ-076)
+
 ## 2026-08-23 — User-journey coherence: recall, provider ops, suggest, recovery, errors
 
 - KB recall is single-path: `web_search` performs KB-first retrieval itself,

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, resolveReportIdentity, flushKbWrites } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, resolveReportIdentity, resolveCollection, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
@@ -195,5 +195,20 @@ describe("report storage and retrieval (REQ-060e, REQ-060f)", () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].source_type).toBe("report");
     expect(results[0].collection).toBe("reports");
+  });
+
+  it("resolveCollection honors explicit > env var > config default > literal default (REQ-065)", () => {
+    const prevEnv = process.env["INFOBROKER_KB_COLLECTION"];
+    try {
+      expect(resolveCollection("explicit")).toBe("explicit");
+      process.env["INFOBROKER_KB_COLLECTION"] = "env-col";
+      expect(resolveCollection(undefined)).toBe("env-col");
+      expect(resolveCollection("explicit")).toBe("explicit");
+      delete process.env["INFOBROKER_KB_COLLECTION"];
+      expect(resolveCollection(undefined)).toBe("default");
+    } finally {
+      if (prevEnv === undefined) delete process.env["INFOBROKER_KB_COLLECTION"];
+      else process.env["INFOBROKER_KB_COLLECTION"] = prevEnv;
+    }
   });
 });

@@ -381,10 +381,19 @@ export async function corroborate(
   const findingsArray = [...findings.values()];
   const agreementMap = buildAgreementMap(findingsArray, confidenceThreshold);
 
-  const condensed = findingsArray.map((f) => ({
-    ...f,
-    sources: f.sources.slice(0, 3),
-  }));
+  const condensed = findingsArray.map((f) => {
+    const perSourceTypes: Record<string, number> = {};
+    const sliced = f.sources.slice(0, 3);
+    for (const s of sliced) {
+      const t = s.source_type ?? "unknown";
+      perSourceTypes[t] = (perSourceTypes[t] ?? 0) + 1;
+    }
+    return {
+      ...f,
+      sources: sliced,
+      source_types: perSourceTypes,
+    };
+  });
 
   if (config.corroboration.archive_sources === true) {
     await archiveCondensedSources(condensed);

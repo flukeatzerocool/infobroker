@@ -148,7 +148,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020d`, `024a`–`024c`, `026a`–`026b` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–055, 077–078 (client artifacts and spec integrity), 060, 064–067, 072, 074–076 and sub-REQs `060a`–`060d` (knowledge base), 070–071 (provider architecture), 073 (output contract).
+REQ IDs use block reservations: 001–004 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020d`, `024a`–`024c`, `026a`–`026b` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–055, 077–078 (client artifacts and spec integrity), 060, 064–067, 072, 074–076 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture), 073 (output contract).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -371,7 +371,7 @@ The `providers` spec action SHALL report a token-footprint record measuring the 
 ### 4.9 Knowledge Base
 
 **REQ-060 — `kb`**
-`kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
+`kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-060a — `kb` search action**
 WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, source type, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
@@ -390,6 +390,10 @@ WHEN action is list, the tool SHALL enumerate stored documents as distinct entri
 
 **REQ-060f — `kb` get action**
 WHEN action is get, the tool SHALL return a stored document in full by source URL, reassembling its chunks in order, and SHALL return an error when no document matches the source URL. _Check:_ G1.
+
+**REQ-060g — `kb` encryption action**
+
+WHEN action is encryption, the tool SHALL operate on the knowledge base's at-rest encryption state per its `operation` sub-parameter: `status` SHALL report the encryption state and on-disk format, `generate_key` SHALL write a new key to a caller-supplied key-file path without returning key material, `verify` SHALL test the active key against the store, `backup` SHALL copy the active key file to a caller-supplied backup path, and a rekey sub-operation SHALL re-seal the store to a new key file without loss of stored content. This action SHALL remain reachable while the store is locked. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
 
@@ -884,6 +888,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-060d | kb delete action | 4.9 | G0, G1 |
 | REQ-060e | kb list action | 4.9 | G1 |
 | REQ-060f | kb get action | 4.9 | G1 |
+| REQ-060g | kb encryption action | 4.9 | G0, G1 |
 | REQ-064 | Auto-Indexing | 4.9 | G1 |
 | REQ-065 | Collection Scoping | 4.9 | G1 |
 | REQ-066 | Content Expiry | 4.9 | G1 |
@@ -1307,7 +1312,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-021a, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
-| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086 | G0, G1 |
+| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |

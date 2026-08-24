@@ -7,7 +7,7 @@ vi.mock("./config.js", () => ({
 }));
 
 import { getConfig, getDispatchChain } from "./config.js";
-import { selectChain, ignoredParams } from "./chain.js";
+import { selectChain, ignoredParams, demoteQuotaWarnings } from "./chain.js";
 
 function makeProvider(tier: string) {
   return { tier, enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10 };
@@ -62,6 +62,21 @@ describe("selectChain", () => {
     vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 2 } } as any);
     expect(selectChain(["brave", "duckduckgo", "marginalia", "mojeek"], undefined, () => 0))
       .toEqual(["brave", "duckduckgo"]);
+  });
+});
+
+describe("demoteQuotaWarnings", () => {
+  it("moves warning providers to the tail, preserving relative order", () => {
+    expect(demoteQuotaWarnings(["a", "b", "c"], (s) => s === "b"))
+      .toEqual(["a", "c", "b"]);
+  });
+
+  it("returns the chain unchanged when nothing is warned", () => {
+    expect(demoteQuotaWarnings(["a", "b", "c"], () => false)).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps all warning providers when every provider is warned", () => {
+    expect(demoteQuotaWarnings(["a", "b"], () => true)).toEqual(["a", "b"]);
   });
 });
 

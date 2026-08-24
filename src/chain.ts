@@ -1,4 +1,4 @@
-// @implements REQ-020c REQ-020d
+// @implements REQ-020a REQ-020c REQ-020d
 import { getDispatchChain, getConfig } from "./config.js";
 
 // Which of the filter-style options a provider actually honors. Used by
@@ -62,4 +62,20 @@ export function selectChain(
     });
   }
   return selected.slice(0, config.output.fallback_depth);
+}
+
+// REQ-020a / §7.3: demote providers at quota warning (≥80% usage) to the tail
+// of the chain so they are tried only after non-warning providers, without
+// dropping them entirely (only exhausted providers are dropped).
+export function demoteQuotaWarnings(
+  chain: string[],
+  isQuotaWarned: (slug: string) => boolean,
+): string[] {
+  const warned: string[] = [];
+  const clean: string[] = [];
+  for (const slug of chain) {
+    if (isQuotaWarned(slug)) warned.push(slug);
+    else clean.push(slug);
+  }
+  return [...clean, ...warned];
 }

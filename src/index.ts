@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -12,9 +12,9 @@ import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quot
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
-import { ignoredParams, selectChain } from "./chain.js";
+import { ignoredParams, selectChain, demoteQuotaWarnings } from "./chain.js";
 import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
@@ -293,7 +293,7 @@ async function doWebSearch(
             title: r.title,
             url: r.source_url,
             snippet: r.snippet,
-            source_type: r.freshness_tier,
+            source_type: r.source_type,
           })), {
             query_time_ms: 0,
             fallback_used: false,
@@ -322,6 +322,11 @@ async function doWebSearch(
 
   chain = selectChain(chain, priority, avgLatency);
 
+  // REQ-020a: demote providers at quota warning below non-warning providers.
+  chain = demoteQuotaWarnings(chain, (slug) =>
+    checkQuota(slug, config.providers[slug]?.rate_limit).warning
+  );
+
   if (chain.length === 0) {
     return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
@@ -334,7 +339,7 @@ async function doWebSearch(
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) {
-        quotaExhausted[slug] = 0;
+        quotaExhausted[slug] = quota.daily.remaining;
         continue;
       }
 
@@ -400,7 +405,12 @@ async function doWebSearch(
   // A chain that ended on provider errors is a failure; a chain whose
   // providers all returned empty is a legitimate zero-result answer.
   if (lastError !== null) {
-    const quotaExhaustedList = Object.keys(quotaExhausted);
+    // REQ-031: report the remaining daily quota of each quota-exhausted
+    // provider (distinct from provider failure), not merely its slug.
+    const quotaExhaustedList = Object.entries(quotaExhausted).map(([slug, remaining]) => ({
+      slug,
+      remaining_daily: remaining,
+    }));
     const details: Record<string, unknown> = {
       exhausted_chain: chain,
       quota_exhausted: quotaExhaustedList,
@@ -554,7 +564,10 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
     try {
       const h = await registeredProvider.health();
       status = h.status;
-      avgLatencyMs = h.avgLatencyMs;
+      // REQ-036: report the server's bounded time-window latency when a local
+      // history exists, falling back to the provider's own live measurement
+      // (e.g. first call, no recorded requests yet).
+      avgLatencyMs = avgLatency(providerSlug) || h.avgLatencyMs;
       providerLastSuccess[providerSlug] = Date.now();
     } catch (e) {
       providerLastError[providerSlug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
@@ -563,7 +576,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
       }
     }
   } else {
-    avgLatencyMs = avgLatency(providerSlug);
+    avgLatencyMs = avgLatency(providerSlug) || 0;
   }
 
   if (quota.exhausted) {
@@ -580,6 +593,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
     quota_used: quota.daily.used,
     quota_remaining: quota.daily.remaining,
     quota_reset_at: quota.daily.resetAt,
+    quota_warning: quota.warning,
     avg_latency_ms: avgLatencyMs,
     auth_ok: authOk,
   };
@@ -637,6 +651,12 @@ function doSpecHealth(): string {
       last_spec_review: new Date(SPEC_REVIEW_TIME).toISOString(),
       quota_state_path: getQuotaStatePath(),
       config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
+      kb_storage_path: config.kb
+        ? (config.kb.storage_path.startsWith("~/")
+            ? join(homedir(), config.kb.storage_path.slice(2))
+            : config.kb.storage_path)
+        : undefined,
+      truncation_dir: join(tmpdir(), "infobroker"),
     }],
   })}`;
 }
@@ -875,14 +895,14 @@ server.registerTool(
         const results = kbSearch(
           String(params.query ?? ""),
           Number(params.max_results),
-          params.collection as string | undefined,
+          resolveCollection(params.collection as string | undefined),
           params.source_type as string | undefined
         );
         return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results })}` }] };
       }
       if (action === "list") {
         const entries = kbList(
-          params.collection as string | undefined,
+          resolveCollection(params.collection as string | undefined),
           params.source_type as string | undefined
         );
         return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: entries })}` }] };

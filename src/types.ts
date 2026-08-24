@@ -63,6 +63,7 @@ export interface HealthReport {
   quota_used?: number;
   quota_remaining?: number;
   quota_reset_at?: string;
+  quota_warning?: boolean;
   avg_latency_ms?: number;
   last_error?: string;
   last_success?: string;
@@ -104,6 +105,7 @@ export interface CorroborationFinding {
   verdict: "confirmed" | "contested" | "unverified";
   sources: Array<{ title: string; url: string; snippet: string; claim: string; source_type?: string; archived_url?: string; original_source?: string }>;
   perspectives?: string[];
+  source_types?: Record<string, number>;
 }
 
 export interface CorroborationResult {
