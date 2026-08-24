@@ -152,6 +152,8 @@ export interface KbConfig {
   default_collection: string;
   max_results: number;
   expiry?: Record<string, number>;
+  reports_dir?: string;
+  default_save_destination?: "kb" | "disk" | "both";
   freshness?: {
     tiers: Record<string, { decay_hours: number; expiry_hours: number }>;
     auto_classify: boolean;
@@ -167,6 +169,7 @@ export interface KbChunk {
   text: string;
   embedding: number[];
   source_url: string;
+  chunk_index: number;
   title: string;
   provider: string;
   collection: string;
@@ -182,6 +185,20 @@ export interface KbSearchResult {
   source_url: string;
   title: string;
   snippet: string;
+  collection: string;
+  provider: string;
+  source_type: string;
+  ingested_at: number;
+}
+
+export interface KbListEntry {
+  source_url: string;
+  title: string;
+  collection: string;
+  source_type: string;
+  freshness_tier: string;
+  chunk_count: number;
+  ingested_at: number;
 }
 
 export interface KbStats {

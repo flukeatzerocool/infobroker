@@ -1,9 +1,9 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { KbConfig, KbChunk, KbSearchResult, KbStats } from "./types.js";
+import type { KbConfig, KbChunk, KbSearchResult, KbListEntry, KbStats } from "./types.js";
 
 interface VectorStore {
   chunks: KbChunk[];
@@ -354,6 +354,10 @@ export function kbSearch(
         source_url: chunk.source_url,
         title: chunk.title,
         snippet: chunk.text.slice(0, 200),
+        collection: chunk.collection,
+        provider: chunk.provider,
+        source_type: chunk.source_type,
+        ingested_at: chunk.ingested_at,
       });
     }
   }
@@ -373,6 +377,7 @@ export function kbIngest(
 ): number {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!store) return 0;
+  const s = store;
 
   const resolvedCollection = collection || kbConfig.default_collection || "default";
   const resolvedSourceType = sourceType || "web_search";
@@ -380,28 +385,29 @@ export function kbIngest(
   const chunks = chunkText(text, title);
 
   if (chunks.length === 0) {
-    store.events.push(`Ingest skipped at ${new Date().toISOString()}: empty or unsplittable text (${text.slice(0, 80)})`);
+    s.events.push(`Ingest skipped at ${new Date().toISOString()}: empty or unsplittable text (${text.slice(0, 80)})`);
     return 0;
   }
 
   const now = Date.now();
 
   if (sourceUrl) {
-    store.chunks = store.chunks.filter((c) => c.source_url !== sourceUrl);
+    s.chunks = s.chunks.filter((c) => c.source_url !== sourceUrl);
   }
 
-  const preIngestIdf = { ...store.idf };
-  const preIngestDocCount = store.docCount;
+  const preIngestIdf = { ...s.idf };
+  const preIngestDocCount = s.docCount;
 
-  for (const chunkText of chunks) {
+  chunks.forEach((chunkText, index) => {
     const tokens = tokenize(chunkText);
     const embedding = computeTfIdfVector(tokens, preIngestIdf, preIngestDocCount);
     const id = randomUUID();
-    store.chunks.push({
+    s.chunks.push({
       id,
       text: chunkText,
       embedding,
       source_url: sourceUrl,
+      chunk_index: index,
       title,
       provider,
       collection: resolvedCollection,
@@ -409,7 +415,7 @@ export function kbIngest(
       freshness_tier: resolvedTier,
       ingested_at: now,
     });
-  }
+  });
 
   for (const chunkText of chunks) {
     updateIdf(tokenize(chunkText));
@@ -460,6 +466,70 @@ export function kbStats(): KbStats {
     model_name: activeModel.name,
     events: store?.events ?? [],
   };
+}
+
+export function kbList(collection?: string, sourceType?: string): KbListEntry[] {
+  if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (!store) return [];
+
+  const bySource = new Map<string, KbListEntry>();
+  for (const chunk of store.chunks) {
+    if (collection && chunk.collection !== collection) continue;
+    if (sourceType && chunk.source_type !== sourceType) continue;
+    const key = chunk.source_url || `chunk:${chunk.id}`;
+    const existing = bySource.get(key);
+    if (existing) {
+      existing.chunk_count++;
+      if (chunk.ingested_at > existing.ingested_at) existing.ingested_at = chunk.ingested_at;
+    } else {
+      bySource.set(key, {
+        source_url: chunk.source_url,
+        title: chunk.title,
+        collection: chunk.collection,
+        source_type: chunk.source_type,
+        freshness_tier: chunk.freshness_tier,
+        chunk_count: 1,
+        ingested_at: chunk.ingested_at,
+      });
+    }
+  }
+
+  return [...bySource.values()].sort((a, b) => b.ingested_at - a.ingested_at);
+}
+
+export function kbGet(sourceUrl: string): { title: string; source_url: string; collection: string; source_type: string; freshness_tier: string; ingested_at: number; text: string } | null {
+  if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (!store) return null;
+
+  const matches = store.chunks
+    .filter((c) => c.source_url === sourceUrl)
+    .sort((a, b) => (a.chunk_index ?? 0) - (b.chunk_index ?? 0));
+
+  if (matches.length === 0) return null;
+
+  const first = matches[0];
+  return {
+    title: first.title,
+    source_url: first.source_url,
+    collection: first.collection,
+    source_type: first.source_type,
+    freshness_tier: first.freshness_tier,
+    ingested_at: matches.reduce((m, c) => Math.max(m, c.ingested_at), 0),
+    text: matches.map((c) => c.text).join("\n"),
+  };
+}
+
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "report";
+}
+
+export function resolveReportIdentity(title: string, providedUrl?: string): string {
+  if (providedUrl) return providedUrl;
+  return `report://${slugify(title)}`;
 }
 
 export function kbDelete(collection?: string, sourceUrl?: string): number {

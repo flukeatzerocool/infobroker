@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-08-23 — Reports archived in the knowledge base as a distinct content class
+
+- The `kb` tool now stores and retrieves generated reports as a first-class
+  content class rather than burying them as generic `explicit` chunks. Ingest
+  accepts optional `source_type`, `freshness_tier`, `save_to`, and `format`
+  parameters; saving a report (`source_type: "report"`) defaults to the
+  `reports` collection and the new `report` freshness tier, which never
+  expires but decays in confidence so an outdated report does not satisfy
+  KB-first sufficiency for time-sensitive queries. (REQ-060b, REQ-083)
+- Two new `kb` actions: `list` enumerates stored documents with title,
+  source URL, collection, source type, freshness tier, chunk count, and
+  ingest time (newest first); `get` retrieves a stored document in full,
+  reassembling its chunks in order. Chunks now carry a `chunk_index` for
+  stable reassembly, and search results expose `collection`, `provider`,
+  `source_type`, and `ingested_at` so reports can be told apart from cached
+  snippets. (REQ-060e, REQ-060f, REQ-060a)
+- Report saves can also write to local disk instead of, or in addition to,
+  the knowledge base via `save_to: "disk"`/`"both"` and `kb.reports_dir`
+  (default `~/Infobroker/reports`); `kb.default_save_destination` defaults to
+  `kb`. Reports ingested without a URL receive a stable `report://` identity
+  derived from their title, so re-ingesting the same report updates it in
+  place rather than duplicating. (REQ-067, REQ-072)
+- `instructions/search-preferences.md` now directs clients to archive
+  finished reports with `kb` ingest and revisit them with `list`/`get`,
+  including a refresh cycle for updating outdated reports.
+
 ## 2026-08-23 — Knowledge base retrieval consistency fixed; stable feature space
 
 - The knowledge base's TF-IDF vectorizer sized embeddings to the live

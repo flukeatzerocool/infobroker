@@ -19,6 +19,17 @@ previously researched content. If the knowledge base returns results, use
 them — do not repeat the external search. If it returns no results,
 proceed with `infobroker_infobroker_web_search`.
 
+After producing a report or written research deliverable, archive it with
+`infobroker_infobroker_kb` (action ingest) using `source_type: "report"`,
+so it is stored in the knowledge base by default (`save_to` defaults to
+`kb`) and can be revisited later. To review past reports, use `kb` (action
+list) to enumerate them and `kb` (action get) to retrieve one in full. To
+refresh an outdated report, retrieve it with `kb` (action get), re-research
+the fresh state with `infobroker_infobroker_web_search`, and ingest the
+updated report under the same title to replace it. Stored reports are
+dated snapshots — verify them against fresh sources before treating their
+content as current.
+
 Use `infobroker_infobroker_web_search` instead of the built-in
 `websearch` tool.
 Use `infobroker_infobroker_fetch_page` instead of the built-in

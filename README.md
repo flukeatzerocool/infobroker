@@ -246,9 +246,12 @@ base. `kb` checks the cache before hitting external providers — only
 falling back to the network when the cached results aren't fresh enough
 or relevant enough. Its actions ingest new text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
-freshness schedule, and deduplicated by source. Other search MCP servers
-re-fetch the same facts every session; Infobroker remembers and reuses
-what it already found.
+freshness schedule, and deduplicated by source. Beyond the cache, `kb`
+archives the reports you generate: ingest with `source_type: "report"`
+(and default to the knowledge base) and revisit them with `kb` list and
+`kb` get, or write them to a local directory instead. Other search MCP
+servers re-fetch the same facts every session; Infobroker remembers and
+reuses what it already found.
 
 ### Research Pipeline
 

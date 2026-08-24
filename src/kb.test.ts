@@ -1,9 +1,9 @@
-// @implements REQ-075
+// @implements REQ-075 REQ-082 REQ-060e REQ-060f
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbSearch, kbStats, flushKbWrites } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, resolveReportIdentity, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
@@ -142,5 +142,58 @@ describe("storage path change and write flush", () => {
     expect(oldStore.chunks.length).toBeGreaterThan(0);
 
     rmSync(dir2, { recursive: true, force: true });
+  });
+});
+
+describe("report storage and retrieval (REQ-060e, REQ-060f)", () => {
+  it("lists reports and returns metadata including source_type and ingested_at", () => {
+    const chunks = kbIngest(
+      "This is a generated report about solar flares. It reviews recent activity. First section.",
+      "Solar Flare Report",
+      "",
+      "explicit",
+      "reports",
+      "report",
+      "report"
+    );
+    expect(chunks).toBeGreaterThan(0);
+
+    const list = kbList("reports", "report");
+    expect(list.length).toBeGreaterThan(0);
+    expect(list[0].source_type).toBe("report");
+    expect(list[0].title).toBe("Solar Flare Report");
+    expect(list[0].ingested_at).toBeGreaterThan(0);
+  });
+
+  it("reassembles report text in order via kbGet", () => {
+    const text = [
+      "First paragraph about topic alpha.",
+      "Second paragraph about topic beta.",
+      "Third paragraph about topic gamma.",
+    ].join(" ");
+    kbIngest(text, "Ordered Report", "report://ordered-report", "explicit", "reports", "report", "report");
+
+    const doc = kbGet("report://ordered-report");
+    expect(doc).not.toBeNull();
+    expect(doc!.text).toContain("First paragraph");
+    expect(doc!.text).toContain("Third paragraph");
+    expect(doc!.title).toBe("Ordered Report");
+  });
+
+  it("returns null from kbGet for an unknown source_url", () => {
+    expect(kbGet("report://does-not-exist")).toBeNull();
+  });
+
+  it("derives a stable report identity from a title", () => {
+    expect(resolveReportIdentity("The Great Report!")).toBe("report://the-great-report");
+    expect(resolveReportIdentity("X", "https://example.com/x")).toBe("https://example.com/x");
+  });
+
+  it("exposes source_type and collection on search results", () => {
+    kbIngest("zirconium compounds for nuclear reactors", "Zirconium Report", "report://zirconium", "explicit", "reports", "report", "report");
+    const results = kbSearch("zirconium compounds", 10, "reports", "report");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].source_type).toBe("report");
+    expect(results[0].collection).toBe("reports");
   });
 });

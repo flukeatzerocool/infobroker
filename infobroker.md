@@ -371,19 +371,25 @@ The `providers` spec action SHALL report a token-footprint record measuring the 
 ### 4.9 Knowledge Base
 
 **REQ-060 — `kb`**
-`kb` manages the local knowledge base. Parameters: `action` (required: search, ingest, stats, delete) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
+`kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-060a — `kb` search action**
-WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
+WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, source type, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `kb` ingest action**
-WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title and collection. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
+WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, source type, freshness tier, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
 
 **REQ-060c — `kb` stats action**
 WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
 
 **REQ-060d — `kb` delete action**
 WHEN action is delete, the tool SHALL remove chunks by collection or source URL, requiring at least one filter, and SHALL report the count of removed chunks. _Check:_ G0, G1.
+
+**REQ-060e — `kb` list action**
+WHEN action is list, the tool SHALL enumerate stored documents as distinct entries with title, source URL, collection, source type, freshness tier, chunk count, and ingest timestamp, ordered newest first, and SHALL accept a collection filter and a source-type filter. _Check:_ G1.
+
+**REQ-060f — `kb` get action**
+WHEN action is get, the tool SHALL return a stored document in full by source URL, reassembling its chunks in order, and SHALL return an error when no document matches the source URL. _Check:_ G1.
 
 **REQ-064 — Auto-Indexing**
 
@@ -399,11 +405,11 @@ Indexed content SHALL be removable by age. The removal interval for content SHAL
 
 **REQ-067 — Knowledge Base Configuration**
 
-The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, and maximum results per query. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
 
-Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. The chunk count reported by the `kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
+Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. The chunk count reported by the `kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
 **REQ-074 — Freshness Classification**
 
@@ -420,6 +426,10 @@ When the knowledge base is configured, every web search SHALL query the knowledg
 **REQ-082 — KB Retrieval Consistency**
 
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
+
+**REQ-083 — Report Storage**
+
+The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report source type and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base, defaulting to the knowledge base. _Check:_ G1.
 
 ### 4.10 Deployment and Updates
 
@@ -860,6 +870,8 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-060b | kb ingest action | 4.9 | G0, G1 |
 | REQ-060c | kb stats action | 4.9 | G1 |
 | REQ-060d | kb delete action | 4.9 | G0, G1 |
+| REQ-060e | kb list action | 4.9 | G1 |
+| REQ-060f | kb get action | 4.9 | G1 |
 | REQ-064 | Auto-Indexing | 4.9 | G1 |
 | REQ-065 | Collection Scoping | 4.9 | G1 |
 | REQ-066 | Content Expiry | 4.9 | G1 |
@@ -869,6 +881,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-075 | Confidence Decay | 4.9 | G1 |
 | REQ-076 | KB-First Sufficiency | 4.9 | G1 |
 | REQ-082 | KB Retrieval Consistency | 4.9 | G1 |
+| REQ-083 | Report Storage | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 
@@ -1279,7 +1292,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-021a, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
-| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082 | G0, G1 |
+| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |

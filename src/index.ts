@@ -1,10 +1,10 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { loadConfig, reloadConfig, getConfig, getEnvVar, getDispatchChain } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
@@ -14,7 +14,7 @@ import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain } from "./chain.js";
 import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, autoIndex, flushKbWrites } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, autoIndex, flushKbWrites } from "./kb.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 
 const START_TIME = Date.now();
@@ -115,6 +115,25 @@ function maybeTruncate(text: string, maxChars: number): { text: string; truncate
   const fpath = join(tmpDir, fname);
   writeFileSync(fpath, text);
   return { text: text.slice(0, maxChars) + "...", truncated: true, outputPath: fpath };
+}
+
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "report";
+}
+
+function saveReportToDisk(title: string, text: string, format: string): string {
+  const base = getConfig().kb?.reports_dir || join(homedir(), "Infobroker", "reports");
+  const dir = base.startsWith("~/") ? join(homedir(), base.slice(2)) : base;
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const ext = format === "json" ? "json" : "md";
+  const date = new Date().toISOString().slice(0, 10);
+  const fpath = join(dir, `${date}-${slugify(title)}.${ext}`);
+  writeFileSync(fpath, text);
+  return fpath;
 }
 
 function json(data: unknown): string {
@@ -721,16 +740,19 @@ server.registerTool(
   "infobroker_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search, ingest, stats, or delete.",
+    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete. Use ingest with source_type 'report' and save_to 'kb' (default) to archive generated reports; use list/get to revisit them.",
     inputSchema: {
-      action: z.enum(["search", "ingest", "stats", "delete"]).describe("Operation to perform"),
+      action: z.enum(["search", "ingest", "list", "get", "stats", "delete"]).describe("Operation to perform"),
       query: z.string().optional().describe("Search query (for search action)"),
       text: z.string().optional().describe("Raw text to index (for ingest action)"),
       url: z.string().optional().describe("URL to fetch and index (for ingest action)"),
-      title: z.string().optional(),
+      title: z.string().optional().describe("Document/report title"),
       collection: z.string().optional().describe("Collection name"),
-      source_type: z.string().optional().describe("Source type filter (for search action)"),
-      source_url: z.string().optional().describe("Source URL filter (for delete action)"),
+      source_type: z.string().optional().describe("Source type (tag on ingest; filter on search/list)"),
+      freshness_tier: z.string().optional().describe("Freshness tier tag on ingest (e.g. 'report', 'evergreen')"),
+      save_to: z.enum(["kb", "disk", "both"]).optional().describe("Where to save (ingest action): kb, disk, or both. Default kb"),
+      format: z.enum(["markdown", "text", "json"]).optional().default("markdown").describe("File format for disk save"),
+      source_url: z.string().optional().describe("Source URL filter (get/delete action) or identity for ingest"),
       max_results: z.number().min(1).max(50).optional().default(8),
     },
   },
@@ -738,16 +760,34 @@ server.registerTool(
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
-    const action = params.action as "search" | "ingest" | "stats" | "delete";
+    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete";
     try {
       if (action === "search") {
         const results = kbSearch(
           String(params.query ?? ""),
-      Number(params.max_results),
+          Number(params.max_results),
           params.collection as string | undefined,
           params.source_type as string | undefined
         );
         return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results })}` }] };
+      }
+      if (action === "list") {
+        const entries = kbList(
+          params.collection as string | undefined,
+          params.source_type as string | undefined
+        );
+        return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: entries })}` }] };
+      }
+      if (action === "get") {
+        const sourceUrl = params.source_url as string | undefined;
+        if (!sourceUrl) {
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "source_url is required for get action", "Provide source_url (see list action for identities)"))}` }] };
+        }
+        const doc = kbGet(sourceUrl);
+        if (!doc) {
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "not_found", `No document with source_url "${sourceUrl}"`, "Use list action to enumerate stored documents"))}` }] };
+        }
+        return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [doc] })}` }] };
       }
       if (action === "ingest") {
         const text = params.text as string | undefined;
@@ -756,7 +796,6 @@ server.registerTool(
           return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "At least one of text or url must be provided", "Provide text or url parameter"))}` }] };
         }
         let content = text || "";
-        let sourceUrl = url || "";
         if (url && !text) {
           const fetched = await doFetchPage(url);
           if (fetched.startsWith("[ERROR]")) {
@@ -764,17 +803,39 @@ server.registerTool(
           }
           const parsed = JSON.parse(fetched.slice(5));
           content = parsed.results?.[0]?.snippet || "";
-          sourceUrl = url;
         }
+
+        const title = (params.title as string) || url || "untitled";
+        const sourceType = (params.source_type as string) || "explicit";
+        const isReport = sourceType === "report";
+        const collection = (params.collection as string) || (isReport ? "reports" : undefined);
+        const freshnessTier = (params.freshness_tier as string) || (isReport ? "report" : undefined);
+        const saveTo = (params.save_to as string) || getConfig().kb?.default_save_destination || "kb";
+
+        let finalUrl = resolveReportIdentity(title, url || params.source_url as string | undefined);
+        let diskPath: string | undefined;
+        if (saveTo === "disk" || saveTo === "both") {
+          diskPath = saveReportToDisk(title, content, String(params.format || "markdown"));
+          finalUrl = `file://${diskPath}`;
+        } else if (!url) {
+          finalUrl = isReport ? resolveReportIdentity(title, undefined) : "";
+        }
+
         const count = kbIngest(
           content,
-          (params.title as string) || url || "untitled",
-          sourceUrl,
+          title,
+          finalUrl,
           "explicit",
-          params.collection as string | undefined,
-          "explicit"
+          collection,
+          sourceType,
+          freshnessTier
         );
-        const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "ingested", url: sourceUrl, snippet: `${count} chunks ingested` }], meta: { chunks_ingested: count } });
+        const msg = json({
+          status: "ok",
+          provider: "knowledge_base",
+          results: [{ title: "ingested", url: finalUrl, snippet: `${count} chunks ingested` }],
+          meta: { chunks_ingested: count, source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}) },
+        });
         return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
       }
       if (action === "stats") {

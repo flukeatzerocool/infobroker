@@ -177,6 +177,12 @@ function validateConfig(config: Config): void {
     if (typeof kb.auto_index !== "boolean") {
       errors.push("kb.auto_index must be a boolean");
     }
+    if (kb.reports_dir !== undefined && typeof kb.reports_dir !== "string") {
+      errors.push("kb.reports_dir must be a string");
+    }
+    if (kb.default_save_destination !== undefined && !["kb", "disk", "both"].includes(kb.default_save_destination)) {
+      errors.push("kb.default_save_destination must be one of: kb, disk, both");
+    }
     if (kb.expiry && !kb.freshness) {
       console.error("[infobroker] kb.expiry is deprecated — migrate to kb.freshness tiers");
     }
