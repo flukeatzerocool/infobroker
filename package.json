@@ -10,7 +10,7 @@
   "mcpName": "io.github.flukeatzerocool/infobroker",
   "repository": {
     "type": "git",
-    "url": "git+https://git.gay/flukeatzerocool/Infobroker.git"
+    "url": "git+https://github.com/flukeatzerocool/infobroker.git"
   },
   "files": [
     "dist",
