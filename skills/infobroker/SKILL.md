@@ -62,7 +62,7 @@ structured analytic techniques.
 Default shape for reports, articles, documentation, and analysis.
 
 ```
-RECALL     Infobroker `kb` (action search) — previously indexed results first
+RECALL     Infobroker `web_search` KB-first (automatic); `kb` search only for stored-only answers
 SEARCH     Infobroker `web_search`; `corroborate` for contested claims
 EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown)
 VERIFY     cross-reference, score confidence, flag contradictions
@@ -90,7 +90,7 @@ research complete. <N> sources | <K> findings | <gap> gaps noted
 Use when the user wants to verify specific claims.
 
 ```
-RECALL       Infobroker `kb` (action search) on all claims first
+RECALL       Infobroker `web_search` KB-first (automatic); `kb` search only for stored-only answers
 EXTRACT      claims from the user's input
 SEARCH       each claim with Infobroker `web_search` (per-claim queries)
 CROSS-CHECK  Infobroker `corroborate` for multi-source verification

@@ -91,6 +91,7 @@ export interface ToolErrorResponse {
     code: string;
     message: string;
     remediation: string;
+    details?: Record<string, unknown>;
   };
 }
 

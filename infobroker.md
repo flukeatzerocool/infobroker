@@ -207,7 +207,7 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
 
 **REQ-020b — `web_search` suggestion mode**
-WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from the configured suggestion provider, presenting each as a result with a title and no URL. A suggestion-provider failure SHALL return an error per REQ-002 without fallback. _Check:_ G0, G1.
+WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
 
 **REQ-020c — `web_search` priority routing**
 
@@ -232,7 +232,7 @@ WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, lin
 `providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-024a — `providers` list action**
-WHEN action is list, the tool SHALL report every configured provider with its status, capabilities, rate limits, quota usage, and supported task types, with an optional filter selecting only active providers. _Check:_ G0, G1.
+WHEN action is list, the tool SHALL report every configured provider with its status, capabilities, rate limits, quota usage, and supported task types, with an optional filter selecting only active providers. WHEN a provider is not active, the tool SHALL report the reason for its state, distinguishing a missing API key, a missing endpoint URL, a provider disabled by configuration, and quota exhaustion. _Check:_ G0, G1.
 
 **REQ-024b — `providers` health action**
 WHEN action is health, the tool SHALL perform a live connectivity check against the named provider and report its resulting status, average latency, current quota counters, and the timestamps of the most recent error and success from operational history. _Check:_ G0, G1.
@@ -268,7 +268,7 @@ operate independently.
 Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
-The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider, respecting per-provider throttling; a blocked or non-parseable provider response SHALL count as a provider failure. The maximum fallback depth SHALL be configurable in the configuration file. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns an empty result set, the server SHALL return a successful empty result. _Check:_ G1.
+The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. On error, response timeout, or empty results, the server SHALL advance to the next provider, respecting per-provider throttling; a blocked or non-parseable provider response SHALL count as a provider failure. The maximum fallback depth SHALL be configurable. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted` that distinguishes quota exhaustion from provider failure and reports the remaining daily quota of the exhausted providers; when every provider instead returns an empty result set, the server SHALL return a successful empty result. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -323,16 +323,16 @@ provider tier or transport. _Check:_ G1.
 ### 4.7 Client Artifacts
 
 **REQ-050 — `search-preferences.md`**
-The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
+The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. The instruction file SHALL direct the client to rely on the `web_search` tool's built-in knowledge-base-first retrieval for external queries and SHALL reserve a direct `kb` search for answering from stored content alone or inspecting the knowledge base. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
 
 **REQ-051 — Orchestrator Skill**
-The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge base search phase positioned before external web search, such that the client retrieves previously indexed results before making outbound requests. _Check:_ G3 (file presence, content verification).
+The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `web_search` tool's built-in KB-first behavior satisfies, reserving a direct `kb` search for stored-content-only answers and knowledge-base inspection. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
 The build SHALL produce an orchestrator skill (REQ-051) that references four pipeline skills — summarization, technical-writing, proofreading, and translation — by name, and that routes research requests to workflow shapes defined in `skills/infobroker/references/workflows.md`. These skills SHALL be shipped in the repository so the build is self-contained and requires no external skill dependency. _Check:_ G3 (content verification).
 
 **REQ-053 — Pipeline Reference**
-The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline, `skills/infobroker/references/provider-map.md` with the task→provider dispatch table, and `skills/infobroker/references/workflows.md` with the workflow-shape definitions. _Check:_ G3 (file presence).
+The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline, `skills/infobroker/references/provider-map.md` with the task→provider dispatch table, `skills/infobroker/references/workflows.md` with the workflow-shape definitions, and `skills/infobroker/references/journeys.md` mapping user intents to the workflow shapes, tool sequence, and recovery procedures each journey follows. _Check:_ G3 (file presence).
 
 **REQ-054 — User Documentation**
 The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers. _Check:_ G3 (file presence).

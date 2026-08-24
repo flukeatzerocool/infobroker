@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-08-23 — User-journey coherence: recall, provider ops, suggest, recovery, errors
+
+- KB recall is single-path: `web_search` performs KB-first retrieval itself,
+  so the client instructions and workflow shapes now reserve a direct `kb`
+  search for stored-content-only answers and inspection rather than issuing a
+  redundant recall before every external query. (REQ-050, REQ-051)
+- `providers` list entries report an `inactive_reason` (missing key, missing
+  URL, disabled, or quota-exhausted) so the ops journey distinguishes *why* a
+  provider is down. (REQ-024a)
+- `suggest` degrades across suggestion-capable providers instead of erroring on
+  the first failure. (REQ-020b)
+- The `all_providers_exhausted` error now distinguishes quota exhaustion from
+  provider failure and lists the exhausted chain and quota-exhausted providers.
+  (REQ-031)
+- New `skills/infobroker/references/journeys.md` maps intents to workflow
+  shapes, tool journeys, and the encryption lifecycle; the recovery procedure
+  now ends with a verify-after-reload confirmation. (REQ-053)
+
 ## 2026-08-23 — Encryption user journey: enable, disable, and recover
 
 - The `kb` tool gains an `encryption` action with `status`, `generate_key`,

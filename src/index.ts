@@ -97,11 +97,11 @@ function ok(provider: string, results: SearchResult[], meta: Record<string, unkn
   return base;
 }
 
-function err(provider: string, code: string, message: string, remediation: string): ToolErrorResponse {
+function err(provider: string, code: string, message: string, remediation: string, details?: Record<string, unknown>): ToolErrorResponse {
   return {
     status: "error",
     provider,
-    error: { code, message, remediation },
+    error: { code, message, remediation, ...(details ? { details } : {}) },
   };
 }
 
@@ -259,18 +259,23 @@ async function doWebSearch(
   const config = getConfig();
 
   if (suggest) {
-    try {
-      const ddg = PROVIDERS["duckduckgo"];
-      const suggestions = ddg?.suggest ? await ddg.suggest(query) : [];
-      return `[OK] ${json({
-        status: "ok",
-        provider: "duckduckgo",
-        results: suggestions.map((s) => ({ title: s, url: "", snippet: s })),
-        meta: { query_time_ms: 0, fallback_used: false },
-      })}`;
-    } catch (e) {
-      return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later"))}`;
+    let lastErr: string | null = null;
+    for (const [slug, provider] of Object.entries(PROVIDERS)) {
+      if (!provider?.suggest) continue;
+      if (config.providers[slug] && !config.providers[slug].enabled) continue;
+      try {
+        const suggestions = await provider.suggest(query);
+        return `[OK] ${json({
+          status: "ok",
+          provider: slug,
+          results: suggestions.map((s) => ({ title: s, url: "", snippet: s })),
+          meta: { query_time_ms: 0, fallback_used: false },
+        })}`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+      }
     }
+    return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", lastErr ?? "No suggestion-capable provider available", "Retry later"))}`;
   }
 
   if (isKbConfigured()) {
@@ -323,11 +328,15 @@ async function doWebSearch(
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType };
   let lastError: ToolErrorResponse | null = null;
+  const quotaExhausted: Record<string, number> = {};
 
   for (const slug of chain) {
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
-      if (quota.exhausted) continue;
+      if (quota.exhausted) {
+        quotaExhausted[slug] = 0;
+        continue;
+      }
 
       await throttle(slug);
       const start = Date.now();
@@ -391,7 +400,12 @@ async function doWebSearch(
   // A chain that ended on provider errors is a failure; a chain whose
   // providers all returned empty is a legitimate zero-result answer.
   if (lastError !== null) {
-    return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration"))}`;
+    const quotaExhaustedList = Object.keys(quotaExhausted);
+    const details: Record<string, unknown> = {
+      exhausted_chain: chain,
+      quota_exhausted: quotaExhaustedList,
+    };
+    return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration", details))}`;
   }
   return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [] }))}`;
 }
@@ -481,6 +495,13 @@ function providerOperational(p: ProviderConfig): boolean {
   return true;
 }
 
+function providerInactiveReason(p: ProviderConfig): "disabled" | "no_api_key" | "no_url" | null {
+  if (!p.enabled) return "disabled";
+  if (p.auth_env && !process.env[p.auth_env]) return "no_api_key";
+  if (p.url_env && !process.env[p.url_env]) return "no_url";
+  return null;
+}
+
 function doListProviders(filter?: string): string {
   const config = getConfig();
   const entries = Object.entries(config.providers);
@@ -491,12 +512,15 @@ function doListProviders(filter?: string): string {
 
   const list = filtered.map(([slug, p]) => {
     const quota = checkQuota(slug, p.rate_limit);
+    const operational = providerOperational(p);
+    const reason = quota.exhausted ? "exhausted" : (operational ? null : providerInactiveReason(p));
     return {
       slug,
       tier: p.tier,
       capabilities: p.capabilities,
       enabled: p.enabled,
-      status: quota.exhausted ? "exhausted" : (providerOperational(p) ? "active" : "inactive"),
+      status: quota.exhausted ? "exhausted" : (operational ? "active" : "inactive"),
+      ...(reason ? { inactive_reason: reason } : {}),
       quota_used: quota.daily.used,
       quota_remaining: quota.daily.remaining,
       quota_warning: quota.warning,

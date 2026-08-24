@@ -10,8 +10,9 @@ route to — sections are independent.
 Every shape composes from these steps; a shape names the steps it uses
 rather than restating them.
 
-- **RECALL** — `kb` (action search) before any external request. Fresh
-  hits may satisfy the task without leaving the local store.
+- **RECALL** — `web_search` performs KB-first recall automatically before
+  external providers; use a direct `kb` (action search) only when stored
+  content alone can answer the task or to inspect the store.
 - **SEARCH** — `web_search` (multi-provider, auto-selection, fallback
   chain). Use `corroborate` when a claim is contested.
 - **EXTRACT** — `fetch_page` on promising URLs for full content.

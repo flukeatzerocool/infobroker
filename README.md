@@ -431,7 +431,9 @@ plaintext immediately (keep the key available during the transition so the
 server can read the store to decrypt it). **Recover** a locked store with
 `status` to see the state, `verify` to confirm a candidate key before
 committing it, `backup` to restore a copy of your key file, and `rekey` to
-move to a new key without losing content.
+move to a new key without losing content. After re-keying, point
+`kb.encryption.key_file` at the new key, reload, then run `verify` again to
+confirm the new key opens the store.
 
 ```
 infobroker_kb action=encryption operation=generate_key key_file=~/.config/infobroker/kb.key

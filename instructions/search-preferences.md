@@ -13,11 +13,13 @@ quota tracking, and cross-source verification. Prefer them over
 built-in `websearch`/`webfetch` equivalents. If an Infobroker tool returns
 an error or is quota-exhausted, retry with the built-in equivalent.
 
-Search the knowledge base with `infobroker_infobroker_kb` (action search)
-before making any external web request. The knowledge base caches
-previously researched content. If the knowledge base returns results, use
-them — do not repeat the external search. If it returns no results,
-proceed with `infobroker_infobroker_web_search`.
+`infobroker_infobroker_web_search` performs knowledge-base recall
+automatically before external providers, so do not issue a separate
+`infobroker_infobroker_kb` (action search) for the same query before it.
+Use `infobroker_infobroker_kb` (action search) directly only to answer
+entirely from stored content, to inspect what is stored, or to maintain
+the knowledge base. If the knowledge base returns results sufficient to
+answer, use them — do not repeat the external search.
 
 After producing a report or written research deliverable, archive it with
 `infobroker_infobroker_kb` (action ingest) using `source_type: "report"`,
