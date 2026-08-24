@@ -16,6 +16,7 @@
 12. [§B Appendix: REQ Authoring Conventions](#b-appendix-req-authoring-conventions)
 13. [§C Appendix: Spec-Driven Development Discipline](#c-appendix-spec-driven-development-discipline)
 14. [§D Appendix: Feature Taxonomy](#d-appendix-feature-taxonomy)
+
 ## §1 Mission and Capability Model
 
 Infobroker is a configurable, multi-provider MCP server that wraps public web
