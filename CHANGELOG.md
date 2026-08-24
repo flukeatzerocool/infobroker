@@ -2,6 +2,27 @@
 
 ## 2026.08.24 — 
 
+- `fetch_page` supports question-grounded reading: pass a `question` to get the
+  ranked passages that address it (scored, sentence-bounded), so reading a page
+  to answer a specific question returns the relevant text instead of the whole
+  document. (REQ-021b)
+- `web_search` and `fetch_page` accept arrays of up to five queries or URLs,
+  processed concurrently and merged into a single response with per-input
+  provenance. (REQ-020, REQ-021)
+- Truncated responses now include an in-band note naming the truncation limit
+  and the full-content file path. (REQ-004)
+- New `fetch` config block (`passage_size`, `max_passages`, `detect_date`) tunes
+  question extraction and recency reporting; `truncate.ts`, `batch.ts`, and
+  `rerank.ts` extract the truncation, batch-merge, and passage-ranking logic
+  into testable modules.
+- `fetch_page` reports a page's last-updated date when it can determine one
+  (HTTP header or document metadata), with the evidence source and a confidence
+  rating, on by default. (REQ-021c)
+- New `cite` tool returns academic references as BibTeX citations from
+  scholarly sources, working without an API key. (REQ-027)
+- `web_search` supports query expansion via `expand`: it returns expansion
+  variants derived from suggestions and query keywords. (REQ-020e)
+
 ## 2026-08-23 — Provider health threshold and result provenance
 
 - The `providers` health action now marks a provider `degraded` when its

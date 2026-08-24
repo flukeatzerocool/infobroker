@@ -54,6 +54,12 @@ export interface Config {
   };
   fetch?: {
     allow_private_urls?: boolean;
+    passage_size?: number;
+    max_passages?: number;
+    detect_date?: boolean;
+  };
+  expand?: {
+    max_expansions?: number;
   };
   kb?: KbConfig;
 }

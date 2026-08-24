@@ -23,10 +23,11 @@ row below.
 
 | Intent | Tools | Steps |
 |--------|-------|-------|
-| Search broadly | `web_search` | KB-first recall → classify task → dispatch chain → fallback on failure |
+| Search broadly | `web_search` | KB-first recall → classify task → dispatch chain → fallback on failure; batch several queries by passing an array |
 | Autocomplete a query | `web_search` (`suggest: true`) | suggestion provider → next suggestion-capable provider → error if none |
-| Read a URL | `fetch_page` | SSRF guard → renderer chain (Jina → native) → truncate → auto-index |
+| Read a URL | `fetch_page` | SSRF guard → renderer chain (Jina → native) → truncate → auto-index; when reading with a specific question, pass `question` to get ranked passages |
 | Multi-source truth-finding | `corroborate` | search → iterate → cross-source verify → confidence-scored findings |
+| Academic references | `cite` | search scholarly sources → BibTeX citation per reference |
 | Check provider status | `providers` (list / health) | list state (incl. inactivity reason) → live health per slug |
 | Knowledge base search | `kb` (search) | vector + keyword hybrid → freshness-adjusted score |
 | Store a report | `kb` (ingest `source_type: report`) | index → `reports` collection → revisit via list/get |

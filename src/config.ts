@@ -169,6 +169,24 @@ function validateConfig(config: Config): void {
     errors.push("output.degraded_latency_ms must be a non-negative number");
   }
 
+  if (config.fetch) {
+    if (config.fetch.passage_size !== undefined && (typeof config.fetch.passage_size !== "number" || config.fetch.passage_size < 1)) {
+      errors.push("fetch.passage_size must be a positive number");
+    }
+    if (config.fetch.max_passages !== undefined && (typeof config.fetch.max_passages !== "number" || config.fetch.max_passages < 1)) {
+      errors.push("fetch.max_passages must be a positive number");
+    }
+    if (config.fetch.detect_date !== undefined && typeof config.fetch.detect_date !== "boolean") {
+      errors.push("fetch.detect_date must be a boolean");
+    }
+  }
+
+  if (config.expand) {
+    if (config.expand.max_expansions !== undefined && (typeof config.expand.max_expansions !== "number" || config.expand.max_expansions < 1)) {
+      errors.push("expand.max_expansions must be a positive number");
+    }
+  }
+
   if (config.kb) {
     const kb = config.kb;
     if (typeof kb.chunk_size !== "number" || kb.chunk_size < 1) {

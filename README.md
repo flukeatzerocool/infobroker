@@ -179,7 +179,7 @@ Requirements: Node.js 20+.
 
 ## MCP Server
 
-Your research backend. Six tools, twenty providers, one
+Your research backend. Seven tools, twenty providers, one
 corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
@@ -191,7 +191,8 @@ spec.
 
 `web_search` sends one query to every provider that can answer it. Search
 across DuckDuckGo, Wikipedia, academic databases, news, code repositories —
-or describe your task and the server picks the best source. Failed providers fall
+or describe your task and the server picks the best source. Pass an array of
+queries to batch several searches in one call. Failed providers fall
 back silently through a configurable chain so you get results, not
 error messages. Other search tools lock you to one engine; Infobroker
 routes every query to the right provider and keeps going when one
@@ -201,13 +202,26 @@ fails.
 
 > "Fetch the article on the Battle of Yavin and summarize it."
 > "Get the text of that page about the Death Star plans."
+> "Where, in that report, does it mention the reactor core?"
 
 `fetch_page` hands any URL to Jina Reader, which renders it as clean
 Markdown optimized for LLM consumption. Falls back to native HTTP when
 Jina is throttled. Wikipedia and Internet Archive have dedicated
-renderers for source-specific extraction. Built-in web fetchers return
-raw HTML; Infobroker gives you clean, readable content from any source —
-ready for summarization or analysis.
+renderers for source-specific extraction. Ask a page a question — pass
+`question` to `fetch_page` and it returns the passages that answer it, each
+scored and ranked, instead of the whole document. Built-in web fetchers
+return raw HTML; Infobroker gives you clean, readable content from any
+source — ready for summarization or analysis. Fetch also reports the page's
+last-updated date when it can determine one, so you know how current your
+source is.
+
+### Citations
+
+> "Give me BibTeX references for papers on hyperdrive field dynamics."
+
+`cite` searches scholarly sources and returns each reference as a formatted
+BibTeX entry with its fields — title, authors, year, venue, and URL — ready
+to paste into a reference list.
 
 ### Provider Intelligence
 

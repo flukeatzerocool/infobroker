@@ -15,7 +15,9 @@ rather than restating them.
   content alone can answer the task or to inspect the store.
 - **SEARCH** — `web_search` (multi-provider, auto-selection, fallback
   chain). Use `corroborate` when a claim is contested.
-- **EXTRACT** — `fetch_page` on promising URLs for full content.
+- **EXTRACT** — `fetch_page` on promising URLs for full content; pass
+  `question` to a page you are reading to answer a specific question, so only
+  the ranked passages that address it are returned.
 - **VERIFY** — cross-reference across sources, score confidence, flag
   contradictions explicitly.
 - **WRITE** — `technical-writing` for the deliverable.

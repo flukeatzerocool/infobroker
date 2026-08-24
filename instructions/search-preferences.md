@@ -42,4 +42,12 @@ Use `infobroker_infobroker_corroborate` for multi-source truth-finding and
 deep research tasks.
 Use `infobroker_infobroker_providers` (action list or health) when unsure
 which search backend to use or to check provider status.
+Use `infobroker_infobroker_web_search` with an array of queries to batch
+several searches in one call (no built-in equivalent).
+Use `infobroker_infobroker_web_search` with `expand: true` to generate query
+variants before a deep search (no built-in equivalent).
+Use `infobroker_infobroker_fetch_page` with a `question` when reading a page
+to answer a specific question — it returns the ranked passages that address it
+rather than the whole page.
+Use `infobroker_infobroker_cite` for BibTeX references in scholarly work.
 Cite URLs with every claim sourced from the web.

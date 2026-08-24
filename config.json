@@ -196,6 +196,15 @@
     "privacy_critical": ["duckduckgo", "searxng", "mojeek"],
     "content_fetch": ["jina", "native_fetch"]
   },
+  "fetch": {
+    "allow_private_urls": false,
+    "passage_size": 100,
+    "max_passages": 1,
+    "detect_date": true
+  },
+  "expand": {
+    "max_expansions": 5
+  },
   "corroboration": {
     "max_iterations": 5,
     "max_http_calls": 30,

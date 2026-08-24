@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-021 REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-021 REQ-021b REQ-021c REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -18,6 +18,13 @@ import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, 
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { Config, ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
+import { maybeTruncate } from "./truncate.js";
+import { capInputs, mergeItems } from "./batch.js";
+import { rankPassages } from "./rerank.js";
+import { detectUpdatedAt } from "./datetime.js";
+import { searchCitations } from "./cite.js";
+import { deriveExpansions } from "./expand.js";
+import { infobrokerFetch } from "./http.js";
 
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
@@ -104,24 +111,6 @@ function err(provider: string, code: string, message: string, remediation: strin
     provider,
     error: { code, message, remediation, ...(details ? { details } : {}) },
   };
-}
-
-function maybeTruncate(text: string, maxChars: number): { text: string; truncated: boolean; outputPath?: string } {
-  if (text.length <= maxChars) return { text, truncated: false };
-
-  const tmpDir = join(tmpdir(), "infobroker");
-  if (!existsSync(tmpDir)) {
-    mkdirSync(tmpDir, { recursive: true });
-  }
-  const fname = `trunc-${Date.now()}.txt`;
-  const fpath = join(tmpDir, fname);
-  writeFileSync(fpath, text);
-  try {
-    chmodSync(fpath, 0o600);
-  } catch {
-    // best effort
-  }
-  return { text: text.slice(0, maxChars) + "...", truncated: true, outputPath: fpath };
 }
 
 function slugify(title: string): string {
@@ -246,7 +235,7 @@ function filterByContentType(results: SearchResult[], contentType: string): Sear
 }
 
 async function doWebSearch(
-  query: string,
+  query: string | string[],
   preferredProvider?: string,
   maxResults = 8,
   safeSearch: "on" | "off" | "strict" = "on",
@@ -255,8 +244,20 @@ async function doWebSearch(
   priority?: string,
   suggest = false,
   contentType?: string,
-  region?: string
+  region?: string,
+  expand = false
 ): Promise<string> {
+  if (Array.isArray(query)) {
+    const queries = capInputs(query);
+    const envelopes = await Promise.all(
+      queries.map((q) =>
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand)
+      )
+    );
+    const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
+    return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
+  }
+
   const config = getConfig();
 
   if (suggest) {
@@ -277,6 +278,28 @@ async function doWebSearch(
       }
     }
     return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", lastErr ?? "No suggestion-capable provider available", "Retry later"))}`;
+  }
+
+  if (expand) {
+    const suggestions: string[] = [];
+    for (const [slug, provider] of Object.entries(PROVIDERS)) {
+      if (!provider?.suggest) continue;
+      if (config.providers[slug] && !config.providers[slug].enabled) continue;
+      try {
+        suggestions.push(...(await provider.suggest(query)));
+        break;
+      } catch {
+        // suggestion provider unavailable — expand from the query keywords alone
+      }
+    }
+    const maxExpansions = config.expand?.max_expansions;
+    const expansions = deriveExpansions(query, suggestions, maxExpansions);
+    return `[OK] ${json({
+      status: "ok",
+      provider: "duckduckgo",
+      results: expansions.map((s) => ({ title: s, url: "", snippet: s })),
+      meta: { query_time_ms: 0, fallback_used: false },
+    })}`;
   }
 
   if (isKbConfigured()) {
@@ -421,10 +444,56 @@ async function doWebSearch(
   return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [] }))}`;
 }
 
-async function doFetchPage(url: string, renderer?: string, maxLength?: number): Promise<string> {
+// REQ-021c: best-effort last-updated detection. Reads the last-modified header
+// via a manual-redirect HEAD, then falls back to parsing HTML metadata via a
+// manual-redirect GET. Manual redirects avoid following a hop to a new host,
+// so the SSRF guard (already asserted for the requested URL) is not bypassed.
+async function detectPageDate(url: string): Promise<{ date: string; source: string; confidence: string } | undefined> {
+  try {
+    const head = await infobrokerFetch(url, { method: "HEAD", redirect: "manual", providerSlug: "native_fetch" });
+    const headerData: Record<string, string | string[] | undefined> = {};
+    head.headers.forEach((v, k) => (headerData[k] = v));
+    let detected = detectUpdatedAt("", headerData);
+    if (detected) return detected;
+
+    if (head.status < 300 || head.status >= 400) {
+      const get = await infobrokerFetch(url, { redirect: "manual", providerSlug: "native_fetch" });
+      if (get.ok) {
+        const html = (await get.text()).slice(0, 200000);
+        detected = detectUpdatedAt(html);
+        if (detected) return detected;
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function doFetchPage(
+  url: string | string[],
+  renderer?: string,
+  maxLength?: number,
+  question?: string,
+  passageSize?: number,
+  maxPassages?: number,
+  detectDate?: boolean
+): Promise<string> {
+  if (Array.isArray(url)) {
+    const urls = capInputs(url);
+    const envelopes = await Promise.all(
+      urls.map((u) => doFetchPage(u, renderer, maxLength, question, passageSize, maxPassages, detectDate))
+    );
+    const merged = mergeItems(urls.map((u, i) => ({ query: u, envelope: envelopes[i] })));
+    return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
+  }
+
   const config = getConfig();
   const renderers = renderer ? [renderer] : getDispatchChain("content_fetch");
   const effectiveMax = maxLength ?? config.output.max_chars;
+  const effectivePassageSize = passageSize ?? config.fetch?.passage_size;
+  const effectiveMaxPassages = maxPassages ?? config.fetch?.max_passages;
+  const effectiveDetectDate = detectDate ?? config.fetch?.detect_date ?? true;
 
   const allowPrivate = config.fetch?.allow_private_urls === true;
   try {
@@ -475,7 +544,56 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
       providerLastSuccess[slug] = Date.now();
       const truncated = maybeTruncate(content, effectiveMax);
 
+      const pageDate = effectiveDetectDate ? await detectPageDate(url) : undefined;
+      const dateMeta = pageDate
+        ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
+        : {};
+
       autoIndex([{ title: new URL(url).hostname, url, snippet: content }], slug, undefined, "fetch_page");
+
+      if (question) {
+        const passages = rankPassages(content, question, effectivePassageSize ?? 100, effectiveMaxPassages ?? 1);
+        if (passages.length > 0) {
+          return `[OK] ${json({
+            status: "ok",
+            provider: slug,
+            question,
+            extraction_mode: "content",
+            results: [{
+              title: new URL(url).hostname,
+              url,
+              snippet: passages[0].text,
+              ...dateMeta,
+            }],
+            snippets: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
+            top_score: passages[0].score,
+            ...dateMeta,
+            meta: {
+              query_time_ms: elapsed,
+              fallback_used: false,
+            },
+          })}`;
+        }
+        return `[OK] ${json({
+          status: "ok",
+          provider: slug,
+          question,
+          extraction_mode: "full_content",
+          results: [{
+            title: new URL(url).hostname,
+            url,
+            snippet: truncated.text,
+            ...dateMeta,
+          }],
+          note: "No passage addressed the question; returning the full content instead.",
+          ...dateMeta,
+          meta: {
+            query_time_ms: elapsed,
+            fallback_used: false,
+          },
+          ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
+        })}`;
+      }
 
       return `[OK] ${json({
         status: "ok",
@@ -484,7 +602,9 @@ async function doFetchPage(url: string, renderer?: string, maxLength?: number): 
           title: new URL(url).hostname,
           url,
           snippet: truncated.text,
+          ...dateMeta,
         }],
+        ...dateMeta,
         meta: {
           query_time_ms: elapsed,
           fallback_used: false,
@@ -677,7 +797,7 @@ server.registerTool(
     title: "Web Search",
     description: "Unified provider search with task-type routing, fallback chain, and optional suggestions.",
     inputSchema: {
-      query: z.string().describe("Search query"),
+      query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
       max_results: z.number().min(1).max(30).optional().default(8),
       safe_search: z.enum(["on", "off", "strict"]).optional().default("on"),
@@ -685,13 +805,14 @@ server.registerTool(
       page: z.number().min(1).optional().default(1),
       priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional(),
       suggest: z.boolean().optional().default(false),
+      expand: z.boolean().optional().default(false).describe("Return query-expansion strings instead of search results"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
     },
   },
   async (params) => {
     const content = await doWebSearch(
-      String(params.query),
+      params.query,
       params.provider as string | undefined,
       Number(params.max_results),
       (params.safe_search as "on" | "off" | "strict") ?? "on",
@@ -700,7 +821,8 @@ server.registerTool(
       params.priority as string | undefined,
       Boolean(params.suggest),
       params.content_type as string | undefined,
-      params.region as string | undefined
+      params.region as string | undefined,
+      Boolean(params.expand)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
@@ -713,13 +835,25 @@ server.registerTool(
     title: "Fetch Page Content",
     description: "Fetch and extract URL content. Jina Reader by default, native HTTP fallback.",
     inputSchema: {
-      url: z.string().describe("URL to fetch"),
+      url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional(),
       max_length: z.number().optional().default(50000),
+      question: z.string().optional().describe("Question to extract ranked passages for, instead of returning the whole page"),
+      passage_size: z.number().optional().describe("Target words per passage (default from config)"),
+      max_passages: z.number().optional().describe("Number of passages to return (default from config)"),
+      detect_date: z.boolean().optional().describe("Detect and report the page's last-updated date (default from config)"),
     },
   },
   async (params) => {
-    const content = await doFetchPage(String(params.url), params.renderer as string | undefined, params.max_length !== undefined ? Number(params.max_length) : undefined);
+    const content = await doFetchPage(
+      params.url,
+      params.renderer as string | undefined,
+      params.max_length !== undefined ? Number(params.max_length) : undefined,
+      params.question as string | undefined,
+      params.passage_size !== undefined ? Number(params.passage_size) : undefined,
+      params.max_passages !== undefined ? Number(params.max_passages) : undefined,
+      params.detect_date as boolean | undefined
+    );
     return { content: [{ type: "text" as const, text: content }] };
   }
 );
@@ -1024,6 +1158,52 @@ server.registerTool(
           {
             type: "text" as const,
             text: `[ERROR] ${json(err("system", "config_error", (e instanceof Error ? e.message : String(e)) + ". Previous config remains active.", "Fix config.json and retry"))}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// --- cite ---
+server.registerTool(
+  "infobroker_cite",
+  {
+    title: "Cite (Academic References)",
+    description: "Return academic references for a query as BibTeX citations, drawn from scholarly sources.",
+    inputSchema: {
+      query: z.string().describe("Search query"),
+      max_results: z.number().min(1).max(30).optional().default(8),
+    },
+  },
+  async (params) => {
+    try {
+      const citations = await searchCitations(String(params.query), Number(params.max_results));
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `[OK] ${json({
+              status: "ok",
+              provider: "academic",
+              results: citations.map((c) => ({
+                title: c.title,
+                url: c.url,
+                year: c.year,
+                authors: c.authors,
+                venue: c.venue,
+                bibtex: c.bibtex,
+              })),
+            })}`,
+          },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `[ERROR] ${json(err("academic", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later"))}`,
           },
         ],
       };

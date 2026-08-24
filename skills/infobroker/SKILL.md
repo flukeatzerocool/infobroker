@@ -64,7 +64,9 @@ Default shape for reports, articles, documentation, and analysis.
 ```
 RECALL     Infobroker `web_search` KB-first (automatic); `kb` search only for stored-only answers
 SEARCH     Infobroker `web_search`; `corroborate` for contested claims
-EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown)
+EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
+           reading a page to answer a specific question, pass `question` to get
+           the ranked passages that address it instead of the whole page
 VERIFY     cross-reference, score confidence, flag contradictions
 SUMMARIZE  `summarization` skill — condense findings before writing
 WRITE      `technical-writing` skill — reports, docs, tutorials, specs
@@ -126,10 +128,11 @@ early.
 | Intent | Tool | Provider hint |
 |--------|------|--------------|
 | Search web broadly | `web_search` | Auto-selected (default: DuckDuckGo) |
-| Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown) |
+| Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown); pass `question` to extract ranked passages |
 | Autocomplete a query | `web_search` (`suggest: true`) | DuckDuckGo |
 | "Which tool should I use?" | `web_search` | Auto-selection returns serving provider |
 | Multi-source truth-finding | `corroborate` | Uses all active providers |
+| Academic citations | `cite` | BibTeX references from scholarly sources |
 | Check provider status | `providers` (action list/health) | N/A |
 | Reload config at runtime | `reload_config` | N/A |
 | Search local knowledge base | `kb` (action search) | Semantic + keyword hybrid |

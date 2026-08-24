@@ -149,7 +149,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026 and their sub-REQs `020a`–`020d`, `021a`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–086 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–027 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–086 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -169,7 +169,7 @@ Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `ra
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, source type, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
 **REQ-004 — Truncation**
-Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. _Check:_ G1.
+Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
 
 **REQ-073 — Minimum Viable Result**
 
@@ -202,7 +202,7 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 ### 4.3 Core Tools
 
 **REQ-020 — `web_search`**
-`web_search` is the unified search tool. Parameters: `query` (required), plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `content_type` (default all), and `region`. When `suggest` is true, the tool SHALL return query-autocomplete strings instead of search results. Otherwise the tool SHALL return normalized results with source provenance, enforce `max_results` even when the serving provider ignores it, and SHALL fall back through the configured chain on failure. Providers SHALL accept all parameters without error, ignoring any they do not support. The `content_type` filter SHALL be applied server-side over normalized URLs regardless of the serving provider. _Check:_ G0, G1.
+`web_search` is the unified search tool. Parameters: `query` (required) which SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `content_type` (default all), and `region`. When `suggest` is true, the tool SHALL return query-autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and SHALL fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response with per-input provenance. Providers SHALL ignore unsupported parameters without error; the `content_type` filter is applied server-side. _Check:_ G0, G1.
 
 **REQ-020a — `web_search` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -218,13 +218,17 @@ Parameters: the `web_search` tool accepts `priority` with values `privacy`, `fre
 
 Parameters: the `web_search` tool accepts `time_range`, `page`, `safe_search`, `content_type`, and `region`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
 
+**REQ-020e — `web_search` query expansion**
+WHEN `web_search` receives `expand` set to true, the tool SHALL return query-expansion strings instead of search results, derived from a suggestion-capable provider and the query's keywords, presented as results with a title and no URL. WHEN no suggestion-capable provider is available, the tool SHALL derive expansions from the query alone rather than erroring. _Check:_ G0, G1.
+
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required),
-`renderer` (optional: `jina` default, `native_fetch`, `wikipedia`,
-`internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k
-chars). Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which
-produces clean Markdown optimized for LLM consumption. Falls back to native
-HTTP fetch if the selected renderer is throttled or errors. _Check:_ G0, G1.
+Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, and `detect_date`. Default renderer is Jina Reader (`https://r.jina.ai/{url}`) which produces clean Markdown optimized for LLM consumption. Falls back to native HTTP fetch if the selected renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
+
+**REQ-021b — `fetch_page` question-grounded extraction**
+WHEN `fetch_page` receives a `question`, the tool SHALL split the fetched content into passages at sentence boundaries and SHALL return the passages ranked by relevance to the question, each with a relevance score, up to the configured passage count. The response SHALL identify the extraction mode: passage content when ranking produced a match, or full content with a note when no passage matched or the content was unreadable. A low top score SHALL be reported as the page not answering the question rather than as a ranking failure. _Check:_ G1.
+
+**REQ-021c — `fetch_page` date detection**
+WHEN `fetch_page` receives a `detect_date` request, the tool SHALL report the page's last-updated date when determinable from HTTP headers or document metadata, together with the evidence source and a confidence rating. WHEN no date is determinable, the tool SHALL omit the date field rather than guess. The detected date SHALL be surfaced alongside the content in the same response. _Check:_ G1.
 
 **REQ-021a — `fetch_page` network-target safety**
 WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
@@ -257,6 +261,9 @@ WHEN source preservation is enabled in the configuration, `corroborate` SHALL be
 
 **REQ-026d — corroboration provenance record**
 The `corroborate` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding, formatted so a downstream citation can document the analytic tooling used. The record SHALL be present in verbose output. _Check:_ G1.
+
+**REQ-027 — `cite`**
+The `cite` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
 
 ### 4.4 Rate Limiting and Resilience
 
@@ -481,8 +488,8 @@ requiring reconfiguration. _Check:_ G1.
 ### 5.2 Layered Architecture
 
 ```
-Layer 3: Tools                 web_search, fetch_page, corroborate, providers,
-                               kb, reload_config
+Layer 3: Tools                 web_search, fetch_page, corroborate, cite,
+                               providers, kb, reload_config
 
 Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
@@ -554,7 +561,7 @@ responses. The corroboration loop validates against:
 ### 6.1 Tool Naming
 
 All tools use `snake_case`. Tool names are domain terminology: `web_search`,
-`fetch_page`, `corroborate`, `providers`, `kb`, `reload_config`. These logical
+`fetch_page`, `corroborate`, `cite`, `providers`, `kb`, `reload_config`. These logical
 names are registered with the MCP client under an `infobroker_` prefix
 (e.g., `infobroker_web_search`).
 
@@ -854,8 +861,11 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-020b | web_search suggestion mode | 4.3 | G0, G1 |
 | REQ-020c | web_search priority routing | 4.3 | G1 |
 | REQ-020d | web_search parameter transparency | 4.3 | G0, G1 |
+| REQ-020e | web_search query expansion | 4.3 | G0, G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
 | REQ-021a | fetch_page network-target safety | 4.3 | G1 |
+| REQ-021b | fetch_page question-grounded extraction | 4.3 | G1 |
+| REQ-021c | fetch_page date detection | 4.3 | G1 |
 | REQ-024 | providers | 4.3 | G0, G1 |
 | REQ-024a | providers list action | 4.3 | G0, G1 |
 | REQ-024b | providers health action | 4.3 | G0, G1 |
@@ -865,6 +875,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-026b | corroboration claim attribution | 4.3 | G1 |
 | REQ-026c | corroboration source preservation | 4.3 | G1 |
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
+| REQ-027 | cite | 4.3 | G0, G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
@@ -999,6 +1010,7 @@ configuration layer is merged over it by the server (REQ-010).
 | `duckduckgo_suggest_related_searches` | `web_search` with `suggest` — DuckDuckGo autocomplete, same endpoint |
 | (none) | `web_search` auto-selection — task-type routing (was `choose_provider`) |
 | (none) | `corroborate` — multi-pass truth-finding |
+| (none) | `cite` — academic references as BibTeX |
 | (none) | `providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
 | (none) | `kb` — knowledge base search/ingest/stats/delete (was four `kb_*` tools) |
 | (none) | `reload_config` — ops tooling |
@@ -1314,12 +1326,12 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-021, REQ-021a, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page`, `cite` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
 | 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
-| 6 | Tool Surface & Contracts | (all 6 tools) | REQ-001, REQ-002, REQ-079 | G0 |
+| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 
