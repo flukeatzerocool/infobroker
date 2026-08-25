@@ -6,26 +6,12 @@
 
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { extractAssistantText } from "../lib/event-stream.mjs";
 
 const [manifestPath, runPath, skill, ...rest] = process.argv.slice(2);
 const grade = rest.includes("--grade");
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-
-// Extract assistant text from the JSON event stream (opencode --format json).
-// The stream is newline-delimited JSON; assistant text parts carry type "text"
-// and a `.text` field on `ev.part`.
-function extractAssistantText(raw) {
-  const parts = [];
-  for (const line of raw.split("\n")) {
-    let ev;
-    try { ev = JSON.parse(line); } catch { continue; }
-    const part = ev?.part;
-    if (part?.type === "text" && typeof part.text === "string") parts.push(part.text);
-    else if (typeof ev?.text === "string") parts.push(ev.text);
-  }
-  return parts.join("\n");
-}
 
 const raw = readFileSync(runPath, "utf8");
 const text = extractAssistantText(raw);

@@ -8,7 +8,7 @@ fi
 
 echo "Running pre-push checks..."
 echo "  version sync..."
-npx tsx scripts/version-check.ts
+npm run version-sync
 
 echo "  spec checks (typecheck, spec, readme)..."
 npm run check

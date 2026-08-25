@@ -18,11 +18,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST="$PROJECT_DIR/test-fixtures/research/manifest.json"
 EVALUATOR="$SCRIPT_DIR/test-research/evaluate-research.mjs"
 
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info()  { echo -e "${GREEN}$*${NC}"; }
-warn()  { echo -e "${YELLOW}$*${NC}"; }
-error() { echo -e "${RED}$*${NC}"; }
-die()   { error "$*"; exit 1; }
+# shellcheck source=scripts/lib/opencode-utils.sh
+source "$SCRIPT_DIR/lib/opencode-utils.sh"
 
 ONLY=""; FROM=""
 for arg in "$@"; do
@@ -36,9 +33,7 @@ for arg in "$@"; do
   esac
 done
 
-for tool in opencode node; do
-  command -v "$tool" >/dev/null 2>&1 || die "missing '$tool'"
-done
+require_tools opencode node
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RUN_DIR="${TMPDIR:-/tmp}/infobroker/research-tests/run-${TIMESTAMP}"
@@ -73,24 +68,9 @@ if [[ -z "$(node -e 'const fs=require("fs");const p=process.argv[1];console.log(
 fi
 
 # ── Start backend ──
-PORT="${PIPELINE_PORT:-4096}"
-SERVER_URL="http://localhost:${PORT}"
-started=false
-if curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; then
-  info "Reusing existing opencode serve at $SERVER_URL"
-else
-  info "Starting opencode serve on port $PORT..."
-  opencode serve --port "$PORT" > "$RUN_DIR/opencode-serve.log" 2>&1 &
-  OPC_SERVE_PID=$!
-  i=0
-  until curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; do
-    i=$((i+1)); [[ $i -gt 60 ]] && die "opencode serve did not come up"
-    sleep 1
-  done
-  started=true
-fi
+ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
 
-cleanup() { [[ "$started" == "true" && -n "${OPC_SERVE_PID:-}" ]] && kill "$OPC_SERVE_PID" 2>/dev/null || true; }
+cleanup() { cleanup_serve; }
 trap cleanup EXIT SIGINT SIGTERM
 
 run_turn() {

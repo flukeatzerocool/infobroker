@@ -30,12 +30,8 @@ MANIFEST_DIR="$PROJECT_DIR/test-fixtures/skills"
 INPUTS_DIR="$MANIFEST_DIR/inputs"
 EVALUATOR="$SCRIPT_DIR/test-skills/evaluate.mjs"
 
-# ── Colors ──
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info()  { echo -e "${GREEN}$*${NC}"; }
-warn()  { echo -e "${YELLOW}$*${NC}"; }
-error() { echo -e "${RED}$*${NC}"; }
-die()   { error "$*"; exit 1; }
+# shellcheck source=scripts/lib/opencode-utils.sh
+source "$SCRIPT_DIR/lib/opencode-utils.sh"
 
 # ── Flag parsing ──
 FROM_SKILL=""; RESUME=false; GRADE=false; MODEL="${SKILL_TEST_MODEL:-}"; RETRY=false
@@ -55,9 +51,7 @@ for arg in "$@"; do
 done
 
 # ── Pre-flight ──
-for tool in opencode node npx; do
-  command -v "$tool" >/dev/null 2>&1 || die "Pre-flight failed: missing '$tool'"
-done
+require_tools opencode node npx
 
 warn "Running gate checks (npm run check)..."
 if ! npm run check >/dev/null 2>&1; then
@@ -87,29 +81,9 @@ done
 IFS=$'\n' MANIFESTS=($(printf '%s\n' "${MANIFESTS[@]}" | sort)); unset IFS
 
 # ── Start backend ──
-PORT="${PIPELINE_PORT:-4096}"
-SERVER_URL="http://localhost:${PORT}"
-started=false
-if curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; then
-  info "Reusing existing opencode serve at $SERVER_URL"
-else
-  info "Starting opencode serve on port $PORT..."
-  opencode serve --port "$PORT" > "$RUN_DIR/opencode-serve.log" 2>&1 &
-  OPC_SERVE_PID=$!
-  i=0
-  until curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; do
-    i=$((i+1))
-    [[ $i -gt 60 ]] && die "opencode serve did not come up (see $RUN_DIR/opencode-serve.log)"
-    sleep 1
-  done
-  started=true
-fi
+ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
 
-cleanup() {
-  if [[ "$started" == "true" && -n "${OPC_SERVE_PID:-}" ]]; then
-    kill "$OPC_SERVE_PID" 2>/dev/null || true
-  fi
-}
+cleanup() { cleanup_serve; }
 trap cleanup EXIT SIGINT SIGTERM
 
 # ── Build prompt + run ──

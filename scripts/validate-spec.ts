@@ -1,9 +1,9 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
-import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
 import { execSync } from "node:child_process";
+import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
+import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 
 // @implements REQ-055
 
@@ -323,13 +323,9 @@ function checkGeneratedAuthStale(): void {
     error(`Generated auth reference missing: ${authPath} — run 'npm run generate-auth'`);
     return;
   }
-  try {
-    execSync("npx tsx scripts/generate-provider-auth.ts", { cwd: ROOT, stdio: "pipe" });
-  } catch {
-    error("Auth reference generation script failed");
-    return;
-  }
-  // git diff --exit-code detects if the generated file changed
+  // Regenerate in-process (no subprocess spawn), then diff against the committed
+  // file to detect drift.
+  writeProviderAuth(readConfig());
   try {
     execSync(`git diff --exit-code -- "${authPath}"`, { cwd: ROOT, stdio: "pipe" });
   } catch {
@@ -338,30 +334,6 @@ function checkGeneratedAuthStale(): void {
 }
 
 checkGeneratedAuthStale();
-
-// --- Spec hash staleness check ---
-
-function checkSpecHashStale(): void {
-  const decisionsPath = join(ROOT, "DECISIONS.md");
-  if (!existsSync(decisionsPath)) return;
-
-  const decisions = readFileSync(decisionsPath, "utf-8");
-  const storedHash = decisions.match(/\*\*Spec hash:\*\*\s*`([a-f0-9]+)`/)?.[1];
-  if (!storedHash) {
-    warn("Spec hash missing from DECISIONS.md — run 'npm run hash'");
-    return;
-  }
-
-  const specPath = join(ROOT, "infobroker.md");
-  if (!existsSync(specPath)) return;
-
-  const currentHash = createHash("sha256").update(readFileSync(specPath)).digest("hex");
-  if (currentHash !== storedHash) {
-    warn(`Spec hash is stale (stored: ${storedHash.slice(0, 8)}..., current: ${currentHash.slice(0, 8)}...) — run 'npm run hash'`);
-  }
-}
-
-checkSpecHashStale();
 
 // --- REQ manifest verification ---
 

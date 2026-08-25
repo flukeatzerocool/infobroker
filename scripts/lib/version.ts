@@ -1,0 +1,40 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const ROOT = join(__dirname, "..", "..");
+
+export function today(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}.${m}.${dd}`;
+}
+
+// package.json uses a calendar-date spelling ("2026.08.23"); server.json follows
+// semver (leading zeros disallowed). normalizeSemver derives the semver form by
+// stripping leading zeros from each numeric segment. Idempotent.
+export function normalizeSemver(v: string): string {
+  return v.split(".").map((seg) => String(Number(seg))).join(".");
+}
+
+export function readRootPackage(): { version: string } {
+  return JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+}
+
+export function replaceInFile(
+  filePath: string,
+  pattern: RegExp,
+  replacement: string,
+  label: string
+): boolean {
+  const content = readFileSync(filePath, "utf-8");
+  if (!content.match(pattern)) {
+    console.error(`  FAIL  ${label}: pattern not found`);
+    return false;
+  }
+  writeFileSync(filePath, content.replace(pattern, replacement));
+  return true;
+}

@@ -124,11 +124,11 @@ step_skip() {
   return 1
 }
 
-# scan_findings — sum `findings` across all per-dir scan-*.json and the
-# git scan summary. Prints "?" if no summary file is parseable.
+# scan_findings — sum `findings` across the project scan (scan-project.json)
+# and the git scan summary (scan-git.json). Prints "?" if none is parseable.
 scan_findings() {
   local total=0 found=false f count
-  for f in "$PIPELINE_RUN_DIR"/scan-*.json "$PIPELINE_RUN_DIR"/scan-git.json; do
+  for f in "$PIPELINE_RUN_DIR"/scan-*.json; do
     [[ -f "$f" ]] || continue
     count=$(json_from_file "$f" findings)
     if [[ "$count" =~ ^[0-9]+$ ]]; then
@@ -425,12 +425,10 @@ if $PARALLEL; then
     unset PIPELINE_SESSION_ID
     PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-scan"
     ensure_session
-    for d in $SCAN_DIRS; do
-      sed -e "s|<SCAN_DIR>|$d|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-${d}.json|g" \
-        "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
-      run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
-      [[ $OPC_RC -ne 0 ]] && exit 1
-    done
+    sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
+      "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
+    run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
+    [[ $OPC_RC -ne 0 ]] && exit 1
     sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
       "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
     run_pipeline_step "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" --model "$PIPELINE_LIGHT_MODEL" --retry
@@ -452,12 +450,10 @@ else
   if step_skip scan; then
     info "Dead-code scan: SKIPPED (state journal)"
   else
-    for d in $SCAN_DIRS; do
-      sed -e "s|<SCAN_DIR>|$d|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-${d}.json|g" \
-        "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
-      run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
-      [[ $OPC_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN."
-    done
+    sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
+      "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
+    run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
+    [[ $OPC_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN."
     sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
       "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
     run_pipeline_step "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" --model "$PIPELINE_LIGHT_MODEL" --retry

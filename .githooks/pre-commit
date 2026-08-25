@@ -6,8 +6,5 @@ if ! command -v node >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Running pre-commit checks (npm run hash && npm run version-sync && npm run check)..."
-npm run hash
-git add DECISIONS.md
+echo "Running pre-commit checks (npm run version-sync)..."
 npm run version-sync
-npm run check

@@ -383,12 +383,6 @@ registered against the interface without changing call sites; REQ-067's
 "embedding model reference" and REQ-060c's availability reporting already
 bound the contract, so no new REQ was required (F9 covers unavailability).
 
-### D-012: Build Fingerprint (auto-generated)
-
-**Spec hash:** `099c5546e53d8a61f6ed1ba166e0d094ae9dd573c09dbead6b2bbe6d58eb26d1`
-**Source hash:** `40c1219ab67fbaaf608a5e7c6384ef155ba0612f582da980d5813a1d314c240d`
-**Config hash:** `1ae5e6639b68034cfaba883252ba8e3e891be331d49122f79c0082af0abc5edf`
-**Total fingerprint:** `d93fd9931f1120f37c84ccb2eedef103253f998ed494cb6641978c88d0623b7f`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

@@ -1,9 +1,10 @@
-Scan the <SCAN_DIR> directory for dead and outdated data. This is a
-read-only audit — do NOT modify any files. <SCAN_DIR> is one directory of
-the project tree; also scan the root files (README.md, infobroker.md,
-config.json, package.json, tsconfig.json, AGENTS.md, DECISIONS.md) and the
-other tracked project directories (src/, scripts/, skills/, instructions/,
-test-fixtures/) for stale references into and out of this directory.
+Scan the project directories listed in `<SCAN_DIRS>` for dead and outdated
+data. This is a read-only audit — do NOT modify any files. `<SCAN_DIRS>` is a
+space-separated list of project directories; also scan the root files
+(README.md, infobroker.md, config.json, package.json, tsconfig.json,
+AGENTS.md, DECISIONS.md) and the other tracked project directories (src/,
+scripts/, skills/, instructions/, test-fixtures/) for stale references into
+and out of these directories.
 
 Checklist:
 1. REQ citations in source code — grep for REQ-\d+ patterns. Each REQ number

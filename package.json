@@ -28,13 +28,12 @@
     "validate-spec": "npx tsx scripts/validate-spec.ts",
     "validate-readme": "npx tsx scripts/validate-readme.ts",
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",
-    "version-bump": "npx tsx scripts/version-bump.ts",
-    "version-sync": "npx tsx scripts/version-check.ts",
+    "version-bump": "npx tsx scripts/version.ts bump",
+    "version-sync": "npx tsx scripts/version.ts check",
     "newsletter": "npx tsx scripts/newsletter-digest.ts",
     "newsletter-push": "npx tsx scripts/newsletter-push.ts",
     "push": "bash scripts/push-pipeline.sh",
-    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run test && npx tsx scripts/check-shipped-kb-empty.ts",
-    "hash": "npx tsx scripts/hash-manifest.ts"
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run test && npx tsx scripts/check-shipped-kb-empty.ts"
   },
   "keywords": [
     "search",

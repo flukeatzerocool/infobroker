@@ -6,32 +6,10 @@
 // text excerpt to <dir>/final.txt and emits one JSON result line to stdout.
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { extractAssistantText, extractToolOrder } from "../lib/event-stream.mjs";
 
 const [scenarioJsonPath, transcriptPath, outDir] = process.argv.slice(2);
 const scenario = JSON.parse(readFileSync(scenarioJsonPath, "utf8"));
-
-function extractText(raw) {
-  const parts = [];
-  for (const line of raw.split("\n")) {
-    let ev;
-    try { ev = JSON.parse(line); } catch { continue; }
-    if (ev?.part?.type === "text" && typeof ev.part.text === "string") parts.push(ev.part.text);
-  }
-  return parts.join("\n");
-}
-
-function extractToolOrder(raw) {
-  const tools = [];
-  for (const line of raw.split("\n")) {
-    let ev;
-    try { ev = JSON.parse(line); } catch { continue; }
-    if (ev?.type === "tool_use" || ev?.part?.type === "tool") {
-      const t = ev?.tool ?? ev?.part?.tool;
-      if (typeof t === "string") tools.push(t);
-    }
-  }
-  return tools;
-}
 
 function extractUrls(text) {
   const urls = [];
@@ -44,7 +22,7 @@ function extractUrls(text) {
 }
 
 const raw = readFileSync(transcriptPath, "utf8");
-const text = extractText(raw);
+const text = extractAssistantText(raw);
 const toolOrder = extractToolOrder(raw);
 
 writeFileSync(`${outDir}/final.txt`, text.trim().slice(-4000), "utf8");
