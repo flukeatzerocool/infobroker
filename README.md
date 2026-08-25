@@ -513,6 +513,19 @@ Two optional keys tune per-provider behavior in `config.json`:
   sources (Wikipedia, arXiv) leave it empty because the page is the
   origin.
 
+### Hedged fallback
+
+`web_search` and `fetch_page` fall back with a hedge instead of waiting
+out a slow provider's full timeout: the primary (first-choice) provider
+runs alone for a latency-derived window, then the remaining providers
+race and the first result wins. The common path uses one provider call;
+the hedge fires only when the primary is slow or failing. `fetch_page`
+additionally prefers the primary renderer in a short grace window so a
+marginally slow `jina` is not displaced by a lower-quality `native_fetch`.
+Tune the window with `output.hedge_enabled`, `hedge_min_delay_ms`,
+`hedge_max_delay_ms`, and `hedge_grace_ms`; set `hedge_enabled` to
+`false` for the sequential chain.
+
 ## How It Compares
 
 | Tool name | What you're used to | How Infobroker differs |

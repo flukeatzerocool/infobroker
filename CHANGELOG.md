@@ -2,6 +2,18 @@
 
 ## 2026.08.24 — 
 
+- `web_search` fallback is now hedged rather than strictly sequential: the
+  primary provider runs alone for a latency-derived window, then the remaining
+  providers race and the first result wins — cutting worst-case latency from
+  chain-depth × timeout to a single bounded window while keeping the common
+  path to one provider call. `meta.fallback_used` now means the serving
+  provider was not the chain's first choice. Tunable via new `output.hedge_*`
+  settings (`hedge_enabled`, `hedge_min_delay_ms`, `hedge_max_delay_ms`,
+  `hedge_grace_ms`). (REQ-031)
+- `fetch_page` (and deep reading) gains the same hedged dispatch with a
+  quality-aware twist: the renderer hedge prefers the primary renderer within
+  a short grace window, so a marginally-slow `jina` still serves instead of a
+  fallback downgrading to `native_fetch` HTML-to-text. (REQ-021)
 - `corroborate` integrates with the rest of the tool surface: it now searches
   across all active providers — including encyclopedias and scholarly indexes —
   rather than only web_search-capable ones, honoring a new `priority` parameter

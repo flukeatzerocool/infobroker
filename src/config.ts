@@ -171,6 +171,18 @@ function validateConfig(config: Config): void {
   if (config.output.degraded_latency_ms !== undefined && (typeof config.output.degraded_latency_ms !== "number" || config.output.degraded_latency_ms < 0)) {
     errors.push("output.degraded_latency_ms must be a non-negative number");
   }
+  if (config.output.hedge_enabled !== undefined && typeof config.output.hedge_enabled !== "boolean") {
+    errors.push("output.hedge_enabled must be a boolean");
+  }
+  if (config.output.hedge_min_delay_ms !== undefined && (typeof config.output.hedge_min_delay_ms !== "number" || config.output.hedge_min_delay_ms < 0)) {
+    errors.push("output.hedge_min_delay_ms must be a non-negative number");
+  }
+  if (config.output.hedge_max_delay_ms !== undefined && (typeof config.output.hedge_max_delay_ms !== "number" || config.output.hedge_max_delay_ms < config.output.hedge_min_delay_ms!)) {
+    errors.push("output.hedge_max_delay_ms must be a number no less than hedge_min_delay_ms");
+  }
+  if (config.output.hedge_grace_ms !== undefined && (typeof config.output.hedge_grace_ms !== "number" || config.output.hedge_grace_ms < 0)) {
+    errors.push("output.hedge_grace_ms must be a non-negative number");
+  }
 
   if (config.fetch) {
     if (config.fetch.passage_size !== undefined && (typeof config.fetch.passage_size !== "number" || config.fetch.passage_size < 1)) {

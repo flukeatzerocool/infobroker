@@ -2,6 +2,37 @@
 
 ## Active Decisions
 
+### D-037: Hedged (Speculative) Fallback Dispatch for `web_search` and `fetch_page` (2026.08.24)
+
+The fallback chain was sequential: provider N+1 was tried only after provider N
+failed or timed out, so worst-case latency was chain-depth × timeout (up to 45s
+for a slow `jina` followed by `native_fetch`). The roadmap called for concurrent
+dispatch, but a naive all-providers-at-once race would multiply provider calls
+(and quota cost) on every request even when the first provider succeeds.
+
+- **Hedged dispatch** — run the primary alone for a latency-derived window
+  (`clamp(avgLatency(primary), hedge_min_delay_ms, hedge_max_delay_ms)`; the
+  floor when the primary has no recorded latency), then race the remaining
+  providers and take the first non-empty success. The common path costs one
+  call and preserves priority; the hedge only fires when the primary is slow
+  or failing. `output.hedge_enabled: false` restores the sequential chain.
+- **Quality-aware fetch hedge** — `fetch_page` renderers are not equivalent
+  (`jina` returns Markdown, `native_fetch` returns HTML-to-text), so a pure
+  first-success race would systematically downgrade content. `fetch_page`
+  heeds a `hedge_grace_ms` preferred-primary window: a non-preferred winner is
+  held briefly so a marginally-slow `jina` still serves. The serving renderer
+  is always reported, so the downgrade is transparent when it does occur.
+- **First-success semantics** — `meta.fallback_used` now means "the serving
+  provider was not the chain's first-choice provider," not "a provider
+  errored." A hedged fetch doubles requests to the target site (jina
+  server-side plus one direct fetch), but `native_fetch` is quota-free and the
+  tail-latency win is large; deep mode counts a hedged page as one page read.
+- **Pure `src/hedge.ts`** — the race primitive (`raceFirstSuccess`) and the
+  deadline computation (`computeHedgeDelay`) are extracted, unit-tested, and
+  shared by both tools, mirroring the `batch.ts`/`truncate.ts`/`rerank.ts`
+  convention. `corroborate` is deliberately untouched: it already races a
+  broad pool and needs every provider's claims for cross-referencing.
+
 ### D-036: Corroborate Integration — All-Active Pool, Priority, Parallel Gaps, KB Recall (2026.08.24)
 
 `corroborate` had drifted from its own contract: it filtered its provider pool

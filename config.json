@@ -241,7 +241,11 @@
     "verbose": true,
     "fallback_depth": 3,
     "max_redirect_hops": 5,
-    "degraded_latency_ms": 2000
+    "degraded_latency_ms": 2000,
+    "hedge_enabled": true,
+    "hedge_min_delay_ms": 200,
+    "hedge_max_delay_ms": 1500,
+    "hedge_grace_ms": 300
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",

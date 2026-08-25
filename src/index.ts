@@ -25,6 +25,7 @@ import { deepRead } from "./deep-search.js";
 import { detectUpdatedAt } from "./datetime.js";
 import { searchCitations } from "./cite.js";
 import { deriveExpansions } from "./expand.js";
+import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
 import { infobrokerFetch } from "./http.js";
 
 const START_TIME = Date.now();
@@ -365,12 +366,25 @@ async function doWebSearch(
   let lastError: ToolErrorResponse | null = null;
   const quotaExhausted: Record<string, number> = {};
 
-  for (const slug of chain) {
+  const primarySlug = chain[0];
+  const hedgeConf = config.output;
+  const hedgeEnabled = hedgeConf.hedge_enabled !== false;
+  const hedgeMinMs = hedgeConf.hedge_min_delay_ms ?? 200;
+  const hedgeMaxMs = hedgeConf.hedge_max_delay_ms ?? 1500;
+
+  // Attempt one provider: throttles, times, retries, applies the content-type
+  // filter, and records quota/latency/error bookkeeping. Returns a non-empty
+  // success payload, or null to advance the chain (empty results, filter
+  // removal, or failure). Bookkeeping is done here so the shared
+  // all_providers_exhausted path below stays identical to the sequential chain.
+  const attempt = async (
+    slug: string,
+  ): Promise<{ slug: string; filtered: SearchResult[]; elapsed: number } | null> => {
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) {
         quotaExhausted[slug] = quota.daily.remaining;
-        continue;
+        return null;
       }
 
       await throttle(slug);
@@ -404,58 +418,16 @@ async function doWebSearch(
       // all-empty case is reported as a legitimate zero-result answer.
       if (results.length === 0) {
         providerLastError[slug] = { message: "empty result set", timestamp: Date.now() };
-        continue;
+        return null;
       }
 
       const filtered = contentType ? filterByContentType(results, contentType) : results;
       if (filtered.length === 0) {
         providerLastError[slug] = { message: "content_type filter removed all results", timestamp: Date.now() };
-        continue;
+        return null;
       }
 
-      autoIndex(filtered, slug, undefined, undefined, query, timeRange);
-
-      if (deep && !compactMode()) {
-        const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
-        const maxPages = Math.min(deepConf.max_pages ?? 3, deepBudget ? deepBudget.remaining : (deepConf.max_pages ?? 3));
-        const allowPrivateDeep = config.fetch?.allow_private_urls === true;
-        const renderers = getDispatchChain("content_fetch");
-        const deepMeta = await deepRead(
-          query,
-          filtered,
-          deepConf,
-          config.fetch?.passage_size ?? 100,
-          config.fetch?.max_passages ?? 1,
-          maxPages,
-          async (url) => {
-            const fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
-            if (!fetched) return null;
-            return { content: fetched.content, slug: fetched.slug };
-          },
-          {
-            detectDate: deepConf.detect_date ? detectPageDate : undefined,
-            rank: rankPassages,
-            autoIndex: (r, content, provider) =>
-              autoIndex([{ title: r.title, url: r.url, snippet: content, ...(r.last_updated ? { source_updated_at: r.last_updated } : {}) }], provider, undefined, "deep"),
-          }
-        );
-        if (deepBudget) deepBudget.remaining -= deepMeta.pages_read;
-        return `[OK] ${json(ok(slug, deepMeta.results, {
-          query_time_ms: elapsed,
-          fallback_used: lastError !== null,
-          quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-          ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
-          deep: true,
-          pages_read: deepMeta.pages_read,
-        }))}`;
-      }
-
-      return `[OK] ${json(ok(slug, filtered, {
-        query_time_ms: elapsed,
-        fallback_used: lastError !== null,
-        quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
-      }))}`;
+      return { slug, filtered, elapsed };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       providerLastError[slug] = { message: msg, timestamp: Date.now() };
@@ -463,6 +435,87 @@ async function doWebSearch(
         lastError = err(slug, "parse_error", msg, "Trying next provider in fallback chain");
       } else {
         lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
+      }
+      return null;
+    }
+  };
+
+  // Shape the winner's results into the response. `fallback_used` now means
+  // "the serving provider was not the chain's first-choice provider" (the
+  // hedge raced ahead of the primary), not merely "a provider errored".
+  const buildSuccess = async (slug: string, filtered: SearchResult[], elapsed: number): Promise<string> => {
+    autoIndex(filtered, slug, undefined, undefined, query, timeRange);
+
+    if (deep && !compactMode()) {
+      const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
+      const maxPages = Math.min(deepConf.max_pages ?? 3, deepBudget ? deepBudget.remaining : (deepConf.max_pages ?? 3));
+      const allowPrivateDeep = config.fetch?.allow_private_urls === true;
+      const renderers = getDispatchChain("content_fetch");
+      const deepMeta = await deepRead(
+        query,
+        filtered,
+        deepConf,
+        config.fetch?.passage_size ?? 100,
+        config.fetch?.max_passages ?? 1,
+        maxPages,
+        async (url) => {
+          const fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
+          if (!fetched) return null;
+          return { content: fetched.content, slug: fetched.slug };
+        },
+        {
+          detectDate: deepConf.detect_date ? detectPageDate : undefined,
+          rank: rankPassages,
+          autoIndex: (r, content, provider) =>
+            autoIndex([{ title: r.title, url: r.url, snippet: content, ...(r.last_updated ? { source_updated_at: r.last_updated } : {}) }], provider, undefined, "deep"),
+        }
+      );
+      if (deepBudget) deepBudget.remaining -= deepMeta.pages_read;
+      return `[OK] ${json(ok(slug, deepMeta.results, {
+        query_time_ms: elapsed,
+        fallback_used: slug !== primarySlug,
+        quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
+        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
+        deep: true,
+        pages_read: deepMeta.pages_read,
+      }))}`;
+    }
+
+    return `[OK] ${json(ok(slug, filtered, {
+      query_time_ms: elapsed,
+      fallback_used: slug !== primarySlug,
+      quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
+      ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
+    }))}`;
+  };
+
+  if (hedgeEnabled && chain.length > 1) {
+    // REQ-031 (hedged dispatch): run the primary alone for its hedge window;
+    // if it has not answered by then (or fails), race the remaining providers
+    // and take the first non-empty success, bounding worst-case latency.
+    const hedgeDelay = computeHedgeDelay(avgLatency(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
+    const primaryPromise = attempt(primarySlug);
+    const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), hedgeDelay));
+    const primaryResult = await Promise.race([primaryPromise, deadline]);
+
+    if (primaryResult !== null) {
+      return buildSuccess(primaryResult.slug, primaryResult.filtered, primaryResult.elapsed);
+    }
+
+    try {
+      const winner = await raceFirstSuccess<{ slug: string; filtered: SearchResult[]; elapsed: number }>([
+        { slug: primarySlug, run: () => primaryPromise },
+        ...chain.slice(1).map((slug) => ({ slug, run: () => attempt(slug) })),
+      ]);
+      return buildSuccess(winner.value.slug, winner.value.filtered, winner.value.elapsed);
+    } catch {
+      // every provider failed — fall through to the shared handling below
+    }
+  } else {
+    for (const slug of chain) {
+      const result = await attempt(slug);
+      if (result !== null) {
+        return buildSuccess(result.slug, result.filtered, result.elapsed);
       }
     }
   }
@@ -522,7 +575,8 @@ async function fetchPageContent(
   maxChars: number,
   allowPrivate: boolean,
 ): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
-  for (const slug of renderers) {
+  const config = getConfig();
+  const attempt = async (slug: string) => {
     try {
       await throttle(slug);
       const start = Date.now();
@@ -530,7 +584,7 @@ async function fetchPageContent(
       const doCall = async (): Promise<string> => {
         if (slug === "native_fetch") {
           // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard.
-          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, getConfig().output.max_redirect_hops);
+          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, config.output.max_redirect_hops);
         }
         const provider = resolveProvider(slug);
         if (!provider?.fetchPage) {
@@ -539,7 +593,6 @@ async function fetchPageContent(
         return await provider.fetchPage(url);
       };
 
-      const config = getConfig();
       const timeoutMs = config.providers[slug]?.timeout;
       const timedCall = async (): Promise<string> =>
         Promise.race([
@@ -557,7 +610,46 @@ async function fetchPageContent(
       return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
     } catch (e) {
       providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
+      return null;
     }
+  };
+
+  const hedgeConf = config.output;
+  const hedgeEnabled = hedgeConf.hedge_enabled !== false;
+
+  if (hedgeEnabled && renderers.length > 1) {
+    // REQ-021 (hedged renderer dispatch): prefer the primary renderer. Hedge a
+    // fallback after the primary's latency window and race, giving the primary
+    // a short grace window so a marginally-slow primary still serves rather
+    // than a lower-quality fallback.
+    const primarySlug = renderers[0];
+    const hedgeMinMs = hedgeConf.hedge_min_delay_ms ?? 200;
+    const hedgeMaxMs = hedgeConf.hedge_max_delay_ms ?? 1500;
+    const hedgeGraceMs = hedgeConf.hedge_grace_ms ?? 300;
+    const hedgeDelay = computeHedgeDelay(avgLatency(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
+
+    const primaryPromise = attempt(primarySlug);
+    const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), hedgeDelay));
+    const primaryResult = await Promise.race([primaryPromise, deadline]);
+
+    if (primaryResult !== null) {
+      return primaryResult;
+    }
+
+    try {
+      const winner = await raceFirstSuccess([
+        { slug: primarySlug, run: () => primaryPromise },
+        ...renderers.slice(1).map((slug) => ({ slug, run: () => attempt(slug) })),
+      ], { prefer: primarySlug, graceMs: hedgeGraceMs });
+      return winner.value;
+    } catch {
+      return null;
+    }
+  }
+
+  for (const slug of renderers) {
+    const result = await attempt(slug);
+    if (result !== null) return result;
   }
   return null;
 }

@@ -7,5 +7,4 @@
   "Upcoming" section directly.
 -->
 
-## Concurrent web_search fallback
-- Dispatch the first `fallback_depth` providers concurrently and take the first success, cutting worst-case search latency from chain-depth × timeout to one timeout.
+<!-- No upcoming items. Remove entries once they ship to CHANGELOG.md. -->

@@ -195,6 +195,37 @@ describe("configuration overlay", () => {
     ).rejects.toThrow(/degraded_latency_ms/);
   });
 
+  it("rejects a non-boolean output hedge_enabled", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { hedge_enabled: "yes" } })
+    ).rejects.toThrow(/hedge_enabled/);
+  });
+
+  it("rejects a negative output hedge_min_delay_ms", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { hedge_min_delay_ms: -1 } })
+    ).rejects.toThrow(/hedge_min_delay_ms/);
+  });
+
+  it("rejects an output hedge_max_delay_ms below hedge_min_delay_ms", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { hedge_min_delay_ms: 1000, hedge_max_delay_ms: 500 } })
+    ).rejects.toThrow(/hedge_max_delay_ms/);
+  });
+
+  it("rejects a negative output hedge_grace_ms", async () => {
+    await expect(
+      loadWithOverlay(BASE, { output: { hedge_grace_ms: -1 } })
+    ).rejects.toThrow(/hedge_grace_ms/);
+  });
+
+  it("honors configured hedge fields", async () => {
+    const cfg = await loadWithOverlay(BASE, { output: { hedge_min_delay_ms: 100, hedge_max_delay_ms: 900, hedge_grace_ms: 250 } });
+    expect(cfg.output.hedge_min_delay_ms).toBe(100);
+    expect(cfg.output.hedge_max_delay_ms).toBe(900);
+    expect(cfg.output.hedge_grace_ms).toBe(250);
+  });
+
   it("rejects a non-boolean provider resells flag", async () => {
     await expect(
       loadWithOverlay(BASE, { providers: { duckduckgo: { resells: "yes" } } })

@@ -52,6 +52,10 @@ export interface Config {
     fallback_depth: number;
     max_redirect_hops: number;
     degraded_latency_ms?: number;
+    hedge_enabled?: boolean;
+    hedge_min_delay_ms?: number;
+    hedge_max_delay_ms?: number;
+    hedge_grace_ms?: number;
   };
   fetch?: {
     allow_private_urls?: boolean;
