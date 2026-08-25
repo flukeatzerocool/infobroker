@@ -36,9 +36,11 @@ src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  �
 | CORE | `src/providers/core.ts` | free_http |
 | Marginalia | `src/providers/marginalia.ts` | builtin |
 | Mojeek | `src/providers/mojeek.ts` | builtin |
+| Wiby | `src/providers/wiby.ts` | builtin |
 | Brave Search | `src/providers/brave.ts` | keyed_http |
 | Exa | `src/providers/exa.ts` | keyed_http |
 | Tavily | `src/providers/tavily.ts` | keyed_http |
+| Yep | `src/providers/yep.ts` | keyed_http |
 | SearXNG | `src/providers/searxng.ts` | self_hosted_http |
 
 Provider auth requirements are generated from `config.json` into
