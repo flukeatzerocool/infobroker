@@ -172,11 +172,9 @@ All providers SHALL return results in a common shape that includes a title, URL,
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
 
 **REQ-073 — Minimum Viable Result**
-
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
 
 **REQ-079 — Output Verbosity**
-
 The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. Default verbosity SHALL be verbose. _Check:_ G1.
 
 ### 4.2 Provider Configuration
@@ -211,11 +209,9 @@ WHEN `provider` is omitted, the tool SHALL select the serving provider by classi
 WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
 
 **REQ-020c — `web_search` priority routing**
-
 Parameters: the `web_search` tool accepts `priority` with values `privacy`, `free_only`, `speed`, and `quality`. WHEN a caller supplies `priority`, the tool SHALL route the query through a chain honoring that value: `privacy` SHALL prefer providers that do not forward queries to third parties, `free_only` SHALL exclude providers requiring an API key or self-hosted instance, `speed` SHALL prefer providers with the lowest recent latency, and `quality` SHALL use the default dispatch chain. The response SHALL identify the serving provider. _Check:_ G1.
 
 **REQ-020d — `web_search` parameter transparency**
-
 Parameters: the `web_search` tool accepts `time_range`, `page`, `safe_search`, `content_type`, and `region`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
 
 **REQ-020e — `web_search` query expansion**
@@ -249,11 +245,9 @@ WHEN action is spec, the tool SHALL report build identity, provider counts, upti
 Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
 **REQ-026a — corroboration source authority**
-
 When `corroborate` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
 
 **REQ-026b — corroboration claim attribution**
-
 Each finding returned by `corroborate` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
 
 **REQ-026c — corroboration source preservation**
@@ -288,7 +282,6 @@ The fallback chain SHALL be ordered by provider priority in `config.json` and SH
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
 
 **REQ-033 — Persistent Quota Tracking**
-
 Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counter state SHALL be durably written to disk such that quota enforcement survives server restarts. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). _Check:_ G1.
 
 **REQ-034 — Quota Warning Threshold**
@@ -409,76 +402,59 @@ WHEN action is list, the tool SHALL enumerate stored documents as distinct entri
 WHEN action is get, the tool SHALL return a stored document in full by source URL, reassembling its chunks in order, and SHALL return an error when no document matches the source URL. _Check:_ G1.
 
 **REQ-060g — `kb` encryption action**
-
 WHEN action is encryption, the tool SHALL operate on the knowledge base's at-rest encryption state per its `operation` sub-parameter: `status` SHALL report the encryption state and on-disk format, `generate_key` SHALL write a new key to a caller-supplied key-file path without returning key material, `verify` SHALL test the active key against the store, `backup` SHALL copy the active key file to a caller-supplied backup path, and a rekey sub-operation SHALL re-seal the store to a new key file without loss of stored content. This action SHALL remain reachable while the store is locked. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
-
 Search results from `web_search`, rendered page content from `fetch_page`, and findings from `corroborate` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
-
 A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
 
 **REQ-066 — Content Expiry**
-
 Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its source type. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
 
 **REQ-067 — Knowledge Base Configuration**
-
 The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
-
 Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. The chunk count reported by the `kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
 **REQ-074 — Freshness Classification**
-
 Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
 
 **REQ-075 — Confidence Decay**
-
 Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL be proportional to the content's freshness tier and the elapsed time since ingestion. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
 
 **REQ-076 — KB-First Sufficiency**
-
 When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
 
 **REQ-082 — KB Retrieval Consistency**
-
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
 
 **REQ-083 — Report Storage**
-
 The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report source type and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base, defaulting to the knowledge base. _Check:_ G1.
 
 **REQ-084 — KB At-Rest Encryption**
-
 The knowledge base SHALL support optional at-rest encryption of its stored content and of reports written to disk, where the key SHALL be derived from a user-supplied secret that is never stored with the content. WHEN encryption is enabled, the server SHALL NOT persist knowledge-base content or reports in plaintext, SHALL refuse knowledge-base operations when the required secret is unavailable or invalid, reporting the refusal as an error per REQ-002, and SHALL report the encryption state in the stats action. The server SHALL support changing the secret without loss of stored content. WHEN encryption is disabled, stored content SHALL remain readable. _Check:_ G1.
 
 **REQ-085 — KB Data Preservation**
-
 WHEN the knowledge base store cannot be read — because the encryption key is unavailable, decryption fails, or the file format is unrecognized or newer than supported — the server SHALL NOT modify, overwrite, rename, or delete the store file, SHALL NOT persist new content, and SHALL report the failure as an error per REQ-002, leaving the store unchanged for recovery. The server SHALL persist knowledge-base content only through atomic writes such that a crash leaves either the previous complete store or the new complete store, never a partial file. A store written in an unrecognized or newer format SHALL NOT be rewritten by this version. _Check:_ G1.
 
 **REQ-086 — KB Encryption Transitions and Recovery**
-
 The knowledge base SHALL support enable and disable of at-rest encryption (REQ-084) as explicit, immediate transitions. WHEN encryption is enabled while the store is plaintext, the server SHALL encrypt the store in place; WHEN encryption is disabled while the store is encrypted and the secret is available, the server SHALL decrypt the store in place. Each transition SHALL commit atomically and verify the result before replacing the store. WHEN the store is locked, the server SHALL expose the encryption state, the on-disk format, and a recovery directive through a knowledge-base operation that remains reachable while locked. The server SHALL support verifying a candidate secret against the store and re-keying the store to a new secret without loss of stored content. _Check:_ G1.
 
 **REQ-087 — KB Source Date Preservation**
-
 WHEN knowledge-base ingest knows a source's last-updated date, whether supplied by the caller or determined from a fetched URL per REQ-021c, the tool SHALL store that date with the ingested content. The list, get, and search actions SHALL report the stored source date alongside their other fields. WHEN no date is known, the actions SHALL omit the date field rather than guess. Re-ingesting a source SHALL preserve a previously stored date when the new ingest supplies none. _Check:_ G1.
 
 ### 4.10 Deployment and Updates
 
 **REQ-042 — Source Distribution**
-
 Users SHALL obtain the server from a public source repository. Updates
 SHALL be delivered as repository updates that users apply to their local
 copy. The distributed repository SHALL NOT contain user configuration
 layers, stored research content, or accumulated quota state. _Check:_ G1.
 
 **REQ-043 — Update Preservation**
-
 Applying an update to the server SHALL NOT remove, reset, or overwrite
 user-owned state: the user configuration layer (REQ-010), indexed
 knowledge base content (REQ-067), and accumulated quota state (REQ-033).
