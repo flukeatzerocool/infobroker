@@ -1,10 +1,11 @@
-// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e
 import type { SearchResult, CorroborationResult, CorroborationFinding } from "./types.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
-import { getConfig, getActiveProviders } from "./config.js";
+import { getConfig, getActiveProviders, getDispatchChain } from "./config.js";
 import { throttle } from "./rate-limiter.js";
 import { checkQuota, increment } from "./quota.js";
 import { retryWithBackoff } from "./retry.js";
+import { isKbConfigured, kbSearch } from "./kb.js";
 import { getDomain } from "tldts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -35,6 +36,26 @@ export function resolveSearcher(
 ): Searcher | undefined {
   if (searchers[slug]) return searchers[slug];
   return resolveProvider(slug)?.search as Searcher | undefined;
+}
+
+// Wrap a searcher call in a per-provider timeout race, mirroring web_search's
+// timeout guard (index.ts), so a slow provider cannot stall corroboration
+// beyond its configured timeout.
+function timedSearch(
+  searcher: Searcher,
+  query: string,
+  opts: { max_results?: number } | undefined,
+  timeoutMs: number | undefined,
+): () => Promise<SearchResult[]> {
+  return async () => {
+    if (!timeoutMs || timeoutMs <= 0) return searcher(query, opts);
+    return Promise.race([
+      searcher(query, opts),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Provider timed out after ${timeoutMs}ms`)), timeoutMs)
+      ),
+    ]);
+  };
 }
 
 const STOPWORDS = new Set([
@@ -244,16 +265,64 @@ function buildAgreementMap(
   return map;
 }
 
+// Parity with getDispatchChain: skip enabled providers whose required env is
+// absent, so corroborate does not waste calls on keyed/self-hosted backends
+// that cannot authenticate this session.
+function providerOperational(
+  slug: string,
+  config: ReturnType<typeof getConfig>,
+): boolean {
+  const p = config.providers[slug];
+  if (!p) return false;
+  if (p.auth_env && !process.env[p.auth_env]) return false;
+  if (p.url_env && !process.env[p.url_env]) return false;
+  return true;
+}
+
+// Apply the user's priority intent to the corroboration pool without the
+// fallback_depth slice that governs web_search's sequential chain — the
+// corroboration pool must stay broad for cross-referencing.
+function applyPriority(
+  slugs: string[],
+  priority: "speed" | "quality" | "privacy" | "free_only" | undefined,
+): string[] {
+  if (priority === "privacy") {
+    const privacyChain = getDispatchChain("privacy_critical");
+    if (privacyChain.length > 0) return privacyChain;
+  } else if (priority === "free_only") {
+    const config = getConfig();
+    const filtered = slugs.filter((slug) => {
+      const p = config.providers[slug];
+      return p && p.tier !== "keyed_http" && p.tier !== "self_hosted_http";
+    });
+    if (filtered.length > 0) return filtered;
+  }
+  return slugs;
+}
+
 function pickGapProvider(
   availableProviders: string[],
   config: ReturnType<typeof getConfig>,
   startIndex: number,
 ): string | null {
+  // Prefer non-warned providers (parity with web_search's quota-warning
+  // demotion): an exhausted provider is never returned; a warned provider is
+  // returned only when no clean alternative remains.
+  const warned: number[] = [];
   for (let offset = 0; offset < availableProviders.length; offset++) {
     const idx = (startIndex + offset) % availableProviders.length;
     const slug = availableProviders[idx];
     const q = checkQuota(slug, config.providers[slug]?.rate_limit);
-    if (!q.exhausted) return slug;
+    if (q.exhausted) continue;
+    const qIdx = availableProviders.indexOf(slug);
+    if (q.warning) {
+      warned.push(qIdx);
+      continue;
+    }
+    return slug;
+  }
+  for (const qIdx of warned) {
+    return availableProviders[qIdx];
   }
   return null;
 }
@@ -264,6 +333,7 @@ export async function corroborate(
     max_iterations?: number;
     confidence_threshold?: number;
     providers?: string[];
+    priority?: "speed" | "quality" | "privacy" | "free_only";
     searchers?: Record<string, Searcher>;
   } = {}
 ): Promise<CorroborationResult> {
@@ -278,13 +348,19 @@ export async function corroborate(
   const firstPassMaxResults = config.corroboration.first_pass_max_results;
   const similarityThreshold = config.corroboration.similarity_threshold;
   const authorityWeights = config.corroboration.authority_weights;
+  const kbRecall = config.corroboration.kb_recall !== false;
   const searchers = options.searchers ?? SEARCHERS;
 
+  // REQ-026: corroborate defaults to all active providers that expose a search
+  // function — not merely the web_search-capable tier, so high-authority
+  // knowledge providers (encyclopedia, academic, structured_fact) participate
+  // and REQ-026a authority weighting applies to real sources.
   const providerList = options.providers
     || getActiveProviders()
-         .filter(([, p]) => p.capabilities.includes("web_search"))
+         .filter(([slug]) => providerOperational(slug, config))
          .map(([slug]) => slug);
-  const availableProviders = providerList.filter((p) => resolveSearcher(p, searchers));
+  const pool = applyPriority(providerList, options.priority);
+  const availableProviders = pool.filter((p) => resolveSearcher(p, searchers));
 
   if (availableProviders.length === 0) {
     return {
@@ -299,6 +375,23 @@ export async function corroborate(
   }
 
   const findings = new Map<string, CorroborationFinding>();
+
+  // REQ-026e: prior KB findings participate as corroborating sources before
+  // external search. KB recall is derivative (SR-001) and never blocks the
+  // external pass when absent, below threshold, or on error.
+  if (kbRecall && isKbConfigured()) {
+    try {
+      const recalled = kbSearch(query, firstPassMaxResults).map((r) => ({
+        title: r.title,
+        url: r.source_url,
+        snippet: r.snippet,
+        source_type: r.source_type,
+      }));
+      reconcileClaims(findings, recalled, similarityThreshold, authorityWeights);
+    } catch {
+      // KB unavailable — proceed to external providers.
+    }
+  }
   let totalCalls = 0;
   let iteration = 0;
   const providersUsed = new Set<string>();
@@ -317,7 +410,7 @@ export async function corroborate(
           const searcher = resolveSearcher(slug, searchers);
           if (!searcher) return null;
           const results = await retryWithBackoff(
-            async () => searcher(query, { max_results: firstPassMaxResults }),
+            timedSearch(searcher, query, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
             config.providers[slug]
           );
           return { slug, results };
@@ -339,30 +432,42 @@ export async function corroborate(
       const gaps = getGaps(findings, confidenceThreshold);
       if (gaps.length === 0) break;
 
+      // Phase 3 refinement: issue up to three gap queries concurrently within
+      // the remaining HTTP-call budget, so the phase costs one round-trip
+      // instead of one per gap. Provider rotation spreads the queries across
+      // distinct backends.
+      const gapTasks: Array<{ slug: string; refinedQuery: string }> = [];
       for (const gapTopic of gaps.slice(0, 3)) {
-        if (totalCalls >= maxCalls) break;
+        if (gapTasks.length >= Math.max(0, maxCalls - totalCalls)) break;
         const refinedQuery = deriveRefinedQuery(gapTopic, query);
         if (searchedQueries.has(refinedQuery)) continue;
         searchedQueries.add(refinedQuery);
 
-        const gapProvider = pickGapProvider(availableProviders, config, totalCalls);
+        const gapProvider = pickGapProvider(availableProviders, config, totalCalls + gapTasks.length);
         if (!gapProvider) continue;
+        gapTasks.push({ slug: gapProvider, refinedQuery });
+      }
 
-        try {
-          await throttle(gapProvider);
-          const doCall = async () => {
-            const searcher = resolveSearcher(gapProvider, searchers);
-            if (!searcher) throw new Error(`No searcher for ${gapProvider}`);
-            return await searcher(refinedQuery, { max_results: 3 });
-          };
-          const results = await retryWithBackoff(doCall, config.providers[gapProvider]);
+      const settled = await Promise.allSettled(
+        gapTasks.map(async ({ slug, refinedQuery }) => {
+          await throttle(slug);
+          const searcher = resolveSearcher(slug, searchers);
+          if (!searcher) throw new Error(`No searcher for ${slug}`);
+          const results = await retryWithBackoff(
+            timedSearch(searcher, refinedQuery, { max_results: 3 }, config.providers[slug]?.timeout),
+            config.providers[slug]
+          );
+          return { slug, results };
+        })
+      );
+
+      for (const result of settled) {
+        if (result.status === "fulfilled") {
+          const { slug, results } = result.value;
           totalCalls++;
-          providersUsed.add(gapProvider);
-          increment(gapProvider, config.providers[gapProvider]?.rate_limit);
-
+          providersUsed.add(slug);
+          increment(slug, config.providers[slug]?.rate_limit);
           reconcileClaims(findings, results, similarityThreshold, authorityWeights);
-        } catch {
-          // skip
         }
       }
     }

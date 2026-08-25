@@ -246,7 +246,7 @@ WHEN action is health, the tool SHALL perform a live connectivity check against 
 WHEN action is spec, the tool SHALL report build identity, provider counts, uptime, cumulative request count, and paths to persistent state files; when the knowledge base is configured, the report SHALL also include chunk count, per-collection counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
 **REQ-026 — `corroborate`**
-Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
+Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
 **REQ-026a — corroboration source authority**
 
@@ -261,6 +261,9 @@ WHEN source preservation is enabled in the configuration, `corroborate` SHALL be
 
 **REQ-026d — corroboration provenance record**
 The `corroborate` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding, formatted so a downstream citation can document the analytic tooling used. The record SHALL be present in verbose output. _Check:_ G1.
+
+**REQ-026e — corroboration knowledge-base recall**
+WHEN the knowledge base is configured and recall is enabled, `corroborate` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
 
 **REQ-027 — `cite`**
 The `cite` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
@@ -687,9 +690,14 @@ An explicit `provider` parameter takes precedence over priority routing.
 ### 8.1 Algorithm
 
 ```
-function corroborate(query, max_iterations=5, confidence_threshold=0.8, providers=[...]):
+function corroborate(query, max_iterations=5, confidence_threshold=0.8, providers=[...], priority=None):
   findings = {}
   iteration = 0
+
+  // Phase 0: Knowledge-base recall (REQ-026e) — prior findings reconcile as
+  // corroborating sources; never blocks external search.
+  kb_results = kb_recall(query)
+  reconcile_claims(findings, kb_results)
 
   while iteration < max_iterations:
     // Phase 1: Broad search across all active providers (up to
@@ -767,6 +775,8 @@ is configurable via `corroboration.similarity_threshold`.
 - `max_iterations` defaults to 5, capped at 10.
 - Max total HTTP calls per `corroborate` invocation: 30.
 - `first_pass_max_results` (default 10) bounds results fetched per provider in Phase 1.
+- Gap-refinement queries run concurrently within the remaining HTTP-call budget.
+- Knowledge-base recall is governed by the configurable `corroboration.kb_recall` setting.
 - If either limit is reached, return partial findings with `corroboration: "partial"` flag.
 
 ---
@@ -882,6 +892,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-026b | corroboration claim attribution | 4.3 | G1 |
 | REQ-026c | corroboration source preservation | 4.3 | G1 |
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
+| REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
 | REQ-027 | cite | 4.3 | G0, G1 |
 | REQ-028 | web_search deep reading | 4.3 | G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
@@ -1337,7 +1348,7 @@ secondary concerns rather than duplicating the REQ.
 |---|--------------|-------|--------------|------|
 | 1 | Core Retrieval | `web_search`, `fetch_page`, `cite` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-028, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
-| 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
+| 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
 | 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079 | G0 |

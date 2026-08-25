@@ -201,6 +201,17 @@ describe("configuration overlay", () => {
     ).rejects.toThrow(/resells/);
   });
 
+  it("rejects a non-boolean corroboration.kb_recall", async () => {
+    await expect(
+      loadWithOverlay(BASE, { corroboration: { kb_recall: "yes" } })
+    ).rejects.toThrow(/kb_recall/);
+  });
+
+  it("accepts corroboration.kb_recall", async () => {
+    const cfg = await loadWithOverlay(BASE, { corroboration: { kb_recall: false } });
+    expect(cfg.corroboration.kb_recall).toBe(false);
+  });
+
   it("accepts per-provider degraded_latency_ms and resells", async () => {
     const cfg = await loadWithOverlay(BASE, {
       providers: { duckduckgo: { degraded_latency_ms: 1500, resells: true } },

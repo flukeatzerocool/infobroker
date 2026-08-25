@@ -2,6 +2,14 @@
 
 ## 2026.08.24 — 
 
+- `corroborate` integrates with the rest of the tool surface: it now searches
+  across all active providers — including encyclopedias and scholarly indexes —
+  rather than only web_search-capable ones, honoring a new `priority` parameter
+  and skipping providers whose credentials are unset. Its gap-refinement
+  queries dispatch concurrently within the HTTP-call budget, and, when the
+  knowledge base is configured, it recalls prior findings as corroborating
+  sources before hitting the network. (REQ-026, REQ-026e)
+
 - `web_search` gains a deep reading mode: pass `deep: true` to read the top
   search results and get each page's passages ranked against the query, reusing
   the question-grounded passage ranker so a deep search returns the specific

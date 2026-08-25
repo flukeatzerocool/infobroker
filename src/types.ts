@@ -43,6 +43,7 @@ export interface Config {
     similarity_threshold: number;
     authority_weights?: Record<string, number>;
     archive_sources?: boolean;
+    kb_recall?: boolean;
   };
   output: {
     max_chars: number;

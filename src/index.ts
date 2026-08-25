@@ -951,6 +951,7 @@ server.registerTool(
       max_iterations: z.number().min(1).max(10).optional().default(5),
       confidence_threshold: z.number().min(0).max(1).optional().default(0.8),
       providers: z.array(z.string()).optional().describe("Optional array of provider slugs to limit the search to"),
+      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional().describe("Route the corroboration pool by intent"),
     },
   },
   async (params) => {
@@ -959,6 +960,7 @@ server.registerTool(
         max_iterations: Number(params.max_iterations),
         confidence_threshold: Number(params.confidence_threshold),
         providers: params.providers as string[] | undefined,
+        priority: params.priority as "speed" | "quality" | "privacy" | "free_only" | undefined,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),

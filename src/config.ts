@@ -158,6 +158,9 @@ function validateConfig(config: Config): void {
       }
     }
   }
+  if (config.corroboration?.kb_recall !== undefined && typeof config.corroboration.kb_recall !== "boolean") {
+    errors.push("corroboration.kb_recall must be a boolean");
+  }
 
   if (typeof config.output.fallback_depth !== "number" || config.output.fallback_depth < 1) {
     errors.push("output.fallback_depth must be a positive number");

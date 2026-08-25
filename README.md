@@ -244,15 +244,18 @@ gives you operational visibility into every backend.
 > "Find the consensus on who fired first — Han or Greedo."
 
 `corroborate` runs a multi-pass truth-finding loop: broad
-search across active providers, claim extraction, cross-source
-reconciliation, and targeted follow-up for gaps. Claims corroborated
-across independent sources score high confidence, weighted by each
-source's authority; every source is bound to the claim it supports.
-Contradictions are surfaced with all perspectives. Gaps trigger refined
-queries. You get a structured report — confirmed, contested, and
-unverified findings — with source provenance, per-source claims, and
-confidence scores. Every other search tool returns a list of links;
-Infobroker finds the truth and tells you how sure it is.
+search across all of your active providers — search engines,
+encyclopedias, and scholarly indexes alike — then claim extraction,
+cross-source reconciliation, and targeted follow-up for gaps, dispatched
+in parallel. Claims corroborated across independent sources score high
+confidence, weighted by each source's authority; every source is bound
+to the claim it supports. Contradictions are surfaced with all
+perspectives. Gaps trigger refined queries. It also remembers: prior
+findings in your knowledge base participate as corroborating sources
+before it queries the network. You get a structured report — confirmed,
+contested, and unverified findings — with source provenance, per-source
+claims, and confidence scores. Every other search tool returns a list of
+links; Infobroker finds the truth and tells you how sure it is.
 
 ### Knowledge Base
 

@@ -5,6 +5,7 @@ import type { SearchResult, CorroborationFinding } from "../src/types.js";
 vi.mock("../src/config.js", () => ({
   getConfig: vi.fn(),
   getActiveProviders: vi.fn(),
+  getDispatchChain: vi.fn(),
 }));
 
 vi.mock("../src/rate-limiter.js", () => ({
@@ -20,14 +21,20 @@ vi.mock("../src/retry.js", () => ({
   retryWithBackoff: vi.fn(),
 }));
 
+vi.mock("../src/kb.js", () => ({
+  isKbConfigured: vi.fn(),
+  kbSearch: vi.fn(),
+}));
+
 vi.mock("../src/providers/index.js", () => ({
   PROVIDERS: {} as Record<string, { search?: (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]> }>,
 }));
 
-import { getConfig, getActiveProviders } from "../src/config.js";
+import { getConfig, getActiveProviders, getDispatchChain } from "../src/config.js";
 import { throttle } from "../src/rate-limiter.js";
 import { checkQuota, increment } from "../src/quota.js";
 import { retryWithBackoff } from "../src/retry.js";
+import { isKbConfigured, kbSearch } from "../src/kb.js";
 import {
   extractTopic,
   jaccardSimilarity,
@@ -59,7 +66,7 @@ function mockConfig(overrides: Record<string, unknown> = {}) {
   };
   vi.mocked(getConfig).mockReturnValue(base as any);
   vi.mocked(getActiveProviders).mockReturnValue(
-    Object.entries(base.providers).filter(([, p]: [string, any]) => p.enabled && p.capabilities.includes("web_search")) as any
+    Object.entries(base.providers).filter(([, p]: [string, any]) => p.enabled) as any
   );
 }
 
@@ -311,6 +318,9 @@ describe("corroborate", () => {
     vi.mocked(checkQuota).mockReturnValue(makeQuota());
     vi.mocked(increment).mockReturnValue(makeQuota());
     vi.mocked(retryWithBackoff).mockImplementation(async (fn) => (fn as () => Promise<any>)());
+    vi.mocked(isKbConfigured).mockReturnValue(false);
+    vi.mocked(kbSearch).mockReturnValue([]);
+    vi.mocked(getDispatchChain).mockReturnValue([]);
   });
 
   it("returns empty result when no providers available", async () => {
@@ -564,5 +574,182 @@ describe("corroborate", () => {
     expect(result.provenance?.confidence_threshold).toBe(0.8);
     expect(result.provenance?.max_iterations).toBe(1);
     expect(typeof result.provenance?.version).toBe("string");
+  });
+
+  it("queries non-web_search active providers (REQ-026 all-active pool)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        arxiv: { enabled: true, capabilities: ["academic"], rate_limit: {}, priority: 15, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    let arxivCalled = false;
+    const result = await corroborate("quantum computing", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Quantum Computing Study", "https://a.com/1", "quantum computing progresses")],
+        arxiv: async () => { arxivCalled = true; return [makeResult("Quantum Computing Review", "https://arxiv.org/abs/1", "quantum computing progresses rapidly")]; },
+      },
+    });
+
+    expect(arxivCalled).toBe(true);
+    expect(result.providers_used).toContain("arxiv");
+  });
+
+  it("routes priority privacy through the privacy_critical chain", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        mojeek: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 5, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["encyclopedia"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+    });
+    vi.mocked(getDispatchChain).mockReturnValue(["duckduckgo", "mojeek"]);
+
+    let wikipediaCalled = false;
+    const result = await corroborate("test", {
+      priority: "privacy",
+      searchers: {
+        duckduckgo: async () => [],
+        mojeek: async () => [],
+        wikipedia: async () => { wikipediaCalled = true; return []; },
+      },
+    });
+
+    expect(wikipediaCalled).toBe(false);
+    expect(result.providers_used).not.toContain("wikipedia");
+  });
+
+  it("runs gap refinement queries concurrently", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        marginalia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 5, timeout: 10000 },
+        mojeek: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 5, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 3, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const calls: Record<string, number> = {};
+
+    const phaseAwareSearcher = (slug: string, result: SearchResult): () => Promise<SearchResult[]> => {
+      return async () => {
+        calls[slug] = (calls[slug] ?? 0) + 1;
+        if (calls[slug] > 1) {
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await gate;
+          inFlight--;
+        }
+        return [result];
+      };
+    };
+
+    const resultPromise = corroborate("topic", {
+      searchers: {
+        duckduckgo: phaseAwareSearcher("duckduckgo", makeResult("First Distinct Topic", "https://a.com/1", "first distinct claim")),
+        marginalia: phaseAwareSearcher("marginalia", makeResult("Second Distinct Topic", "https://b.com/1", "second distinct claim")),
+        mojeek: phaseAwareSearcher("mojeek", makeResult("Third Distinct Topic", "https://c.com/1", "third distinct claim")),
+      },
+    });
+
+    // Phase 1 settles with three distinct low-confidence findings; Phase 3
+    // then fires three gap queries that overlap before the gate opens.
+    await vi.waitFor(() => expect(inFlight).toBeGreaterThanOrEqual(3));
+    release();
+    const result = await resultPromise;
+
+    expect(maxInFlight).toBeGreaterThanOrEqual(3);
+    expect(result.iteration_count).toBeGreaterThan(0);
+  });
+
+  it("caps gap queries to the remaining HTTP-call budget", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        marginalia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 5, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 3, max_http_calls: 3, confidence_threshold: 0.8 },
+    });
+
+    let calls = 0;
+    const searcherFor = (r: SearchResult) => async () => { calls++; return [r]; };
+
+    const result = await corroborate("topic", {
+      searchers: {
+        duckduckgo: searcherFor(makeResult("First Distinct Topic", "https://a.com/1", "first distinct claim")),
+        marginalia: searcherFor(makeResult("Second Distinct Topic", "https://b.com/1", "second distinct claim")),
+      },
+    });
+
+    // Phase 1 uses 2 calls; only 1 gap call fits the budget.
+    expect(calls).toBe(3);
+    void result;
+  });
+
+  it("reconciles knowledge-base recall into findings (REQ-026e)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: true },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(kbSearch).mockReturnValue([
+      { score: 0.9, freshness_score: 0.8, freshness_tier: "stable", source_url: "https://wiki.example/1", title: "Recalled Topic", snippet: "recalled corroborating claim", collection: "default", provider: "knowledge_base", source_type: "encyclopedia", ingested_at: Date.now() },
+    ]);
+
+    const result = await corroborate("topic", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Recalled Topic Match", "https://a.com/1", "recalled corroborating claim")],
+      },
+    });
+
+    expect(kbSearch).toHaveBeenCalled();
+    expect(result.providers_used).not.toContain("knowledge_base");
+    expect(result.total_sources).toBeGreaterThanOrEqual(2);
+  });
+
+  it("skips knowledge-base recall when kb_recall is false", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: false },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+
+    await corroborate("topic", {
+      searchers: { duckduckgo: async () => [makeResult("T", "https://a.com/1", "x")] },
+    });
+
+    expect(kbSearch).not.toHaveBeenCalled();
+  });
+
+  it("excludes providers whose auth env is unset", async () => {
+    process.env["INFOBROKER_BRAVE_API_KEY"] = "";
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        brave: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 30, timeout: 10000, auth_env: "INFOBROKER_BRAVE_API_KEY" },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    let braveCalled = false;
+    await corroborate("topic", {
+      searchers: {
+        duckduckgo: async () => [makeResult("T", "https://a.com/1", "x")],
+        brave: async () => { braveCalled = true; return []; },
+      },
+    });
+
+    expect(braveCalled).toBe(false);
+    delete process.env["INFOBROKER_BRAVE_API_KEY"];
   });
 });

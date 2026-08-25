@@ -220,6 +220,7 @@
     "first_pass_max_results": 10,
     "similarity_threshold": 0.3,
     "archive_sources": false,
+    "kb_recall": true,
     "authority_weights": {
       "academic": 1.0,
       "encyclopedia": 1.0,

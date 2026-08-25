@@ -2,6 +2,32 @@
 
 ## Active Decisions
 
+### D-036: Corroborate Integration — All-Active Pool, Priority, Parallel Gaps, KB Recall (2026.08.24)
+
+`corroborate` had drifted from its own contract: it filtered its provider pool
+to `web_search`-capable providers while REQ-026 promised "all active," which
+left REQ-026a's authority weighting a dead knob (encyclopedia/academic sources
+were weighted highest yet never queried) and made the skill's "uses all active
+providers" claim false. Four fixes land together:
+
+- **All-active pool** — corroborate now defaults to every active provider that
+  exposes a search function, skipping only those whose `auth_env`/`url_env` is
+  unset (parity with `getDispatchChain`). Authority weighting becomes live.
+- **Priority routing** — a `priority` parameter narrows the pool by intent
+  (privacy → the privacy_critical chain; free_only → non-keyed/self-hosted),
+  reusing the same intent vocabulary as `web_search` without its
+  `fallback_depth` slice, which would gut cross-referencing.
+- **Parallel gap refinement** — Phase 3 issues up to three gap queries
+  concurrently within the remaining HTTP-call budget (the closed ROADMAP item).
+- **KB recall** — new REQ-026e; prior KB findings reconcile as corroborating
+  sources before external search, gated by `corroboration.kb_recall` (default
+  true). The KB stays derivative (SR-001): absence or failure never blocks.
+
+A per-provider timeout race wraps each searcher call, matching `web_search`.
+`selectChain` was deliberately not reused for the pool because its
+`fallback_depth` cap is a sequential-chain concept; corroboration needs the
+broad set.
+
 ### D-035: Deep Search as a web_search Mode, Not a New Tool or a Corroborate Upgrade (2026.08.24)
 
 Deep search — search, then read the top results and rank each page's passages
@@ -27,8 +53,8 @@ tuning reuses the `fetch` block rather than adding parallel knobs. The `deep`
 block governs only fetch economics (page budget, total-page cap, concurrency,
 early-exit score, and a hard time limit); date detection is off by default to
 keep the critical path fast. Two related latency wins — parallel first-hop
-fallback dispatch and concurrent `corroborate` gap refinement — are roadmapped
-separately rather than bundled here.
+fallback dispatch and concurrent `corroborate` gap refinement — were roadmapped
+separately rather than bundled here; the latter shipped in D-036.
 
 ### D-034: Per-Provider Health Threshold and Reseller Provenance (2026.08.23)
 
