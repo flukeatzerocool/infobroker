@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.08.24 — Report directory moved outside the repository tree
+
+- The knowledge base report storage directory now resolves outside the
+  distributed repository by rule: REQ-067 states that the report storage
+  directory, when set, SHALL resolve outside the repository tree, consistent
+  with REQ-042. The shipped `kb.reports_dir`
+  default moves from `~/Infobroker/reports` (inside the repo tree) to
+  `~/.local/share/infobroker/reports`, and the code-level fallback follows
+  suit so disk-saved reports never land in the deploy tree even when the repo
+  is `~/Infobroker`. (REQ-067, REQ-042)
+- The shipped-KB-empty gate now also rejects an in-repo `kb.reports_dir`, so
+  a misconfigured report directory fails `npm run check` instead of silently
+  writing user reports into the repository.
+
 ## 2026.08.24 — Skill-test harness scope control and diagnostics
 
 - `scripts/test-skills.sh` now accepts a `--only=<skill>` flag (parity with

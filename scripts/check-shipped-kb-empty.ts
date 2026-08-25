@@ -62,6 +62,23 @@ if (storagePath) {
   }
 }
 
+// 1b. The report storage directory must likewise live outside the repository.
+//     An in-repo reports_dir would write disk-saved reports into the deploy
+//     tree, violating REQ-042/REQ-067.
+const reportsDir = config?.kb?.reports_dir;
+if (reportsDir) {
+  const expanded = reportsDir.startsWith("~/")
+    ? join(homedir(), reportsDir.slice(2))
+    : reportsDir;
+  const resolved = isAbsolute(expanded) ? expanded : resolve(ROOT, expanded);
+  const rel = relative(ROOT, resolved);
+  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
+    violations.push(
+      `kb.reports_dir (${reportsDir}) resolves inside the repository — reports must live outside the tree so the repo ships no user content`
+    );
+  }
+}
+
 // 2. No KB artifact file or directory may exist in the shipped tree.
 walk(ROOT);
 

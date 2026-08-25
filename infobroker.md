@@ -426,7 +426,7 @@ Indexed content SHALL be removable by age. The removal interval for content SHAL
 
 **REQ-067 — Knowledge Base Configuration**
 
-The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
 

@@ -124,7 +124,7 @@ function slugify(title: string): string {
 }
 
 function saveReportToDisk(title: string, text: string, format: string): string {
-  const base = getConfig().kb?.reports_dir || join(homedir(), "Infobroker", "reports");
+  const base = getConfig().kb?.reports_dir || join(homedir(), ".local", "share", "infobroker", "reports");
   const dir = base.startsWith("~/") ? join(homedir(), base.slice(2)) : base;
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   const ext = format === "json" ? "json" : "md";

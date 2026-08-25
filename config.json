@@ -255,7 +255,7 @@
     "auto_index": true,
     "default_collection": "default",
     "max_results": 50,
-    "reports_dir": "~/Infobroker/reports",
+    "reports_dir": "~/.local/share/infobroker/reports",
     "default_save_destination": "kb",
     "freshness": {
       "tiers": {
