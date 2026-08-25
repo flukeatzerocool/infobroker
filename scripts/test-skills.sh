@@ -10,8 +10,9 @@
 # routing and deliverable-quality coverage, see `npm run test-research`.
 #
 # Usage:
-#   ./scripts/test-skills.sh [--from=<skill>] [--resume] [--grade]
+#   ./scripts/test-skills.sh [--only=<skill>] [--from=<skill>] [--resume] [--grade]
 #                            [--model <m>] [--retry] [--help]
+#   --only=<skill>  Run only the named skill (skip everything else).
 #   --from=<skill>  Start at a named skill.
 #   --resume        Skip skills already recorded PASS in the state journal.
 #   --grade         Run a second LLM rubric pass per skill (soft, non-gating).
@@ -34,9 +35,10 @@ EVALUATOR="$SCRIPT_DIR/test-skills/evaluate.mjs"
 source "$SCRIPT_DIR/lib/opencode-utils.sh"
 
 # ── Flag parsing ──
-FROM_SKILL=""; RESUME=false; GRADE=false; MODEL="${SKILL_TEST_MODEL:-}"; RETRY=false
+FROM_SKILL=""; ONLY_SKILL=""; RESUME=false; GRADE=false; MODEL="${SKILL_TEST_MODEL:-}"; RETRY=false
 for arg in "$@"; do
   case "$arg" in
+    --only=*) ONLY_SKILL="${arg#--only=}" ;;
     --from=*) FROM_SKILL="${arg#--from=}" ;;
     --resume) RESUME=true ;;
     --grade) GRADE=true ;;
@@ -44,7 +46,7 @@ for arg in "$@"; do
     --model=*) MODEL="${arg#--model=}" ;;
     --model) error "--model requires a value: --model=<m>"; exit 1 ;;
     --help|-h)
-      printf '%s\n' "Usage: ./scripts/test-skills.sh [--from=<skill>] [--resume] [--grade] [--model <m>] [--retry]"
+      printf '%s\n' "Usage: ./scripts/test-skills.sh [--only=<skill>] [--from=<skill>] [--resume] [--grade] [--model <m>] [--retry]"
       exit 0 ;;
     *) echo "Unknown flag: $arg"; exit 1 ;;
   esac
@@ -101,9 +103,15 @@ run_skill() {
 printf '%s\n' "" | cat > "$RESULTS_FILE.tmp"
 SUMMARY=""
 
+SKILLS_RUN=0
 for manifest in "${MANIFESTS[@]}"; do
   skill=$(node -e 'console.log(require(process.argv[1]).skill)' "$manifest")
   [[ "$skill" == "undefined" || -z "$skill" ]] && die "Manifest missing 'skill': $manifest"
+
+  # --only filtering: skip any skill other than the named one.
+  if [[ -n "$ONLY_SKILL" ]] && [[ "$skill" != "$ONLY_SKILL" ]]; then
+    continue
+  fi
 
   # --from filtering: skip skills that sort before FROM_SKILL.
   if [[ -n "$FROM_SKILL" ]] && [[ "$skill" < "$FROM_SKILL" ]]; then
@@ -132,6 +140,7 @@ for manifest in "${MANIFESTS[@]}"; do
     | sed "s|\./input\.txt|$workdir/input.txt|g" > "$prompt_file"
 
   info "════ Testing $skill ════"
+  SKILLS_RUN=$((SKILLS_RUN + 1))
   out_file="$workdir/run.txt"
   run_skill "$manifest" "$workdir" "$prompt_file" "$out_file"
   RC=$?
@@ -152,6 +161,11 @@ for manifest in "${MANIFESTS[@]}"; do
   $GRADE && grade_flag="--grade"
   node "$EVALUATOR" "$manifest" "$out_file" "$skill" $grade_flag >> "$RESULTS_FILE.tmp"
 done
+
+# --only guard: no manifest matched the requested skill.
+if [[ -n "$ONLY_SKILL" ]] && [[ "$SKILLS_RUN" -eq 0 ]]; then
+  die "No skill selected (check --only=$ONLY_SKILL)."
+fi
 
 # ── Assemble results ──
 node -e '
@@ -180,7 +194,10 @@ node -e '
   const r=require(process.argv[1]);
   for(const [s,o] of Object.entries(r.skills)){
     const mark=o.status==="pass"?"PASS":"FAIL";
-    console.log(`  ${mark.padEnd(5)} ${s}${o.status==="fail"?" — missing: "+o.missing.join(", "):""}`)
+    const bits=[];
+    if(o.missing?.length) bits.push("missing: "+o.missing.join(", "));
+    if(o.outOfOrder?.length) bits.push("out of order: "+o.outOfOrder.join(", "));
+    console.log(`  ${mark.padEnd(5)} ${s}${bits.length?" — "+bits.join("; "):""}`)
   }
   const sm=r.summary;
   console.log(`\n  ${sm.pass}/${sm.total} passed`);

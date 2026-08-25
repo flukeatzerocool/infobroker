@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.08.24 — Skill-test harness scope control and diagnostics
+
+- `scripts/test-skills.sh` now accepts a `--only=<skill>` flag (parity with
+  `test-research.sh`) so a single skill can be re-tested in isolation without
+  running the whole manifest, or reverted names it directly.
+- `scripts/test-skills/evaluate.mjs` now reports out-of-order completion
+  tokens as "out of order" rather than "missing", and validates tokens against
+  the assistant's final reply only — a token echoed in the skill's own loaded
+  content no longer counts as a pass.
+
 ## 2026.08.24 — Analysis technique selection and usage
 
 - The `analysis-loop` skill now chooses its structured analytic technique by

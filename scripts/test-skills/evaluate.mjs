@@ -6,7 +6,7 @@
 
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { extractAssistantText } from "../lib/event-stream.mjs";
+import { extractFinalAssistantText } from "../lib/event-stream.mjs";
 
 const [manifestPath, runPath, skill, ...rest] = process.argv.slice(2);
 const grade = rest.includes("--grade");
@@ -14,10 +14,11 @@ const grade = rest.includes("--grade");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
 const raw = readFileSync(runPath, "utf8");
-const text = extractAssistantText(raw);
+const text = extractFinalAssistantText(raw);
 
 const tokens = manifest.expected_tokens ?? [];
 const missing = [];
+const outOfOrder = [];
 let lastIdx = -1;
 let orderOk = true;
 for (const tok of tokens) {
@@ -26,25 +27,15 @@ for (const tok of tokens) {
     missing.push(tok);
     orderOk = false;
   } else if (idx < lastIdx) {
+    outOfOrder.push(tok);
     orderOk = false;
   } else {
     lastIdx = idx;
   }
 }
 
-if (missing.length > 0) {
-  const result = {
-    skill,
-    status: "fail",
-    missing,
-    orderOk,
-  };
-  process.stdout.write(JSON.stringify(result) + "\n");
-  process.exit(0);
-}
-
 if (!orderOk) {
-  const result = { skill, status: "fail", missing: [], orderOk: false, note: "tokens out of order" };
+  const result = { skill, status: "fail", missing, outOfOrder, orderOk };
   process.stdout.write(JSON.stringify(result) + "\n");
   process.exit(0);
 }
