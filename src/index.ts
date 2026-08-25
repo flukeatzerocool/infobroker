@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-021 REQ-021b REQ-021c REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-021 REQ-021b REQ-021c REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -21,6 +21,7 @@ import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { capInputs, mergeItems } from "./batch.js";
 import { rankPassages } from "./rerank.js";
+import { deepRead } from "./deep-search.js";
 import { detectUpdatedAt } from "./datetime.js";
 import { searchCitations } from "./cite.js";
 import { deriveExpansions } from "./expand.js";
@@ -245,13 +246,18 @@ async function doWebSearch(
   suggest = false,
   contentType?: string,
   region?: string,
-  expand = false
+  expand = false,
+  deep = false,
+  deepBudget?: { remaining: number }
 ): Promise<string> {
   if (Array.isArray(query)) {
     const queries = capInputs(query);
+    // A shared fetch budget bounds total page reads across the whole batch
+    // (REQ-028): a 5-query deep search must not multiply the page budget.
+    const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
     const envelopes = await Promise.all(
       queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand)
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand, deep, deepBudget)
       )
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
@@ -409,6 +415,41 @@ async function doWebSearch(
 
       autoIndex(filtered, slug, undefined, undefined, query, timeRange);
 
+      if (deep && !compactMode()) {
+        const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
+        const maxPages = Math.min(deepConf.max_pages ?? 3, deepBudget ? deepBudget.remaining : (deepConf.max_pages ?? 3));
+        const allowPrivateDeep = config.fetch?.allow_private_urls === true;
+        const renderers = getDispatchChain("content_fetch");
+        const deepMeta = await deepRead(
+          query,
+          filtered,
+          deepConf,
+          config.fetch?.passage_size ?? 100,
+          config.fetch?.max_passages ?? 1,
+          maxPages,
+          async (url) => {
+            const fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
+            if (!fetched) return null;
+            return { content: fetched.content, slug: fetched.slug };
+          },
+          {
+            detectDate: deepConf.detect_date ? detectPageDate : undefined,
+            rank: rankPassages,
+            autoIndex: (r, content, provider) =>
+              autoIndex([{ title: r.title, url: r.url, snippet: content, ...(r.last_updated ? { source_updated_at: r.last_updated } : {}) }], provider, undefined, "deep"),
+          }
+        );
+        if (deepBudget) deepBudget.remaining -= deepMeta.pages_read;
+        return `[OK] ${json(ok(slug, deepMeta.results, {
+          query_time_ms: elapsed,
+          fallback_used: lastError !== null,
+          quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
+          ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
+          deep: true,
+          pages_read: deepMeta.pages_read,
+        }))}`;
+      }
+
       return `[OK] ${json(ok(slug, filtered, {
         query_time_ms: elapsed,
         fallback_used: lastError !== null,
@@ -470,6 +511,57 @@ async function detectPageDate(url: string): Promise<{ date: string; source: stri
   }
 }
 
+// Shared fetch path for fetch_page and web_search deep reading. Walks the
+// content_fetch renderer chain, applying throttle, timeout, retry, and
+// truncation, and returns the first successful render. Returns null when every
+// renderer is exhausted. Date detection, auto-indexing, and response shaping
+// remain the caller's responsibility.
+async function fetchPageContent(
+  url: string,
+  renderers: string[],
+  maxChars: number,
+  allowPrivate: boolean,
+): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
+  for (const slug of renderers) {
+    try {
+      await throttle(slug);
+      const start = Date.now();
+
+      const doCall = async (): Promise<string> => {
+        if (slug === "native_fetch") {
+          // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard.
+          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, getConfig().output.max_redirect_hops);
+        }
+        const provider = resolveProvider(slug);
+        if (!provider?.fetchPage) {
+          throw new Error(`Provider ${slug} has no fetchPage function`);
+        }
+        return await provider.fetchPage(url);
+      };
+
+      const config = getConfig();
+      const timeoutMs = config.providers[slug]?.timeout;
+      const timedCall = async (): Promise<string> =>
+        Promise.race([
+          doCall(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ]);
+      const content = await retryWithBackoff(timedCall);
+
+      const elapsed = Date.now() - start;
+      increment(slug, config.providers[slug]?.rate_limit);
+      trackRequest(slug, elapsed);
+      providerLastSuccess[slug] = Date.now();
+      return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
+    } catch (e) {
+      providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
+    }
+  }
+  return null;
+}
+
 async function doFetchPage(
   url: string | string[],
   renderer?: string,
@@ -502,121 +594,79 @@ async function doFetchPage(
     return `[ERROR] ${json(err("none", "invalid_input", e instanceof Error ? e.message : String(e), `Set fetch.allow_private_urls=true to permit private targets`))}`;
   }
 
-  for (const slug of renderers) {
-    try {
-      await throttle(slug);
-      const start = Date.now();
+  const fetched = await fetchPageContent(url, renderers, effectiveMax, allowPrivate);
+  if (fetched === null) {
+    return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
+  }
+  const { slug, content, truncated, elapsed } = fetched;
 
-      const doCall = async (): Promise<string> => {
-        if (slug === "native_fetch") {
-          // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard
-          // to each resolved location, so a public URL that redirects to a
-          // private/internal target is refused rather than fetched.
-          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, getConfig().output.max_redirect_hops);
-        }
+  const pageDate = effectiveDetectDate ? await detectPageDate(url) : undefined;
+  const dateMeta = pageDate
+    ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
+    : {};
 
-        const provider = resolveProvider(slug);
-        if (!provider?.fetchPage) {
-          throw new Error(`Provider ${slug} has no fetchPage function`);
-        }
-        return await provider.fetchPage(url);
-      };
+  autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
 
-      let content: string;
-      try {
-        const timeoutMs = config.providers[slug]?.timeout;
-        const timedCall = async (): Promise<string> =>
-          Promise.race([
-            doCall(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
-            ),
-          ]);
-        content = await retryWithBackoff(timedCall);
-      } catch (e) {
-        providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
-        continue;
-      }
-
-      const elapsed = Date.now() - start;
-      increment(slug, config.providers[slug]?.rate_limit);
-      trackRequest(slug, elapsed);
-      providerLastSuccess[slug] = Date.now();
-      const truncated = maybeTruncate(content, effectiveMax);
-
-      const pageDate = effectiveDetectDate ? await detectPageDate(url) : undefined;
-      const dateMeta = pageDate
-        ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
-        : {};
-
-      autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
-
-      if (question) {
-        const passages = rankPassages(content, question, effectivePassageSize ?? 100, effectiveMaxPassages ?? 1);
-        if (passages.length > 0) {
-          return `[OK] ${json({
-            status: "ok",
-            provider: slug,
-            question,
-            extraction_mode: "content",
-            results: [{
-              title: new URL(url).hostname,
-              url,
-              snippet: passages[0].text,
-              ...dateMeta,
-            }],
-            snippets: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
-            top_score: passages[0].score,
-            ...dateMeta,
-            meta: {
-              query_time_ms: elapsed,
-              fallback_used: false,
-            },
-          })}`;
-        }
-        return `[OK] ${json({
-          status: "ok",
-          provider: slug,
-          question,
-          extraction_mode: "full_content",
-          results: [{
-            title: new URL(url).hostname,
-            url,
-            snippet: truncated.text,
-            ...dateMeta,
-          }],
-          note: "No passage addressed the question; returning the full content instead.",
-          ...dateMeta,
-          meta: {
-            query_time_ms: elapsed,
-            fallback_used: false,
-          },
-          ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
-        })}`;
-      }
-
+  if (question) {
+    const passages = rankPassages(content, question, effectivePassageSize ?? 100, effectiveMaxPassages ?? 1);
+    if (passages.length > 0) {
       return `[OK] ${json({
         status: "ok",
         provider: slug,
+        question,
+        extraction_mode: "content",
         results: [{
           title: new URL(url).hostname,
           url,
-          snippet: truncated.text,
+          snippet: passages[0].text,
           ...dateMeta,
         }],
+        snippets: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
+        top_score: passages[0].score,
         ...dateMeta,
         meta: {
           query_time_ms: elapsed,
           fallback_used: false,
         },
-        ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
       })}`;
-    } catch {
-      // continue to next renderer
     }
+    return `[OK] ${json({
+      status: "ok",
+      provider: slug,
+      question,
+      extraction_mode: "full_content",
+      results: [{
+        title: new URL(url).hostname,
+        url,
+        snippet: truncated.text,
+        ...dateMeta,
+      }],
+      note: "No passage addressed the question; returning the full content instead.",
+      ...dateMeta,
+      meta: {
+        query_time_ms: elapsed,
+        fallback_used: false,
+      },
+      ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
+    })}`;
   }
 
-  return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
+  return `[OK] ${json({
+    status: "ok",
+    provider: slug,
+    results: [{
+      title: new URL(url).hostname,
+      url,
+      snippet: truncated.text,
+      ...dateMeta,
+    }],
+    ...dateMeta,
+    meta: {
+      query_time_ms: elapsed,
+      fallback_used: false,
+    },
+    ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
+  })}`;
 }
 
 function providerOperational(p: ProviderConfig): boolean {
@@ -806,6 +856,7 @@ server.registerTool(
       priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional(),
       suggest: z.boolean().optional().default(false),
       expand: z.boolean().optional().default(false).describe("Return query-expansion strings instead of search results"),
+      deep: z.boolean().optional().default(false).describe("Read the top results and return each page's ranked passages against the query"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
     },
@@ -822,7 +873,8 @@ server.registerTool(
       Boolean(params.suggest),
       params.content_type as string | undefined,
       params.region as string | undefined,
-      Boolean(params.expand)
+      Boolean(params.expand),
+      Boolean(params.deep)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }

@@ -187,6 +187,27 @@ function validateConfig(config: Config): void {
     }
   }
 
+  if (config.deep) {
+    if (config.deep.max_pages !== undefined && (typeof config.deep.max_pages !== "number" || config.deep.max_pages < 1)) {
+      errors.push("deep.max_pages must be a positive number");
+    }
+    if (config.deep.max_total_pages !== undefined && (typeof config.deep.max_total_pages !== "number" || config.deep.max_total_pages < 1)) {
+      errors.push("deep.max_total_pages must be a positive number");
+    }
+    if (config.deep.concurrency !== undefined && (typeof config.deep.concurrency !== "number" || config.deep.concurrency < 1)) {
+      errors.push("deep.concurrency must be a positive number");
+    }
+    if (config.deep.early_exit_score !== undefined && (typeof config.deep.early_exit_score !== "number" || config.deep.early_exit_score < 0 || config.deep.early_exit_score > 1)) {
+      errors.push("deep.early_exit_score must be a number between 0 and 1");
+    }
+    if (config.deep.max_ms !== undefined && (typeof config.deep.max_ms !== "number" || config.deep.max_ms < 1)) {
+      errors.push("deep.max_ms must be a positive number");
+    }
+    if (config.deep.detect_date !== undefined && typeof config.deep.detect_date !== "boolean") {
+      errors.push("deep.detect_date must be a boolean");
+    }
+  }
+
   if (config.kb) {
     const kb = config.kb;
     if (typeof kb.chunk_size !== "number" || kb.chunk_size < 1) {

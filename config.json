@@ -205,6 +205,14 @@
   "expand": {
     "max_expansions": 5
   },
+  "deep": {
+    "max_pages": 3,
+    "max_total_pages": 8,
+    "concurrency": 4,
+    "early_exit_score": 0.3,
+    "max_ms": 8000,
+    "detect_date": false
+  },
   "corroboration": {
     "max_iterations": 5,
     "max_http_calls": 30,

@@ -14,10 +14,13 @@ rather than restating them.
   external providers; use a direct `kb` (action search) only when stored
   content alone can answer the task or to inspect the store.
 - **SEARCH** — `web_search` (multi-provider, auto-selection, fallback
-  chain). Use `corroborate` when a claim is contested.
+  chain). Use `corroborate` when a claim is contested; use `deep: true`
+  when you want passages read from the top results, not just snippets.
 - **EXTRACT** — `fetch_page` on promising URLs for full content; pass
   `question` to a page you are reading to answer a specific question, so only
-  the ranked passages that address it are returned.
+  the ranked passages that address it are returned. For a one-call
+  search-and-read, `web_search` with `deep: true` returns ranked passages per
+  source.
 - **VERIFY** — cross-reference across sources, score confidence, flag
   contradictions explicitly.
 - **WRITE** — `technical-writing` for the deliverable.

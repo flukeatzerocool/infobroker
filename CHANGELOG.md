@@ -2,6 +2,13 @@
 
 ## 2026.08.24 — 
 
+- `web_search` gains a deep reading mode: pass `deep: true` to read the top
+  search results and get each page's passages ranked against the query, reusing
+  the question-grounded passage ranker so a deep search returns the specific
+  text that answers the question instead of one-line snippets. Fetching is
+  bounded and fast — a page budget, a concurrency pool, an early-exit score,
+  and a hard time limit — with date detection off by default and tunable via a
+  new `deep` config block. (REQ-028)
 - The `kb` ingest action now stores a source's last-updated date — supplied
   directly or auto-detected from a fetched URL — and the `list`, `get`, and
   `search` actions report it, so an archived report carries its source dates

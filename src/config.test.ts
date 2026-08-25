@@ -208,4 +208,24 @@ describe("configuration overlay", () => {
     expect(cfg.providers.duckduckgo.degraded_latency_ms).toBe(1500);
     expect(cfg.providers.duckduckgo.resells).toBe(true);
   });
+
+  it("rejects a non-positive deep.max_pages", async () => {
+    await expect(
+      loadWithOverlay(BASE, { deep: { max_pages: 0, max_total_pages: 8, concurrency: 4 } })
+    ).rejects.toThrow(/deep.max_pages/);
+  });
+
+  it("rejects an out-of-range deep.early_exit_score", async () => {
+    await expect(
+      loadWithOverlay(BASE, { deep: { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 1.5 } })
+    ).rejects.toThrow(/deep.early_exit_score/);
+  });
+
+  it("accepts a valid deep block", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      deep: { max_pages: 4, max_total_pages: 10, concurrency: 3, early_exit_score: 0.5, max_ms: 5000, detect_date: true },
+    });
+    expect(cfg.deep?.max_pages).toBe(4);
+    expect(cfg.deep?.early_exit_score).toBe(0.5);
+  });
 });

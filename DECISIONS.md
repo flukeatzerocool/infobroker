@@ -2,6 +2,34 @@
 
 ## Active Decisions
 
+### D-035: Deep Search as a web_search Mode, Not a New Tool or a Corroborate Upgrade (2026.08.24)
+
+Deep search — search, then read the top results and rank each page's passages
+against the query — is implemented as a `deep: true` mode on `web_search`
+(REQ-028) rather than a new tool or an extension of `corroborate`. Three
+alternatives were weighed:
+
+- **New `infobroker_deep_search` tool** — rejected. Deep search is a search
+  *depth*, not a distinct job, and the tool surface is deliberately lean
+  (13 → 6 tools in 2026.08.21). An eighth tool drags the full
+  spec/README/validator/skill governance surface for a capability the existing
+  tool already nearly provides.
+- **Fold into `corroborate`** — rejected. `corroborate`'s contract (REQ-026) is
+  verdicts from snippets; it never fetches page bodies, and reading bodies
+  would change its identity, its confidence model, and its 30-call budget.
+  Keeping read-depth (deep) and verification (corroborate) composable instead
+  of entangled preserves both contracts.
+- **`deep` mode on `web_search`** — chosen, mirroring how `suggest` (REQ-020b)
+  and `expand` (REQ-020e) already live as modes on the same tool.
+
+The passage-ranking reused comes from REQ-021b (`rerank.ts`), and passage-size
+tuning reuses the `fetch` block rather than adding parallel knobs. The `deep`
+block governs only fetch economics (page budget, total-page cap, concurrency,
+early-exit score, and a hard time limit); date detection is off by default to
+keep the critical path fast. Two related latency wins — parallel first-hop
+fallback dispatch and concurrent `corroborate` gap refinement — are roadmapped
+separately rather than bundled here.
+
 ### D-034: Per-Provider Health Threshold and Reseller Provenance (2026.08.23)
 
 Two latent REQ legs were closed without new REQ IDs. REQ-013's `degraded`
@@ -357,10 +385,10 @@ bound the contract, so no new REQ was required (F9 covers unavailability).
 
 ### D-012: Build Fingerprint (auto-generated)
 
-**Spec hash:** `5ffc19ff9c0571d02d522701a495b52ed106eaeea27f7a1fdf0b19ef2e69d95f`
-**Source hash:** `33027106c427c3d7b1c8919c6a7404861fd5bee859073c26b3f5528e6a383985`
-**Config hash:** `3320f0d85e3342020875075768bab4d4b7191abd0b945437b8d1bb2f04bac399`
-**Total fingerprint:** `46d6310e72d25231baa800468ced9a46f2b7d1f515d113e573bb73a451a2b98a`
+**Spec hash:** `099c5546e53d8a61f6ed1ba166e0d094ae9dd573c09dbead6b2bbe6d58eb26d1`
+**Source hash:** `40c1219ab67fbaaf608a5e7c6384ef155ba0612f582da980d5813a1d314c240d`
+**Config hash:** `1ae5e6639b68034cfaba883252ba8e3e891be331d49122f79c0082af0abc5edf`
+**Total fingerprint:** `d93fd9931f1120f37c84ccb2eedef103253f998ed494cb6641978c88d0623b7f`
 ### D-001: Response Envelope Format
 The REQ-001 contract specifies JSON with `[OK]`/`[ERROR]` prefix.
 Tools return `[OK] JSON_BODY` or `[ERROR] JSON_BODY` text content through

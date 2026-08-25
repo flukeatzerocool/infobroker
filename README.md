@@ -188,14 +188,17 @@ spec.
 
 > "Search for the location of the second Death Star."
 > "Find scholarly papers on hyperspace travel theories."
+> "Search the latest astromech specs and show me the passages that answer: does the R2 unit pre-date the Clone Wars?"
 
 `web_search` sends one query to every provider that can answer it. Search
 across DuckDuckGo, Wikipedia, academic databases, news, code repositories —
 or describe your task and the server picks the best source. Pass an array of
-queries to batch several searches in one call. Failed providers fall
-back silently through a configurable chain so you get results, not
-error messages. Other search tools lock you to one engine; Infobroker
-routes every query to the right provider and keeps going when one
+queries to batch several searches in one call. Ask for a deep read and it
+fetches the top results and ranks each page's passages against your query,
+so you get the specific text that answers the question instead of links.
+Failed providers fall back silently through a configurable chain so you get
+results, not error messages. Other search tools lock you to one engine;
+Infobroker routes every query to the right provider and keeps going when one
 fails.
 
 ### Content Extraction

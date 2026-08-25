@@ -51,6 +51,10 @@ Use `infobroker_infobroker_web_search` with an array of queries to batch
 several searches in one call (no built-in equivalent).
 Use `infobroker_infobroker_web_search` with `expand: true` to generate query
 variants before a deep search (no built-in equivalent).
+Use `infobroker_infobroker_web_search` with `deep: true` to read the top
+results and return each page's passages ranked against the query, so a
+deep search yields the answering text rather than links (no built-in
+equivalent).
 Use `infobroker_infobroker_fetch_page` with a `question` when reading a page
 to answer a specific question — it returns the ranked passages that address it
 rather than the whole page.

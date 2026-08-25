@@ -149,7 +149,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–027 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026d` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -264,6 +264,9 @@ The `corroborate` response SHALL include a provenance record naming the server v
 
 **REQ-027 — `cite`**
 The `cite` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
+
+**REQ-028 — `web_search` deep reading**
+WHEN `web_search` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
 
 ### 4.4 Rate Limiting and Resilience
 
@@ -880,6 +883,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-026c | corroboration source preservation | 4.3 | G1 |
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-027 | cite | 4.3 | G0, G1 |
+| REQ-028 | web_search deep reading | 4.3 | G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
@@ -1331,7 +1335,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page`, `cite` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page`, `cite` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-028, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d | G0, G1 |
 | 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |

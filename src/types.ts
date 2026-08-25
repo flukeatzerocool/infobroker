@@ -61,6 +61,7 @@ export interface Config {
   expand?: {
     max_expansions?: number;
   };
+  deep?: DeepConfig;
   kb?: KbConfig;
 }
 
@@ -153,6 +154,15 @@ export interface SearchOptions {
   page?: number;
   content_type?: string;
   region?: string;
+}
+
+export interface DeepConfig {
+  max_pages: number;
+  max_total_pages: number;
+  concurrency: number;
+  early_exit_score?: number;
+  max_ms?: number;
+  detect_date?: boolean;
 }
 
 export interface KbConfig {
