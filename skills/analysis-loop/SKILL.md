@@ -3,9 +3,11 @@ name: analysis-loop
 description: >
   Use when the user asks to research a topic, investigate a question, or
   produce structured findings with cited, confidence-scored sources.
-  Four-phase disciplined workflow modeled on the cyber threat intelligence
-  lifecycle: scope → collect → analyze → refine. Use ONLY for systematic,
-  gated research — not quick lookups or single-source Q&A.
+  Four-phase disciplined workflow modeled on the intelligence cycle:
+  scope → collect → analyze → refine — the same cycle the cyber threat
+  intelligence, OSINT, and journalism-verification traditions follow.
+  Use ONLY for systematic, gated research — not quick lookups or
+  single-source Q&A.
 
   <example>
   User: "Research the current state of quantum-resistant cryptography
@@ -41,7 +43,8 @@ completes its full cycle before the next starts.
 ## Phase 0 — Question Scoping
 
 The most important phase. A poorly scoped question produces garbage output
-regardless of collection quality. Modeled on CTI Planning & Direction.
+regardless of collection quality. Modeled on the Planning & Direction step of
+the intelligence cycle.
 
 ### If the user's question is vague
 
@@ -84,8 +87,8 @@ Scope: <boundaries> | Format: <audience> | Horizon: <tactical/operational/strate
 
 ## Phase 1 — Collection & Source Assessment
 
-Gather raw data and assess quality before analysis. Maps to CTI Collection
-and Processing.
+Gather raw data and assess quality before analysis. Maps to the Collection
+and Processing step of the intelligence cycle.
 
 ### Collection
 
@@ -156,7 +159,8 @@ Reliability range: <lowest-highest> | <K> gaps
 
 ## Phase 2 — Analysis & Synthesis
 
-Turn processed information into intelligence. Maps to CTI Analysis.
+Turn processed information into intelligence. Maps to the Analysis step of
+the intelligence cycle.
 
 ### Analysis
 
@@ -174,18 +178,38 @@ Turn processed information into intelligence. Maps to CTI Analysis.
    reliability grades. Note whether the disagreement is factual (same claim,
    different facts) or interpretive (same facts, different conclusions).
 
-4. **Structured analytic techniques.** Apply at least one:
-   - **Analysis of Competing Hypotheses (ACH)** — list explanations, evaluate
-     evidence for/against each.
-   - **Key Assumptions Check** — which assumptions underpin each finding?
-     Which would change the conclusion if wrong?
-   - **Devil's Advocacy** — argue against the strongest finding. Does it hold up?
+4. **Structured analytic technique — select by fit, not habit.** Use the
+   technique-selection guide in `references/techniques.md` to match the
+   analysis state to a technique's fit criterion. Select one technique,
+   name it in the output with the reason it fits, then apply it as its own
+   discrete step and report its result. Never apply a technique merely
+   because it is familiar. Techniques (see the catalog for the full method
+   of each):
+   - **Analysis of Competing Hypotheses (ACH)** — competing explanations
+     exist and must be tested against evidence.
+   - **Key Assumptions Check** — conclusions rest on unstated assumptions.
+   - **Devil's Advocacy** — a consensus or strong finding needs a challenge.
+   - **Premortem Analysis** — a plan or projection could be wrong.
+   - **Indicators** — future change must be monitored.
+   - **Quality-of-Information Check** — source reliability is uneven and
+     must be re-evaluated.
+   - **Decision Matrix** — options must be ranked against explicit criteria.
+   - **Structured Self-Critique** — the strongest finding deserves scrutiny
+     for hidden weakness.
+
+   Run the chosen technique as a single, separate pass; do not blur several
+   techniques into one — each requires its own cognitive mode, and mixing
+   them dilutes them. Report the technique and its result before synthesis.
 
 ### Synthesis
 
 ```
 ## Executive Summary
 [3-5 sentence synthesis of highest-confidence findings]
+
+## Structured Analytic Technique
+**Technique:** [name] — [fit rationale]
+**Result:** [the technique's output, reported from its own discrete pass]
 
 ## Findings by EEI
 ### EEI #1: [sub-question]
@@ -213,7 +237,9 @@ Self-check before presenting:
 
 - Does every finding have a confidence score with justification?
 - Are contradictions reported explicitly with both sides?
-- Did I apply at least one structured analytic technique?
+- Did I name the structured analytic technique and justify the choice against
+  its fit criterion — and did I apply it in its own separate step with a
+  reported result?
 - Are source reliability grades included in the source register?
 - Do I distinguish what I *know* from what I *infer*?
 
@@ -228,8 +254,8 @@ research-analysis complete. <N> findings | Confidence: <H>/<M>/<L> |
 
 ## Phase 3 — Dissemination & Refinement
 
-Maps to CTI Dissemination and Feedback. Deliver findings and close the loop
-on gaps.
+Maps to the Dissemination and Feedback step of the intelligence cycle.
+Deliver findings and close the loop on gaps.
 
 ### Dissemination
 
@@ -316,4 +342,7 @@ analysis-loop complete. <N> findings | Confidence: <H>/<M>/<L> |
   high-reliability sources. Weight by grade.
 - Do not let recency bias override source reliability. A 2-year-old A1 source
   is often more trustworthy than a 2-day-old C3 source.
+- Do not apply a structured analytic technique by habit rather than by fit —
+  select using the guide in `references/techniques.md`, name the choice, and
+  run it in its own step.
 - Do not present Phase 2 findings without running the reflexion gate.

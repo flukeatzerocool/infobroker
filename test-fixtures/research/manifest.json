@@ -18,6 +18,7 @@
       "A weighted recommendation with clear justification is given",
       "Confidence in the recommendation is stated",
       "Criteria that lack evidence are flagged as gaps",
+      "A decision-matrix technique is applied explicitly",
       "The engineer audience gets technical depth, not just marketing blurbs"
     ]
   },
@@ -82,6 +83,7 @@
       "The report lists only what changed, flagged as deltas",
       "Items are dated",
       "Removed/discontinued items are reported, not just additions",
+      "Indicators are defined for monitoring the topic",
       "The report is not a full re-summary of the market"
     ]
   },
@@ -103,6 +105,7 @@
       "Assumptions are listed with their attack surface",
       "Failure modes are graded by likelihood and impact",
       "Disconfirming evidence is actively sought",
+      "Devil's advocacy is applied explicitly",
       "An overall robustness verdict is delivered without softening"
     ]
   },
@@ -191,7 +194,9 @@
       "Each finding carries a confidence score with justification",
       "Source reliability and credibility grades appear in a register",
       "Contradictions are reported with both sides and their grades",
-      "At least one structured analytic technique is applied",
+      "A structured analytic technique is named with its fit rationale",
+      "The selected technique is applied as its own discrete step",
+      "Findings cite source URLs",
       "The decision-maker audience gets an executive-led synthesis"
     ]
   },
@@ -231,7 +236,8 @@
     "rubric": [
       "Leads with an executive summary for the CISO audience",
       "Risk ratings or risk-oriented framing are present",
-      "Findings are confidence-scored with source grades"
+      "Findings are confidence-scored with source grades",
+      "A structured analytic technique is named with fit rationale"
     ]
   },
   {
@@ -240,7 +246,7 @@
     "persona": "platform engineer",
     "shape": "gated-analysis",
     "mode": "positive",
-    "utterance": "What are the current regulatory requirements for an AI safety policy governing an LLM-powered internal assistant at a US healthcare-adjacent enterprise? I'm the engineer who will implement the guardrails, so I need technical depth on the specific controls I must build.",
+    "utterance": "What are the current regulatory requirements for an AI safety policy governing an LLM-powered internal assistant at a US healthcare-adjacent enterprise? I'm the engineer who will implement the guardrails, so give me the confidence-scored findings, source-reliability grades, and technical depth on the specific controls I must build — this is a high-stakes decision I have to get right.",
     "followups": ["Proceed with reasonable defaults.", "Close it here and accept the remaining gaps."],
     "tokens": ["analysis-loop complete."],
     "absent": [],
@@ -250,7 +256,8 @@
     "rubric": [
       "Leads with technical findings and specific controls to implement",
       "Provides depth on the concrete mechanisms, not just policy prose",
-      "Citations and source grades are present"
+      "Citations and source grades are present",
+      "A structured analytic technique is named with fit rationale"
     ]
   },
   {

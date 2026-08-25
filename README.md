@@ -323,10 +323,10 @@ polishes language, and `translation` produces multilingual output.
 Gated analysis is the escalation shape. When a question is high-stakes or
 decision-driving, the classify gate routes to the `analysis-loop` skill —
 a disciplined path with confidence-scored findings, source-reliability
-grading, and structured analytic techniques — rather than the lighter
-research-and-write route. It shares the same primitives and Infobroker
-tools but runs its own gated workflow, so you get the rigor without
-leaving the pipeline.
+grading, and structured analytic techniques chosen by fit and named with a
+rationale — rather than the lighter research-and-write route. It shares the
+same primitives and Infobroker tools but runs its own gated workflow, so you
+get the rigor without leaving the pipeline.
 
 A single instruction file, `search-preferences.md`, routes your client
 toward these tools: the knowledge base first, external providers only

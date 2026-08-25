@@ -38,6 +38,9 @@ Each shape ends with a grepable one-line status token in the form
 **Pipeline:** RECALL → SEARCH → EXTRACT → VERIFY → SUMMARIZE
 (`summarization`) → WRITE → POLISH → TRANSLATE (if needed) → CITE.
 
+**Technique:** Key Assumptions Check on the report's central thesis before
+writing.
+
 **Token:** `research complete. <N> sources | <K> findings | <gap> gaps noted`.
 
 ## Fact-Check
@@ -51,6 +54,9 @@ cross-reference → verdict → `summarization` digest → CITE.
 Unverifiable, each with a 0.0–1.0 confidence and a justification. Split
 bundled claims; discard opinions as "not checkable."
 
+**Technique:** Quality-of-Information Check — grade each source used for a
+verdict; hold every claim to primary sources where they exist.
+
 **Token:** `fact-check complete. <N> claims | <T/M/H/MF/F/U> verdicts`.
 
 ## Deep-Dive
@@ -60,6 +66,9 @@ bundled claims; discard opinions as "not checkable."
 **Pipeline:** scope & clarify → parallel SEARCH (2–3 query angles per
 subtopic) → EXTRACT primary sources → VERIFY & triangulate → synthesize a
 structured report (theme-grouped, high-confidence findings first).
+
+**Technique:** Decomposition (topic tree) to split subtopics; Analysis of
+Competing Hypotheses on any contested finding.
 
 **Token:** `deep-dive complete. <N> subtopics | <K> themes | <C> contradictions`.
 
@@ -71,6 +80,9 @@ structured report (theme-grouped, high-confidence findings first).
 structured analytic techniques, refinement rounds. Do not run this shape
 inline.
 
+**Technique:** selected inside the skill by its technique-selection gate
+(`references/techniques.md`), not here.
+
 **Token:** `analysis-loop complete.` (emitted by the skill itself).
 
 ## Competitive Evaluation
@@ -81,6 +93,8 @@ best", "X vs Y", "evaluate these options").
 **Pipeline:** define explicit criteria → RECALL → SEARCH per option →
 EXTRACT → VERIFY → score each option against criteria → weighted decision
 matrix → recommendation with justification.
+
+**Technique:** Decision Matrix — criteria defined and weighted before scoring.
 
 **Output:** a criteria-by-option matrix, a recommendation, and the
 rationale with confidence. Flag criteria lacking evidence as gaps.
@@ -96,6 +110,9 @@ rationale with confidence. Flag criteria lacking evidence as gaps.
 (Semantic Scholar, arXiv, CORE) → deduplicate → screen by title/abstract →
 EXTRACT full texts → theme synthesis → gap analysis → related-work section.
 
+**Technique:** inclusion/exclusion screening (systematic-review method) with a
+theme synthesis across included works.
+
 **Output:** thematic synthesis, explicit inclusion criteria, a gap analysis
 naming what is absent, and a source register.
 
@@ -108,6 +125,9 @@ naming what is absent, and a source register.
 
 **Pipeline:** establish baseline → `kb` freshness check → re-SEARCH →
 compare to baseline → report only the deltas → ingest the new results.
+
+**Technique:** Indicators — define signposts for the topic before comparing,
+so the delta is reported against what would confirm or weaken change.
 
 **Output:** a change report listing what is new or removed since the
 baseline, dated, with the delta flagged — not a full re-summary.
@@ -123,6 +143,9 @@ wrong", "argue against", "red-team this").
 attack each assumption → list failure modes and weaknesses → grade each
 by likelihood and impact.
 
+**Technique:** Devil's Advocacy — build the strongest case against the plan,
+then grade each weakness; no softening.
+
 **Output:** a weakness register, an assumptions list with attack surface,
 and an overall robustness verdict. No softening — the job is to find breaks.
 
@@ -136,6 +159,9 @@ and an overall robustness verdict. No softening — the job is to find breaks.
 **Pipeline:** define the checklist → RECALL → SEARCH per checklist item →
 `corroborate` on contested items → grade each source for reliability →
 flag red flags.
+
+**Technique:** Quality-of-Information Check — grade each source's
+reliability and each claim's credibility separately.
 
 **Output:** a checklist with verified/partial/unverified per item, source
 grades, and a red-flag register. Unverifiable items are stated, not assumed.

@@ -1,6 +1,6 @@
 {
   "skill": "analysis-loop",
-  "prompt": "Load the analysis-loop skill and apply it to the following research question. Scope the question, then collect graded sources using the Infobroker tools (web_search and fetch_page), analyze with confidence scoring, and disseminate. Follow the skill's Phase 0 through Phase 3 gates faithfully.\n\nResearch question: What is the current state of adoption for the HTTP/3 protocol (RFC 9114) in major web browsers and CDNs, and what are the main remaining barriers to wider deployment?\n\nYou MUST end your final reply with the analysis-loop completion line exactly as specified in the skill's Output Contract.",
+  "prompt": "Load the analysis-loop skill and apply it to the following research question. Scope the question, then collect graded sources using the Infobroker tools (web_search and fetch_page), analyze with confidence scoring, and disseminate. In the analysis phase, select a structured analytic technique using the technique-selection guide (references/techniques.md), name the technique and its fit rationale, and apply it as its own discrete step — do not apply a technique merely because it is familiar. Follow the skill's Phase 0 through Phase 3 gates faithfully.\n\nResearch question: What is the current state of adoption for the HTTP/3 protocol (RFC 9114) in major web browsers and CDNs, and what are the main remaining barriers to wider deployment?\n\nYou MUST end your final reply with the analysis-loop completion line exactly as specified in the skill's Output Contract.",
   "expected_tokens": [
     "research-scoping passed.",
     "research-collection complete.",
@@ -12,6 +12,10 @@
     "Each finding carries a confidence score (High/Medium/Low)",
     "Source Register includes reliability and credibility grades",
     "Contradictions are reported rather than resolved silently",
+    "A structured analytic technique is selected by fit and named with its rationale",
+    "The selected technique runs as its own discrete step with a reported output",
+    "Contested claims are cross-verified (corroborate)",
+    "Findings cite source URLs",
     "Final completion line present"
   ],
   "time_limit": "none"

@@ -54,7 +54,7 @@ while ((match = reqPattern.exec(specText)) !== null) {
 }
 
 // Client-artifact REQs verified by file presence, not source citations
-const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054"]);
+const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088"]);
 
 // Meta-REQs that describe the spec process itself
 const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080"]);
@@ -412,6 +412,27 @@ function checkArtifactContent(): void {
     const content = readFileSync(skillPath, "utf-8");
     if (!/(?:RECALL|knowledge base search)/i.test(content)) {
       warn("skills/infobroker/SKILL.md: missing knowledge base search phase in pipelines");
+    }
+  }
+
+  // REQ-088 — gated-analysis skill technique-selection mechanism + catalog.
+  const analysisSkillPath = join(ROOT, "skills", "analysis-loop", "SKILL.md");
+  const catalogPath = join(ROOT, "skills", "analysis-loop", "references", "techniques.md");
+  if (existsSync(analysisSkillPath)) {
+    const content = readFileSync(analysisSkillPath, "utf-8");
+    if (!/technique-selection/i.test(content)) {
+      error("skills/analysis-loop/SKILL.md: missing technique-selection mechanism (REQ-088)");
+    }
+  } else {
+    error("skills/analysis-loop/SKILL.md: missing (REQ-088)");
+  }
+  if (!existsSync(catalogPath)) {
+    error("skills/analysis-loop/references/techniques.md: missing (REQ-088)");
+  } else {
+    const catalog = readFileSync(catalogPath, "utf-8");
+    const techniqueCount = (catalog.match(/^###\s+/gm) ?? []).length;
+    if (techniqueCount < 6) {
+      error(`skills/analysis-loop/references/techniques.md: fewer than 6 techniques (${techniqueCount}) — REQ-088`);
     }
   }
 }

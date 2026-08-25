@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.08.24 — Analysis technique selection and usage
+
+- The `analysis-loop` skill now chooses its structured analytic technique by
+  fit rather than by habit: a selection gate matches the analysis state to a
+  technique's fit criterion, names the chosen technique with its rationale in
+  the output, and runs it as its own discrete step — one technique per pass,
+  not several blurred together. The skill's framing is broadened from the
+  cyber-threat-intelligence lifecycle to the shared intelligence cycle it
+  belongs to. (REQ-088)
+- A new structured-analytic-technique catalog (`references/techniques.md`)
+  documents eight techniques across the intelligence-tradecraft families,
+  each with a fit criterion, method, and output, plus a question-based
+  selection guide; a companion `references/framework-basis.md` records the
+  analytic frameworks each audience draws on and maps each workflow shape to
+  its audience-native method.
+- Every workflow shape now names its analytic technique — from decision
+  matrices in competitive evaluation to devil's advocacy in red-teaming and
+  source-criticism in fact-checking — so the rigor extends beyond the gated
+  path. Skill-test fixtures are strengthened to verify technique selection,
+  discrete-step application, and source grading end to end.
+
 ## 2026.08.24 — 
 
 - `web_search` fallback is now hedged rather than strictly sequential: the
