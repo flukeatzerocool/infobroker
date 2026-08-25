@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.08.24 — Stale-tag handling in the push pipeline
+
+- `scripts/push-pipeline.sh` no longer aborts when the version tag already
+  exists and points to an earlier commit on the same line of work: a stale tag
+  (an ancestor of HEAD, e.g. a prior commit within the same CalVer version) is
+  moved onto the current head automatically and force-pushed to origin and the
+  GitHub mirror. `--force-tag` is now required only when the existing tag is
+  not an ancestor of HEAD — a genuinely conflicting tag.
+
 ## 2026.08.24 — Report directory moved outside the repository tree
 
 - The knowledge base report storage directory now resolves outside the

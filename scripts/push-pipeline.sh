@@ -15,7 +15,7 @@
 #   --resume         Skip steps already recorded complete in the state journal.
 #   --from=<step>    Start at a named step (readthrough|sync|changelog|scan|readme).
 #   --parallel       Run independent steps concurrently (scan ∥ readme; auth ∥ readthrough).
-#   --force-tag      Overwrite an existing version tag (otherwise abort).
+#   --force-tag      Overwrite an existing version tag that is not an ancestor.
 #   --force-push     Force push with lease (otherwise refuse if diverged).
 #   --allow-secrets  Warn but do not block when staged content matches secret patterns.
 #   --help (-h)      Show this message.
@@ -52,7 +52,7 @@ for arg in "$@"; do
       printf '%s\n' "  --resume    Skip steps already recorded complete."
       printf '%s\n' "  --from=S    Start at step (readthrough|sync|changelog|scan|readme)."
       printf '%s\n' "  --parallel  Run independent steps concurrently."
-      printf '%s\n' "  --force-tag Overwrite an existing version tag."
+      printf '%s\n' "  --force-tag Overwrite an existing version tag that is not an ancestor of HEAD."
       printf '%s\n' "  --force-push Force-push with lease if diverged."
       printf '%s\n' "  --allow-secrets  Warn only on secret patterns."
       printf '%s\n' "  --help (-h) Show this message."
@@ -596,19 +596,30 @@ else
 fi
 info "Push: DONE"
 
-# Tag with version.
+# Tag with version. When the tag already exists but points to an earlier
+# commit, the tag is stale rather than conflicting: multiple commits can share
+# one CalVer version (no version bump on a whitespace-only or non-behavior
+# run). The default is to move the stale tag onto the current head; an
+# explicit --force-tag is only required when the existing tag points to a
+# different, newer line of work.
 warn "Tagging v${VERSION}..."
+TAG_MOVED=false
 if git -C "$PROJECT_DIR" tag -l "v${VERSION}" | grep -q "v${VERSION}"; then
-  if $FORCE_TAG; then
-    warn "Tag v${VERSION} exists — overwriting (packages pinning the old tag will diverge)."
+  if $FORCE_TAG || git -C "$PROJECT_DIR" merge-base --is-ancestor "v${VERSION}" HEAD; then
+    warn "Tag v${VERSION} exists — moving it onto the current head (packages pinning the old tag will diverge)."
     git -C "$PROJECT_DIR" tag -f "v${VERSION}"
+    TAG_MOVED=true
   else
-    die "Tag v${VERSION} already exists. Use --force-tag to overwrite."
+    die "Tag v${VERSION} already exists and is not an ancestor of HEAD. Use --force-tag to overwrite."
   fi
 else
   git -C "$PROJECT_DIR" tag "v${VERSION}"
 fi
-git -C "$PROJECT_DIR" push origin "v${VERSION}"
+if $TAG_MOVED; then
+  git -C "$PROJECT_DIR" push origin "v${VERSION}" --force
+else
+  git -C "$PROJECT_DIR" push origin "v${VERSION}"
+fi
 info "Tag v${VERSION}: DONE"
 echo ""
 
@@ -618,7 +629,11 @@ info "Mirror sync (github)"
 info "═══════════════════════════════════════════════"
 if git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
   git -C "$PROJECT_DIR" push github main || warn "Mirror push (main) FAILED — GitHub mirror is behind origin."
-  git -C "$PROJECT_DIR" push github "v${VERSION}" || warn "Mirror tag push FAILED."
+  if $TAG_MOVED; then
+    git -C "$PROJECT_DIR" push github "v${VERSION}" --force || warn "Mirror tag push FAILED."
+  else
+    git -C "$PROJECT_DIR" push github "v${VERSION}" || warn "Mirror tag push FAILED."
+  fi
   info "Mirror sync: DONE"
 else
   warn "No 'github' remote configured — skipping mirror sync (run 'git remote add github <url>')."
