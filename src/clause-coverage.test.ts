@@ -9,7 +9,7 @@ import {
 describe("detectClauseRequirements", () => {
   it("detects the REQ-013 degraded 'or' branch definition", () => {
     const prose =
-      "The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), or `degraded` (latency above a configurable threshold or partial results).";
+      "The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034).";
     const req = detectClauseRequirements(prose);
     // "missing key or unreachable" + "latency ... or partial results" = 4 legs
     expect(req.orBranches).toBe(4);

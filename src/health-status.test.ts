@@ -1,4 +1,4 @@
-// @implements REQ-013 REQ-013 latency-threshold REQ-013 partial-results
+// @implements REQ-013 REQ-013 latency-threshold REQ-013 partial-results REQ-013 exhausted
 import { describe, it, expect } from "vitest";
 import { resolveHealthStatus } from "./health-status.js";
 

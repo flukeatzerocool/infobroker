@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.08.30 — Spec terminology reconciliation
+
+- `infobroker.md` terminology pass: REQ-013 now enumerates `exhausted` as a
+  fourth provider status (alongside `active`/`inactive`/`degraded`), and the
+  appendix tier labels align with the §3 tier taxonomy — Yep moved to Keyed
+  HTTP, the scraped builtins (Marginalia, Mojeek, Wiby) relabeled Built-in,
+  SearXNG is the sole Self-hosted entry, and Build Phase 3's
+  "Registration-tier" label dropped.
+- §7.1 gained the `content_fetch` task type and §7.2's dispatch table gained a
+  Fallback 3 column so its rows match the shipped `config.json` dispatch; §5.3's
+  capability union now lists the full config-derived token set and documents the
+  `web_search`-capability ↔ `general_web`-task-type mapping.
+- The §3 Terminology table was expanded with definitions for provider slug,
+  dispatch chain, capability, provider status, source type, quota, throttling,
+  finding, claim, verdict, agreement map, passage, workflow shape, and the two
+  priority senses; Fallback chain, Content renderer, and Synthesis were amended
+  to match actual usage. `source_type` formatting normalized across REQ bodies,
+  and SR-007 retitled from "Rate limit state persists" to "Quota state persists."
+
 ## 2026.08.30 — Script discipline gate, review-loop governance, README TOC
 
 - Added `scripts/check-script-discipline.ts`, wired into `npm run check`:

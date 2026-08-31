@@ -24,7 +24,7 @@ search, structured knowledge, scholarly, and content-extraction APIs behind a
 unified tool surface. Its design goals:
 
 1. **Free first, privacy always.** Zero-config default uses only free, no-auth-required providers that respect user privacy.
-2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, SearXNG) for higher throughput and specialized queries.
+2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
 4. **Truth by iteration.** A `corroborate` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
 5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, proofreading, and translation, while the orchestrator routes requests to research workflow shapes including fact-checking.
@@ -85,7 +85,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE (all free HTTP, no API key required) provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
-- **SR-007 Rate limit state persists.** Quota counters survive restarts via a JSON state file.
+- **SR-007 Quota state persists.** Quota counters survive restarts via a JSON state file.
 - **SR-008 Corroboration is bounded.** `corroborate` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
 - **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
 - **SR-010 All tool input is validated server-side before any outbound call.** Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
@@ -136,16 +136,31 @@ route to Infobroker first, falling back to built-ins only on error.
 |------|-----------|
 | **Provider** | A search or content-extraction backend (DuckDuckGo, Wikipedia, Brave, etc.) |
 | **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
-| **Fallback chain** | Ordered list of providers tried in sequence on failure |
-| **Content renderer** | A provider that fetches and formats a URL (Jina Reader, native HTTP). Task type for dispatch: `content_fetch`. |
+| **Fallback chain** | The ordered provider list for a task type (§7.2) as exercised on failure: the first entry is primary and remaining entries are tried in sequence per REQ-031. The same object as the dispatch chain. |
+| **Content renderer** | A backend that fetches and formats a URL's content (Jina Reader, native HTTP). A renderer is a provider (e.g. Jina, Wikipedia) or an inline tool-handler fallback (`native_fetch`, §5.2), and is not necessarily a standalone provider module. Task type for dispatch: `content_fetch`. |
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `web_search` auto-selection |
 | **Corroboration** | The multi-pass truth-finding loop in `corroborate` |
-| **Synthesis** | The container format that presents search findings to writing skills |
+| **Synthesis** | The summary statement in a `corroborate` response (§8.1), and a task type for queries needing a synthesized, citation-backed answer (§7.1). |
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
 | **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
 | **Vector store** | The local database that indexes chunks by their embedding vectors and supports semantic (vector similarity) and keyword (full-text) retrieval. |
 | **KB** | Abbreviation for "knowledge base." |
 | **Freshness tier** | A classification assigned to knowledge base content at ingest time that determines how quickly its retrieval confidence decays and when it expires. Tiers range from volatile content that loses accuracy rapidly to stable content that remains accurate indefinitely. |
+| **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `brave`). |
+| **Dispatch chain** | The ordered provider list for a task type (§7.2), primary first; used for auto-selection (REQ-020a) and, on failure, as the fallback chain (REQ-031). |
+| **Capability** | A function a provider declares (e.g. `web_search`, `academic`, `content_fetch`). Capability tokens overlap the task types (§7.1); the `web_search` capability serves the `general_web` task type. |
+| **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed) (REQ-013, REQ-034). |
+| **Source type** | A label carried by a normalized result, a corroborating source, or a KB document. On results it is the provider-declared content kind (e.g. `academic`, `news`); in corroboration it denotes the source-authority class (REQ-026a); on KB documents it is a caller-assigned tag (e.g. `report`). |
+| **Quota** | Per-provider daily and monthly usage counters, persisted across restarts (REQ-033). |
+| **Throttling** | The per-provider minimum interval between requests (REQ-030); distinct from quota. |
+| **Finding** | A corroboration output: a claim with a verdict, confidence, and corroborating sources (§8.1). |
+| **Claim** | A statement attributed to one or more corroborating sources (§8.1). |
+| **Verdict** | A finding's agreement outcome — `confirmed`, `contested`, or a gap (§8.1). |
+| **Agreement map** | The corroboration summary grouping findings as `green` (agreed), `yellow` (contested), or `red` (gaps) (§8.2). |
+| **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
+| **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
+| **Provider priority** | A configuration value ordering providers within a dispatch chain (REQ-010). |
+| **Routing priority** | The `web_search` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
 
 ---
 
@@ -166,7 +181,7 @@ Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or 
 Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
-All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, source type, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
+All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, `source_type`, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
 **REQ-004 — Truncation**
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
@@ -189,7 +204,7 @@ API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API
 The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
-The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), or `degraded` (latency above a configurable threshold or partial results). The assessment SHALL be exposed via the `providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
+The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
 
 **REQ-014 — Generic HTTP Provider Tier**
 The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and referencing it from a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
@@ -384,10 +399,10 @@ The `providers` spec action SHALL report a token-footprint record measuring the 
 `kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-060a — `kb` search action**
-WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, source type, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a source-type filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
+WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, `source_type`, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a `source_type` filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `kb` ingest action**
-WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, source type, freshness tier, source last-updated date, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
+WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
 
 **REQ-060c — `kb` stats action**
 WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
@@ -396,7 +411,7 @@ WHEN action is stats, the tool SHALL report total chunk count, per-collection ch
 WHEN action is delete, the tool SHALL remove chunks by collection or source URL, requiring at least one filter, and SHALL report the count of removed chunks. _Check:_ G0, G1.
 
 **REQ-060e — `kb` list action**
-WHEN action is list, the tool SHALL enumerate stored documents as distinct entries with title, source URL, collection, source type, freshness tier, chunk count, ingest timestamp, and stored source last-updated date, ordered newest first, and SHALL accept a collection filter and a source-type filter. _Check:_ G1.
+WHEN action is list, the tool SHALL enumerate stored documents as distinct entries with title, source URL, collection, `source_type`, freshness tier, chunk count, ingest timestamp, and stored source last-updated date, ordered newest first, and SHALL accept a collection filter and a `source_type` filter. _Check:_ G1.
 
 **REQ-060f — `kb` get action**
 WHEN action is get, the tool SHALL return a stored document in full by source URL, reassembling its chunks in order, and SHALL return an error when no document matches the source URL. _Check:_ G1.
@@ -411,7 +426,7 @@ Search results from `web_search`, rendered page content from `fetch_page`, and f
 A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
 
 **REQ-066 — Content Expiry**
-Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its source type. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
+Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its `source_type`. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
 
 **REQ-067 — Knowledge Base Configuration**
 The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
@@ -432,7 +447,7 @@ When the knowledge base is configured, every web search SHALL query the knowledg
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
 
 **REQ-083 — Report Storage**
-The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report source type and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base, defaulting to the knowledge base. _Check:_ G1.
+The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report `source_type` and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base, defaulting to the knowledge base. _Check:_ G1.
 
 **REQ-084 — KB At-Rest Encryption**
 The knowledge base SHALL support optional at-rest encryption of its stored content and of reports written to disk, where the key SHALL be derived from a user-supplied secret that is never stored with the content. WHEN encryption is enabled, the server SHALL NOT persist knowledge-base content or reports in plaintext, SHALL refuse knowledge-base operations when the required secret is unavailable or invalid, reporting the refusal as an error per REQ-002, and SHALL report the encryption state in the stats action. The server SHALL support changing the secret without loss of stored content. WHEN encryption is disabled, stored content SHALL remain readable. _Check:_ G1.
@@ -503,7 +518,7 @@ Every provider implements:
 interface Provider {
   slug: string;
   tier: 'builtin' | 'free_http' | 'self_hosted_http' | 'keyed_http' | 'generic_http';
-  capabilities: ('web_search' | 'academic' | 'code' | 'encyclopedia' | 'news' | 'archive' | 'content_fetch')[];
+  capabilities: ('web_search' | 'suggest' | 'content_fetch' | 'academic' | 'code' | 'encyclopedia' | 'definition' | 'structured_fact' | 'location' | 'archive' | 'small_web' | 'news' | 'semantic' | 'synthesis' | 'privacy_critical')[];
   rateLimit: { perSecond?: number; perDay?: number; perMonth?: number };
   health(): Promise<{ status: "active" | "degraded" | "inactive"; avgLatencyMs: number }>;
   search(query: string, options: SearchOptions): Promise<SearchResult[]>;
@@ -518,13 +533,19 @@ Free HTTP → `free_http`, Self-hosted HTTP → `self_hosted_http`, Keyed HTTP �
 distinct module per provider: every generic provider is a configuration
 instance resolved through the registration mapping (REQ-070) to a single
 shared implementation, so adding one requires no provider-module source
-change (REQ-014).
+change (REQ-014). The provider-module `health()` returns connectivity status
+(`active`, `degraded`, `inactive`); the provider status reported by the
+`providers` tool (REQ-013) additionally includes `exhausted`. Capability
+tokens overlap the task-type tokens (§7.1) plus `web_search` (general web
+search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
+(§7.2); a provider whose capability list includes `web_search` serves the
+`general_web` task type.
 
 ### 5.4 Build Phases
 
 1. **MCP Skeleton**: stdio transport, tool registration, config loader, env var reader.
 2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
-3. **Registration-tier & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
+3. **Free HTTP & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily, Yep (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Corroboration Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
@@ -622,25 +643,26 @@ when Jina returns 429 or error.
 | `semantic` | "Find things like X", conceptual search | Embedding similarity |
 | `synthesis` | Synthesized answer with citations | Factual density |
 | `privacy_critical` | Must not leak query to third party | Data sovereignty |
+| `content_fetch` | Fetch and render a URL's content (renderer dispatch for `fetch_page`; not used by `web_search` auto-selection) | Fidelity |
 
 ### 7.2 Dispatch Table
 
-| Task type | Primary | Fallback 1 | Fallback 2 |
-|-----------|---------|-----------|-----------|
-| `general_web` | brave (if keyed) | duckduckgo | marginalia |
-| `small_web` | marginalia | mojeek | duckduckgo |
-| `encyclopedia` | wikipedia | duckduckgo | — |
-| `definition` | wiktionary | duckduckgo | — |
-| `structured_fact` | wikidata | wikipedia | duckduckgo |
-| `location` | openstreetmap | wikipedia | duckduckgo |
-| `academic` | semantic_scholar | arxiv | — |
-| `code` | stack_exchange | github | duckduckgo |
-| `news` | brave (if keyed) | duckduckgo | — |
-| `archive` | internet_archive | duckduckgo | — |
-| `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo |
-| `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo |
-| `privacy_critical` | duckduckgo | searxng (if configured) | mojeek |
-| `content_fetch` | jina | native_fetch | — |
+| Task type | Primary | Fallback 1 | Fallback 2 | Fallback 3 |
+|-----------|---------|-----------|-----------|-----------|
+| `general_web` | brave (if keyed) | duckduckgo | marginalia | mojeek |
+| `small_web` | marginalia | mojeek | wiby | duckduckgo |
+| `encyclopedia` | wikipedia | duckduckgo | — | — |
+| `definition` | wiktionary | duckduckgo | — | — |
+| `structured_fact` | wikidata | wikipedia | duckduckgo | — |
+| `location` | openstreetmap | wikipedia | duckduckgo | — |
+| `academic` | semantic_scholar | arxiv | — | — |
+| `code` | stack_exchange | github | duckduckgo | — |
+| `news` | brave (if keyed) | duckduckgo | — | — |
+| `archive` | internet_archive | duckduckgo | — | — |
+| `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo | — |
+| `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo | — |
+| `privacy_critical` | duckduckgo | searxng (if configured) | mojeek | — |
+| `content_fetch` | jina | native_fetch | — | — |
 
 ### 7.3 Provider Deprioritization
 
@@ -1062,13 +1084,16 @@ configuration layer is merged over it by the server (REQ-010).
 
 **Tavily** — `https://api.tavily.com/search`. 1,000 credits/mo free. RAG-optimized results with inline citations. Good for "give me sources about X."
 
-### A.5 Self-Hosted HTTP
+**Yep** — `https://platform.yep.com/api/search` (POST, JSON body, Bearer auth). First-party index built on AhrefsBot (100B+ pages, 8B crawled daily). 1,000 free requests, then pay-as-you-go. Native `content_type`, `location`, `language`, `safe_search`, and publication-date filters. `highlights` type returns query-relevant excerpts at no extra cost.
+
+### A.5 Self-hosted HTTP
 
 **SearXNG** — User runs Docker container. MCP calls `POST /search?format=json` on the user's instance URL. Full privacy — all queries stay on user's machine. 274 search backends available. Requires `format: json` enabled in `settings.yml`.
 
-**Yep** — `https://platform.yep.com/api/search` (POST, JSON body, Bearer auth). First-party index built on AhrefsBot (100B+ pages, 8B crawled daily). 1,000 free requests, then pay-as-you-go. Native `content_type`, `location`, `language`, `safe_search`, and publication-date filters. `highlights` type returns query-relevant excerpts at no extra cost.
+### A.6 Built-in (Scraped, No Official API)
 
-### A.6 Scraped (No Official API)
+These providers are builtin-tier (in-process scraping, zero config) — grouped
+here by transport, not by a separate tier.
 
 **Marginalia** — `https://search.marginalia.nu/search?query={query}`. Open-source search engine prioritizing non-commercial content. HTML scraping. Unknown rate limits — conservative 5s interval.
 
