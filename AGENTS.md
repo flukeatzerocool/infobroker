@@ -53,6 +53,48 @@ npm run start       # start server via tsx
 npm run typecheck   # tsc --noEmit
 ```
 
+## Script Discipline
+
+All scripts in `scripts/` — the spec tooling, shell entry points
+(`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`), and CI workflow
+steps — follow one discipline. These rules apply to new scripts and to
+modifications of existing scripts.
+
+**Roles.** Every script declares one role in its header: **gate** (exits
+non-zero on failure; wired into a package.json script), **build tool**
+(mutates tracked artifacts deterministically), **entry point** (implements
+a spec contract and cites the REQ), or **informational** (reports findings,
+exits 0).
+
+**Mechanically enforced** (`npm run check-script-discipline`, part of
+`npm run check`):
+
+- Every top-level script starts with `#!/usr/bin/env npx tsx` (TS) and a
+  header comment naming the script's role, purpose, and exit-code contract.
+  `scripts/lib/` modules are exempt from the shebang but still carry a
+  header comment.
+- Exit codes: 0 = pass, 1 = gate/check failure or build error, 2 = fatal
+  unexpected error. No other exit codes.
+- Path resolution: use `import.meta.dirname` to derive repo-root paths;
+  no `fileURLToPath(import.meta.url)` boilerplate.
+- Empty `catch {}` blocks carry a comment explaining why the error is
+  safely ignored.
+
+**Conventions (documented, not mechanically checked):**
+
+- stdout carries the result payload; stderr carries diagnostics, warnings,
+  and progress. Machine-readable output goes to stdout.
+- Flag-taking scripts implement `--help`/`-h` (usage to stdout, exit 0)
+  and reject unknown flags. Scripts with more than one flag parse through
+  `scripts/lib/args.ts`.
+- Deterministic by default: no wall-clock-dependent output, no network, no
+  hidden state. Mutating scripts offer `--dry-run`.
+- A script implementing a spec contract cites the REQ ID in its header; a
+  behavioral change to a gate requires a CHANGELOG entry and a re-run of
+  the gates it feeds.
+- Shell discipline: `set -euo pipefail`, a case-based flag parser, `--help`,
+  color only on a TTY. Shell scripts are gate-checked with `bash -n`.
+
 ## State Model
 
 - **Config**: `config.json` (shipped default) — provider config, dispatch tables, limits, hot-reloadable. A user layer at `config.local.json` (or `INFOBROKER_CONFIG_LOCAL`) is merged over the shipped default; user values take precedence and survive updates (REQ-010, REQ-042, REQ-043). `config.local.json` is git-ignored.
@@ -168,6 +210,7 @@ This runs:
 | `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
+| `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch |
 | `npm run test`       | Vitest unit and integration tests                  |
 | `scripts/check-shipped-kb-empty.ts` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
 
@@ -180,6 +223,29 @@ Shell scripts (`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`) are
 gate-checked with `bash -n`. Running `shellcheck` on them before committing
 is recommended but not required — it is not installed as a devDependency and
 is not part of `npm run check`.
+
+## Review-Loop Governance
+
+The improvement loop terminates; it does not spiral. A completed plan is
+clean when its AAR returns `LOOP PAUSED` with zero new action items.
+
+- **Completion bar.** Every plan states its own done-bar — what must pass
+  and what must close for *this* plan to be done. Bars are
+  session-achievable. "Execute all <unbounded backlog>" is not a bar.
+- **Finding triage (P0–P3).** P0 = demonstrated wrong output or gate
+  failure — fix in-session. P1 = normative gap unscheduled — schedule on
+  `ROADMAP.md`. P2 = improvement preventing a demonstrated failure —
+  bounded, else downgraded. P3 = informational — record-and-close, no
+  action. "Audit X" is P3 unless a failure is demonstrated.
+- **Register hygiene.** Findings live in `REVIEW-REGISTER.md` with terminal
+  dispositions: `Resolved` / `Scheduled-roadmap` / `Closed-P3` /
+  `Deferred-by-user`. `ROADMAP.md` is the tracking surface for scheduled
+  work; the AAR references it and never restates it as recommendations.
+- **Loop status.** Every AAR ends with `LOOP PAUSED` or `LOOP OPEN`.
+  PAUSED requires: gates green, no open P0/P1 beyond the scheduled
+  roadmap. When PAUSED, the AAR lists zero new action items; the next plan
+  comes from `ROADMAP.md` or a direct user request — never from "AAR
+  recommendations."
 
 ## Newsletter
 

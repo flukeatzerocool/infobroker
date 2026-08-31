@@ -25,7 +25,8 @@ README DESIGN:
   Structure: Hero → North Star → Quick Start → MCP Server (§3 features) →
     Skills → Providers → Configuration → How It Compares → Contribute →
     License → Spec. No other ordering. Canonical h2 headings are enforced
-    by validate-readme.
+    by validate-readme. A TOC listing the canonical h2 sections follows the
+    Hero; validate-readme enforces TOC↔heading sync.
 
   Audience split: §2 is for developers who want to start the server.
     §3 describes what users can do with it. The Skills section (§3.5)
@@ -121,6 +122,17 @@ configure. Five more providers unlock with API keys or self-hosting. A built-in 
 sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
+
+- [North Star](#north-star)
+- [Quick Start](#quick-start)
+- [MCP Server](#mcp-server)
+- [Skills](#skills)
+- [Providers](#providers)
+- [Configuration](#configuration)
+- [How It Compares](#how-it-compares)
+- [Contribute](#contribute)
+- [License](#license)
+- [Spec](#spec)
 
 ## North Star
 

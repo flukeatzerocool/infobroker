@@ -1,3 +1,7 @@
+// parse-readme.ts — shared README parsing: headings, links, blockquotes,
+// bullet lists, prose lines, and slugification. Single source of truth for
+// tool and provider names derived from src/index.ts and config.json.
+
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 

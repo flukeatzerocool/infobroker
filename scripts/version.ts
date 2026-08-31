@@ -1,10 +1,22 @@
+#!/usr/bin/env npx tsx
+// version.ts — build tool: bump every version reference to today's calendar
+// date (CalVer), or check that every reference is in sync. The version
+// locations are enumerated once here so bump and check can never drift apart.
+//
+// Exit codes: 0 = pass; 1 = sync failure.
+// Usage: npx tsx scripts/version.ts <bump|check>
+
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { today, normalizeSemver, readRootPackage, ROOT } from "./lib/version.js";
+import { handleHelp } from "./lib/args.js";
 
-// Bump every version reference to today's calendar date (CalVer), or check
-// that every reference is in sync. The version locations are enumerated once
-// here so bump and check can never drift apart.
+const USAGE = `Usage: npx tsx scripts/version.ts <bump|check>
+
+  bump   Bump every version reference to today's calendar date.
+  check  Verify every version reference is in sync.
+`;
+handleHelp(process.argv, USAGE);
 
 function bump(): void {
   const version = today();

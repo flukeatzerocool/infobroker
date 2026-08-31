@@ -1,8 +1,10 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+// version.ts — shared version helpers: today's CalVer date, semver
+// normalization, root-package read, and in-file replacement.
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const __dirname = import.meta.dirname;
 export const ROOT = join(__dirname, "..", "..");
 
 export function today(): string {

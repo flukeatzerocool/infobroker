@@ -1,13 +1,18 @@
+#!/usr/bin/env npx tsx
+// validate-spec.ts — gate: spec-code traceability, REQ-body hygiene, manifest
+// and taxonomy reconciliation. Wired into `npm run check` (G3).
+//
+// Exit codes: 0 = all checks pass; 1 = errors found.
+
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 
 // @implements REQ-055
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const ROOT = join(__dirname, "..");
 const SPEC = join(ROOT, "infobroker.md");
 const SRC = join(ROOT, "src");

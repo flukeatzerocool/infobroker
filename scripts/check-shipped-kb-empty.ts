@@ -1,9 +1,15 @@
+#!/usr/bin/env npx tsx
+// check-shipped-kb-empty.ts — gate: the repository ships an empty knowledge
+// base. Fails if a KB artifact or an in-repo `storage_path` is present.
+// Wired into `npm run check`.
+//
+// Exit codes: 0 = repo ships no KB artifact; 1 = violation found.
+
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join, dirname, resolve, isAbsolute, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve, isAbsolute, relative } from "node:path";
 import { homedir } from "node:os";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const ROOT = join(__dirname, "..");
 
 const violations: string[] = [];

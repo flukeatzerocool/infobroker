@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.08.30 — Script discipline gate, review-loop governance, README TOC
+
+- Added `scripts/check-script-discipline.ts`, wired into `npm run check`:
+  every script under `scripts/` now carries a role header, a shebang where
+  applicable, `import.meta.dirname` path resolution, and a 0/1/2 exit-code
+  contract. Migrated the existing scripts off `fileURLToPath(import.meta.url)`
+  and added a shared `scripts/lib/args.ts` flag parser.
+- Documented the script-discipline conventions and a review-loop governance
+  section (completion bar, P0–P3 triage, `LOOP PAUSED`/`LOOP OPEN` loop
+  status) in `AGENTS.md`, alongside a new `REVIEW-REGISTER.md` artifact.
+- Added a table of contents to `README.md` after the Hero, and a
+  `checkTocSync` validator check so the TOC stays in lockstep with the
+  canonical h2 sections.
+
 ## 2026.08.24 — Stale-tag handling in the push pipeline
 
 - `scripts/push-pipeline.sh` no longer aborts when the version tag already

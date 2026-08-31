@@ -1,15 +1,16 @@
-import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, "..");
-
-// Pushes the latest newsletter draft to Buttondown as a *draft* (status
-// "draft"), so a human reviews and sends it from the Buttondown dashboard.
-// Semi-automated by design: this script never sends on its own.
+#!/usr/bin/env npx tsx
+// newsletter-push.ts — entry point: push the latest newsletter draft to
+// Buttondown as a *draft* (status "draft"), so a human reviews and sends it
+// from the dashboard. Semi-automated by design: never sends on its own.
 //
 // Requires BUTTONDOWN_API_KEY in the environment (a Buttondown API token).
+// Exit codes: 0 = draft pushed; 1 = push failed.
+
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+
+const __dirname = import.meta.dirname;
+const root = join(__dirname, "..");
 
 function today(): string {
   const d = new Date();

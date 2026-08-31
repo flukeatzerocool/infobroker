@@ -929,7 +929,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.24",
+  version: "2026.08.30",
 });
 
 // --- web_search ---

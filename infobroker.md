@@ -956,6 +956,7 @@ infobroker/
 ├── README.md                              # Setup, config, integration
 ├── config.json                            # Shipped default configuration
 ├── DECISIONS.md                           # Implementation decisions
+├── REVIEW-REGISTER.md                     # Review-loop finding dispositions
 └── AGENTS.md                              # Code map for AI maintainers
 ```
 

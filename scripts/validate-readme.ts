@@ -1,4 +1,10 @@
 #!/usr/bin/env npx tsx
+// validate-readme.ts — gate: README structure, voice, links, comparison table,
+// and tool/provider reconciliation against src/index.ts and config.json.
+// Wired into `npm run check`.
+//
+// Exit codes: 0 = all checks pass; 1 = errors found.
+
 import {
   readReadme, extractHeadings, extractLinks, extractBlockquotes,
   extractBulletLists, proseOnly, proseLines, slugify,
@@ -167,6 +173,9 @@ function checkFeatureLists(text: string): Issue[] {
 
   for (const list of lists) {
     if (list.items.length >= 3) {
+      if (list.items.every((item) => /^\[[^\]]+\]\(#[^)]+\)$/.test(item.trim()))) {
+        continue;
+      }
       const listCharIndex = text.split("\n").slice(0, list.startLine - 1).join("\n").length;
       if (contributeRange && listCharIndex >= contributeRange[0] && listCharIndex <= contributeRange[1]) {
         continue;
@@ -354,6 +363,7 @@ function checkSectionLengths(text: string): Issue[] {
       if (trimmed.startsWith(">")) continue;
       if (/^\s*\|/.test(lines[j])) continue;
       if (/^\s*<!--/.test(lines[j])) continue;
+      if (/^\s*-\s*\[[^\]]+\]\(#[^)]+\)\s*$/.test(lines[j])) continue;
       wordCount += trimmed.split(/\s+/).filter((w) => w.length > 0).length;
     }
 
@@ -403,8 +413,33 @@ function checkTaxonomyLink(text: string): Issue[] {
   return issues;
 }
 
-function checkSurfaceReconciliation(text: string): Issue[] {
+function checkTocSync(text: string): Issue[] {
   const issues: Issue[] = [];
+  const headings = extractHeadings(text);
+  const links = extractLinks(text);
+
+  const firstH2 = headings.find((h) => h.level === 2);
+  const tocLinks = links.filter((l) => l.url.startsWith("#") && (!firstH2 || l.line < firstH2.line));
+
+  const h2Titles = headings.filter((h) => h.level === 2).map((h) => h.title);
+  for (const title of h2Titles) {
+    const slug = slugify(title);
+    if (!tocLinks.some((l) => l.url === `#${slug}`)) {
+      issues.push({ error: true, msg: `TOC missing entry for '## ${title}' (#${slug})` });
+    }
+  }
+
+  for (const link of tocLinks) {
+    const targetSlug = link.url.slice(1);
+    if (!headings.some((h) => slugify(h.title) === targetSlug)) {
+      issues.push({ line: link.line, error: true, msg: `TOC link '#${targetSlug}' does not match any heading` });
+    }
+  }
+
+  return issues;
+}
+
+function checkSurfaceReconciliation(text: string): Issue[] {  const issues: Issue[] = [];
 
   // Every tool in src/index.ts must have either its full name or its
   // shorthand (sans `infobroker_` prefix) recognized, so a renamed or
@@ -448,6 +483,7 @@ function main(): void {
     { name: "Tool names in prose", run: checkToolNamesInProse, severity: "hard" },
     { name: "Feature lists", run: checkFeatureLists, severity: "soft" },
     { name: "Internal links", run: checkInternalLinks, severity: "hard" },
+    { name: "TOC sync", run: checkTocSync, severity: "hard" },
     { name: "Voice drift", run: checkVoiceDrift, severity: "soft" },
     { name: "Near-duplicate sentences", run: checkNearDuplicates, severity: "soft" },
     { name: "External links", run: checkExternalLinks, severity: "soft" },

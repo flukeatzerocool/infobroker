@@ -1,8 +1,13 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+#!/usr/bin/env npx tsx
+// newsletter-digest.ts — build tool: generate the weekly newsletter digest from
+// outline.json and write it to newsletter/drafts/.
+//
+// Exit codes: 0 = digest written; 1 = generation failed.
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
+const __dirname = import.meta.dirname;
 const root = join(__dirname, "..");
 
 type Outline = { sections: { id: string; enabled: boolean }[] };

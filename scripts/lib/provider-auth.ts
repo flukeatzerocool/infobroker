@@ -1,8 +1,10 @@
+// provider-auth.ts — read config.json and generate the provider-auth reference
+// Markdown (skills/infobroker/references/provider-auth.md).
+
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const ROOT = join(__dirname, "..", "..");
 
 interface ProviderEntry {
