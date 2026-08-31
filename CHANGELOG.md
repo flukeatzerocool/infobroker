@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026.08.31 — 
+
 ## 2026.08.30 — Spec terminology reconciliation
 
 - `infobroker.md` terminology pass: REQ-013 now enumerates `exhausted` as a
