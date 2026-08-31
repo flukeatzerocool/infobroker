@@ -14,7 +14,10 @@ Inspect what changed this run:
    Group bullets by impact area. Each bullet opens with what changed and why
    it matters in plain English, then the REQ reference in parentheses.
 4. If nothing semantic changed (no REQ added/modified, no behavior change),
-   do not add an empty entry.
+   do not add an entry — and do NOT remove or alter the `## YYYY.MM.DD — `
+   version header that `version-bump` seeded at the top of CHANGELOG.md.
+   Leave CHANGELOG.md exactly as version-bump left it and report
+   `CHANGELOG NO CHANGE.`
 
 Do NOT commit. End your reply with exactly one line:
 - `CHANGELOG UPDATED.` if you added an entry, or

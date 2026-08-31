@@ -16,7 +16,9 @@ the current src/ tree in your context from the prior step.
 5. After all changes, run `npm run validate-spec` to confirm REQ coverage
    is intact and `npm test` to confirm no regression.
 6. Run `npm run version-bump` to update the version in package.json and
-   src/index.ts to today's date.
+   src/index.ts to today's date. Leave the `## <version> — ` header that
+   version-bump seeds in CHANGELOG.md empty — do not add content to it (the
+   changelog step owns CHANGELOG content).
 7. Review: load and apply the code-review skill against the full sync diff
    (`git diff` plus untracked source files). Review for bugs, security,
    performance, readability, and maintainability with severity-tied feedback.
