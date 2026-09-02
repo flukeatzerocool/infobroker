@@ -482,7 +482,7 @@ knowledge base content (REQ-067), and accumulated quota state (REQ-033).
 The server SHALL operate on preserved user state after an update without
 requiring reconfiguration. _Check:_ G1.
 
-**REQ-091 — Registry-published distribution**
+**REQ-091 — Registry-Published Distribution**
 The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1.
 
 ---
@@ -955,7 +955,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-087 | KB Source Date Preservation | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
-| REQ-091 | Registry-published distribution | 4.10 | G1 |
+| REQ-091 | Registry-Published Distribution | 4.10 | G1 |
 
 ---
 
