@@ -21,6 +21,8 @@
   state the `[OK]`/`[ERROR]` JSON envelope, and `inspect_providers`,
   `manage_kb`, and `verify_claims` document which parameter each action
   needs; the tool-surface gate enforces both.
+- Fixed REQ-026 parameter name: the `verify_claims` tool parameter is
+  `providers`, not `inspect_providers`, matching the live tool schema.
 
 ## 2026.08.31 — 
 
