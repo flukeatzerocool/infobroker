@@ -123,6 +123,8 @@ sources to separate established facts from contested claims. Bundled
 client skills transform raw research into polished writing. Free first.
 Privacy always.
 
+[![infobroker MCP server](https://glama.ai/mcp/servers/flukeatzerocool/infobroker/badges/card.svg)](https://glama.ai/mcp/servers/flukeatzerocool/infobroker)
+
 - [North Star](#north-star)
 - [Quick Start](#quick-start)
 - [MCP Server](#mcp-server)
