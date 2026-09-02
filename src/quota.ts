@@ -151,7 +151,3 @@ export function checkQuota(
 export function getQuotaStatePath(): string {
   return QUOTA_FILE;
 }
-
-export function getCounter(slug: string): QuotaCounter | undefined {
-  return quotaState.providers[slug];
-}

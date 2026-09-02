@@ -603,10 +603,6 @@ export function runTruncSweep(ttlMs: number = TRUNC_TTL_MS): number {
   return removed;
 }
 
-export function getKbConfig(): KbConfig | null {
-  return kbConfig;
-}
-
 // REQ-065: resolve the active collection from the most-specific specifier —
 // a tool-provided parameter, then INFOBROKER_KB_COLLECTION, then the
 // configured default, then the literal "default".

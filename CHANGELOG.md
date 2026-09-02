@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.09.02 — Spec authoring conformance and dead-code cleanup
+
+- Tightened REQ-021 and REQ-079 prose to authoring-conformance rules:
+  dropped the Jina Reader URL template (an implementation detail) and the
+  repeated `jina` default from REQ-021 (SR-011a), and removed the
+  "Default verbosity SHALL be verbose" default-value statement from
+  REQ-079 (SR-011d) — the defaults live in the Parameters list and
+  `config.json` (`output.verbose`), respectively.
+- Removed three dead exports: `removeProvider` (rate-limiter.ts),
+  `getCounter` (quota.ts), and `getKbConfig` (kb.ts) — each had a single
+  definition site and no callers anywhere in the repo.
+- Linked `skills/analysis-loop/references/framework-basis.md` from the
+  analysis-loop SKILL.md technique-selection step, resolving the orphan
+  reference file.
+- Completed the §10.1 artifact tree: added `journeys.md` to the
+  infobroker references and the analysis-loop `references/` subtree
+  (`techniques.md`, `framework-basis.md`).
+
 ## 2026.09.02 — Tool-surface rename, definition-quality REQs, and registry distribution
 
 - Renamed four tools to a verb_noun convention (REQ-090): `corroborate` →

@@ -47,7 +47,3 @@ export async function throttle(slug: string): Promise<void> {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-export function removeProvider(slug: string): void {
-  limits.delete(slug);
-}

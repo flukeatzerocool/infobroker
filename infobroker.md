@@ -190,7 +190,7 @@ Tool outputs longer than the configured max length SHALL be truncated and writte
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
 
 **REQ-079 — Output Verbosity**
-The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. Default verbosity SHALL be verbose. _Check:_ G1.
+The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. _Check:_ G1.
 
 ### 4.2 Provider Configuration
 
@@ -233,7 +233,7 @@ Parameters: the `web_search` tool accepts `time_range`, `page`, `safe_search`, `
 WHEN `web_search` receives `expand` set to true, the tool SHALL return query-expansion strings instead of search results, derived from a suggestion-capable provider and the query's keywords, presented as results with a title and no URL. WHEN no suggestion-capable provider is available, the tool SHALL derive expansions from the query alone rather than erroring. _Check:_ G0, G1.
 
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, and `detect_date`. Default renderer is Jina Reader (`https://r.jina.ai/{url}`) producing clean Markdown for LLM use. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a short grace; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
+Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, and `detect_date`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a short grace; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
 
 **REQ-021b — `fetch_page` question-grounded extraction**
 WHEN `fetch_page` receives a `question`, the tool SHALL split the fetched content into passages at sentence boundaries and SHALL return the passages ranked by relevance to the question, each with a relevance score, up to the configured passage count. The response SHALL identify the extraction mode: passage content when ranking produced a match, or full content with a note when no passage matched or the content was unreadable. A low top score SHALL be reported as the page not answering the question rather than as a ranking failure. _Check:_ G1.
@@ -976,9 +976,13 @@ infobroker/
 │   │   └── references/
 │   │       ├── provider-map.md            # Task → provider dispatch reference
 │   │       ├── pipeline-map.md            # Skill pipeline diagram (Mermaid)
+│   │       ├── journeys.md                # User-journey routing and recovery
 │   │       └── workflows.md               # Workflow-shape definitions
 │   ├── analysis-loop/
-│   │   └── SKILL.md                       # Gated analytic-rigor research workflow
+│   │   ├── SKILL.md                       # Gated analytic-rigor research workflow
+│   │   └── references/
+│   │       ├── techniques.md              # Structured analytic technique catalog
+│   │       └── framework-basis.md         # Analytic frameworks per audience
 │   ├── summarization/
 │   │   └── SKILL.md                       # Condense findings
 │   ├── technical-writing/

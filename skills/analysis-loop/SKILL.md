@@ -180,7 +180,8 @@ the intelligence cycle.
 
 4. **Structured analytic technique — select by fit, not habit.** Use the
    technique-selection guide in `references/techniques.md` to match the
-   analysis state to a technique's fit criterion. Select one technique,
+   analysis state to a technique's fit criterion; the framework each
+   audience draws on is recorded in `references/framework-basis.md`. Select one technique,
    name it in the output with the reason it fits, then apply it as its own
    discrete step and report its result. Never apply a technique merely
    because it is familiar. Techniques (see the catalog for the full method
