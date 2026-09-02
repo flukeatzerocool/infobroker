@@ -1,7 +1,7 @@
 // version.ts — shared version helpers: today's CalVer date, semver
-// normalization, root-package read, and in-file replacement.
+// normalization, and root-package read.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const __dirname = import.meta.dirname;
@@ -24,19 +24,4 @@ export function normalizeSemver(v: string): string {
 
 export function readRootPackage(): { version: string } {
   return JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
-}
-
-export function replaceInFile(
-  filePath: string,
-  pattern: RegExp,
-  replacement: string,
-  label: string
-): boolean {
-  const content = readFileSync(filePath, "utf-8");
-  if (!content.match(pattern)) {
-    console.error(`  FAIL  ${label}: pattern not found`);
-    return false;
-  }
-  writeFileSync(filePath, content.replace(pattern, replacement));
-  return true;
 }

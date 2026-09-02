@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.09.02 — Remove dead exports
+
+- Removed four dead exports with no callers anywhere in the tree:
+  `parseFlag` and `parseValueFlag` (scripts/lib/args.ts), `replaceInFile`
+  (scripts/lib/version.ts), and the `ToolResponse` type (src/types.ts).
+
 ## 2026.09.02 — Knowledge-base search stops surfacing stale cached results
 
 - When a knowledge-base lookup satisfies the KB-first relevance and

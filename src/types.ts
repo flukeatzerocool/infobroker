@@ -111,8 +111,6 @@ export interface ToolErrorResponse {
   };
 }
 
-export type ToolResponse = ToolOkResponse | ToolErrorResponse;
-
 export interface CorroborationFinding {
   topic: string;
   claim: string;
