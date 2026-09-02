@@ -26,7 +26,7 @@ unified tool surface. Its design goals:
 1. **Free first, privacy always.** Zero-config default uses only free, no-auth-required providers that respect user privacy.
 2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
-4. **Truth by iteration.** A `corroborate` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
+4. **Truth by iteration.** A `verify_claims` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
 5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, proofreading, and translation, while the orchestrator routes requests to research workflow shapes including fact-checking.
 6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
@@ -67,9 +67,9 @@ route to Infobroker first, falling back to built-ins only on error.
 | F5 | MCP protocol errors | tools/list returns wrong schema | G0 conformance gate catches schema drift |
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
-| F8 | Corroboration loop stalls | `corroborate` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
+| F8 | Corroboration loop stalls | `verify_claims` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
-| F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `kb` stats action reports the event. |
+| F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `manage_kb` stats action reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
 | F12 | Generic provider misconfiguration | Empty results or parse errors from a user-defined endpoint | Config validation rejects a malformed endpoint or result mapping (REQ-014); a provider whose mapping produces no results advances the fallback chain (REQ-031) |
 
@@ -81,12 +81,12 @@ route to Infobroker first, falling back to built-ins only on error.
 
 - **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
-- **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `providers` health responses.
+- **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `inspect_providers` health responses.
 - **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE (all free HTTP, no API key required) provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Quota state persists.** Quota counters survive restarts via a JSON state file.
-- **SR-008 Corroboration is bounded.** `corroborate` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
+- **SR-008 Corroboration is bounded.** `verify_claims` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
 - **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
 - **SR-010 All tool input is validated server-side before any outbound call.** Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
 
@@ -139,8 +139,8 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Fallback chain** | The ordered provider list for a task type (§7.2) as exercised on failure: the first entry is primary and remaining entries are tried in sequence per REQ-031. The same object as the dispatch chain. |
 | **Content renderer** | A backend that fetches and formats a URL's content (Jina Reader, native HTTP). A renderer is a provider (e.g. Jina, Wikipedia) or an inline tool-handler fallback (`native_fetch`, §5.2), and is not necessarily a standalone provider module. Task type for dispatch: `content_fetch`. |
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `web_search` auto-selection |
-| **Corroboration** | The multi-pass truth-finding loop in `corroborate` |
-| **Synthesis** | The summary statement in a `corroborate` response (§8.1), and a task type for queries needing a synthesized, citation-backed answer (§7.1). |
+| **Corroboration** | The multi-pass truth-finding loop in `verify_claims` |
+| **Synthesis** | The summary statement in a `verify_claims` response (§8.1), and a task type for queries needing a synthesized, citation-backed answer (§7.1). |
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
 | **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
 | **Vector store** | The local database that indexes chunks by their embedding vectors and supports semantic (vector similarity) and keyword (full-text) retrieval. |
@@ -198,13 +198,13 @@ The server SHALL support a configurable output verbosity that applies to all too
 Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The configuration SHALL be composed of a shipped default configuration and a user configuration layer. Values in the user layer SHALL take precedence over values in the shipped default. The user configuration layer SHALL be preserved when the software is updated. The config declares each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section supplying values inherited by providers that do not override them. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
-API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
+API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
 
 **REQ-012 — Environment Variable Mapping**
 The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
-The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
+The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
 
 **REQ-014 — Generic HTTP Provider Tier**
 The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and referencing it from a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
@@ -244,41 +244,47 @@ WHEN `fetch_page` receives a `detect_date` request, the tool SHALL report the pa
 **REQ-021a — `fetch_page` network-target safety**
 WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
 
-**REQ-024 — `providers`**
-`providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
+**REQ-024 — `inspect_providers`**
+`inspect_providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
-**REQ-024a — `providers` list action**
+**REQ-024a — `inspect_providers` list action**
 WHEN action is list, the tool SHALL report every configured provider with its status, capabilities, rate limits, quota usage, and supported task types, with an optional filter selecting only active providers. WHEN a provider is not active, the tool SHALL report the reason for its state, distinguishing a missing API key, a missing endpoint URL, a provider disabled by configuration, and quota exhaustion. _Check:_ G0, G1.
 
-**REQ-024b — `providers` health action**
+**REQ-024b — `inspect_providers` health action**
 WHEN action is health, the tool SHALL perform a live connectivity check against the named provider and report its resulting status, average latency, current quota counters, and the timestamps of the most recent error and success from operational history. _Check:_ G0, G1.
 
-**REQ-024c — `providers` spec action**
+**REQ-024c — `inspect_providers` spec action**
 WHEN action is spec, the tool SHALL report build identity, provider counts, uptime, cumulative request count, and paths to persistent state files; when the knowledge base is configured, the report SHALL also include chunk count, per-collection counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
-**REQ-026 — `corroborate`**
-Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
+**REQ-026 — `verify_claims`**
+Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `inspect_providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
 **REQ-026a — corroboration source authority**
-When `corroborate` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
+When `verify_claims` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
 
 **REQ-026b — corroboration claim attribution**
-Each finding returned by `corroborate` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
+Each finding returned by `verify_claims` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
 
 **REQ-026c — corroboration source preservation**
-WHEN source preservation is enabled in the configuration, `corroborate` SHALL best-effort capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
+WHEN source preservation is enabled in the configuration, `verify_claims` SHALL best-effort capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
 
 **REQ-026d — corroboration provenance record**
-The `corroborate` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding, formatted so a downstream citation can document the analytic tooling used. The record SHALL be present in verbose output. _Check:_ G1.
+The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding, formatted so a downstream citation can document the analytic tooling used. The record SHALL be present in verbose output. _Check:_ G1.
 
 **REQ-026e — corroboration knowledge-base recall**
-WHEN the knowledge base is configured and recall is enabled, `corroborate` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
+WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
 
-**REQ-027 — `cite`**
-The `cite` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
+**REQ-027 — `get_citations`**
+The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
 
 **REQ-028 — `web_search` deep reading**
 WHEN `web_search` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
+
+**REQ-089 — Tool-definition quality**
+Every advertised tool definition SHALL state the tool's purpose, when to use it, and when not to use it, naming the alternatives a caller could choose instead. Every tool definition SHALL disclose behavioral consequences: effects on stored state, external calls, rate limits, authentication requirements, and destructive operations. Every parameter in a tool's input schema SHALL carry a description of its meaning and any non-obvious constraints or interactions. Tool definitions SHALL declare annotations for read-only, destructive, and idempotent behavior. _Check:_ G0, G1.
+
+**REQ-090 — Tool naming convention**
+Tool names SHALL follow a verb-noun pattern: a verb naming the operation followed by the noun naming the resource the operation acts on. A tool's name SHALL allow an agent to infer the operation and resource without reading the description. _Check:_ G0, G1.
 
 ### 4.4 Rate Limiting and Resilience
 
@@ -300,7 +306,7 @@ Providers SHALL retry on transient errors before advancing to the next provider 
 Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counter state SHALL be durably written to disk such that quota enforcement survives server restarts. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). _Check:_ G1.
 
 **REQ-034 — Quota Warning Threshold**
-At 80% of quota usage, the `providers` health action SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
+At 80% of quota usage, the `inspect_providers` health action SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
 
 **REQ-035 — Request Timeout**
 Each outbound provider call SHALL be bounded by a configurable timeout. A call
@@ -309,7 +315,7 @@ trigger fallback chain advancement. The timeout is configurable per provider in
 `config.json`. _Check:_ G1.
 
 **REQ-036 — Latency Tracking Window**
-Provider latency metrics reported via the `providers` health action SHALL be computed over
+Provider latency metrics reported via the `inspect_providers` health action SHALL be computed over
 a bounded time window. The window strategy is configurable. All-time unbounded
 accumulation SHALL NOT be the sole computation strategy. _Check:_ G1.
 
@@ -345,10 +351,10 @@ provider tier or transport. _Check:_ G1.
 ### 4.7 Client Artifacts
 
 **REQ-050 — `search-preferences.md`**
-The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. The instruction file SHALL direct the client to rely on the `web_search` tool's built-in knowledge-base-first retrieval for external queries and SHALL reserve a direct `kb` search for answering from stored content alone or inspecting the knowledge base. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
+The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. The instruction file SHALL direct the client to rely on the `web_search` tool's built-in knowledge-base-first retrieval for external queries and SHALL reserve a direct `manage_kb` search for answering from stored content alone or inspecting the knowledge base. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
 
 **REQ-051 — Orchestrator Skill**
-The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `web_search` tool's built-in KB-first behavior satisfies, reserving a direct `kb` search for stored-content-only answers and knowledge-base inspection. _Check:_ G3 (file presence, content verification).
+The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `web_search` tool's built-in KB-first behavior satisfies, reserving a direct `manage_kb` search for stored-content-only answers and knowledge-base inspection. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
 The build SHALL produce an orchestrator skill (REQ-051) that references four pipeline skills — summarization, technical-writing, proofreading, and translation — by name, and that routes research requests to workflow shapes defined in `skills/infobroker/references/workflows.md`. These skills SHALL be shipped in the repository so the build is self-contained and requires no external skill dependency. _Check:_ G3 (content verification).
@@ -391,36 +397,36 @@ _Check:_ G3.
 Every tool parameter default declared in this specification SHALL be the value the tool applies when the parameter is omitted, and no code path SHALL apply a different value. Behavior configurable through the configuration file SHALL resolve entirely from the configuration, and source code SHALL NOT carry a divergent numeric fallback for a value the configuration supplies. Where a tool default and a configuration value describe the same limit, they SHALL match. Verification SHALL fail when any of these divergences is present. _Check:_ G3.
 
 **REQ-081 — Token Footprint Report**
-The `providers` spec action SHALL report a token-footprint record measuring the advertised tool surface and the server's typical response size. The record SHALL include the total byte size of the advertised tool schemas derived from live tool registration, and a byte measurement of recent tool responses. The measurements SHALL be derived from live registration and measured responses rather than static literals. _Check:_ G1.
+The `inspect_providers` spec action SHALL report a token-footprint record measuring the advertised tool surface and the server's typical response size. The record SHALL include the total byte size of the advertised tool schemas derived from live tool registration, and a byte measurement of recent tool responses. The measurements SHALL be derived from live registration and measured responses rather than static literals. _Check:_ G1.
 
 ### 4.9 Knowledge Base
 
-**REQ-060 — `kb`**
-`kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
+**REQ-060 — `manage_kb`**
+`manage_kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
-**REQ-060a — `kb` search action**
+**REQ-060a — `manage_kb` search action**
 WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, `source_type`, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a `source_type` filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
-**REQ-060b — `kb` ingest action**
+**REQ-060b — `manage_kb` ingest action**
 WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
 
-**REQ-060c — `kb` stats action**
+**REQ-060c — `manage_kb` stats action**
 WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
 
-**REQ-060d — `kb` delete action**
+**REQ-060d — `manage_kb` delete action**
 WHEN action is delete, the tool SHALL remove chunks by collection or source URL, requiring at least one filter, and SHALL report the count of removed chunks. _Check:_ G0, G1.
 
-**REQ-060e — `kb` list action**
+**REQ-060e — `manage_kb` list action**
 WHEN action is list, the tool SHALL enumerate stored documents as distinct entries with title, source URL, collection, `source_type`, freshness tier, chunk count, ingest timestamp, and stored source last-updated date, ordered newest first, and SHALL accept a collection filter and a `source_type` filter. _Check:_ G1.
 
-**REQ-060f — `kb` get action**
+**REQ-060f — `manage_kb` get action**
 WHEN action is get, the tool SHALL return a stored document in full by source URL, reassembling its chunks in order, and SHALL return an error when no document matches the source URL. _Check:_ G1.
 
-**REQ-060g — `kb` encryption action**
+**REQ-060g — `manage_kb` encryption action**
 WHEN action is encryption, the tool SHALL operate on the knowledge base's at-rest encryption state per its `operation` sub-parameter: `status` SHALL report the encryption state and on-disk format, `generate_key` SHALL write a new key to a caller-supplied key-file path without returning key material, `verify` SHALL test the active key against the store, `backup` SHALL copy the active key file to a caller-supplied backup path, and a rekey sub-operation SHALL re-seal the store to a new key file without loss of stored content. This action SHALL remain reachable while the store is locked. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
-Search results from `web_search`, rendered page content from `fetch_page`, and findings from `corroborate` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
+Search results from `web_search`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
 A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
@@ -432,7 +438,7 @@ Indexed content SHALL be removable by age. The removal interval for content SHAL
 The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
-Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. The chunk count reported by the `kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
+Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. The chunk count reported by the `manage_kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
 **REQ-074 — Freshness Classification**
 Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
@@ -476,6 +482,9 @@ knowledge base content (REQ-067), and accumulated quota state (REQ-033).
 The server SHALL operate on preserved user state after an update without
 requiring reconfiguration. _Check:_ G1.
 
+**REQ-091 — Registry-published distribution**
+The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1.
+
 ---
 
 ## §5 Build Process
@@ -492,8 +501,8 @@ requiring reconfiguration. _Check:_ G1.
 ### 5.2 Layered Architecture
 
 ```
-Layer 3: Tools                 web_search, fetch_page, corroborate, cite,
-                               providers, kb, reload_config
+Layer 3: Tools                 web_search, fetch_page, verify_claims, get_citations,
+                               inspect_providers, manage_kb, reload_config
 
 Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
@@ -535,7 +544,7 @@ instance resolved through the registration mapping (REQ-070) to a single
 shared implementation, so adding one requires no provider-module source
 change (REQ-014). The provider-module `health()` returns connectivity status
 (`active`, `degraded`, `inactive`); the provider status reported by the
-`providers` tool (REQ-013) additionally includes `exhausted`. Capability
+`inspect_providers` tool (REQ-013) additionally includes `exhausted`. Capability
 tokens overlap the task-type tokens (§7.1) plus `web_search` (general web
 search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 (§7.2); a provider whose capability list includes `web_search` serves the
@@ -551,7 +560,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
 7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
 8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
-9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `corroborate`, the `kb` MCP tool, content expiry maintenance loop.
+9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `verify_claims`, the `manage_kb` MCP tool, content expiry maintenance loop.
 
 ### 5.5 Corroboration Quality (Single Phase)
 
@@ -562,7 +571,7 @@ responses. The corroboration loop validates against:
 - Every tool has a zod schema and a registered handler
 - Every provider implements the Provider interface
 - Fallback chains have at least one active provider
-- `corroborate` exits within max_iterations
+- `verify_claims` exits within max_iterations
 
 ---
 
@@ -571,7 +580,7 @@ responses. The corroboration loop validates against:
 ### 6.1 Tool Naming
 
 All tools use `snake_case`. Tool names are domain terminology: `web_search`,
-`fetch_page`, `corroborate`, `cite`, `providers`, `kb`, `reload_config`. These logical
+`fetch_page`, `verify_claims`, `get_citations`, `inspect_providers`, `manage_kb`, `reload_config`. These logical
 names are registered with the MCP client under an `infobroker_` prefix
 (e.g., `infobroker_web_search`).
 
@@ -774,7 +783,7 @@ is configurable via `corroboration.similarity_threshold`.
 ### 8.3 Iteration Limits
 
 - `max_iterations` defaults to 5, capped at 10.
-- Max total HTTP calls per `corroborate` invocation: 30.
+- Max total HTTP calls per `verify_claims` invocation: 30.
 - `first_pass_max_results` (default 10) bounds results fetched per provider in Phase 1.
 - Gap-refinement queries run concurrently within the remaining HTTP-call budget.
 - Knowledge-base recall is governed by the configurable `corroboration.kb_recall` setting.
@@ -803,9 +812,9 @@ is configurable via `corroboration.similarity_threshold`.
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
 - Normalizer: input from each provider format → verify common output shape
-- `corroborate`: mock 3 providers with overlapping claims → verify agreement detection
+- `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
-- Token footprint: call `providers` spec action → verify `tool_schema_bytes` and `median_response_bytes` are present, numeric, and consistent with live registration
+- Token footprint: call `inspect_providers` spec action → verify `tool_schema_bytes` and `median_response_bytes` are present, numeric, and consistent with live registration
 - Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `web_search` returns mapped results through the dispatch chain
 - Generic provider malformed config: declare a generic provider with an invalid endpoint or result mapping → verify config validation rejects it on load and reload
 - Provider removal: disable a provider in the user configuration layer → verify it is skipped by dispatch and recommendations, and the disabled state survives reload and a simulated update
@@ -820,7 +829,7 @@ is configurable via `corroboration.similarity_threshold`.
 - KB auto-indexing: execute `web_search` with mock provider → verify store received results after response
 - KB collection scoping: insert content into two collections → query scoped to one → verify only scoped results returned
 - KB expiry: insert content with past timestamp → trigger maintenance → verify expired content removed; verify non-expired content retained
-- KB config validation: provide invalid KB config section → verify `kb` search returns config error
+- KB config validation: provide invalid KB config section → verify `manage_kb` search returns config error
 - KB deduplication: ingest URL with content → note chunk count → re-ingest same URL → verify count unchanged, content updated
 - Normalizer discard: normalize results with empty URL → verify zero results returned, max_results count preserved for downstream provider
 - Config overlay: load shipped default plus user configuration layer → verify user values take precedence over shipped values
@@ -886,18 +895,20 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-021a | fetch_page network-target safety | 4.3 | G1 |
 | REQ-021b | fetch_page question-grounded extraction | 4.3 | G1 |
 | REQ-021c | fetch_page date detection | 4.3 | G1 |
-| REQ-024 | providers | 4.3 | G0, G1 |
-| REQ-024a | providers list action | 4.3 | G0, G1 |
-| REQ-024b | providers health action | 4.3 | G0, G1 |
-| REQ-024c | providers spec action | 4.3 | G0, G1 |
-| REQ-026 | corroborate | 4.3 | G0, G1 |
+| REQ-024 | inspect_providers | 4.3 | G0, G1 |
+| REQ-024a | inspect_providers list action | 4.3 | G0, G1 |
+| REQ-024b | inspect_providers health action | 4.3 | G0, G1 |
+| REQ-024c | inspect_providers spec action | 4.3 | G0, G1 |
+| REQ-026 | verify_claims | 4.3 | G0, G1 |
 | REQ-026a | corroboration source authority | 4.3 | G1 |
 | REQ-026b | corroboration claim attribution | 4.3 | G1 |
 | REQ-026c | corroboration source preservation | 4.3 | G1 |
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
-| REQ-027 | cite | 4.3 | G0, G1 |
+| REQ-027 | get_citations | 4.3 | G0, G1 |
 | REQ-028 | web_search deep reading | 4.3 | G1 |
+| REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
+| REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
@@ -920,14 +931,14 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
 | REQ-080 | Tool Default Consistency | 4.8 | G3 |
 | REQ-081 | Token Footprint Report | 4.8 | G1 |
-| REQ-060 | kb | 4.9 | G0, G1 |
-| REQ-060a | kb search action | 4.9 | G0, G1 |
-| REQ-060b | kb ingest action | 4.9 | G0, G1 |
-| REQ-060c | kb stats action | 4.9 | G1 |
-| REQ-060d | kb delete action | 4.9 | G0, G1 |
-| REQ-060e | kb list action | 4.9 | G1 |
-| REQ-060f | kb get action | 4.9 | G1 |
-| REQ-060g | kb encryption action | 4.9 | G0, G1 |
+| REQ-060 | manage_kb | 4.9 | G0, G1 |
+| REQ-060a | manage_kb search action | 4.9 | G0, G1 |
+| REQ-060b | manage_kb ingest action | 4.9 | G0, G1 |
+| REQ-060c | manage_kb stats action | 4.9 | G1 |
+| REQ-060d | manage_kb delete action | 4.9 | G0, G1 |
+| REQ-060e | manage_kb list action | 4.9 | G1 |
+| REQ-060f | manage_kb get action | 4.9 | G1 |
+| REQ-060g | manage_kb encryption action | 4.9 | G0, G1 |
 | REQ-064 | Auto-Indexing | 4.9 | G1 |
 | REQ-065 | Collection Scoping | 4.9 | G1 |
 | REQ-066 | Content Expiry | 4.9 | G1 |
@@ -944,6 +955,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-087 | KB Source Date Preservation | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
+| REQ-091 | Registry-published distribution | 4.10 | G1 |
 
 ---
 
@@ -1034,10 +1046,10 @@ configuration layer is merged over it by the server (REQ-010).
 | `duckduckgo_get_page_content` | `fetch_page` — Jina Reader as default renderer, native fallback |
 | `duckduckgo_suggest_related_searches` | `web_search` with `suggest` — DuckDuckGo autocomplete, same endpoint |
 | (none) | `web_search` auto-selection — task-type routing (was `choose_provider`) |
-| (none) | `corroborate` — multi-pass truth-finding |
-| (none) | `cite` — academic references as BibTeX |
-| (none) | `providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
-| (none) | `kb` — knowledge base search/ingest/stats/delete (was four `kb_*` tools) |
+| (none) | `verify_claims` — multi-pass truth-finding |
+| (none) | `get_citations` — academic references as BibTeX |
+| (none) | `inspect_providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
+| (none) | `manage_kb` — knowledge base search/ingest/stats/delete (was four `kb_*` tools) |
 | (none) | `reload_config` — ops tooling |
 | Client `websearch` | Infobroker is preferred; built-in is fallback |
 | Client `webfetch` | Infobroker `fetch_page` is preferred; built-in is fallback |
@@ -1354,12 +1366,12 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page`, `cite` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-028, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
-| 2 | Provider Intelligence | `providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
-| 3 | Corroboration | `corroborate` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
-| 4 | Knowledge Base | `kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081 | G0, G1 |
-| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079 | G0 |
+| 1 | Core Retrieval | `web_search`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-028, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
+| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
+| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091 | G0, G1 |
+| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 

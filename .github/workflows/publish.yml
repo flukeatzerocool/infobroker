@@ -28,7 +28,7 @@ jobs:
       - name: Determine if version is already published
         id: check
         run: |
-          LOCAL_VERSION=$(node -e "console.log(require('./package.json').version)")
+          LOCAL_VERSION=$(node -e "console.log(require('./package.json').version.split('.').map(Number).join('.'))")
           PUBLISHED_VERSION=$(npm view infobroker version 2>/dev/null || echo "")
           echo "local=$LOCAL_VERSION"
           echo "published=$PUBLISHED_VERSION"
@@ -50,4 +50,4 @@ jobs:
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
           chmod +x mcp-publisher
           ./mcp-publisher login github-oidc
-          ./mcp-publisher publish
+          ./mcp-publisher publish server.json

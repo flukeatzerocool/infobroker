@@ -929,7 +929,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.08.31",
+  version: "2026.09.02",
 });
 
 // --- web_search ---
@@ -937,20 +937,25 @@ server.registerTool(
   "infobroker_web_search",
   {
     title: "Web Search",
-    description: "Unified provider search with task-type routing, fallback chain, and optional suggestions.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), or ranked passages from the top pages (deep). Do NOT use for a URL you already have (use fetch_page), for high-stakes claim verification (use verify_claims), for stored-report recall (use manage_kb search), or for academic citations (use get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers.",
     inputSchema: {
-      query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]),
+      query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
-      max_results: z.number().min(1).max(30).optional().default(8),
-      safe_search: z.enum(["on", "off", "strict"]).optional().default("on"),
-      time_range: z.enum(["day", "week", "month", "year"]).optional(),
-      page: z.number().min(1).optional().default(1),
-      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional(),
-      suggest: z.boolean().optional().default(false),
+      max_results: z.number().min(1).max(30).optional().default(8).describe("Number of results to return (1-30, default 8)"),
+      safe_search: z.enum(["on", "off", "strict"]).optional().default("on").describe("Safe-search filtering: on, off, or strict (default on)"),
+      time_range: z.enum(["day", "week", "month", "year"]).optional().describe("Restrict results to day, week, month, or year"),
+      page: z.number().min(1).optional().default(1).describe("Results page number (default 1)"),
+      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional().describe("Route by intent: speed, quality, privacy, or free_only"),
+      suggest: z.boolean().optional().default(false).describe("Return query-autocomplete strings instead of results (default false)"),
       expand: z.boolean().optional().default(false).describe("Return query-expansion strings instead of search results"),
       deep: z.boolean().optional().default(false).describe("Read the top results and return each page's ranked passages against the query"),
-      content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all"),
+      content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
+    },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
     },
   },
   async (params) => {
@@ -977,15 +982,20 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch and extract URL content. Jina Reader by default, native HTTP fallback.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question (question mode returns ranked passages), or need the page's last-updated date (detect_date). Do NOT use for a general topic search (use web_search) or for claim verification across sources (use verify_claims). Makes external HTTP calls, falls back to native HTTP when Jina is throttled, truncates very long pages, and needs no API key.",
     inputSchema: {
-      url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]),
-      renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional(),
-      max_length: z.number().optional().default(50000),
+      url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
+      renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
+      max_length: z.number().optional().default(50000).describe("Maximum characters to return (default 50000)"),
       question: z.string().optional().describe("Question to extract ranked passages for, instead of returning the whole page"),
       passage_size: z.number().optional().describe("Target words per passage (default from config)"),
       max_passages: z.number().optional().describe("Number of passages to return (default from config)"),
       detect_date: z.boolean().optional().describe("Detect and report the page's last-updated date (default from config)"),
+    },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
     },
   },
   async (params) => {
@@ -1004,14 +1014,18 @@ server.registerTool(
 
 // --- providers ---
 server.registerTool(
-  "infobroker_providers",
+  "infobroker_inspect_providers",
   {
-    title: "Providers",
-    description: "Operational state over configured providers: list, health, or spec actions.",
+    title: "Inspect Providers",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use web_search) or to read a page (use fetch_page). Read-only: it reports state and never modifies configuration, providers, or stored data.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),
       status: z.enum(["active", "all"]).optional().describe("Filter for list action"),
+    },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
     },
   },
   async (params) => {
@@ -1032,18 +1046,23 @@ server.registerTool(
   }
 );
 
-// --- corroborate ---
+// --- verify_claims ---
 server.registerTool(
-  "infobroker_corroborate",
+  "infobroker_verify_claims",
   {
-    title: "Corroborate (Multi-Source Truth-Finding)",
-    description: "Multi-pass truth-finding search with cross-source verification.",
+    title: "Verify Claims",
+    description: "Run a multi-pass truth-finding loop that searches across providers, reconciles claims across independent sources, and returns confidence-scored findings with per-claim source attribution. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use web_search) or for citation formatting (use get_citations). Makes multiple searches bounded by max_iterations and per-provider rate limits, recalls prior findings from the knowledge base, and indexes its findings back into the knowledge base.",
     inputSchema: {
       query: z.string().describe("Search query"),
-      max_iterations: z.number().min(1).max(10).optional().default(5),
-      confidence_threshold: z.number().min(0).max(1).optional().default(0.8),
+      max_iterations: z.number().min(1).max(10).optional().default(5).describe("Maximum search-refinement passes (1-10, default 5)"),
+      confidence_threshold: z.number().min(0).max(1).optional().default(0.8).describe("Minimum confidence to report a finding as confirmed (0-1, default 0.8)"),
       providers: z.array(z.string()).optional().describe("Optional array of provider slugs to limit the search to"),
       priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional().describe("Route the corroboration pool by intent"),
+    },
+    annotations: {
+      readOnlyHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
     },
   },
   async (params) => {
@@ -1079,10 +1098,10 @@ server.registerTool(
 
 // --- kb ---
 server.registerTool(
-  "infobroker_kb",
+  "infobroker_manage_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete. Use ingest with source_type 'report' and save_to 'kb' (default) to archive generated reports; use list/get to revisit them. Use the 'encryption' action to enable/disable at-rest encryption, generate or back up a key, verify a key, or re-key the store.",
+    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete stored content and reports, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content (list/get), or manage encryption keys. Use the 'encryption' action to enable or disable at-rest encryption, generate or back up a key, verify a key, or re-key the store. Do NOT use for fresh external search (use web_search) or to fetch a new page (use fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design.",
     inputSchema: {
       action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
@@ -1098,7 +1117,12 @@ server.registerTool(
       save_to: z.enum(["kb", "disk", "both"]).optional().describe("Where to save (ingest action): kb, disk, or both. Default kb"),
       format: z.enum(["markdown", "text", "json"]).optional().default("markdown").describe("File format for disk save"),
       source_url: z.string().optional().describe("Source URL filter (get/delete action) or identity for ingest"),
-      max_results: z.number().min(1).max(50).optional().default(8),
+      max_results: z.number().min(1).max(50).optional().default(8).describe("Maximum results to return (1-50, default 8)"),
+    },
+    annotations: {
+      destructiveHint: true,
+      readOnlyHint: false,
+      idempotentHint: false,
     },
   },
   async (params) => {
@@ -1280,8 +1304,12 @@ server.registerTool(
   "infobroker_reload_config",
   {
     title: "Reload Configuration",
-    description: "Re-read config without restarting. Active connections are preserved.",
+    description: "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json and want the changes applied immediately. Do NOT use to inspect configuration or provider state (use inspect_providers). If the new configuration is invalid, the previous configuration stays active and an error is returned.",
     inputSchema: {},
+    annotations: {
+      readOnlyHint: false,
+      idempotentHint: true,
+    },
   },
   async () => {
     try {
@@ -1319,13 +1347,17 @@ server.registerTool(
 
 // --- cite ---
 server.registerTool(
-  "infobroker_cite",
+  "infobroker_get_citations",
   {
-    title: "Cite (Academic References)",
-    description: "Return academic references for a query as BibTeX citations, drawn from scholarly sources.",
+    title: "Get Citations",
+    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use web_search) or for verifying a contested claim (use verify_claims). Operates without an API key when at least one scholarly source is reachable.",
     inputSchema: {
       query: z.string().describe("Search query"),
-      max_results: z.number().min(1).max(30).optional().default(8),
+      max_results: z.number().min(1).max(30).optional().default(8).describe("Maximum references to return (1-30, default 8)"),
+    },
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
     },
   },
   async (params) => {

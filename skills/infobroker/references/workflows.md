@@ -11,10 +11,10 @@ Every shape composes from these steps; a shape names the steps it uses
 rather than restating them.
 
 - **RECALL** — `web_search` performs KB-first recall automatically before
-  external providers; use a direct `kb` (action search) only when stored
+  external providers; use a direct `manage_kb` (action search) only when stored
   content alone can answer the task or to inspect the store.
 - **SEARCH** — `web_search` (multi-provider, auto-selection, fallback
-  chain). Use `corroborate` when a claim is contested; use `deep: true`
+  chain). Use `verify_claims` when a claim is contested; use `deep: true`
   when you want passages read from the top results, not just snippets.
 - **EXTRACT** — `fetch_page` on promising URLs for full content; pass
   `question` to a page you are reading to answer a specific question, so only
@@ -47,7 +47,7 @@ writing.
 
 **Trigger:** verify specific claims from user input.
 
-**Pipeline:** RECALL → extract claims → SEARCH per claim → `corroborate`
+**Pipeline:** RECALL → extract claims → SEARCH per claim → `verify_claims`
 cross-reference → verdict → `summarization` digest → CITE.
 
 **Verdict:** True, Mostly True, Half True, Mostly False, False, or
@@ -123,7 +123,7 @@ naming what is absent, and a source register.
 **Trigger:** track a topic across time ("what changed", "monitor X",
 "watch this", "weekly briefing").
 
-**Pipeline:** establish baseline → `kb` freshness check → re-SEARCH →
+**Pipeline:** establish baseline → `manage_kb` freshness check → re-SEARCH →
 compare to baseline → report only the deltas → ingest the new results.
 
 **Technique:** Indicators — define signposts for the topic before comparing,
@@ -157,7 +157,7 @@ and an overall robustness verdict. No softening — the job is to find breaks.
 "background check", "is this legit", "due diligence").
 
 **Pipeline:** define the checklist → RECALL → SEARCH per checklist item →
-`corroborate` on contested items → grade each source for reliability →
+`verify_claims` on contested items → grade each source for reliability →
 flag red flags.
 
 **Technique:** Quality-of-Information Check — grade each source's

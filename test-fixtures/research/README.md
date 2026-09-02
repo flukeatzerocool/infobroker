@@ -31,7 +31,7 @@ entry declares:
 - `tokens` appear in order in the assistant's text.
 - `absent` tokens do not appear.
 - `sections` are present (case-insensitive OR-match).
-- `tool_audit.kb_before_search`: a `kb` tool call precedes the first
+- `tool_audit.kb_before_search`: a `manage_kb` tool call precedes the first
   `web_search`. (Only asserted when the scenario sets it `true`.)
 - `tool_audit.uses_infobroker`: at least one `infobroker_infobroker_*` tool
   is called. Built-in `websearch`/`webfetch` do **not** fail this — they are
@@ -39,7 +39,7 @@ entry declares:
 
 **Advisory** (reported, not gating):
 
-- `tool_audit.corroborate`: `corroborate` was called. This is "use on
+- `tool_audit.verify_claims`: `verify_claims` was called. This is "use on
   contested claims" guidance, topic-dependent, not a shape requirement.
 - `citation_sample`: the first N cited URLs are fetched; each is classified
   `reachable` / `blocked` / `invalid` / `error`. A bad URL flags for review

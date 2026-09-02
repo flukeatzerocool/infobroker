@@ -10,7 +10,7 @@
     "tokens": ["evaluation complete."],
     "absent": [],
     "sections": ["criteria", "recommendation"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "Evaluation criteria are defined explicitly before scoring",
@@ -33,7 +33,7 @@
     "tokens": ["fact-check complete."],
     "absent": [],
     "sections": ["verdict", "confidence"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "Each claim receives a distinct verdict (True/Mostly True/Half True/Mostly False/False/Unverifiable)",
@@ -55,7 +55,7 @@
     "tokens": ["lit-review complete."],
     "absent": [],
     "sections": ["inclusion", "gap", "source register"],
-    "tool_audit": { "kb_before_search": true, "corroborate": false, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": false, "uses_infobroker": true },
     "citation_sample": 5,
     "rubric": [
       "Inclusion/exclusion criteria are stated explicitly",
@@ -76,7 +76,7 @@
     "tokens": ["monitor complete."],
     "absent": [],
     "sections": ["new", "changed"],
-    "tool_audit": { "kb_before_search": true, "corroborate": false, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": false, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "A baseline is established before comparing",
@@ -98,7 +98,7 @@
     "tokens": ["red-team complete."],
     "absent": [],
     "sections": ["weakness", "assumption", "verdict"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 3,
     "rubric": [
       "The plan is restated before being attacked",
@@ -120,7 +120,7 @@
     "tokens": ["vetting complete."],
     "absent": [],
     "sections": ["checklist", "red flag", "verified"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "A due-diligence checklist is defined up front",
@@ -141,7 +141,7 @@
     "tokens": ["research complete."],
     "absent": [],
     "sections": ["source"],
-    "tool_audit": { "kb_before_search": true, "corroborate": false, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": false, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "Facts are backed by fetched/verified material, not assertion alone",
@@ -161,7 +161,7 @@
     "tokens": ["deep-dive complete."],
     "absent": [],
     "sections": ["theme", "contradiction"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "Multiple subtopics are investigated in parallel with distinct query angles",
@@ -187,7 +187,7 @@
     ],
     "absent": [],
     "sections": ["Executive Summary", "Source Register", "Uncertainty Register"],
-    "tool_audit": { "kb_before_search": false, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": false, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 5,
     "rubric": [
       "Phase 0 emits a scoping gate before any search",
@@ -211,7 +211,7 @@
     "tokens": ["research complete."],
     "absent": [],
     "sections": ["Standardmodell"],
-    "tool_audit": { "kb_before_search": true, "corroborate": false, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": false, "uses_infobroker": true },
     "citation_sample": 3,
     "rubric": [
       "The research phase completes before translation",
@@ -231,7 +231,7 @@
     "tokens": ["analysis-loop complete."],
     "absent": [],
     "sections": ["Executive Summary", "risk"],
-    "tool_audit": { "kb_before_search": false, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": false, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "Leads with an executive summary for the CISO audience",
@@ -251,7 +251,7 @@
     "tokens": ["analysis-loop complete."],
     "absent": [],
     "sections": ["control", "Source Register"],
-    "tool_audit": { "kb_before_search": false, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": false, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "Leads with technical findings and specific controls to implement",
@@ -275,7 +275,7 @@
     "tokens": ["analysis-loop complete."],
     "absent": [],
     "sections": ["Source Register", "refine", "Refinement"],
-    "tool_audit": { "kb_before_search": false, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": false, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "The disputed finding is re-examined with a targeted re-search",
@@ -299,7 +299,7 @@
     "tokens": ["research-scoping passed.", "analysis-loop complete."],
     "absent": [],
     "sections": ["Source Register"],
-    "tool_audit": { "kb_before_search": false, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": false, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "The expanded scope re-enters scoping rather than being bolted on",
@@ -318,7 +318,7 @@
     "tokens": [],
     "absent": ["research-collection complete."],
     "sections": ["clarif"],
-    "tool_audit": { "kb_before_search": false, "corroborate": false, "uses_infobroker": false },
+    "tool_audit": { "kb_before_search": false, "verify_claims": false, "uses_infobroker": false },
     "citation_sample": 0,
     "rubric": [
       "Asks targeted clarifying questions before searching",
@@ -338,7 +338,7 @@
     "tokens": ["research complete."],
     "absent": [],
     "sections": ["source"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 2,
     "rubric": [
       "Well-sourced claims are distinguished from weakly-sourced claims",
@@ -357,7 +357,7 @@
     "tokens": ["fact-check complete."],
     "absent": [],
     "sections": ["verdict", "confidence"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 4,
     "rubric": [
       "The verdict reflects the state of the evidence, including disagreement",
@@ -376,7 +376,7 @@
     "tokens": ["analysis-loop complete."],
     "absent": [],
     "sections": ["Uncertainty Register", "gap", "zero usable", "no source"],
-    "tool_audit": { "kb_before_search": true, "corroborate": true, "uses_infobroker": true },
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 2,
     "rubric": [
       "The absence of sources is itself reported as a finding",

@@ -14,7 +14,7 @@
     "Contradictions are reported rather than resolved silently",
     "A structured analytic technique is selected by fit and named with its rationale",
     "The selected technique runs as its own discrete step with a reported output",
-    "Contested claims are cross-verified (corroborate)",
+    "Contested claims are cross-verified (verify_claims)",
     "Findings cite source URLs",
     "Final completion line present"
   ],

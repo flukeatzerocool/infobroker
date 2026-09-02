@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.09.02 — Tool-surface rename, definition-quality REQs, and registry distribution
+
+- Renamed four tools to a verb_noun convention (REQ-090): `corroborate` →
+  `verify_claims`, `kb` → `manage_kb`, `providers` → `inspect_providers`,
+  `cite` → `get_citations`. Spec REQ titles, manifest, taxonomy, README,
+  skills, and instructions updated in lockstep; the corroboration *concept*
+  and internal function names are unchanged.
+- Added REQ-089 (tool-definition quality): every tool now states its
+  purpose, when-to/when-not usage with alternatives, and behavioral
+  consequences; every parameter carries a description; every tool declares
+  read-only, destructive, and idempotent annotations.
+- Added REQ-091 (registry-published distribution). Fixed the publish
+  workflow to pass `server.json` positionally to `mcp-publisher` and to
+  compare npm-canonical versions; added `glama.json`.
+- New `src/tool-surface.test.ts` verifies the advertised tool surface over
+  stdio against REQ-089 and REQ-090.
+
 ## 2026.08.31 — 
 
 ## 2026.08.30 — Spec terminology reconciliation

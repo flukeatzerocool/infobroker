@@ -58,8 +58,9 @@ while ((match = reqPattern.exec(specText)) !== null) {
   allReqs.add(`REQ-${match[1]}`);
 }
 
-// Client-artifact REQs verified by file presence, not source citations
-const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088"]);
+// Client- and distribution-artifact REQs verified by file presence (skills,
+// docs, server.json), not by src/ source citations.
+const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091"]);
 
 // Meta-REQs that describe the spec process itself
 const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080"]);
@@ -483,7 +484,7 @@ function requireDefault(re: RegExp, label: string, schema: string | undefined): 
   }
 }
 requireDefault(/`max_results`\s+\(default\s+(\d+)\s*,/ , "REQ-020 web_search max_results", schemaDefault("web_search", "max_results", 30));
-requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a kb max_results", schemaDefault("kb", "max_results", 50));
+requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a manage_kb max_results", schemaDefault("manage_kb", "max_results", 50));
 
 // --- Report ---
 

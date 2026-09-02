@@ -12,7 +12,7 @@ Checklist:
 2. Deprecated or renamed terms — grep for any stale references to removed
    REQs, tools, or providers no longer configured.
 3. Hardcoded counts — check if provider count, tool count, REQ count, or
-   other numeric constants in source code match the `providers` spec action
+   other numeric constants in source code match the `inspect_providers` spec action
    output or current infobroker.md.
 4. Stale file paths — check import paths, config references, and README
    paths exist on disk.

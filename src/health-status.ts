@@ -1,5 +1,5 @@
 // @implements REQ-013 REQ-036
-// Pure decision function for the `providers` health status. Extracted from
+// Pure decision function for the `inspect_providers` health status. Extracted from
 // doProviderHealth so the REQ-013 degraded definition (latency threshold OR
 // partial results) is unit-testable without an MCP round-trip.
 export type HealthStatus = "active" | "inactive" | "degraded" | "exhausted";

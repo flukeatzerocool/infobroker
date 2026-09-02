@@ -2,6 +2,39 @@
 
 ## Active Decisions
 
+### D-039: Registry-Published Distribution (REQ-091) and Glama Metadata (2026.09.02)
+
+The server was npm-published but never registered with the official MCP
+registry, and the publish workflow carried two defects: `mcp-publisher
+publish` was invoked without the `server.json` positional argument, and the
+"already published?" guard compared the CalVer spelling (`2026.09.02`)
+against npm's canonical form (`2026.9.2`), which never match, so every push
+re-attempted publication. REQ-091 states the contract: the build SHALL
+publish to npm and register with the MCP registry, and the registered version
+SHALL equal the npm-canonical form of the package version over the stdio
+transport. The workflow now passes `server.json` explicitly and normalizes
+the local version before comparing. A `glama.json` declaring the maintainer
+was added so Glama can attribute the listing.
+
+### D-038: Tool-Surface Rename to verb_noun and Definition-Quality REQs (2026.09.02)
+
+The tool surface mixed three naming patterns (verb_noun, bare verb, noun),
+and the tool descriptions under-specified usage and behavior — Glama's
+TDQS audit scored the server 2.9/5 with a 1.8 minimum on `web_search`, and
+2/5 naming coherence. Two contracts were added: REQ-089 (every tool states
+purpose, when-to/when-not with alternatives, and behavioral consequences;
+every parameter is described; annotations declared) and REQ-090 (verb_noun
+naming). Four tools were renamed — `corroborate` → `verify_claims`,
+`kb` → `manage_kb`, `providers` → `inspect_providers`, `cite` →
+`get_citations` — while `web_search`, `fetch_page`, and `reload_config`
+already matched. The corroboration *concept* (glossary, §8 algorithm, the
+internal `corroborate.ts` module and function) is unchanged; only the
+advertised tool name changed. This is a breaking change for callers of the
+four renamed tools; it was accepted as the cost of fixing the coherence
+dimension, and every client-facing reference (README, skills, instructions,
+fixtures) was updated in the same change. A stdio-surface test
+(`src/tool-surface.test.ts`) now enforces both contracts.
+
 ### D-037: Hedged (Speculative) Fallback Dispatch for `web_search` and `fetch_page` (2026.08.24)
 
 The fallback chain was sequential: provider N+1 was tried only after provider N

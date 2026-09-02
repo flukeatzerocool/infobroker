@@ -16,7 +16,7 @@ flowchart TD
     C -->|"high-stakes rigor"| AL
 
     subgraph RP["Research & Write"]
-        RPr["web_search / corroborate"] --> RPe["fetch_page"]
+        RPr["web_search / verify_claims"] --> RPe["fetch_page"]
         RPe --> RPv["verify & triangulate"]
         RPv --> RPs["summarization"]
         RPs --> RPw["technical-writing"]
@@ -25,7 +25,7 @@ flowchart TD
     end
 
     subgraph FC["Fact-Check"]
-        FCc["extract claims → web_search → corroborate"] --> FCv["assign verdicts"]
+        FCc["extract claims → web_search → verify_claims"] --> FCv["assign verdicts"]
     end
 
     subgraph EV["Competitive Evaluation"]
@@ -45,7 +45,7 @@ flowchart TD
     end
 
     subgraph VE["Vetting / Due-Diligence"]
-        VEc["checklist → per-item search → corroborate"] --> VEv["red-flag register"]
+        VEc["checklist → per-item search → verify_claims"] --> VEv["red-flag register"]
     end
 
     subgraph AL["Analysis Loop (escalation)"]

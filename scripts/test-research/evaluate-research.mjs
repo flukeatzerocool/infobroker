@@ -61,8 +61,8 @@ if (ta.kb_before_search) {
   const ws = toolOrder.findIndex((t) => t.includes("web_search"));
   audit.kb_before_search = kb !== -1 && (ws === -1 || kb < ws);
 }
-if (ta.corroborate) {
-  audit.corroborate = toolOrder.some((t) => t.includes("corroborate"));
+if (ta.verify_claims) {
+  audit.verify_claims = toolOrder.some((t) => t.includes("verify_claims"));
 }
 if (ta.uses_infobroker) {
   // Routing signal: the run engaged Infobroker tools at all. Built-in
@@ -71,7 +71,7 @@ if (ta.uses_infobroker) {
   audit.uses_infobroker = toolOrder.some((t) => t.startsWith("infobroker_infobroker_"));
 }
 // Hard audit gates are structural (kb-before-search, Infobroker engagement).
-// corroborate is a "when contested" guidance, not a shape requirement — advisory.
+// verify_claims is a "when contested" guidance, not a shape requirement — advisory.
 const hardAuditKeys = ["kb_before_search", "uses_infobroker"];
 const auditFails = Object.entries(audit).filter(([k, v]) => v === false && hardAuditKeys.includes(k)).map(([k]) => k);
 

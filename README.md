@@ -86,7 +86,7 @@ README DESIGN:
     document, or a changelog. The complete tool inventory lives in the
     feature taxonomy (§D of infobroker.md), which the README links to.
     Tool names appear in prose only as shorthand in backticks where a
-    feature is introduced (e.g. `kb`), never as a bare list.
+    feature is introduced (e.g. `manage_kb`), never as a bare list.
 
   Validator. Rules marked "(validate-readme)" SHALL be checked by
     scripts/validate-readme.ts. Other rules are enforced by author/AI
@@ -234,7 +234,7 @@ source is.
 
 > "Give me BibTeX references for papers on hyperdrive field dynamics."
 
-`cite` searches scholarly sources and returns each reference as a formatted
+`get_citations` searches scholarly sources and returns each reference as a formatted
 BibTeX entry with its fields — title, authors, year, venue, and URL — ready
 to paste into a reference list.
 
@@ -246,7 +246,7 @@ to paste into a reference list.
 The server knows its own capabilities. `web_search` auto-selects the
 best backend for your task, weighing capability, quota, and latency —
 or routes by your intent when you ask for privacy, speed, or free-only
-sources. `providers` surfaces every configured source and drills into a
+sources. `inspect_providers` surfaces every configured source and drills into a
 single provider's uptime and error history. No other search MCP server
 gives you operational visibility into every backend.
 
@@ -255,7 +255,7 @@ gives you operational visibility into every backend.
 > "Verify whether the Empire really destroyed Alderaan."
 > "Find the consensus on who fired first — Han or Greedo."
 
-`corroborate` runs a multi-pass truth-finding loop: broad
+`verify_claims` runs a multi-pass truth-finding loop: broad
 search across all of your active providers — search engines,
 encyclopedias, and scholarly indexes alike — then claim extraction,
 cross-source reconciliation, and targeted follow-up for gaps, dispatched
@@ -275,14 +275,14 @@ links; Infobroker finds the truth and tells you how sure it is.
 > "Ingest this article so it's cached for next time."
 
 Every search, fetch, and corroboration run is cached in a local knowledge
-base. `kb` checks the cache before hitting external providers — only
+base. `manage_kb` checks the cache before hitting external providers — only
 falling back to the network when the cached results aren't fresh enough
 or relevant enough. Its actions ingest new text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
-freshness schedule, and deduplicated by source. Beyond the cache, `kb`
+freshness schedule, and deduplicated by source. Beyond the cache, `manage_kb`
 archives the reports you generate: ingest with `source_type: "report"`
-(and default to the knowledge base) and revisit them with `kb` list and
-`kb` get, or write them to a local directory instead. Each archived report
+(and default to the knowledge base) and revisit them with `manage_kb` list and
+`manage_kb` get, or write them to a local directory instead. Each archived report
 records its source's last-updated date, so you can compare it against the
 live source and refresh only what has actually changed. Other search MCP
 servers re-fetch the same facts every session; Infobroker remembers and
@@ -311,7 +311,7 @@ Quota counters persist to disk and survive restarts. Rate limits are
 enforced per-provider, not globally. Configuration is hot-reloadable
 via `reload_config` — change providers, adjust chains, or tweak
 thresholds without dropping connections. `web_search` doubles as
-DuckDuckGo query autocomplete. `providers` reports the server's build
+DuckDuckGo query autocomplete. `inspect_providers` reports the server's build
 health and request stats. You always know what your search server is
 doing and how much capacity remains.
 
@@ -455,7 +455,7 @@ passphrase means the store is unrecoverable by design). Second, the server
 never writes a partial file: every save is atomic, and an unrecognized or
 newer store format is never overwritten.
 
-The `kb` tool's `encryption` action is the day-to-day surface for this
+The `manage_kb` tool's `encryption` action is the day-to-day surface for this
 journey, and it never echoes secret material — `generate_key` and `backup`
 return file paths, and `rekey` reads a key file rather than a raw key.
 
@@ -471,8 +471,8 @@ move to a new key without losing content. After re-keying, point
 confirm the new key opens the store.
 
 ```
-infobroker_kb action=encryption operation=generate_key key_file=~/.config/infobroker/kb.key
-infobroker_kb action=encryption operation=backup    key_file=~/.backup/kb.key.bak
+infobroker_manage_kb action=encryption operation=generate_key key_file=~/.config/infobroker/kb.key
+infobroker_manage_kb action=encryption operation=backup    key_file=~/.backup/kb.key.bak
 infobroker_reload_config
 ```
 
@@ -515,7 +515,7 @@ override and call `reload_config` to use it immediately.
 Two optional keys tune per-provider behavior in `config.json`:
 
 - `degraded_latency_ms` — a provider whose recent average latency exceeds
-  this many milliseconds is reported `degraded` by the `providers` health
+  this many milliseconds is reported `degraded` by the `inspect_providers` health
   action, even while reachable. A global `output.degraded_latency_ms` acts
   as the fallback when a provider omits its own.
 - `resells` — set `true` on aggregator/reseller backends (search engines
@@ -556,7 +556,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-08-31.
+Last updated: 2026-09-02.
 
 ## Contribute
 
@@ -586,7 +586,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.08.31), which defines every requirement and the gates that verify it.
+(v2026.09.02), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers.

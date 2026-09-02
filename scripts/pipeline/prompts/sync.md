@@ -25,7 +25,7 @@ the current src/ tree in your context from the prior step.
    Fix all critical and high findings (auto-confirm — this is a trusted
    automated pipeline), then re-run `npm run typecheck` and `npm test`. If any
    critical finding cannot be fixed, report it as a failure.
-8. Smoke test: start the server and call `infobroker_providers` (action spec). Verify:
+8. Smoke test: start the server and call `infobroker_inspect_providers` (action spec). Verify:
    - Tool count has not decreased from the baseline
    - Provider count matches config.json
    - No confidence scores below 50%

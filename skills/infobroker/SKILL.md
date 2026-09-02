@@ -62,8 +62,8 @@ structured analytic techniques.
 Default shape for reports, articles, documentation, and analysis.
 
 ```
-RECALL     Infobroker `web_search` KB-first (automatic); `kb` search only for stored-only answers
-SEARCH     Infobroker `web_search`; `corroborate` for contested claims
+RECALL     Infobroker `web_search` KB-first (automatic); `manage_kb` search only for stored-only answers
+SEARCH     Infobroker `web_search`; `verify_claims` for contested claims
 EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
            reading a page to answer a specific question, pass `question` to get
            the ranked passages that address it instead of the whole page
@@ -92,10 +92,10 @@ research complete. <N> sources | <K> findings | <gap> gaps noted
 Use when the user wants to verify specific claims.
 
 ```
-RECALL       Infobroker `web_search` KB-first (automatic); `kb` search only for stored-only answers
+RECALL       Infobroker `web_search` KB-first (automatic); `manage_kb` search only for stored-only answers
 EXTRACT      claims from the user's input
 SEARCH       each claim with Infobroker `web_search` (per-claim queries)
-CROSS-CHECK  Infobroker `corroborate` for multi-source verification
+CROSS-CHECK  Infobroker `verify_claims` for multi-source verification
 VERDICT      assign True→Unverifiable + confidence + justification
 SUMMARIZE    `summarization` skill — executive summary
 CITE         source URLs with every verdict
@@ -131,14 +131,14 @@ early.
 | Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown); pass `question` to extract ranked passages |
 | Autocomplete a query | `web_search` (`suggest: true`) | DuckDuckGo |
 | "Which tool should I use?" | `web_search` | Auto-selection returns serving provider |
-| Multi-source truth-finding | `corroborate` | Uses all active providers |
-| Academic citations | `cite` | BibTeX references from scholarly sources |
-| Check provider status | `providers` (action list/health) | N/A |
+| Multi-source truth-finding | `verify_claims` | Uses all active providers |
+| Academic citations | `get_citations` | BibTeX references from scholarly sources |
+| Check provider status | `inspect_providers` (action list/health) | N/A |
 | Reload config at runtime | `reload_config` | N/A |
-| Search local knowledge base | `kb` (action search) | Semantic + keyword hybrid |
-| Ingest into knowledge base | `kb` (action ingest) | Text or URL |
-| Knowledge base stats | `kb` (action stats) | Operational metrics |
-| Delete from knowledge base | `kb` (action delete) | By collection or source URL |
+| Search local knowledge base | `manage_kb` (action search) | Semantic + keyword hybrid |
+| Ingest into knowledge base | `manage_kb` (action ingest) | Text or URL |
+| Knowledge base stats | `manage_kb` (action stats) | Operational metrics |
+| Delete from knowledge base | `manage_kb` (action delete) | By collection or source URL |
 | Translate findings | `translation` skill | Multilingual output |
 
 ## When to Escalate
@@ -153,8 +153,8 @@ path; `analysis-loop` runs the disciplined, gated path.
 ## Best Practices
 
 - Always use `web_search` before `fetch_page` — verify the URL exists
-- Use `corroborate` for claims where the truth might be contested; use `web_search` for simple lookups
+- Use `verify_claims` for claims where the truth might be contested; use `web_search` for simple lookups
 - When writing output, route through the full pipeline (search → verify → summarize → write → polish)
 - Cite sources with URLs for every factual claim
 - Fall back to built-in `websearch`/`webfetch` only when Infobroker tools error
-- Check `providers` (action health) if searches return empty or slow — a provider may be exhausted
+- Check `inspect_providers` (action health) if searches return empty or slow — a provider may be exhausted
