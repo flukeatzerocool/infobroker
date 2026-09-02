@@ -611,7 +611,7 @@ Tool responses are JSON with this envelope:
 | OpenStreetMap | `https://nominatim.openstreetmap.org/search` | 1 req/sec, User-Agent required |
 | Jina Reader | `https://r.jina.ai/` | Append URL to path, returns Markdown |
 | Internet Archive | `https://archive.org/wayback/available` | Check availability, then fetch |
-| Semantic Scholar | `https://api.semanticscholar.org/graph/v1/` | 1 RPS authenticated, shared pool unauth |
+| Semantic Scholar | `https://api.semanticscholar.org/graph/v1/` | Shared pool 1,000 RPS unauth; 1 RPS dedicated with key |
 | arXiv | `https://export.arxiv.org/api/query` | 1 call/3 sec |
 | Stack Exchange | `https://api.stackexchange.com/2.3/` | 300/day unauth, 10,000/day keyed |
 | GitHub | `https://api.github.com/search/code` | 60/hr unauth, 5,000/hr token |
