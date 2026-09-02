@@ -353,6 +353,17 @@ version_only_diff() {
 # a REQ-body edit by scanning the diff with enough context that a body edit is
 # always adjacent to its header.
 spec_req_change() {
+  # A letter-case-only diff (e.g. the read-through step title-casing a REQ
+  # heading to match its siblings) is cosmetic, not a REQ modification: the
+  # contract text is unchanged, so C.10 provenance requires no CHANGELOG
+  # entry. Compare HEAD against the working tree with case normalized; an
+  # empty result means nothing substantive changed.
+  if diff \
+      <(git -C "$PROJECT_DIR" show "HEAD:infobroker.md" 2>/dev/null | tr '[:upper:]' '[:lower:]') \
+      <(tr '[:upper:]' '[:lower:]' < "$PROJECT_DIR/infobroker.md") \
+      >/dev/null 2>&1; then
+    return 1
+  fi
   git -C "$PROJECT_DIR" diff --unified=4 -- infobroker.md 2>/dev/null \
     | awk '
       /^@@/ { body_left = 0; next }
