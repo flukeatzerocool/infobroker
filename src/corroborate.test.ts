@@ -1,6 +1,6 @@
 // @implements REQ-026
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { SearchResult, CorroborationFinding } from "../src/types.js";
+import type { SearchResult } from "../src/types.js";
 
 vi.mock("../src/config.js", () => ({
   getConfig: vi.fn(),

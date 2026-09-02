@@ -23,6 +23,12 @@
   needs; the tool-surface gate enforces both.
 - Fixed REQ-026 parameter name: the `verify_claims` tool parameter is
   `providers`, not `inspect_providers`, matching the live tool schema.
+- Dead-code cleanup: removed unused imports (`getEnvVar`, `Config` in
+  `index.ts`, `stripHtml` in `duckduckgo.ts`), an unused const
+  (`KB_UNINITIALIZED`), two dead function parameters (`citationKey.title`,
+  `resolveDek.blob`), and two unused test imports. Enabled
+  `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` so `npm run
+  typecheck` now fails on dead code.
 
 ## 2026.08.31 — 
 

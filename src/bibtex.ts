@@ -18,7 +18,7 @@ function escapeLatex(text: string): string {
     .replace(/\^/g, "\\textasciicircum{}");
 }
 
-function citationKey(author?: string, year?: string, title?: string): string {
+function citationKey(author?: string, year?: string): string {
   const last = (author || "").split(/[,\s]+/)[0] || "anon";
   const slug = last.toLowerCase().replace(/[^a-z0-9]/g, "");
   const y = year || "nd";
@@ -41,7 +41,7 @@ export function formatBibtex(fields: CitationFields): string {
 }
 
 export function citationFor(title: string, authors: string[], year?: string, venue?: string, url?: string): string {
-  const key = citationKey(authors[0], year || undefined, title);
+  const key = citationKey(authors[0], year || undefined);
   return formatBibtex({
     type: authors.length > 0 ? "article" : "misc",
     key,

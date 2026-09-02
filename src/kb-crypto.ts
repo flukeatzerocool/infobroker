@@ -145,12 +145,12 @@ export function parseEnvelope(blob: Buffer): ParsedEnvelope {
 
 export function openEnvelope(resolved: ResolvedKey, blob: Buffer): Buffer {
   const parsed = parseEnvelope(blob);
-  const dek = resolveDek(resolved, parsed.header, blob);
+  const dek = resolveDek(resolved, parsed.header);
   const headerBytes = serializeHeader(parsed.header);
   return decrypt(dek, parsed.ciphertext, headerBytes, parsed.nonce, parsed.tag);
 }
 
-function resolveDek(resolved: ResolvedKey, header: EnvelopeHeader, blob: Buffer): Buffer {
+function resolveDek(resolved: ResolvedKey, header: EnvelopeHeader): Buffer {
   if (header.kdf === KDF_RAW_DEK) {
     if (resolved.kind !== "raw") {
       throw new Error("store encrypted with a raw key — supply INFOBROKER_KB_KEY or kb.encryption.key_file");

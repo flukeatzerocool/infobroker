@@ -48,7 +48,6 @@ let loadedStat: { mtimeMs: number; size: number } | null = null;
 const WRITE_INTERVAL_MS = 30_000;
 const modelAvailable = true;
 const CONFIG_ERROR_CODE = "config_error";
-const KB_UNINITIALIZED = "knowledge base not configured";
 const TRUNC_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const STORE_FILENAME = "vector-store.json";

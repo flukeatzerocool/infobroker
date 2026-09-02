@@ -1,5 +1,5 @@
 // @implements REQ-031 REQ-021
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
 
 function sleep(ms: number): Promise<void> {

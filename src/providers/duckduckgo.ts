@@ -4,7 +4,6 @@ import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError, ParseError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
-import { stripHtml } from "../lib/html.js";
 
 const DDG_URL = "https://html.duckduckgo.com/html/";
 const SUGGEST_URL = "https://duckduckgo.com/ac/";
