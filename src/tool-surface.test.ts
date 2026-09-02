@@ -95,6 +95,13 @@ async function listTools(): Promise<ListToolsResult> {
 test("tool surface satisfies REQ-089 and REQ-090", async () => {
   const { tools } = await listTools();
 
+  // REQ-089: multi-action tools document which parameter each action needs.
+  const couplingNotes: Record<string, RegExp> = {
+    infobroker_inspect_providers: /required for the `health` action/,
+    infobroker_manage_kb: /`query` for search/,
+    infobroker_verify_claims: /`max_iterations` bounds/,
+  };
+
   // REQ-090: the exact seven-tool surface, one tool per feature area.
   expect(tools.map((t) => t.name).sort()).toEqual([
     "infobroker_fetch_page",
@@ -116,6 +123,16 @@ test("tool surface satisfies REQ-089 and REQ-090", async () => {
     expect(tool.description, `${tool.name} missing description`).toBeTruthy();
     expect(tool.description!, `${tool.name} missing 'Use when'`).toMatch(/Use when/i);
     expect(tool.description!, `${tool.name} missing 'Do NOT use'`).toMatch(/Do NOT use/i);
+
+    // REQ-089: description states the response contract ([OK]/[ERROR] envelope).
+    expect(tool.description!, `${tool.name} missing [OK] return contract`).toMatch(/\[OK\]/);
+    expect(tool.description!, `${tool.name} missing [ERROR] return contract`).toMatch(/\[ERROR\]/);
+
+    // REQ-089: multi-action tools document parameter couplings.
+    const coupling = couplingNotes[tool.name];
+    if (coupling) {
+      expect(tool.description!, `${tool.name} missing parameter-coupling note`).toMatch(coupling);
+    }
 
     // REQ-089: annotations declared.
     expect(tool.annotations, `${tool.name} missing annotations`).toBeDefined();

@@ -16,6 +16,11 @@
   compare npm-canonical versions; added `glama.json`.
 - New `src/tool-surface.test.ts` verifies the advertised tool surface over
   stdio against REQ-089 and REQ-090.
+- Extended REQ-089 to require every tool description to state its response
+  contract and non-obvious parameter couplings. All seven descriptions now
+  state the `[OK]`/`[ERROR]` JSON envelope, and `inspect_providers`,
+  `manage_kb`, and `verify_claims` document which parameter each action
+  needs; the tool-surface gate enforces both.
 
 ## 2026.08.31 — 
 

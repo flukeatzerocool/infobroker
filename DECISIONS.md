@@ -2,6 +2,21 @@
 
 ## Active Decisions
 
+### D-040: Return-Contract and Parameter-Coupling Disclosure (REQ-089 extension, 2026.09.02)
+
+Glama's TDQS per-tool audit criticized two smells the D-038 pass did not
+close: no tool description stated what the tool returns ("missing return
+description" is a named smell in the underlying research, arXiv 2602.18914),
+and the multi-action tools (`inspect_providers`, `manage_kb`,
+`verify_claims`) left parameter couplings undocumented. REQ-089 gained a
+clause requiring every tool definition to state its response contract and
+any non-obvious parameter couplings. All seven descriptions now state the
+`[OK]`/`[ERROR]` JSON envelope, and the three multi-action tools name which
+parameter each action needs. The stdio-surface test
+(`src/tool-surface.test.ts`) now enforces both the return-contract clause
+and the coupling notes, so the gain cannot silently regress. Kept compact
+per the research's token-overhead warning (arXiv 2602.14878).
+
 ### D-039: Registry-Published Distribution (REQ-091) and Glama Metadata (2026.09.02)
 
 The server was npm-published but never registered with the official MCP

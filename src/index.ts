@@ -937,7 +937,7 @@ server.registerTool(
   "infobroker_web_search",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), or ranked passages from the top pages (deep). Do NOT use for a URL you already have (use fetch_page), for high-stakes claim verification (use verify_claims), for stored-report recall (use manage_kb search), or for academic citations (use get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), or ranked passages from the top pages (deep). Do NOT use for a URL you already have (use fetch_page), for high-stakes claim verification (use verify_claims), for stored-report recall (use manage_kb search), or for academic citations (use get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -982,7 +982,7 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question (question mode returns ranked passages), or need the page's last-updated date (detect_date). Do NOT use for a general topic search (use web_search) or for claim verification across sources (use verify_claims). Makes external HTTP calls, falls back to native HTTP when Jina is throttled, truncates very long pages, and needs no API key.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question (question mode returns ranked passages), or need the page's last-updated date (detect_date). Do NOT use for a general topic search (use web_search) or for claim verification across sources (use verify_claims). Makes external HTTP calls, falls back to native HTTP when Jina is throttled, truncates very long pages, and needs no API key. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
@@ -1017,7 +1017,7 @@ server.registerTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
-    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use web_search) or to read a page (use fetch_page). Read-only: it reports state and never modifies configuration, providers, or stored data.",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use web_search) or to read a page (use fetch_page). Read-only: it reports state and never modifies configuration, providers, or stored data. `provider` is required for the `health` action; `status` filters `list`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, and results.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),
@@ -1051,7 +1051,7 @@ server.registerTool(
   "infobroker_verify_claims",
   {
     title: "Verify Claims",
-    description: "Run a multi-pass truth-finding loop that searches across providers, reconciles claims across independent sources, and returns confidence-scored findings with per-claim source attribution. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use web_search) or for citation formatting (use get_citations). Makes multiple searches bounded by max_iterations and per-provider rate limits, recalls prior findings from the knowledge base, and indexes its findings back into the knowledge base.",
+    description: "Run a multi-pass truth-finding loop that searches across providers, reconciles claims across independent sources, and returns confidence-scored findings with per-claim source attribution. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use web_search) or for citation formatting (use get_citations). Makes multiple searches bounded by max_iterations and per-provider rate limits, recalls prior findings from the knowledge base, and indexes its findings back into the knowledge base. `max_iterations` bounds the refinement passes; `confidence_threshold` is the bar for a finding to be reported confirmed. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_iterations: z.number().min(1).max(10).optional().default(5).describe("Maximum search-refinement passes (1-10, default 5)"),
@@ -1101,7 +1101,7 @@ server.registerTool(
   "infobroker_manage_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete stored content and reports, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content (list/get), or manage encryption keys. Use the 'encryption' action to enable or disable at-rest encryption, generate or back up a key, verify a key, or re-key the store. Do NOT use for fresh external search (use web_search) or to fetch a new page (use fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design.",
+    description: "Manage the local knowledge base: search, ingest, list, get, stats, or delete stored content and reports, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content (list/get), or manage encryption keys. Use the 'encryption' action to enable or disable at-rest encryption, generate or back up a key, verify a key, or re-key the store. Do NOT use for fresh external search (use web_search) or to fetch a new page (use fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Which parameter each action needs: `query` for search, `text` or `url` for ingest, `source_url` for get/delete. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
     inputSchema: {
       action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
@@ -1304,7 +1304,7 @@ server.registerTool(
   "infobroker_reload_config",
   {
     title: "Reload Configuration",
-    description: "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json and want the changes applied immediately. Do NOT use to inspect configuration or provider state (use inspect_providers). If the new configuration is invalid, the previous configuration stays active and an error is returned.",
+    description: "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json and want the changes applied immediately. Do NOT use to inspect configuration or provider state (use inspect_providers). If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
     inputSchema: {},
     annotations: {
       readOnlyHint: false,
@@ -1350,7 +1350,7 @@ server.registerTool(
   "infobroker_get_citations",
   {
     title: "Get Citations",
-    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use web_search) or for verifying a contested claim (use verify_claims). Operates without an API key when at least one scholarly source is reachable.",
+    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use web_search) or for verifying a contested claim (use verify_claims). Operates without an API key when at least one scholarly source is reachable. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_results: z.number().min(1).max(30).optional().default(8).describe("Maximum references to return (1-30, default 8)"),
