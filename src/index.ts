@@ -315,12 +315,12 @@ async function doWebSearch(
       if (kbResults.length > 0) {
         const relevanceThreshold = config.kb!.kb_first_relevance_threshold;
         const confidenceThreshold = config.kb!.kb_first_confidence_threshold;
-        const sufficient = kbResults.some(
+        const sufficientResults = kbResults.filter(
           (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
         );
-        if (sufficient) {
+        if (sufficientResults.length > 0) {
           const kbProvider = "knowledge_base";
-          return `[OK] ${json(ok(kbProvider, kbResults.map((r) => ({
+          return `[OK] ${json(ok(kbProvider, sufficientResults.map((r) => ({
             title: r.title,
             url: r.source_url,
             snippet: r.snippet,

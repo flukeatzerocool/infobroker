@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.09.02 — Knowledge-base search stops surfacing stale cached results
+
+- When a knowledge-base lookup satisfies the KB-first relevance and
+  freshness thresholds, the server now returns only the cached results
+  that actually met those thresholds rather than the entire cached result
+  set. This prevents stale or low-relevance cached pages from being served
+  in place of fresh web sources; when nothing cached qualifies, external
+  search proceeds as before. (REQ-076)
+
 ## 2026.09.02 — Spec authoring conformance and dead-code cleanup
 
 - Tightened REQ-021 and REQ-079 prose to authoring-conformance rules:

@@ -1,4 +1,4 @@
-// @implements REQ-075 REQ-082 REQ-060e REQ-060f REQ-087
+// @implements REQ-075 REQ-082 REQ-060e REQ-060f REQ-087 REQ-076
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -218,6 +218,21 @@ describe("report storage and retrieval (REQ-060e, REQ-060f)", () => {
     kbIngest("the first version", "Versioned", "https://example.com/versioned", "test", undefined, "report", "report", "2026-08-01");
     kbIngest("the second version without a date", "Versioned", "https://example.com/versioned", "test", undefined, "report", "report");
     expect(kbGet("https://example.com/versioned")?.source_updated_at).toBe("2026-08-01");
+  });
+
+  it("exposes independent freshness_score and score for KB-first thresholding (REQ-076)", () => {
+    kbIngest(
+      "quantum computing error correction is a rapidly advancing field of study",
+      "kb-first",
+      "https://example.com/kb-first",
+      "test"
+    );
+    const results = kbSearch("quantum computing error correction", 10);
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(typeof r.score).toBe("number");
+      expect(typeof r.freshness_score).toBe("number");
+    }
   });
 
   it("resolveCollection honors explicit > env var > config default > literal default (REQ-065)", () => {
