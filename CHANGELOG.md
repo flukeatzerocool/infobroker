@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.09.03 — Remove dead cooldown export and a REQ-012 worked example
+
+- Removed the unused `clearCooldown` export from `src/cooldown.ts` (no callers
+  in `src/`, `scripts/`, or tests).
+- Removed the worked example from the REQ-012 body (Appendix B prohibits
+  worked examples disguised as requirements).
+
 ## 2026.09.03 — Hardcode the Glama tool-definition quality bar
 
 - Added REQ-092 (tool-definition quality bar): the advertised tool surface

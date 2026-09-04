@@ -201,7 +201,7 @@ Provider configuration SHALL reside in a JSON file at a path specified by the `I
 API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
 
 **REQ-012 — Environment Variable Mapping**
-The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. Example: `INFOBROKER_BRAVE_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
+The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
 The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.

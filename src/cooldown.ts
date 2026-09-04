@@ -33,10 +33,6 @@ export function cooldownRemainingMs(slug: string): number {
   return Math.max(0, until - Date.now());
 }
 
-export function clearCooldown(slug: string): void {
-  cooldowns.delete(slug);
-}
-
 // A failure that should put the provider in cooldown: a rate-limit response
 // (HTTP 429) or a provider-declared bot challenge. Transient 503s are left to
 // the retry policy and do not cool the provider down.
