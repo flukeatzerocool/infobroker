@@ -7,3 +7,10 @@
 -->
 
 <!-- No upcoming items. Remove entries once they ship to CHANGELOG.md. -->
+
+## Emit the `rate_limited` error code (REQ-002 conformance)
+
+- REQ-002 names `rate_limited` but no code path emits it. Deferred from the
+  2026.09.03 cooldown change: a clean observable path (e.g. an explicitly
+  requested provider returning 429) needs a small error-semantics decision
+  before implementation. See DECISIONS.md D-041.

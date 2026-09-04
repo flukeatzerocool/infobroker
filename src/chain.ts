@@ -1,4 +1,4 @@
-// @implements REQ-020a REQ-020c REQ-020d
+// @implements REQ-020a REQ-020c REQ-020d REQ-031a
 import { getDispatchChain, getConfig } from "./config.js";
 
 // Which of the filter-style options a provider actually honors. Used by
@@ -78,4 +78,18 @@ export function demoteQuotaWarnings(
     else clean.push(slug);
   }
   return [...clean, ...warned];
+}
+
+// REQ-031a: when a non-general_web task chain exhausts, the server retries the
+// general_web chain before failing. Providers already attempted in the serving
+// chain are excluded so they are not re-tried. The general_web task itself has
+// no cross-task fallback (it is already the general chain).
+export function crossTaskFallbackChain(
+  taskType: string,
+  attempted: string[],
+  generalChain: string[],
+): string[] {
+  if (taskType === "general_web") return [];
+  const attemptedSet = new Set(attempted);
+  return generalChain.filter((slug) => !attemptedSet.has(slug));
 }

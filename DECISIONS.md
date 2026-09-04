@@ -2,6 +2,24 @@
 
 ## Active Decisions
 
+### D-041: Rate-Limit Cooldown and Cross-Task Fallback (REQ-038, REQ-031a; 2026.09.03)
+
+A Glama research session saturated the `general_web` chain (three HTML-scraping
+engines) and the client fell back to its built-in tools. Root cause: (a) the
+fallback chain is task-scoped and narrow, and (b) a rate-limited provider was
+re-tried on every request in a burst — there was no cross-request memory. Two
+contracts close it. REQ-038 gives each provider a per-provider cooldown on a
+rate-limit (HTTP 429) or anti-bot challenge (DuckDuckGo 202), skipped during
+fallback selection without a new outbound call; the duration is configurable
+(`output.rate_limit_cooldown_ms`, default 30s) and reported via
+`inspect_providers` without touching quota. REQ-031a gives a non-`general_web`
+chain that exhausts by errors a final pass through the `general_web` chain.
+DuckDuckGo's 202 now throws a `BotChallengeError` (a `ParseError` subclass) so
+cooldown detection needs no message matching; the existing `ParseError`-typed
+test still passes because of the subclass. The `rate_limited` error code named
+in REQ-002 remains un-emitted (no clean observable path without a wider
+error-semantics change) and is logged to the roadmap, not implemented here.
+
 ### D-040: Return-Contract and Parameter-Coupling Disclosure (REQ-089 extension, 2026.09.02)
 
 Glama's TDQS per-tool audit criticized two smells the D-038 pass did not

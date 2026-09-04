@@ -7,7 +7,7 @@ vi.mock("./config.js", () => ({
 }));
 
 import { getConfig, getDispatchChain } from "./config.js";
-import { selectChain, ignoredParams, demoteQuotaWarnings } from "./chain.js";
+import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
 
 function makeProvider(tier: string) {
   return { tier, enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10 };
@@ -62,6 +62,22 @@ describe("selectChain", () => {
     vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 2 } } as any);
     expect(selectChain(["brave", "duckduckgo", "marginalia", "mojeek"], undefined, () => 0))
       .toEqual(["brave", "duckduckgo"]);
+  });
+});
+
+describe("crossTaskFallbackChain", () => {
+  it("returns the general_web chain minus attempted providers for a non-general task", () => {
+    expect(crossTaskFallbackChain("academic", ["semantic_scholar", "arxiv"], ["duckduckgo", "marginalia", "mojeek"]))
+      .toEqual(["duckduckgo", "marginalia", "mojeek"]);
+  });
+
+  it("excludes providers already attempted in the serving chain", () => {
+    expect(crossTaskFallbackChain("academic", ["duckduckgo"], ["duckduckgo", "marginalia"]))
+      .toEqual(["marginalia"]);
+  });
+
+  it("returns an empty chain for the general_web task itself", () => {
+    expect(crossTaskFallbackChain("general_web", ["duckduckgo"], ["marginalia"])).toEqual([]);
   });
 });
 

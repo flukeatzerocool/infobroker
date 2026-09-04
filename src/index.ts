@@ -12,7 +12,8 @@ import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quot
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
-import { ignoredParams, selectChain, demoteQuotaWarnings } from "./chain.js";
+import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
+import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
 import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
@@ -372,6 +373,13 @@ async function doWebSearch(
   const attempt = async (
     slug: string,
   ): Promise<{ slug: string; filtered: SearchResult[]; elapsed: number } | null> => {
+    // REQ-038: a provider in cooldown is skipped without a new outbound call,
+    // even when it is the chain primary. The skip is recorded as a rate-limit
+    // failure so a fully-cooled chain reports exhaustion rather than empty.
+    if (inCooldown(slug)) {
+      lastError = err(slug, "rate_limited", "Provider is cooling down", "Retry after the cooldown window");
+      return null;
+    }
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) {
@@ -423,6 +431,11 @@ async function doWebSearch(
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       providerLastError[slug] = { message: msg, timestamp: Date.now() };
+      // REQ-038: a rate-limit or bot-challenge failure puts the provider in
+      // cooldown so a burst of requests stops re-hammering it.
+      if (shouldCooldown(e)) {
+        markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
+      }
       if (e instanceof ParseError) {
         lastError = err(slug, "parse_error", msg, "Trying next provider in fallback chain");
       } else {
@@ -515,6 +528,19 @@ async function doWebSearch(
   // A chain that ended on provider errors is a failure; a chain whose
   // providers all returned empty is a legitimate zero-result answer.
   if (lastError !== null) {
+    // REQ-031a: before failing a non-general_web task, retry the general_web
+    // chain (minus providers already attempted) so a narrow specialized chain
+    // does not fail while a broader web chain could still answer.
+    const crossTaskChain = crossTaskFallbackChain(taskType, chain, selectChain(getDispatchChain("general_web"), undefined, avgLatency));
+    let crossTaskAttempted: string[] = [];
+    for (const slug of crossTaskChain) {
+      crossTaskAttempted.push(slug);
+      const result = await attempt(slug);
+      if (result !== null) {
+        return buildSuccess(result.slug, result.filtered, result.elapsed);
+      }
+    }
+
     // REQ-031: report the remaining daily quota of each quota-exhausted
     // provider (distinct from provider failure), not merely its slug.
     const quotaExhaustedList = Object.entries(quotaExhausted).map(([slug, remaining]) => ({
@@ -522,7 +548,7 @@ async function doWebSearch(
       remaining_daily: remaining,
     }));
     const details: Record<string, unknown> = {
-      exhausted_chain: chain,
+      exhausted_chain: [...chain, ...crossTaskAttempted],
       quota_exhausted: quotaExhaustedList,
     };
     return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration", details))}`;
@@ -569,6 +595,10 @@ async function fetchPageContent(
 ): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
   const config = getConfig();
   const attempt = async (slug: string) => {
+    // REQ-038: a throttled renderer in cooldown is skipped without a new call.
+    if (inCooldown(slug)) {
+      return null;
+    }
     try {
       await throttle(slug);
       const start = Date.now();
@@ -602,6 +632,9 @@ async function fetchPageContent(
       return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
     } catch (e) {
       providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
+      if (shouldCooldown(e)) {
+        markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
+      }
       return null;
     }
   };
@@ -779,6 +812,7 @@ function doListProviders(filter?: string): string {
     const quota = checkQuota(slug, p.rate_limit);
     const operational = providerOperational(p);
     const reason = quota.exhausted ? "exhausted" : (operational ? null : providerInactiveReason(p));
+    const cooldownRemaining = inCooldown(slug) ? cooldownRemainingMs(slug) : undefined;
     return {
       slug,
       tier: p.tier,
@@ -786,6 +820,7 @@ function doListProviders(filter?: string): string {
       enabled: p.enabled,
       status: quota.exhausted ? "exhausted" : (operational ? "active" : "inactive"),
       ...(reason ? { inactive_reason: reason } : {}),
+      ...(cooldownRemaining !== undefined ? { cooldown_remaining_ms: cooldownRemaining } : {}),
       quota_used: quota.daily.used,
       quota_remaining: quota.daily.remaining,
       quota_warning: quota.warning,
@@ -862,6 +897,9 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   if (providerLastSuccess[providerSlug]) {
     report.last_success = new Date(providerLastSuccess[providerSlug]).toISOString();
   }
+  if (inCooldown(providerSlug)) {
+    report.cooldown_remaining_ms = cooldownRemainingMs(providerSlug);
+  }
 
   return `[OK] ${json({
     status: "ok",
@@ -921,7 +959,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.02",
+  version: "2026.09.03",
 });
 
 // --- web_search ---

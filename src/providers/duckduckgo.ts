@@ -2,7 +2,7 @@
 import * as cheerio from "cheerio";
 import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
-import { RetryableError, ParseError } from "../retry.js";
+import { RetryableError, BotChallengeError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const DDG_URL = "https://html.duckduckgo.com/html/";
@@ -31,7 +31,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   // HTTP 202 signals the anti-bot challenge page; treat as a parse failure
   // so the fallback chain advances rather than reporting a silent empty.
   if (resp.status === 202) {
-    throw new ParseError("DuckDuckGo returned an anti-bot challenge (HTTP 202)");
+    throw new BotChallengeError("DuckDuckGo returned an anti-bot challenge (HTTP 202)");
   }
 
   if (!resp.ok) {

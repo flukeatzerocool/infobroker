@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.09.03 — Rate-limit cooldown and broader fallback resilience
+
+- Added a per-provider rate-limit/anti-bot cooldown (REQ-038): a provider
+  that returns a rate-limit response or an anti-bot challenge is skipped
+  during fallback selection for a configurable window
+  (`output.rate_limit_cooldown_ms`, default 30000ms), so a burst of requests
+  stops re-hammering a rate-limited primary. The cooldown is reported through
+  `inspect_providers` and never consumes the provider's quota counters.
+- Added cross-task fallback (REQ-031a): when a non-`general_web` chain is
+  exhausted by errors, the server retries the `general_web` chain before
+  returning `all_providers_exhausted`.
+- Widened the `general_web` dispatch chain to include `wiby` and raised
+  `output.fallback_depth` from 3 to 5.
+- Fixed `throttle()` to record the post-sleep timestamp so consecutive calls
+  each enforce the full minimum interval (REQ-030).
+- DuckDuckGo's HTTP 202 anti-bot challenge now throws a distinct
+  `BotChallengeError` (a `ParseError` subclass) so the cooldown path can
+  detect it without string-matching.
+
 ## 2026.09.02 — Remove dead exports
 
 - Removed four dead exports with no callers anywhere in the tree:

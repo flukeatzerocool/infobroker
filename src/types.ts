@@ -56,6 +56,7 @@ export interface Config {
     hedge_min_delay_ms?: number;
     hedge_max_delay_ms?: number;
     hedge_grace_ms?: number;
+    rate_limit_cooldown_ms?: number;
   };
   fetch?: {
     allow_private_urls?: boolean;
@@ -83,6 +84,7 @@ export interface HealthReport {
   last_error?: string;
   last_success?: string;
   auth_ok: boolean;
+  cooldown_remaining_ms?: number;
 }
 
 export interface ToolMeta {

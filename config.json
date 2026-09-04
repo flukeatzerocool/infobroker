@@ -181,7 +181,7 @@
     }
   },
   "dispatch": {
-    "general_web": ["brave", "duckduckgo", "marginalia", "mojeek"],
+    "general_web": ["brave", "duckduckgo", "marginalia", "mojeek", "wiby"],
     "small_web": ["marginalia", "mojeek", "wiby", "duckduckgo"],
     "encyclopedia": ["wikipedia", "duckduckgo"],
     "definition": ["wiktionary", "duckduckgo"],
@@ -239,13 +239,14 @@
     "max_chars": 50000,
     "latency_window_size": 100,
     "verbose": true,
-    "fallback_depth": 3,
+    "fallback_depth": 5,
     "max_redirect_hops": 5,
     "degraded_latency_ms": 2000,
     "hedge_enabled": true,
     "hedge_min_delay_ms": 200,
     "hedge_max_delay_ms": 1500,
-    "hedge_grace_ms": 300
+    "hedge_grace_ms": 300,
+    "rate_limit_cooldown_ms": 30000
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",

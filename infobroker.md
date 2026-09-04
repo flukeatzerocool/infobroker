@@ -164,7 +164,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026e` (core tools), 030–037 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020e`, `021a`–`021c`, `024a`–`024c`, `026a`–`026e` (core tools), 030–039 (rate limiting and resilience), 040, 042–043 (state and configuration), 050–054 (client artifacts), 055, 077–078, 080–081 (spec integrity), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -299,6 +299,9 @@ Each provider SHALL enforce a configurable minimum interval between requests. Th
 **REQ-031 — Fallback Chain**
 The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. The server SHALL hedge on latency by dispatching lower-priority providers once the serving provider exceeds a configurable threshold, and SHALL return the first provider to succeed. On error, response timeout, or empty results, the server SHALL try the next provider, counting a blocked or non-parseable response as a provider failure. The maximum fallback depth SHALL be configurable. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns empty, the server SHALL return a successful empty result. _Check:_ G1.
 
+**REQ-031a — Cross-task fallback**
+WHEN every provider in the serving task's dispatch chain is exhausted by errors and the serving task is not `general_web`, THE server SHALL attempt the `general_web` chain before returning the `all_providers_exhausted` error. A provider already attempted in the serving chain SHALL NOT be retried in the fallback chain. _Check:_ G1.
+
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
 
@@ -325,6 +328,9 @@ Validation SHALL reject: missing required provider fields, dispatch chains
 referencing providers not declared in the configuration, and invalid rate-limit
 values. On reload, an invalid configuration SHALL leave the previous
 configuration active without interruption. _Check:_ G1.
+
+**REQ-038 — Rate-Limit Cooldown**
+WHEN a provider returns a rate-limit response or an anti-bot challenge, THE server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. _Check:_ G1.
 
 ### 4.5 State and Configuration
 
@@ -658,7 +664,7 @@ when Jina returns 429 or error.
 
 | Task type | Primary | Fallback 1 | Fallback 2 | Fallback 3 |
 |-----------|---------|-----------|-----------|-----------|
-| `general_web` | brave (if keyed) | duckduckgo | marginalia | mojeek |
+| `general_web` | brave (if keyed) | duckduckgo | marginalia | mojeek | wiby |
 | `small_web` | marginalia | mojeek | wiby | duckduckgo |
 | `encyclopedia` | wikipedia | duckduckgo | — | — |
 | `definition` | wiktionary | duckduckgo | — | — |
@@ -678,6 +684,9 @@ when Jina returns 429 or error.
 `web_search` auto-selection SHALL consider current quota remaining when
 selecting. A provider at >80% usage is demoted one tier in the dispatch table.
 A provider at 100% is removed from selection until reset.
+
+A provider in rate-limit cooldown (REQ-038) is excluded from fallback selection
+until its cooldown expires, without affecting its quota counters.
 
 ### 7.4 Priority Routing
 
@@ -811,6 +820,8 @@ is configurable via `corroboration.similarity_threshold`.
 - Redirect hops: configure `output.max_redirect_hops` → verify `fetch_page` follows at most that many redirect hops, re-applying the guard each hop
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
+- Rate-limit cooldown: mock a provider returning a rate-limit or anti-bot response → verify it is skipped without a new outbound call on the following request within the cooldown window, and its quota counters are unchanged (REQ-038)
+- Cross-task fallback: mock every provider in a non-`general_web` chain failing → verify the `general_web` chain serves, without re-trying an already-attempted provider (REQ-031a)
 - Normalizer: input from each provider format → verify common output shape
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
@@ -911,12 +922,14 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
+| REQ-031a | Cross-task fallback | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
 | REQ-033 | Persistent Quota Tracking | 4.4 | G1 |
 | REQ-034 | Quota Warning Threshold | 4.4 | G1 |
 | REQ-035 | Request Timeout | 4.4 | G1 |
 | REQ-036 | Latency Tracking Window | 4.4 | G1 |
 | REQ-037 | Config Validation | 4.4 | G1 |
+| REQ-038 | Rate-Limit Cooldown | 4.4 | G1 |
 | REQ-040 | Configuration Reload | 4.5 | G1 |
 | REQ-070 | Provider Registration | 4.6 | G1 |
 | REQ-071 | Outbound HTTP Identification | 4.6 | G1 |
@@ -1370,7 +1383,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-028, REQ-030, REQ-031, REQ-032, REQ-035, REQ-073 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |

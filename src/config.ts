@@ -183,6 +183,9 @@ function validateConfig(config: Config): void {
   if (config.output.hedge_grace_ms !== undefined && (typeof config.output.hedge_grace_ms !== "number" || config.output.hedge_grace_ms < 0)) {
     errors.push("output.hedge_grace_ms must be a non-negative number");
   }
+  if (config.output.rate_limit_cooldown_ms !== undefined && (typeof config.output.rate_limit_cooldown_ms !== "number" || config.output.rate_limit_cooldown_ms < 0)) {
+    errors.push("output.rate_limit_cooldown_ms must be a non-negative number");
+  }
 
   if (config.fetch) {
     if (config.fetch.passage_size !== undefined && (typeof config.fetch.passage_size !== "number" || config.fetch.passage_size < 1)) {

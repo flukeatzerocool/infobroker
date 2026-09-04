@@ -538,7 +538,10 @@ additionally prefers the primary renderer in a short grace window so a
 marginally slow `jina` is not displaced by a lower-quality `native_fetch`.
 Tune the window with `output.hedge_enabled`, `hedge_min_delay_ms`,
 `hedge_max_delay_ms`, and `hedge_grace_ms`; set `hedge_enabled` to
-`false` for the sequential chain.
+`false` for the sequential chain. A provider that returns a rate-limit
+or anti-bot response is held in a per-provider cooldown (`output.rate_limit_cooldown_ms`)
+so a burst of requests stops re-hammering it, and when a non-`general_web`
+chain exhausts, the server retries the `general_web` chain before failing.
 
 ## How It Compares
 
@@ -558,7 +561,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-09-02.
+Last updated: 2026-09-03.
 
 ## Contribute
 

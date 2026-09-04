@@ -32,8 +32,7 @@ export async function throttle(slug: string): Promise<void> {
   const limit = limits.get(slug);
   if (!limit || limit.perSecond <= 0) return;
 
-  const now = Date.now();
-  const elapsed = now - limit.lastCall;
+  const elapsed = Date.now() - limit.lastCall;
   const minInterval = 1000 / limit.perSecond;
 
   if (elapsed < minInterval) {
@@ -41,7 +40,9 @@ export async function throttle(slug: string): Promise<void> {
     await sleep(delay);
   }
 
-  limits.set(slug, { ...limit, lastCall: now });
+  // Record the post-sleep timestamp so consecutive calls each enforce the full
+  // minimum interval (a pre-sleep timestamp under-throttles the next call).
+  limits.set(slug, { ...limit, lastCall: Date.now() });
 }
 
 function sleep(ms: number): Promise<void> {

@@ -19,6 +19,17 @@ export class ParseError extends Error {
   }
 }
 
+// A provider-declared bot-block or challenge response (e.g. an anti-bot
+// challenge page). A subclass of ParseError so existing consumers that treat
+// it as a parse failure keep working, while cooldown logic can detect it
+// distinctly from ordinary parse/selector drift.
+export class BotChallengeError extends ParseError {
+  constructor(message: string) {
+    super(message);
+    this.name = "BotChallengeError";
+  }
+}
+
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   retryConfig?: { retry_count?: number; retry_backoff_ms?: number },
