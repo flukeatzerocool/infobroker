@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-021 REQ-021b REQ-021c REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021b REQ-021c REQ-021d REQ-021e REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -28,6 +28,8 @@ import { searchCitations } from "./cite.js";
 import { deriveExpansions } from "./expand.js";
 import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
 import { infobrokerFetch } from "./http.js";
+import { stripHtml } from "./lib/html.js";
+import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
@@ -193,6 +195,7 @@ const TASK_TYPE_KEYWORDS: Record<string, string[]> = {
   "encyclopedia": ["encyclopedia", "wiki"],
   "definition": ["definition", "define", "meaning", "etymology", "dictionary", "word"],
   "structured_fact": ["date", "statistic", "identifier", "population", "birth", "death"],
+  "financial": ["sec filing", "financial filing", "10-k", "10-q", "8-k", "edgar", "economic indicator", "gdp", "inflation"],
   "location": ["where is", "location", "map", "address", "city", "place", "geocode"],
   "academic": ["paper", "study", "research paper", "academic", "scholar", "journal", "thesis"],
   "code": ["code", "programming", "error", "debug", "function", "api", "docs", "stack overflow"],
@@ -242,6 +245,7 @@ async function doWebSearch(
   region?: string,
   expand = false,
   deep = false,
+  research = false,
   deepBudget?: { remaining: number }
 ): Promise<string> {
   if (Array.isArray(query)) {
@@ -251,7 +255,7 @@ async function doWebSearch(
     const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
     const envelopes = await Promise.all(
       queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand, deep, deepBudget)
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand, deep, research, deepBudget)
       )
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
@@ -299,6 +303,44 @@ async function doWebSearch(
       provider: "duckduckgo",
       results: expansions.map((s) => ({ title: s, url: "", snippet: s })),
       meta: { query_time_ms: 0, fallback_used: false },
+    })}`;
+  }
+
+  // REQ-020f: research compile — one call fans out to N derived variants,
+  // deep-reads each variant's top pages (bounded per variant), and returns
+  // the ranked passages grouped by variant with provenance. Opt-in and
+  // token-bounded; report synthesis stays in the client skills.
+  if (research) {
+    const maxVariants = config.research?.max_variants ?? 3;
+    const perVariantPages = config.research?.max_pages_per_variant ?? 2;
+    const variants = deriveExpansions(query, [], maxVariants);
+    const groups: Array<Record<string, unknown>> = [];
+    for (const variant of variants) {
+      const budget = { remaining: perVariantPages };
+      const env = await doWebSearch(
+        variant, preferredProvider, maxResults, safeSearch, timeRange, page,
+        priority, false, contentType, region, false, true, false, budget
+      );
+      let parsed: { status?: string; provider?: string; results?: SearchResult[]; meta?: { pages_read?: number } };
+      try {
+        parsed = JSON.parse(env.startsWith("[OK] ") ? env.slice(4) : env.startsWith("[ERROR] ") ? env.slice(8) : env);
+      } catch {
+        parsed = { status: "error", provider: "", results: [] };
+      }
+      groups.push({
+        variant,
+        status: parsed.status ?? "error",
+        provider: parsed.provider,
+        results: parsed.results ?? [],
+        ...(parsed.meta?.pages_read !== undefined ? { pages_read: parsed.meta.pages_read } : {}),
+      });
+    }
+    return `[OK] ${json({
+      status: "ok",
+      provider: "research",
+      query,
+      groups,
+      meta: { query_time_ms: 0, fallback_used: false, research: true, variants: groups.length },
     })}`;
   }
 
@@ -686,12 +728,14 @@ async function doFetchPage(
   question?: string,
   passageSize?: number,
   maxPassages?: number,
-  detectDate?: boolean
+  detectDate?: boolean,
+  crawl = false,
+  extract = false
 ): Promise<string> {
   if (Array.isArray(url)) {
     const urls = capInputs(url);
     const envelopes = await Promise.all(
-      urls.map((u) => doFetchPage(u, renderer, maxLength, question, passageSize, maxPassages, detectDate))
+      urls.map((u) => doFetchPage(u, renderer, maxLength, question, passageSize, maxPassages, detectDate, crawl, extract))
     );
     const merged = mergeItems(urls.map((u, i) => ({ query: u, envelope: envelopes[i] })));
     return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
@@ -709,6 +753,80 @@ async function doFetchPage(
     assertPublicUrl(url, allowPrivate);
   } catch (e) {
     return `[ERROR] ${json(err("none", "invalid_input", e instanceof Error ? e.message : String(e), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+  }
+
+  // REQ-021d: bounded same-origin crawl. Fetches the start page raw, discovers
+  // same-origin links, and recurses within page-count and depth caps, applying
+  // the SSRF guard (REQ-021a) on every hop via the native_fetch path.
+  if (crawl) {
+    const maxPages = config.fetch?.crawl_max_pages ?? 10;
+    const maxDepth = config.fetch?.crawl_max_depth ?? 2;
+    const pages: Array<{ url: string; depth: number; title: string; snippet: string }> = [];
+    const visited = new Set<string>();
+    const queue: Array<{ url: string; depth: number }> = [{ url, depth: 0 }];
+    while (queue.length > 0 && pages.length < maxPages) {
+      const cur = queue.shift()!;
+      if (visited.has(cur.url) || cur.depth > maxDepth) continue;
+      visited.add(cur.url);
+      const fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate);
+      if (fetched === null) continue;
+      const text = stripHtml(fetched.content);
+      pages.push({
+        url: cur.url,
+        depth: cur.depth,
+        title: new URL(cur.url).hostname,
+        snippet: text.slice(0, effectiveMax),
+      });
+      autoIndex([{ title: new URL(cur.url).hostname, url: cur.url, snippet: text.slice(0, 4000) }], "native_fetch", undefined, "crawl");
+      if (cur.depth < maxDepth) {
+        for (const link of extractLinks(fetched.content, cur.url)) {
+          if (!visited.has(link) && isSameOrigin(link, url)) {
+            queue.push({ url: link, depth: cur.depth + 1 });
+          }
+        }
+      }
+    }
+    return `[OK] ${json({
+      status: "ok",
+      provider: "native_fetch",
+      results: pages,
+      meta: {
+        query_time_ms: 0,
+        fallback_used: false,
+        pages: pages.length,
+        max_pages: maxPages,
+        max_depth: maxDepth,
+      },
+    })}`;
+  }
+
+  // REQ-021e: structured-metadata extraction — returns JSON-LD, OpenGraph, and
+  // microdata alongside the page content. Uses the raw native_fetch render so
+  // the embedded metadata is still present.
+  if (extract) {
+    const fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate);
+    if (fetched === null) {
+      return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
+    }
+    const structured = extractStructured(fetched.content);
+    const hasData = structured.jsonld.length > 0 || structured.microdata.length > 0 || Object.keys(structured.open_graph).length > 0;
+    return `[OK] ${json({
+      status: "ok",
+      provider: fetched.slug,
+      url,
+      extraction_mode: "structured",
+      results: [{
+        title: new URL(url).hostname,
+        url,
+        snippet: stripHtml(fetched.content).slice(0, effectiveMax),
+      }],
+      extracted: structured,
+      ...(hasData ? {} : { note: "No structured metadata found on this page." }),
+      meta: {
+        query_time_ms: fetched.elapsed,
+        fallback_used: false,
+      },
+    })}`;
   }
 
   const fetched = await fetchPageContent(url, renderers, effectiveMax, allowPrivate);
@@ -934,7 +1052,9 @@ function doSpecHealth(): string {
       tool_count: toolCount,
       token_footprint: {
         tool_schema_bytes: toolSchemaBytes,
+        tool_schema_tokens: Math.ceil(toolSchemaBytes / 4),
         median_response_bytes: medianResponseBytes(),
+        median_response_tokens: Math.ceil(medianResponseBytes() / 4),
       },
       kb: kbStatsData ? {
         chunk_count: kbStatsData.chunk_count,
@@ -959,7 +1079,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.03",
+  version: "2026.09.04",
 });
 
 // --- web_search ---
@@ -967,7 +1087,7 @@ server.registerTool(
   "infobroker_web_search",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), or ranked passages from the top pages (deep). Do NOT use for a URL you already have (use fetch_page), for high-stakes claim verification (use verify_claims), for stored-report recall (use manage_kb search), or for academic citations (use get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research). Do NOT use for a URL you already have (use fetch_page), for high-stakes claim verification (use verify_claims), for stored-report recall (use manage_kb search), or for academic citations (use get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -979,6 +1099,7 @@ server.registerTool(
       suggest: z.boolean().optional().default(false).describe("Return query-autocomplete strings instead of results (default false)"),
       expand: z.boolean().optional().default(false).describe("Return query-expansion strings instead of search results"),
       deep: z.boolean().optional().default(false).describe("Read the top results and return each page's ranked passages against the query"),
+      research: z.boolean().optional().default(false).describe("Research compile: fan out to derived query variants and deep-read each, returning passages grouped by variant (default off)"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
     },
@@ -1002,7 +1123,8 @@ server.registerTool(
       params.content_type as string | undefined,
       params.region as string | undefined,
       Boolean(params.expand),
-      Boolean(params.deep)
+      Boolean(params.deep),
+      Boolean(params.research)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
@@ -1013,7 +1135,7 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question (question mode returns ranked passages), or need the page's last-updated date (detect_date). Do NOT use for a general topic search (use web_search) or for claim verification across sources (use verify_claims). Makes external HTTP calls, falls back to native HTTP when Jina is throttled, truncates very long pages, and needs no API key. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question (question mode returns ranked passages), need the page's last-updated date (detect_date), a bounded same-origin crawl (crawl), or structured metadata such as JSON-LD (extract). Do NOT use for a general topic search (use web_search) or for claim verification across sources (use verify_claims). Makes external HTTP calls, falls back to native HTTP when Jina is throttled, truncates very long pages, and needs no API key. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
@@ -1022,6 +1144,8 @@ server.registerTool(
       passage_size: z.number().optional().describe("Target words per passage (default from config)"),
       max_passages: z.number().optional().describe("Number of passages to return (default from config)"),
       detect_date: z.boolean().optional().describe("Detect and report the page's last-updated date (default from config)"),
+      crawl: z.boolean().optional().default(false).describe("Bounded same-origin crawl: recursively fetch same-origin pages up to config caps (default off)"),
+      extract: z.boolean().optional().default(false).describe("Return structured metadata (JSON-LD, OpenGraph, microdata) alongside the content (default off)"),
     },
     annotations: {
       readOnlyHint: true,
@@ -1038,7 +1162,9 @@ server.registerTool(
       params.question as string | undefined,
       params.passage_size !== undefined ? Number(params.passage_size) : undefined,
       params.max_passages !== undefined ? Number(params.max_passages) : undefined,
-      params.detect_date as boolean | undefined
+      params.detect_date as boolean | undefined,
+      Boolean(params.crawl),
+      Boolean(params.extract)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }

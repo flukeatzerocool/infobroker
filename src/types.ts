@@ -63,9 +63,15 @@ export interface Config {
     passage_size?: number;
     max_passages?: number;
     detect_date?: boolean;
+    crawl_max_pages?: number;
+    crawl_max_depth?: number;
   };
   expand?: {
     max_expansions?: number;
+  };
+  research?: {
+    max_variants?: number;
+    max_pages_per_variant?: number;
   };
   deep?: DeepConfig;
   kb?: KbConfig;

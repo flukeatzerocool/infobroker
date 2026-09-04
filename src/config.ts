@@ -197,11 +197,26 @@ function validateConfig(config: Config): void {
     if (config.fetch.detect_date !== undefined && typeof config.fetch.detect_date !== "boolean") {
       errors.push("fetch.detect_date must be a boolean");
     }
+    if (config.fetch.crawl_max_pages !== undefined && (typeof config.fetch.crawl_max_pages !== "number" || config.fetch.crawl_max_pages < 1)) {
+      errors.push("fetch.crawl_max_pages must be a positive number");
+    }
+    if (config.fetch.crawl_max_depth !== undefined && (typeof config.fetch.crawl_max_depth !== "number" || config.fetch.crawl_max_depth < 0)) {
+      errors.push("fetch.crawl_max_depth must be a non-negative number");
+    }
   }
 
   if (config.expand) {
     if (config.expand.max_expansions !== undefined && (typeof config.expand.max_expansions !== "number" || config.expand.max_expansions < 1)) {
       errors.push("expand.max_expansions must be a positive number");
+    }
+  }
+
+  if (config.research) {
+    if (config.research.max_variants !== undefined && (typeof config.research.max_variants !== "number" || config.research.max_variants < 1)) {
+      errors.push("research.max_variants must be a positive number");
+    }
+    if (config.research.max_pages_per_variant !== undefined && (typeof config.research.max_pages_per_variant !== "number" || config.research.max_pages_per_variant < 1)) {
+      errors.push("research.max_pages_per_variant must be a positive number");
     }
   }
 

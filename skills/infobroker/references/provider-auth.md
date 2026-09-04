@@ -20,6 +20,12 @@ Generated from `config.json`. Do not edit manually.
 | stack_exchange | free_http | API key | `INFOBROKER_STACK_EXCHANGE_API_KEY` |
 | github | free_http | API key | `INFOBROKER_GITHUB_API_KEY` |
 | core | free_http | API key | `INFOBROKER_CORE_API_KEY` |
+| openalex | free_http | None | — |
+| europe_pmc | free_http | None | — |
+| hacker_news | free_http | None | — |
+| gdelt | free_http | None | — |
+| sec_edgar | free_http | None | — |
+| world_bank | free_http | None | — |
 | brave | keyed_http | API key | `INFOBROKER_BRAVE_API_KEY` |
 | exa | keyed_http | API key | `INFOBROKER_EXA_API_KEY` |
 | tavily | keyed_http | API key | `INFOBROKER_TAVILY_API_KEY` |

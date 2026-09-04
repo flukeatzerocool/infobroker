@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.09.04 — Competitive improvement batch: zero-config providers, research compile, fetch modes
+
+- Added six zero-config providers — OpenAlex, Europe PMC, Hacker News,
+  GDELT, SEC EDGAR, World Bank — and a `financial` task type (REQ-095) routed
+  through `sec_edgar` → `world_bank` → `duckduckgo`. The `academic` and
+  `news` chains gained the new sources as fallbacks. Provider count is now 26
+  (21 zero-config).
+- Added `web_search` `research` mode (REQ-020f): one call derives query
+  variants and deep-reads each, returning passages grouped by variant.
+  Token-bounded by `research.max_variants` (default 3) and
+  `research.max_pages_per_variant` (default 2); off by default.
+- Added opt-in `fetch_page` modes: bounded same-origin `crawl` (REQ-021d,
+  `fetch.crawl_max_pages`/`crawl_max_depth`) and structured `extract`
+  (REQ-021e, JSON-LD/OpenGraph/microdata).
+- Deep-read passages now carry `start`/`end` span anchors (REQ-028).
+- `inspect_providers` spec action reports the token footprint in tokens as
+  well as bytes (REQ-081).
+- All new modes are off by default so plain search/fetch token cost is
+  unchanged; the workflow reference gates `research: true` to Deep-Dive,
+  Competitive Evaluation, and Gated Analysis shapes only.
+
 ## 2026.09.03 — Remove dead cooldown export and a REQ-012 worked example
 
 - Removed the unused `clearCooldown` export from `src/cooldown.ts` (no callers

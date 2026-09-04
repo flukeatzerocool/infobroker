@@ -19,6 +19,12 @@ import { provider as tavily } from "./tavily.js";
 import { provider as searxng } from "./searxng.js";
 import { provider as yep } from "./yep.js";
 import { provider as wiby } from "./wiby.js";
+import { provider as openalex } from "./openalex.js";
+import { provider as europepmc } from "./europe_pmc.js";
+import { provider as hackernews } from "./hacker_news.js";
+import { provider as gdelt } from "./gdelt.js";
+import { provider as sec_edgar } from "./sec_edgar.js";
+import { provider as world_bank } from "./world_bank.js";
 import { createGenericProvider } from "./generic-http.js";
 import { getConfig } from "../config.js";
 import type { Provider } from "../types.js";
@@ -44,6 +50,12 @@ export const PROVIDERS: Record<string, Provider> = {
   searxng,
   yep,
   wiby,
+  openalex,
+  europe_pmc: europepmc,
+  hacker_news: hackernews,
+  gdelt,
+  sec_edgar,
+  world_bank,
 };
 
 const genericCache: Record<string, Provider> = {};

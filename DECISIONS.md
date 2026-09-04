@@ -2,6 +2,33 @@
 
 ## Active Decisions
 
+### D-043: Competitive Improvement Batch — Zero-Config Providers, Research Compile, Fetch Modes (REQ-020f, REQ-021d, REQ-021e, REQ-028, REQ-081, REQ-095; 2026.09.04)
+
+The competitive feature report (Glama related-servers + directory + off-registry
+servers) identified four competitor archetypes. Three gaps map to new
+server-side capability and are implemented as *modes on existing tools*, not
+new tools, preserving the seven-tool surface (REQ-090/092). (1) Six zero-config
+providers — OpenAlex, Europe PMC, Hacker News, GDELT, SEC EDGAR, World Bank —
+plus a `financial` task type (REQ-095); they register through the REQ-070
+mapping, so no tool handler changed. (2) `web_search` gained a `research` mode
+(REQ-020f): one call fans out to derived query variants and deep-reads each,
+returning passages grouped by variant — token-bounded (`research.max_variants`
+default 3, `research.max_pages_per_variant` default 2); report synthesis stays
+in the client skills, matching the deep-search-as-mode decision (D-035). (3)
+`fetch_page` gained opt-in `crawl` (REQ-021d, bounded same-origin, SSRF guard
+per hop) and `extract` (REQ-021e, JSON-LD/OpenGraph/microdata) modes. Every new
+mode is off by default, so the happy-path token cost of a plain search is
+unchanged; the skill workflow reference gates `research: true` to the
+Deep-Dive, Competitive Evaluation, and Gated Analysis shapes only. Deep-read
+passages now surface `start`/`end` span anchors (REQ-028 amendment); REQ-026b
+already carries per-source claim text, so corroboration needed no change.
+REQ-081 now reports the token footprint in bytes *and* tokens, where the token
+figure is a deterministic characters-per-token estimate — no new build gate,
+because the REQ-090/092 bar already caps the surface at seven tools. Key-pool
+rotation (the Search Toolkit gap) is deferred to the roadmap: every keyed
+provider caches its key at module scope, so rotation requires touching each
+keyed provider, which is not justified at "Could" priority (see ROADMAP).
+
 ### D-042: Tool-Definition Quality Bar Codified (REQ-092; 2026.09.03)
 
 The Glama TDQS audit (D-038, D-040) fixed the tool definitions but left the

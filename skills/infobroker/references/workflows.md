@@ -16,6 +16,9 @@ rather than restating them.
 - **SEARCH** — `web_search` (multi-provider, auto-selection, fallback
   chain). Use `verify_claims` when a claim is contested; use `deep: true`
   when you want passages read from the top results, not just snippets.
+  Use `research: true` (multi-variant fan-out with deep reads) only for the
+  Deep-Dive, Competitive Evaluation, and Gated Analysis shapes — it is
+  token-expensive, and simple lookups never escalate to it.
 - **EXTRACT** — `fetch_page` on promising URLs for full content; pass
   `question` to a page you are reading to answer a specific question, so only
   the ranked passages that address it are returned. For a one-call

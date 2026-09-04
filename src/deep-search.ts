@@ -8,7 +8,7 @@ export interface DeepEnrichedResult {
   snippet: string;
   source_type?: string;
   original_source?: string;
-  passages?: Array<{ text: string; score: number; index: number }>;
+  passages?: Array<{ text: string; score: number; index: number; start: number; end: number }>;
   top_score?: number;
   extraction_mode?: "passage" | "full_content";
   last_updated?: string;
@@ -94,7 +94,7 @@ export function deepRead(
       ...base,
       ...(passages.length > 0
         ? {
-            passages: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
+            passages: passages.map((p) => ({ text: p.text, score: p.score, index: p.index, start: p.start, end: p.end })),
             top_score: top.score,
             extraction_mode: "passage" as const,
           }

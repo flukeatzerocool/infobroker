@@ -126,6 +126,54 @@
       "timeout": 30000,
       "resells": true
     },
+    "openalex": {
+      "tier": "free_http",
+      "capabilities": ["academic"],
+      "rate_limit": { "per_second": 1 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
+    "europe_pmc": {
+      "tier": "free_http",
+      "capabilities": ["academic"],
+      "rate_limit": { "per_second": 1 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
+    "hacker_news": {
+      "tier": "free_http",
+      "capabilities": ["news"],
+      "rate_limit": { "per_second": 1 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
+    "gdelt": {
+      "tier": "free_http",
+      "capabilities": ["news"],
+      "rate_limit": { "per_second": 0.2 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
+    "sec_edgar": {
+      "tier": "free_http",
+      "capabilities": ["financial"],
+      "rate_limit": { "per_second": 0.2 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
+    "world_bank": {
+      "tier": "free_http",
+      "capabilities": ["financial"],
+      "rate_limit": { "per_second": 1 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
     "brave": {
       "tier": "keyed_http",
       "capabilities": ["web_search", "news", "semantic"],
@@ -187,9 +235,10 @@
     "definition": ["wiktionary", "duckduckgo"],
     "structured_fact": ["wikidata", "wikipedia", "duckduckgo"],
     "location": ["openstreetmap", "wikipedia", "duckduckgo"],
-    "academic": ["semantic_scholar", "arxiv"],
+    "academic": ["semantic_scholar", "arxiv", "openalex", "europe_pmc"],
     "code": ["stack_exchange", "github", "duckduckgo"],
-    "news": ["brave", "duckduckgo"],
+    "news": ["brave", "duckduckgo", "gdelt", "hacker_news"],
+    "financial": ["sec_edgar", "world_bank", "duckduckgo"],
     "archive": ["internet_archive", "duckduckgo"],
     "semantic": ["exa", "brave", "duckduckgo"],
     "synthesis": ["tavily", "exa", "duckduckgo"],
@@ -200,10 +249,16 @@
     "allow_private_urls": false,
     "passage_size": 100,
     "max_passages": 1,
-    "detect_date": true
+    "detect_date": true,
+    "crawl_max_pages": 10,
+    "crawl_max_depth": 2
   },
   "expand": {
     "max_expansions": 5
+  },
+  "research": {
+    "max_variants": 3,
+    "max_pages_per_variant": 2
   },
   "deep": {
     "max_pages": 3,

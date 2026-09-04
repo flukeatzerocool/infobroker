@@ -116,7 +116,7 @@ README DESIGN:
 
 Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
-behind a single tool surface. Fifteen zero-config providers ship in the
+behind a single tool surface. Twenty-one zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
 configure. Five more providers unlock with API keys or self-hosting. A built-in corroboration engine cross-references independent
 sources to separate established facts from contested claims. Bundled
@@ -193,7 +193,7 @@ Requirements: Node.js 20+.
 
 ## MCP Server
 
-Your research backend. Seven tools, twenty providers, one
+Your research backend. Seven tools, twenty-six providers, one
 corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
@@ -356,7 +356,7 @@ documented answers.
 
 ## Providers
 
-Twenty providers. Fifteen work with zero configuration.
+Twenty-six providers. Twenty-one work with zero configuration.
 
 | Provider | Tier | Type | Key Required |
 |----------|------|------|-------------|
@@ -372,6 +372,12 @@ Twenty providers. Fifteen work with zero configuration.
 | Stack Exchange | Free HTTP | Code Q&A | Optional |
 | GitHub | Free HTTP | Code search | Optional |
 | CORE | Free HTTP | Open access | Optional |
+| OpenAlex | Free HTTP | Academic | No |
+| Europe PMC | Free HTTP | Academic | No |
+| Hacker News | Free HTTP | News | No |
+| GDELT | Free HTTP | News | No |
+| SEC EDGAR | Free HTTP | Financial filings | No |
+| World Bank | Free HTTP | Economic data | No |
 | Marginalia | Built-in | Small web | No |
 | Mojeek | Built-in | Independent index | No |
 | Wiby | Built-in | Small web | No |
@@ -549,7 +555,7 @@ chain exhausts, the server retries the `general_web` chain before failing.
 |-----------|--------------------|-----------------------|
 | Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Fifteen zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
-| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and thirteen other providers work with zero configuration. Upgrade paths for Brave, Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
+| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and nineteen other providers work with zero configuration. Upgrade paths for Brave, Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
 | Other search MCP servers | Single-provider focus, no fallback, no corroboration, no writing pipeline | Multi-provider with automatic fallback. Corroboration engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
 | AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The corroboration engine verifies facts across independent sources. |
 
@@ -561,7 +567,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-09-03.
+Last updated: 2026-09-04.
 
 ## Contribute
 
@@ -591,7 +597,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.09.02), which defines every requirement and the gates that verify it.
+(v2026.09.04), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers.
