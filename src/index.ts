@@ -54,14 +54,6 @@ loadQuotaState();
 
 startupHealthCheck();
 
-const kbConfig = getConfig().kb;
-if (kbConfig) {
-  initKb(kbConfig);
-  console.error("[infobroker] Knowledge base initialized");
-} else {
-  console.error("[infobroker] Knowledge base not configured — KB tools disabled");
-}
-
 function trackRequest(provider: string, latencyMs: number): void {
   totalRequests++;
   const config = getConfig();
@@ -1412,6 +1404,15 @@ process.on("SIGHUP", () => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // Load the KB after the MCP handshake so a large vector store cannot block
+  // the `initialize` request past a client's timeout window.
+  const kbConfig = getConfig().kb;
+  if (kbConfig) {
+    initKb(kbConfig);
+    console.error("[infobroker] Knowledge base initialized");
+  } else {
+    console.error("[infobroker] Knowledge base not configured — KB tools disabled");
+  }
 }
 
 main().catch((e) => {
