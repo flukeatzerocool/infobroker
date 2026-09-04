@@ -286,6 +286,9 @@ Every advertised tool definition SHALL state the tool's purpose, when to use it,
 **REQ-090 — Tool naming convention**
 Tool names SHALL follow a verb-noun pattern: a verb naming the operation followed by the noun naming the resource the operation acts on. A tool's name SHALL allow an agent to infer the operation and resource without reading the description. _Check:_ G0, G1.
 
+**REQ-092 — Tool-definition quality bar**
+The advertised tool surface SHALL satisfy every dimension of the tool-definition quality bar: each tool SHALL state its purpose, when to use it, when not to use it, the alternative tools a caller could choose instead, and the behavioral consequences of calling it. Each tool SHALL state its response contract and any non-obvious parameter couplings. Each tool SHALL declare annotations for read-only, destructive, and idempotent behavior. Tool names SHALL follow the verb-noun pattern. The bar SHALL be enforced by a conformance gate over the live tool schema. _Check:_ G1, G3.
+
 ### 4.4 Rate Limiting and Resilience
 
 Rate limiting (REQ-030) and quota tracking (REQ-033, REQ-034) use separate
@@ -489,7 +492,7 @@ The server SHALL operate on preserved user state after an update without
 requiring reconfiguration. _Check:_ G1.
 
 **REQ-091 — Registry-Published Distribution**
-The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1.
+The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1, G3.
 
 ---
 
@@ -920,6 +923,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-028 | web_search deep reading | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
+| REQ-092 | Tool-definition quality bar | 4.3 | G1, G3 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-031a | Cross-task fallback | 4.4 | G1 |
@@ -968,7 +972,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-087 | KB Source Date Preservation | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
-| REQ-091 | Registry-Published Distribution | 4.10 | G1 |
+| REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
 
 ---
 
@@ -1388,7 +1392,7 @@ secondary concerns rather than duplicating the REQ.
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091 | G0, G1 |
-| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090 | G0 |
+| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 

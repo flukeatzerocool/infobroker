@@ -984,6 +984,7 @@ server.registerTool(
     },
     annotations: {
       readOnlyHint: true,
+      destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
@@ -1024,6 +1025,7 @@ server.registerTool(
     },
     annotations: {
       readOnlyHint: true,
+      destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
@@ -1055,6 +1057,7 @@ server.registerTool(
     },
     annotations: {
       readOnlyHint: true,
+      destructiveHint: false,
       idempotentHint: true,
     },
   },
@@ -1091,6 +1094,7 @@ server.registerTool(
     },
     annotations: {
       readOnlyHint: false,
+      destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true,
     },
@@ -1338,6 +1342,7 @@ server.registerTool(
     inputSchema: {},
     annotations: {
       readOnlyHint: false,
+      destructiveHint: false,
       idempotentHint: true,
     },
   },
@@ -1387,6 +1392,7 @@ server.registerTool(
     },
     annotations: {
       readOnlyHint: true,
+      destructiveHint: false,
       idempotentHint: true,
     },
   },

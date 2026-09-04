@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.09.03 — Hardcode the Glama tool-definition quality bar
+
+- Added REQ-092 (tool-definition quality bar): the advertised tool surface
+  SHALL satisfy every scoring dimension the Glama TDQS audit surfaced —
+  purpose, when-to/not plus alternatives, behavioral consequences, response
+  contract, parameter couplings, and read-only/destructive/idempotent
+  annotations — enforced by G1 and G3.
+- Strengthened the tool-surface gate (`src/tool-surface.test.ts`) to enforce
+  the clauses the prose already promised: each description must name an
+  alternative tool, the verb must come from a known verb set, and all three
+  behavioral hints must be declared (previously any one of three sufficed).
+- Added a static REQ-092 scan to `validate-spec` (G3) that reads `src/index.ts`
+  tool descriptions and annotations, so definition quality cannot regress
+  without failing `npm run check`.
+- All seven tools now declare a `destructiveHint` (previously only
+  `manage_kb` did).
+- Added a REQ-091 gate to `validate-spec` (G3): verifies `server.json` and
+  `glama.json` presence and that the registered version equals the
+  npm-canonical package version.
+
 ## 2026.09.03 — Rate-limit cooldown and broader fallback resilience
 
 - Added a per-provider rate-limit/anti-bot cooldown (REQ-038): a provider

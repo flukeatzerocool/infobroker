@@ -1,7 +1,8 @@
-// @implements REQ-089 REQ-090
+// @implements REQ-089 REQ-090 REQ-092
 // Tool-surface contract test: starts the real server over stdio and verifies
-// the advertised tool surface against REQ-089 (three-clause definitions, full
-// parameter descriptions, annotations) and REQ-090 (verb_noun naming).
+// the advertised tool surface against REQ-089 (purpose, when-to/when-not +
+// alternatives, response contract, parameter descriptions, annotations),
+// REQ-090 (verb_noun naming), and the REQ-092 quality bar.
 
 import { test, expect } from "vitest";
 import { spawn } from "node:child_process";
@@ -92,10 +93,13 @@ async function listTools(): Promise<ListToolsResult> {
   }
 }
 
-test("tool surface satisfies REQ-089 and REQ-090", async () => {
+test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
   const { tools } = await listTools();
 
-  // REQ-089: multi-action tools document which parameter each action needs.
+  // REQ-089/092: multi-action/multi-pass tools document which parameter each
+  // action or mode needs. The map is keyed by tool name; the guard below fails
+  // when a tool exposes an `action` parameter but has no note, so a new
+  // multi-action tool cannot ship undocumented.
   const couplingNotes: Record<string, RegExp> = {
     infobroker_inspect_providers: /required for the `health` action/,
     infobroker_manage_kb: /`query` for search/,
@@ -113,34 +117,50 @@ test("tool surface satisfies REQ-089 and REQ-090", async () => {
     "infobroker_web_search",
   ]);
 
+  // REQ-090: the operation must name a real verb, not just any lowercase
+  // token. `web_search` names the domain first, so the verb may appear in
+  // either position.
+  const operationVerbs = ["search", "fetch", "verify", "get", "inspect", "manage", "reload"];
+
   for (const tool of tools) {
     const slug = tool.name.replace(/^infobroker_/, "");
 
-    // REQ-090: verb_noun pattern — verb, underscore, noun, all lowercase.
+    // REQ-090: verb_noun pattern — two lowercase tokens joined by an underscore.
     expect(slug, `${tool.name} violates verb_noun naming`).toMatch(/^[a-z]+_[a-z]+$/);
+    const tokens = slug.split("_");
+    expect(tokens.length, `${tool.name} must be two verb_noun tokens`).toBe(2);
+    expect(tokens.some((t) => operationVerbs.includes(t)), `${tool.name} must name a known operation verb`).toBe(true);
 
     // REQ-089: description states purpose, when to use, and when not to use.
     expect(tool.description, `${tool.name} missing description`).toBeTruthy();
     expect(tool.description!, `${tool.name} missing 'Use when'`).toMatch(/Use when/i);
     expect(tool.description!, `${tool.name} missing 'Do NOT use'`).toMatch(/Do NOT use/i);
 
+    // REQ-089/092: description names at least one alternative tool.
+    expect(tool.description!, `${tool.name} missing alternative-tool naming`).toMatch(
+      /use\s+(fetch_page|verify_claims|manage_kb|get_citations|inspect_providers|reload_config|web_search)/i
+    );
+
     // REQ-089: description states the response contract ([OK]/[ERROR] envelope).
     expect(tool.description!, `${tool.name} missing [OK] return contract`).toMatch(/\[OK\]/);
     expect(tool.description!, `${tool.name} missing [ERROR] return contract`).toMatch(/\[ERROR\]/);
 
-    // REQ-089: multi-action tools document parameter couplings.
+    // REQ-089/092: multi-action tools document parameter couplings.
     const coupling = couplingNotes[tool.name];
     if (coupling) {
       expect(tool.description!, `${tool.name} missing parameter-coupling note`).toMatch(coupling);
     }
+    const hasAction = "action" in (tool.inputSchema?.properties ?? {});
+    if (hasAction) {
+      expect(couplingNotes[tool.name], `${tool.name} is multi-action but has no coupling note in the gate`).toBeDefined();
+    }
 
-    // REQ-089: annotations declared.
+    // REQ-089/092: annotations declare all three behavioral hints.
     expect(tool.annotations, `${tool.name} missing annotations`).toBeDefined();
     const a = tool.annotations!;
-    expect(
-      a.readOnlyHint !== undefined || a.destructiveHint !== undefined || a.idempotentHint !== undefined,
-      `${tool.name} missing a behavioral hint`
-    ).toBe(true);
+    expect(a.readOnlyHint, `${tool.name} missing readOnlyHint`).toBeDefined();
+    expect(a.destructiveHint, `${tool.name} missing destructiveHint`).toBeDefined();
+    expect(a.idempotentHint, `${tool.name} missing idempotentHint`).toBeDefined();
 
     // REQ-089: every parameter carries a description.
     const props = tool.inputSchema?.properties ?? {};

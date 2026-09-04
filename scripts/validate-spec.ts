@@ -486,6 +486,76 @@ function requireDefault(re: RegExp, label: string, schema: string | undefined): 
 requireDefault(/`max_results`\s+\(default\s+(\d+)\s*,/ , "REQ-020 web_search max_results", schemaDefault("web_search", "max_results", 30));
 requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a manage_kb max_results", schemaDefault("manage_kb", "max_results", 50));
 
+// --- Tool-definition quality bar (REQ-092) ---
+//
+// The REQ-089/090/092 bar is enforced statically over src/index.ts so a tool
+// definition that regresses (drops an alternative, the return contract, or a
+// behavioral annotation) fails spec validation, not only the live stdio test.
+function checkToolDefinitionBar(): void {
+  const text = readFileSync(join(SRC, "index.ts"), "utf-8");
+  const blocks = text.split(/registerTool\(\s*"infobroker_/).slice(1);
+  if (blocks.length === 0) {
+    error("REQ-092: no infobroker_ registerTool calls found in src/index.ts");
+    return;
+  }
+  for (const block of blocks) {
+    const slug = block.slice(0, block.indexOf('"'));
+    const descMatch = block.match(/description:\s*"([^"]*)"/);
+    const desc = descMatch?.[1] ?? "";
+    const label = `infobroker_${slug}`;
+    if (!/Use when/i.test(desc)) error(`${label}: description missing 'Use when' (REQ-092)`);
+    if (!/Do NOT use/i.test(desc)) error(`${label}: description missing 'Do NOT use' (REQ-092)`);
+    if (!/use\s+(fetch_page|verify_claims|manage_kb|get_citations|inspect_providers|reload_config|web_search)/i.test(desc)) {
+      error(`${label}: description missing an alternative-tool reference (REQ-092)`);
+    }
+    if (!/\[OK\]/.test(desc)) error(`${label}: description missing [OK] return contract (REQ-092)`);
+    if (!/\[ERROR\]/.test(desc)) error(`${label}: description missing [ERROR] return contract (REQ-092)`);
+    const annMatch = block.match(/annotations:\s*\{([^}]*)\}/);
+    const ann = annMatch?.[1] ?? "";
+    for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint"]) {
+      if (!new RegExp(`\\b${hint}:`).test(ann)) {
+        error(`${label}: annotations missing ${hint} (REQ-092)`);
+      }
+    }
+  }
+}
+checkToolDefinitionBar();
+
+// --- Registry-published distribution (REQ-091) ---
+//
+// server.json and glama.json are distribution artifacts; verify their presence
+// and that the registered version equals the npm-canonical package version.
+function checkRegistryArtifacts(): void {
+  const serverJsonPath = join(ROOT, "server.json");
+  const glamaJsonPath = join(ROOT, "glama.json");
+  if (!existsSync(serverJsonPath)) {
+    error("server.json missing — REQ-091 registry distribution");
+    return;
+  }
+  if (!existsSync(glamaJsonPath)) {
+    error("glama.json missing — REQ-091 registry attribution");
+  }
+  let pkgVersion: string;
+  try {
+    pkgVersion = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
+  } catch {
+    error("package.json missing or unparseable — REQ-091 version parity check unable to run");
+    return;
+  }
+  const canonical = pkgVersion.split(".").map((s) => String(Number(s))).join(".");
+  let serverVersion: string;
+  try {
+    serverVersion = JSON.parse(readFileSync(serverJsonPath, "utf-8")).version;
+  } catch {
+    error("server.json missing or unparseable — REQ-091");
+    return;
+  }
+  if (serverVersion !== canonical) {
+    error(`server.json version ${serverVersion} diverges from npm-canonical package.json version ${canonical} — REQ-091`);
+  }
+}
+checkRegistryArtifacts();
+
 // --- Report ---
 
 console.log(`\nvalidate-spec — Infobroker spec-code traceability\n`);

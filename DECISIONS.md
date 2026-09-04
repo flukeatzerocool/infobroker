@@ -2,6 +2,22 @@
 
 ## Active Decisions
 
+### D-042: Tool-Definition Quality Bar Codified (REQ-092; 2026.09.03)
+
+The Glama TDQS audit (D-038, D-040) fixed the tool definitions but left the
+scoring criteria implicit in the REQ-089/090 prose, with enforcement weaker
+than the prose: the gate checked only "Use when"/"Do NOT use", the return
+contract, and at least one of three annotations, so a description could drop
+an alternative, a coupling note, or a destructive annotation and still pass.
+REQ-092 states the quality bar as a named contract — purpose, when-to/not plus
+alternatives, behavioral consequences, response contract, parameter couplings,
+and all three read-only/destructive/idempotent annotations — and binds it to
+both G1 (the live stdio tool-surface test) and G3 (a static scan of
+src/index.ts descriptions and annotations in validate-spec). All seven tools
+now declare a `destructiveHint` (previously only `manage_kb` did). REQ-091 also
+gained a G3 gate: validate-spec verifies server.json and glama.json presence
+and that the registered version equals the npm-canonical package version.
+
 ### D-041: Rate-Limit Cooldown and Cross-Task Fallback (REQ-038, REQ-031a; 2026.09.03)
 
 A Glama research session saturated the `general_web` chain (three HTML-scraping
