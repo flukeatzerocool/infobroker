@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.09.04)
+# AGENTS.md — Infobroker MCP Server (v2026.09.05)
 
 ## Layer Map
 
