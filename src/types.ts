@@ -40,6 +40,7 @@ export interface Config {
     max_http_calls: number;
     confidence_threshold: number;
     first_pass_max_results: number;
+    first_pass_max_providers: number;
     similarity_threshold: number;
     authority_weights?: Record<string, number>;
     archive_sources?: boolean;

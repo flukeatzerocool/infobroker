@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.09.04 — Corroboration first-pass cap, early exit, and research-reference docs
+
+- `verify_claims` Phase-1 broad pass now caps to
+  `corroboration.first_pass_max_providers` (default 5, highest priority
+  first) instead of fanning out to every active search-capable provider, and
+  runs in concurrency-limited batches that stop early once every finding
+  clears the confidence bar. The remaining pool still serves gap refinement.
+  `corroboration.first_pass_max_results` default 10 → 5. D-044.
+- Added research references under `skills/infobroker/references/`:
+  `decision-tree.md` (shape/tool/escalation selection), `corroboration.md`
+  (how `verify_claims` reaches a verdict), `report-template.md` (canonical
+  deliverable skeleton + per-shape blocks), `config-tune.md` (cost/recall
+  tuning), `troubleshooting.md`, `glossary.md`, and `skill-authoring.md`
+  (template for new workflow shapes). Wired into `SKILL.md` and
+  `workflows.md`.
+
 ## 2026.09.04 — Spec-drift prevention: generated provider-map, AGENTS.md and reservation gates
 
 - Fixed drift from the competitive batch: AGENTS.md version stamp and six

@@ -300,6 +300,18 @@ function applyPriority(
   return slugs;
 }
 
+// Order the Phase-1 pool by config priority (higher = more authoritative),
+// so the first-pass cap keeps the highest-authority sources (encyclopedia,
+// academic, structured fact) and drops the tail (small-web scrapers, the
+// content-fetch stub) when the cap bites. Stable sort: ties keep pool order.
+function orderFirstPassPool(slugs: string[], config: ReturnType<typeof getConfig>): string[] {
+  return [...slugs].sort((a, b) => {
+    const pa = config.providers[a]?.priority ?? 0;
+    const pb = config.providers[b]?.priority ?? 0;
+    return pb - pa;
+  });
+}
+
 function pickGapProvider(
   availableProviders: string[],
   config: ReturnType<typeof getConfig>,
@@ -346,6 +358,7 @@ export async function corroborate(
     options.confidence_threshold ?? config.corroboration.confidence_threshold;
   const maxCalls = config.corroboration.max_http_calls;
   const firstPassMaxResults = config.corroboration.first_pass_max_results;
+  const firstPassMaxProviders = config.corroboration.first_pass_max_providers;
   const similarityThreshold = config.corroboration.similarity_threshold;
   const authorityWeights = config.corroboration.authority_weights;
   const kbRecall = config.corroboration.kb_recall !== false;
@@ -354,7 +367,9 @@ export async function corroborate(
   // REQ-026: corroborate defaults to all active providers that expose a search
   // function — not merely the web_search-capable tier, so high-authority
   // knowledge providers (encyclopedia, academic, structured_fact) participate
-  // and REQ-026a authority weighting applies to real sources.
+  // and REQ-026a authority weighting applies to real sources. The Phase-1
+  // broad pass is capped to first_pass_max_providers (highest priority first);
+  // the remaining pool stays available for gap refinement.
   const providerList = options.providers
     || getActiveProviders()
          .filter(([slug]) => providerOperational(slug, config))
@@ -401,32 +416,51 @@ export async function corroborate(
     const prevFindingsCount = findings.size;
 
     if (iteration === 0) {
-      const searchPromises = availableProviders.map(async (slug) => {
-        if (totalCalls >= maxCalls) return null;
-        const q = checkQuota(slug, config.providers[slug]?.rate_limit);
-        if (q.exhausted) return null;
-        try {
-          await throttle(slug);
-          const searcher = resolveSearcher(slug, searchers);
-          if (!searcher) return null;
-          const results = await retryWithBackoff(
-            timedSearch(searcher, query, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
-            config.providers[slug]
-          );
-          return { slug, results };
-        } catch {
-          return null;
-        }
-      });
+      // Phase 1 broad pass, capped to first_pass_max_providers (highest
+      // priority first) and run in concurrency-limited batches. After each
+      // batch, stop early once every finding clears the confidence bar, so
+      // wall time tracks "time to pin the truth" rather than the slowest
+      // provider. The remaining pool is left for gap refinement.
+      const firstPassSlugs = orderFirstPassPool(availableProviders, config).slice(
+        0,
+        firstPassMaxProviders
+      );
+      const FIRST_PASS_CONCURRENCY = 4;
 
-      const settled = await Promise.allSettled(searchPromises);
-      for (const result of settled) {
-        if (result.status === "fulfilled" && result.value) {
-          totalCalls++;
-          providersUsed.add(result.value.slug);
-          increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-          reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights);
+      for (let i = 0; i < firstPassSlugs.length; i += FIRST_PASS_CONCURRENCY) {
+        const batch = firstPassSlugs.slice(i, i + FIRST_PASS_CONCURRENCY);
+        const searchPromises = batch.map(async (slug) => {
+          if (totalCalls >= maxCalls) return null;
+          const q = checkQuota(slug, config.providers[slug]?.rate_limit);
+          if (q.exhausted) return null;
+          try {
+            await throttle(slug);
+            const searcher = resolveSearcher(slug, searchers);
+            if (!searcher) return null;
+            const results = await retryWithBackoff(
+              timedSearch(searcher, query, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
+              config.providers[slug]
+            );
+            return { slug, results };
+          } catch {
+            return null;
+          }
+        });
+
+        const settled = await Promise.allSettled(searchPromises);
+        for (const result of settled) {
+          if (result.status === "fulfilled" && result.value) {
+            totalCalls++;
+            providersUsed.add(result.value.slug);
+            increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
+            reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights);
+          }
         }
+
+        const barMet =
+          findings.size > 0 &&
+          [...findings.values()].every((f) => f.confidence >= confidenceThreshold);
+        if (barMet) break;
       }
     } else {
       const gaps = getGaps(findings, confidenceThreshold);

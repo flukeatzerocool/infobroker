@@ -161,6 +161,13 @@ function validateConfig(config: Config): void {
   if (config.corroboration?.kb_recall !== undefined && typeof config.corroboration.kb_recall !== "boolean") {
     errors.push("corroboration.kb_recall must be a boolean");
   }
+  if (
+    config.corroboration?.first_pass_max_providers !== undefined &&
+    (typeof config.corroboration.first_pass_max_providers !== "number" ||
+      config.corroboration.first_pass_max_providers < 1)
+  ) {
+    errors.push("corroboration.first_pass_max_providers must be a positive number");
+  }
 
   if (typeof config.output.fallback_depth !== "number" || config.output.fallback_depth < 1) {
     errors.push("output.fallback_depth must be a positive number");

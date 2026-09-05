@@ -60,7 +60,7 @@ function mockConfig(overrides: Record<string, unknown> = {}) {
       wikidata: { enabled: true, capabilities: ["structured_fact", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
     },
     dispatch: { general_web: ["duckduckgo"] },
-    corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8 },
+    corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 },
     output: { max_chars: 50000, latency_window_size: 100 },
     ...overrides,
   };
@@ -751,5 +751,71 @@ describe("corroborate", () => {
 
     expect(braveCalled).toBe(false);
     delete process.env["INFOBROKER_BRAVE_API_KEY"];
+  });
+
+  it("caps the first pass to first_pass_max_providers, highest priority first", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["encyclopedia"], rate_limit: {}, priority: 20, timeout: 10000 },
+        wikidata: { enabled: true, capabilities: ["structured_fact"], rate_limit: {}, priority: 20, timeout: 10000 },
+        arxiv: { enabled: true, capabilities: ["academic"], rate_limit: {}, priority: 15, timeout: 10000 },
+        hacker_news: { enabled: true, capabilities: ["news"], rate_limit: {}, priority: 15, timeout: 10000 },
+        marginalia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 5, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 3 },
+    });
+
+    const calls: string[] = [];
+    const searcherFor = (slug: string) => async () => {
+      calls.push(slug);
+      return [makeResult("Common Topic", `https://${slug}.example/1`, "shared claim")];
+    };
+
+    await corroborate("topic", {
+      searchers: {
+        duckduckgo: searcherFor("duckduckgo"),
+        wikipedia: searcherFor("wikipedia"),
+        wikidata: searcherFor("wikidata"),
+        arxiv: searcherFor("arxiv"),
+        hacker_news: searcherFor("hacker_news"),
+        marginalia: searcherFor("marginalia"),
+      },
+    });
+
+    expect(calls).toEqual(["wikipedia", "wikidata", "arxiv"]);
+  });
+
+  it("stops the first pass early once the confidence bar is met", async () => {
+    mockConfig({
+      providers: {
+        wikipedia: { enabled: true, capabilities: ["encyclopedia"], rate_limit: {}, priority: 20, timeout: 10000 },
+        wikidata: { enabled: true, capabilities: ["structured_fact"], rate_limit: {}, priority: 20, timeout: 10000 },
+        arxiv: { enabled: true, capabilities: ["academic"], rate_limit: {}, priority: 15, timeout: 10000 },
+        openalex: { enabled: true, capabilities: ["academic"], rate_limit: {}, priority: 14, timeout: 10000 },
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        hacker_news: { enabled: true, capabilities: ["news"], rate_limit: {}, priority: 5, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 6 },
+    });
+
+    const calls: string[] = [];
+    const searcherFor = (slug: string) => async () => {
+      calls.push(slug);
+      return [makeResult("Common Topic", `https://${slug}.example/1`, "shared claim")];
+    };
+
+    await corroborate("topic", {
+      searchers: {
+        wikipedia: searcherFor("wikipedia"),
+        wikidata: searcherFor("wikidata"),
+        arxiv: searcherFor("arxiv"),
+        openalex: searcherFor("openalex"),
+        duckduckgo: searcherFor("duckduckgo"),
+        hacker_news: searcherFor("hacker_news"),
+      },
+    });
+
+    expect(calls).toEqual(["wikipedia", "wikidata", "arxiv", "openalex"]);
   });
 });

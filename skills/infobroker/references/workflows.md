@@ -3,7 +3,10 @@
 Canonical definitions for every research workflow the orchestrator routes.
 The orchestrator's Phase 0 Classify gate maps user intent to one of these
 shapes, then executes the shape's tool sequence. Read only the shape you
-route to — sections are independent.
+route to — sections are independent. For the ordered classification
+questions and the escalation rubric, see `decision-tree.md`; for each
+shape's output structure, see `report-template.md`; for how `verify_claims`
+reaches a verdict, see `corroboration.md`.
 
 ## Shared Primitives
 
@@ -25,7 +28,8 @@ rather than restating them.
   search-and-read, `web_search` with `deep: true` returns ranked passages per
   source.
 - **VERIFY** — cross-reference across sources, score confidence, flag
-  contradictions explicitly.
+  contradictions explicitly. Use `verify_claims` for contested claims and
+  read its result per `corroboration.md`.
 - **WRITE** — `technical-writing` for the deliverable.
 - **POLISH** — `proofreading` for language quality.
 - **TRANSLATE** — `translation` when the target language is not English.

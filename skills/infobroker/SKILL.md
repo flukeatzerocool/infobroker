@@ -39,7 +39,9 @@ description: >
 ## Phase 0: Classify
 
 Map the request to one workflow shape before any search. Consult
-`references/workflows.md` for the full definition of the chosen shape.
+`references/workflows.md` for the full definition of the chosen shape and
+`references/decision-tree.md` for the ordered disambiguation questions, the
+tool-selection conditions, and the escalation rubric.
 
 | Intent marker | Workflow shape |
 |---------------|----------------|
@@ -55,7 +57,8 @@ Map the request to one workflow shape before any search. Consult
 
 The default is Research & Write. Escalate to `analysis-loop` when the
 question is high-stakes and requires source-reliability grading and
-structured analytic techniques.
+structured analytic techniques — score it with the rubric in
+`references/decision-tree.md` §3 rather than judging by feel.
 
 ## Pipeline: Research & Write
 
@@ -69,7 +72,10 @@ EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
            the ranked passages that address it instead of the whole page
 VERIFY     cross-reference, score confidence, flag contradictions
 SUMMARIZE  `summarization` skill — condense findings before writing
-WRITE      `technical-writing` skill — reports, docs, tutorials, specs
+WRITE      `technical-writing` skill — reports, docs, tutorials, specs; use
+           the skeleton in `references/report-template.md` so every report
+           carries Executive Summary → Key Findings → Sources → Contradictions
+           → Gaps → Source Register
 POLISH     `proofreading` skill — grammar, spelling, style, clarity, tone
 TRANSLATE  load and apply the `translation` skill — when the user asked for a
            non-English output; end that step with its `translation complete.`
@@ -115,7 +121,9 @@ Competitive Evaluation, Literature Review, Monitoring/Delta,
 Adversarial/Red-Team, and Vetting/Due-Diligence are defined in
 `references/workflows.md`. Route to the matching shape after Phase 0
 classification; each shape composes the same primitives (recall → search →
-extract → verify → write → polish → cite) into its own sequence.
+extract → verify → write → polish → cite) into its own sequence and ends with
+its own output block in `references/report-template.md`. To add a shape of
+your own, follow `references/skill-authoring.md`.
 
 Always end your reply with the chosen shape's `Token:` line from
 `references/workflows.md`, verbatim, as the final line. The token is a

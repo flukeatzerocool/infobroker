@@ -23,7 +23,7 @@ const BASE: Config = {
     },
   },
   dispatch: { general_web: ["duckduckgo"], privacy_critical: ["duckduckgo"] },
-  corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_results: 10, similarity_threshold: 0.3 },
+  corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_results: 10, first_pass_max_providers: 5, similarity_threshold: 0.3 },
   output: { max_chars: 50000, latency_window_size: 100, fallback_depth: 3, max_redirect_hops: 5 },
   kb: {
     storage_path: "~/.local/share/infobroker/knowledge-base",
@@ -241,6 +241,17 @@ describe("configuration overlay", () => {
   it("accepts corroboration.kb_recall", async () => {
     const cfg = await loadWithOverlay(BASE, { corroboration: { kb_recall: false } });
     expect(cfg.corroboration.kb_recall).toBe(false);
+  });
+
+  it("rejects a non-positive corroboration.first_pass_max_providers", async () => {
+    await expect(
+      loadWithOverlay(BASE, { corroboration: { first_pass_max_providers: 0 } })
+    ).rejects.toThrow(/first_pass_max_providers/);
+  });
+
+  it("accepts corroboration.first_pass_max_providers", async () => {
+    const cfg = await loadWithOverlay(BASE, { corroboration: { first_pass_max_providers: 7 } });
+    expect(cfg.corroboration.first_pass_max_providers).toBe(7);
   });
 
   it("accepts per-provider degraded_latency_ms and resells", async () => {

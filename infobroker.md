@@ -742,9 +742,12 @@ function corroborate(query, max_iterations=5, confidence_threshold=0.8, provider
   reconcile_claims(findings, kb_results)
 
   while iteration < max_iterations:
-    // Phase 1: Broad search across all active providers (up to
-    // first_pass_max_results results per provider, default 10)
-    raw_results = parallel_search(query, providers)
+    // Phase 1: Broad search across the first-pass provider cap (up to
+    // first_pass_max_providers providers, default 5, highest priority first;
+    // up to first_pass_max_results results each, default 5). Batches stop
+    // early once the confidence bar is met; the full pool serves Phase 3.
+    first_pass_providers = top_n_by_priority(providers, first_pass_max_providers)
+    raw_results = parallel_search(query, first_pass_providers)
     claims = extract_claims(raw_results)
 
     // Phase 2: Cross-reference — group claims by topic
@@ -816,7 +819,11 @@ is configurable via `corroboration.similarity_threshold`.
 
 - `max_iterations` defaults to 5, capped at 10.
 - Max total HTTP calls per `verify_claims` invocation: 30.
-- `first_pass_max_results` (default 10) bounds results fetched per provider in Phase 1.
+- `first_pass_max_providers` (default 5) bounds how many providers participate
+  in the Phase-1 broad pass; the pass runs in concurrency-limited batches and
+  stops early once every finding clears the confidence bar. The remaining
+  pool is used for gap refinement.
+- `first_pass_max_results` (default 5) bounds results fetched per provider in Phase 1.
 - Gap-refinement queries run concurrently within the remaining HTTP-call budget.
 - Knowledge-base recall is governed by the configurable `corroboration.kb_recall` setting.
 - If either limit is reached, return partial findings with `corroboration: "partial"` flag.

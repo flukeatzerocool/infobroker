@@ -2,6 +2,25 @@
 
 ## Active Decisions
 
+### D-044: Corroboration First-Pass Cap and Early Exit (2026.09.04)
+
+The corroboration Phase-1 broad pass previously fanned out to every active
+search-capable provider concurrently (`Promise.allSettled` over the full pool,
+up to 21 providers in a zero-config install), each fetching
+`first_pass_max_results` (10) results — ~170–210 snippets before refinement,
+with wall time bound by the slowest provider. The first pass is now capped to
+`corroboration.first_pass_max_providers` (default 5), ordered by config
+`priority` descending (high-authority first: encyclopedia, structured fact,
+academic before small-web scrapers), run in concurrency-limited batches of 4
+with an early-exit once every finding clears the confidence bar. The full pool
+remains available for gap refinement, so breadth is deferred, not lost.
+
+Alternatives rejected: AbortController cancellation of in-flight calls
+(per-searcher signature churn, minimal gain once the batch size is small);
+reducing only `max_http_calls` (keeps the latency problem); keeping the
+all-active first pass and only trimming results (still pays 17–21 round trips).
+This supersedes the all-active first pass documented in D-036.
+
 ### D-043: Competitive Improvement Batch — Zero-Config Providers, Research Compile, Fetch Modes (REQ-020f, REQ-021d, REQ-021e, REQ-028, REQ-081, REQ-095; 2026.09.04)
 
 The competitive feature report (Glama related-servers + directory + off-registry
