@@ -7,11 +7,12 @@
 # current spec, dead-code audit, and documentation refresh.
 #
 # Usage:
-#   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--resume] [--from=<step>]
+#   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--resume] [--from=<step>]
 #                              [--parallel] [--force-tag] [--force-push]
 #                              [--allow-secrets] [--help]
 #   --dry-run        Assemble, check, typecheck — skip commit, push, tag.
 #   --yes (-y)       Skip confirmation prompt before commit/push.
+#   --no-push        Commit but skip push, tag, and mirror sync.
 #   --resume         Skip steps already recorded complete in the state journal.
 #   --from=<step>    Start at a named step (readthrough|sync|changelog|scan|readme).
 #   --parallel       Run independent steps concurrently (scan ∥ readme; auth ∥ readthrough).
@@ -31,6 +32,7 @@ set -euo pipefail
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
+NO_PUSH=false
 START_STEP=""
 
 for arg in "$@"; do
@@ -42,6 +44,7 @@ for arg in "$@"; do
     --force-tag) FORCE_TAG=true ;;
     --force-push) FORCE_PUSH=true ;;
     --allow-secrets) ALLOW_SECRETS=true ;;
+    --no-push) NO_PUSH=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --help|-h)
       printf '%s\n' "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--resume] [--from=<step>]"
@@ -49,6 +52,7 @@ for arg in "$@"; do
       printf '%s\n' ""
       printf '%s\n' "  --dry-run   Spec audit, read-through, sync, checks, scans — skip commit, push, tag."
       printf '%s\n' "  --yes (-y)  Skip confirmation prompt before commit/push."
+      printf '%s\n' "  --no-push   Commit but skip push, tag, and mirror sync."
       printf '%s\n' "  --resume    Skip steps already recorded complete."
       printf '%s\n' "  --from=S    Start at step (readthrough|sync|changelog|scan|readme)."
       printf '%s\n' "  --parallel  Run independent steps concurrently."
@@ -492,6 +496,15 @@ fi
 
 SCAN_FINDINGS=$(scan_findings)
 
+# README-sync guard: a REQ-body change this run alters what the server does,
+# so the README must reflect it (AGENTS.md README governance). A REQ change
+# that leaves README.md untouched means the README step skipped its job.
+if spec_req_change; then
+  if whitespace_only_diff README.md; then
+    die "Spec REQ changed but README.md was not updated — README must reflect spec changes."
+  fi
+fi
+
 # validate-readme as a post-session shell gate
 warn "Validating README..."
 npm run validate-readme >/dev/null 2>&1 || die "README validation FAILED."
@@ -579,6 +592,9 @@ fi
 echo ""
 
 # ── push ────────────────────────────────────────────────────────────────────
+if $NO_PUSH; then
+  warn "No-push mode: skipping push, tag, mirror sync, and remote check (commit is local only)."
+else
 info "═══════════════════════════════════════════════"
 info "Push to origin"
 info "═══════════════════════════════════════════════"
@@ -661,6 +677,7 @@ info "npm + MCP Registry publish: handled by the GitHub mirror CI (OIDC)."
 git -C "$PROJECT_DIR" ls-remote origin HEAD >/dev/null 2>&1
 info "Remote check: OK"
 echo ""
+fi
 
 # ── post-run cleanliness report ─────────────────────────────────────────────
 LEFTOVERS=$(git -C "$PROJECT_DIR" status --short || true)
@@ -682,7 +699,11 @@ echo "  Provider auth docs regenerated."
 grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && echo "  Changelog updated."
 echo "  Dead-code scan: ${SCAN_FINDINGS} finding(s)."
 echo "  README and skill references refreshed."
-echo "  Pushed to origin — v${VERSION}"
+if $NO_PUSH; then
+  echo "  Committed locally — push skipped (--no-push)."
+else
+  echo "  Pushed to origin — v${VERSION}"
+fi
 echo "  Logs: $PIPELINE_RUN_DIR"
 echo ""
 info "Done."
