@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.09.05 — README spec-reconciliation gate and feature-taxonomy check
+
+- The push pipeline now fails when a REQ body changed this run but `README.md`
+  was not updated (spec→README binding), closing the gap where the README
+  step could silently skip reflecting a spec change. D-045.
+- `validate-readme` now reconciles the README §MCP Server feature tour against
+  the §D feature taxonomy (`src/lib/feature-taxonomy.ts`): every feature
+  subsection must map to a real §D group and every user-facing §D group
+  (1–5, 7) must be covered. D-045.
+
 ## 2026.09.04 — Corroboration first-pass cap, early exit, and research-reference docs
 
 - `verify_claims` Phase-1 broad pass now caps to

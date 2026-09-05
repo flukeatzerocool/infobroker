@@ -130,8 +130,11 @@ in sync with the project:
   It derives the tool surface and provider registry from `src/index.ts` and
   `config.json` at validate time (single source of truth — never hardcoded),
   then checks structure, voice, links, comparison table, and that every tool
-  and provider is referenced. Do not hardcode tool/provider names in the
-  validator.
+  and provider is referenced. It also reconciles the README's §MCP Server
+  feature tour against the §D feature taxonomy in `infobroker.md` (see
+  `src/lib/feature-taxonomy.ts`): every feature subsection must map to a real
+  §D group and every user-facing §D group (1–5, 7) must be covered. Do not
+  hardcode tool/provider names in the validator.
 - **Updater**: `scripts/pipeline/prompts/readme.md` — the push-pipeline step
   that auto-refreshes the README. It runs a two-phase Generate → Verify loop
   in a single prompt: phase 1 updates the README against the spec and
@@ -141,7 +144,9 @@ in sync with the project:
 
 When a change to tools, providers, or the spec changes what the README
 claims, update the README in the same commit. A README that promises
-something the server does not deliver is a defect.
+something the server does not deliver is a defect. The push pipeline enforces
+this: after the README step, if a REQ body changed this run but `README.md`
+has no non-whitespace diff, the pipeline fails (spec→README binding).
 
 ## Key Environment Variables
 

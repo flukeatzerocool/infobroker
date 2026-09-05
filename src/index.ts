@@ -1079,7 +1079,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.04",
+  version: "2026.09.05",
 });
 
 // --- web_search ---

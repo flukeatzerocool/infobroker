@@ -2,6 +2,27 @@
 
 ## Active Decisions
 
+### D-045: README Spec-Reconciliation Gate and Feature-Taxonomy Check (2026.09.05)
+
+The README auto-update step relied solely on the model reading `infobroker.md`
+and choosing to update `README.md`; nothing failed the pipeline when a spec
+prose/REQ change left the README untouched, and `validate-readme` reconciled
+tools and providers but not feature content. Two mechanical checks close the
+gap. First, a push-pipeline guard: after the README step, a REQ-body change
+this run (`spec_req_change`) with no non-whitespace `README.md` diff fails the
+pipeline — a hard spec→README binding that forces the README step to do its
+job, mirroring the C.10 changelog provenance requirement. Second,
+`validate-readme` now reconciles the README §MCP Server feature tour against
+the §D feature taxonomy via `src/lib/feature-taxonomy.ts`: group numbers and
+names are derived from `infobroker.md` at validate time (single source of
+truth), with a declared marketing-title→group mapping (`Unified Search→1`,
+`Content Extraction→1`, `Citations→1`, `Provider Intelligence→2`,
+`Multi-Source Verification→3`, `Knowledge Base→4`, `Operational Visibility→5`,
+`Research Pipeline→7`). A README feature subsection with no §D group (invented
+feature) or an uncovered user-facing §D group (1–5, 7) is a hard error.
+Feature blurbs are matched at group granularity, not per-REQ, because the
+README DESIGN non-goal forbids REQ citations in prose.
+
 ### D-044: Corroboration First-Pass Cap and Early Exit (2026.09.04)
 
 The corroboration Phase-1 broad pass previously fanned out to every active

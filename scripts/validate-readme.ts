@@ -5,14 +5,18 @@
 //
 // Exit codes: 0 = all checks pass; 1 = errors found.
 
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   readReadme, extractHeadings, extractLinks, extractBlockquotes,
   extractBulletLists, proseOnly, proseLines, slugify,
   deriveToolNames, deriveProviderSlugs,
 } from "./lib/parse-readme.js";
+import { deriveFeatureAreas, reconcileReadmeFeatures } from "../src/lib/feature-taxonomy.js";
 
 const toolNames = deriveToolNames();
 const providerSlugs = deriveProviderSlugs();
+const SPEC_PATH = resolve(process.cwd(), "infobroker.md");
 
 interface Issue {
   line?: number;
@@ -471,6 +475,25 @@ function checkSurfaceReconciliation(text: string): Issue[] {  const issues: Issu
   return issues;
 }
 
+function checkFeatureAreaReconciliation(text: string): Issue[] {
+  const issues: Issue[] = [];
+  let specText = "";
+  try {
+    specText = existsSync(SPEC_PATH) ? readFileSync(SPEC_PATH, "utf-8") : "";
+  } catch {
+    specText = "";
+  }
+  const areas = deriveFeatureAreas(specText);
+  if (areas.length === 0) {
+    issues.push({ error: true, msg: "Feature taxonomy (§D) not found or unparseable in infobroker.md" });
+    return issues;
+  }
+  for (const f of reconcileReadmeFeatures(text, areas)) {
+    issues.push({ error: f.error, msg: f.msg });
+  }
+  return issues;
+}
+
 function main(): void {
   const text = readReadme();
   let errors = 0;
@@ -491,6 +514,7 @@ function main(): void {
     { name: "Section lengths", run: checkSectionLengths, severity: "soft" },
     { name: "Taxonomy link", run: checkTaxonomyLink, severity: "hard" },
     { name: "Surface reconciliation", run: checkSurfaceReconciliation, severity: "hard" },
+    { name: "Feature-area reconciliation", run: checkFeatureAreaReconciliation, severity: "hard" },
   ];
 
   for (const { name, run, severity } of checks) {
