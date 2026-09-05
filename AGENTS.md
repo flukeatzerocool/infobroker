@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.08.10)
+# AGENTS.md — Infobroker MCP Server (v2026.09.04)
 
 ## Layer Map
 
@@ -34,6 +34,12 @@ src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  �
 | Stack Exchange | `src/providers/stack_exchange.ts` | free_http |
 | GitHub | `src/providers/github.ts` | free_http |
 | CORE | `src/providers/core.ts` | free_http |
+| OpenAlex | `src/providers/openalex.ts` | free_http |
+| Europe PMC | `src/providers/europe_pmc.ts` | free_http |
+| Hacker News | `src/providers/hacker_news.ts` | free_http |
+| GDELT | `src/providers/gdelt.ts` | free_http |
+| SEC EDGAR | `src/providers/sec_edgar.ts` | free_http |
+| World Bank | `src/providers/world_bank.ts` | free_http |
 | Marginalia | `src/providers/marginalia.ts` | builtin |
 | Mojeek | `src/providers/mojeek.ts` | builtin |
 | Wiby | `src/providers/wiby.ts` | builtin |

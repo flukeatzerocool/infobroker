@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
+import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
 
 // @implements REQ-055
 
@@ -341,13 +342,31 @@ function checkGeneratedAuthStale(): void {
 
 checkGeneratedAuthStale();
 
+// --- Generated provider-map staleness check ---
+
+function checkGeneratedProviderMapStale(): void {
+  const mapPath = join(ROOT, "skills", "infobroker", "references", "provider-map.md");
+  if (!existsSync(mapPath)) {
+    error(`Generated provider-map reference missing: ${mapPath} — run 'npm run generate-provider-map'`);
+    return;
+  }
+  writeProviderMap(readMapConfig());
+  try {
+    execSync(`git diff --exit-code -- "${mapPath}"`, { cwd: ROOT, stdio: "pipe" });
+  } catch {
+    error(`Generated provider-map reference is stale — run 'npm run generate-provider-map' and commit the result`);
+  }
+}
+
+checkGeneratedProviderMapStale();
+
 // --- REQ manifest verification ---
 
-function checkManifest(): void {
+function checkManifest(): Set<string> {
   const manifestIdx = specText.indexOf("## 9.5 REQ Manifest");
   if (manifestIdx === -1) {
     error("REQ manifest (§9.5) not found");
-    return;
+    return new Set<string>();
   }
   const nextHeading = specText.slice(manifestIdx + 1).search(/^##\s/m);
   const manifestSection = nextHeading === -1
@@ -371,9 +390,66 @@ function checkManifest(): void {
       error(`${req}: in REQ manifest (§9.5) but missing from §4 body`);
     }
   }
+  return manifestReqs;
 }
 
-checkManifest();
+const manifestReqs = checkManifest();
+
+// --- Block-reservation paragraph coverage ---
+//
+// §1.6 enumerates every REQ ID in block-reservation ranges. Expand those
+// ranges and reconcile them bidirectionally against the §9.5 manifest so a
+// newly added REQ (or a stale reservation) cannot silently fall out of sync.
+
+function expandReservations(text: string): Set<string> {
+  const ids = new Set<string>();
+  // Sub-REQ IDs are backtick-wrapped (`` `020a`–`020f` ``), which breaks the
+  // range regex across the en dash. Strip backticks first so ranges parse.
+  const clean = text.replace(/`/g, "");
+  const rangeRe = /\b(\d{3})([a-z])?[–-](\d{3})([a-z])?/g;
+  const residual = clean.replace(rangeRe, (m, start, startSuffix, end, endSuffix) => {
+    if (startSuffix || endSuffix) {
+      const base = String(start);
+      const from = startSuffix ? startSuffix.charCodeAt(0) : "a".charCodeAt(0);
+      const to = endSuffix ? endSuffix.charCodeAt(0) : "z".charCodeAt(0);
+      for (let c = from; c <= to; c++) ids.add(`${base}${String.fromCharCode(c)}`);
+    } else {
+      for (let n = Number(start); n <= Number(end); n++) ids.add(String(n).padStart(3, "0"));
+    }
+    return " ";
+  });
+  const singleRe = /\b\d{3}[a-z]?\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = singleRe.exec(residual)) !== null) ids.add(m[0]);
+  return ids;
+}
+
+function checkReservationParagraph(manifest: Set<string>): void {
+  const anchor = "REQ IDs use block reservations";
+  const anchorIdx = specText.indexOf(anchor);
+  if (anchorIdx === -1) {
+    error("Block-reservation paragraph (§1.6) not found");
+    return;
+  }
+  const blankAt = specText.indexOf("\n\n", anchorIdx);
+  const paragraph = blankAt === -1 ? specText.slice(anchorIdx) : specText.slice(anchorIdx, blankAt);
+
+  const reserved = expandReservations(paragraph);
+  const manifestIds = new Set([...manifest].map((r) => r.replace(/^REQ-/, "")));
+
+  for (const id of manifestIds) {
+    if (!reserved.has(id)) {
+      error(`${id}: in REQ manifest (§9.5) but missing from the block-reservation paragraph (§1.6) — add it to the reservation list`);
+    }
+  }
+  for (const id of reserved) {
+    if (!manifestIds.has(id)) {
+      error(`${id}: listed in the block-reservation paragraph (§1.6) but not in the REQ manifest (§9.5) — stale reservation`);
+    }
+  }
+}
+
+checkReservationParagraph(manifestReqs);
 
 // --- Feature taxonomy exhaustive coverage check ---
 
@@ -555,6 +631,53 @@ function checkRegistryArtifacts(): void {
   }
 }
 checkRegistryArtifacts();
+
+// --- Agent-facing doc drift checks ---
+//
+// AGENTS.md is not covered by validate-readme (which derives only the README
+// surface), so verify its provider-backend table and version stamp here.
+
+function checkAgentsDoc(): void {
+  const agentsPath = join(ROOT, "AGENTS.md");
+  if (!existsSync(agentsPath)) {
+    error("AGENTS.md missing");
+    return;
+  }
+  const agents = readFileSync(agentsPath, "utf-8");
+
+  const config = readConfig();
+  const configSlugs = Object.keys(config.providers).filter((slug) => !PROVIDER_EXCLUSIONS.has(slug));
+  const listed = new Set<string>();
+  const rowRe = /^\|\s*[^|]+\|\s*`src\/providers\/([a-z0-9_]+)\.ts`\s*\|/gm;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(agents)) !== null) listed.add(m[1]);
+
+  for (const slug of configSlugs) {
+    if (!listed.has(slug)) {
+      error(`AGENTS.md provider-backend table missing '${slug}' — add a row to the Provider Backends table`);
+    }
+  }
+  for (const slug of listed) {
+    if (!(slug in config.providers)) {
+      error(`AGENTS.md provider-backend table lists '${slug}', which is absent from config.json — stale row`);
+    }
+  }
+
+  let pkgVersion: string;
+  try {
+    pkgVersion = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
+  } catch {
+    return;
+  }
+  const stamp = agents.match(/\(v([0-9.]+)\)/);
+  if (!stamp) {
+    error("AGENTS.md header missing '(vX.Y.Z)' version stamp");
+  } else if (stamp[1] !== pkgVersion) {
+    error(`AGENTS.md version stamp (v${stamp[1]}) diverges from package.json version (${pkgVersion}) — update the header`);
+  }
+}
+
+checkAgentsDoc();
 
 // --- Report ---
 

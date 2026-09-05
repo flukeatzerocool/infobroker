@@ -24,8 +24,8 @@ hardcoded count in prose).
    prefix). Update stale names. Shorthand in backticks only.
 5. Update skills/infobroker/references/provider-auth.md if config.json has
    changed (regenerated separately — leave as-is if identical).
-6. Update skills/infobroker/references/provider-map.md — verify provider
-   slugs, tiers, capabilities, and enabled status match config.json.
+6. Update skills/infobroker/references/provider-map.md by running
+   `npm run generate-provider-map` (derived from config.json — do not hand-edit).
 7. Update skills/infobroker/references/pipeline-map.md — verify tool-to-
    provider mappings are still accurate.
 8. Verify the '## Skills' section reconciles with the skills/ directory —

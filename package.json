@@ -29,6 +29,7 @@
     "validate-readme": "npx tsx scripts/validate-readme.ts",
     "check-script-discipline": "npx tsx scripts/check-script-discipline.ts",
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",
+    "generate-provider-map": "npx tsx scripts/generate-provider-map.ts",
     "version-bump": "npx tsx scripts/version.ts bump",
     "version-sync": "npx tsx scripts/version.ts check",
     "push": "bash scripts/push-pipeline.sh",

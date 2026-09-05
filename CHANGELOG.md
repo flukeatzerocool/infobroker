@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.09.04 — Spec-drift prevention: generated provider-map, AGENTS.md and reservation gates
+
+- Fixed drift from the competitive batch: AGENTS.md version stamp and six
+  provider rows (OpenAlex, Europe PMC, Hacker News, GDELT, SEC EDGAR,
+  World Bank); provider-map.md task and capabilities tables.
+- `skills/infobroker/references/provider-map.md` is now generated from
+  `config.json` (`npm run generate-provider-map`); `validate-spec` fails when
+  it is stale, mirroring the provider-auth staleness gate.
+- `validate-spec` now reconciles the AGENTS.md provider-backend table against
+  `config.json` (both directions) and verifies the AGENTS.md header version
+  stamp equals the package.json version.
+- `validate-spec` now reconciles the §1.6 block-reservation paragraph against
+  the §9.5 REQ manifest (both directions), so a new sub-REQ cannot fall out
+  of the reservation index.
+
 ## 2026.09.04 — Competitive improvement batch: zero-config providers, research compile, fetch modes
 
 - Added six zero-config providers — OpenAlex, Europe PMC, Hacker News,

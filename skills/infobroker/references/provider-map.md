@@ -8,15 +8,16 @@ dispatch chain, falling back in order.
 
 | Task type | Primary | Fallback 1 | Fallback 2 |
 |-----------|---------|-----------|-----------|
-| General web search | Brave (if keyed) | DuckDuckGo | Marginalia, Mojeek |
+| General web search | Brave (if keyed) | DuckDuckGo | Marginalia, Mojeek, Wiby |
 | Small web / blogs / non-commercial | Marginalia | Mojeek | Wiby, DuckDuckGo |
 | Encyclopedia article | Wikipedia | DuckDuckGo | — |
 | Word definition / etymology | Wiktionary | DuckDuckGo | — |
 | Structured fact (dates, stats) | Wikidata | Wikipedia | DuckDuckGo |
-| Location / place lookup | OpenStreetMap Nominatim | Wikipedia | DuckDuckGo |
-| Academic paper search | Semantic Scholar | arXiv | — |
+| Location / place lookup | OpenStreetMap | Wikipedia | DuckDuckGo |
+| Academic paper search | Semantic Scholar | arXiv | OpenAlex, Europe PMC |
 | Code / technical Q&A | Stack Exchange | GitHub | DuckDuckGo |
-| Recent news | Brave (if keyed) | DuckDuckGo | — |
+| Recent news | Brave (if keyed) | DuckDuckGo | GDELT, Hacker News |
+| Financial filings / economic data | SEC EDGAR | World Bank | DuckDuckGo |
 | Historical web page | Internet Archive | DuckDuckGo | — |
 | Semantic / "find things like X" | Exa (if keyed) | Brave (if keyed) | DuckDuckGo |
 | Synthesized answer with citations | Tavily (if keyed) | Exa (if keyed) | DuckDuckGo |
@@ -27,25 +28,31 @@ dispatch chain, falling back in order.
 
 | Provider | Web | Academic | Code | Encyclopedia | News | Archive | Fetch | Key required |
 |----------|-----|----------|------|-------------|------|---------|-------|-------------|
-| DuckDuckGo | Yes | — | Yes | — | Yes | — | — | No |
-| Marginalia | Yes | — | — | — | — | — | — | No |
-| Mojeek | Yes | — | — | — | — | — | — | No |
-| Wiby | Yes | — | — | — | — | — | — | No |
+| DuckDuckGo | Yes | — | — | — | — | — | — | No |
+| Jina Reader | — | — | — | — | — | — | Yes | No |
 | Wikipedia | — | — | — | Yes | — | — | — | No |
 | Wiktionary | — | — | — | Defs | — | — | — | No |
 | Wikidata | — | — | — | Facts | — | — | — | No |
 | OpenStreetMap | — | — | — | Geo | — | — | — | No |
-| Semantic Scholar | — | Yes | — | — | — | — | — | No* |
+| Internet Archive | — | — | — | — | — | Yes | — | No |
 | arXiv | — | Yes | — | — | — | — | — | No |
+| Semantic Scholar | — | Yes | — | — | — | — | — | No* |
 | Stack Exchange | — | — | Yes | — | — | — | — | No* |
 | GitHub | — | — | Yes | — | — | — | — | No* |
-| Internet Archive | — | — | — | — | — | Yes | — | No |
-| Jina Reader | — | — | — | — | — | — | Yes | No |
-| Brave | Yes | — | — | — | Yes | — | — | Yes |
-| Exa | Yes | — | — | — | — | — | — | Yes |
-| Tavily | Yes | — | — | — | — | — | — | Yes |
-| Yep | Yes | — | — | — | — | — | — | Yes |
 | CORE | — | Yes | — | — | — | — | — | No* |
-| SearXNG | Yes | Yes | Yes | Yes | Yes | — | — | No* |
+| Marginalia | Yes | — | — | — | — | — | — | No |
+| Mojeek | Yes | — | — | — | — | — | — | No |
+| Wiby | Yes | — | — | — | — | — | — | No |
+| OpenAlex | — | Yes | — | — | — | — | — | No |
+| Europe PMC | — | Yes | — | — | — | — | — | No |
+| Hacker News | — | — | — | — | Yes | — | — | No |
+| GDELT | — | — | — | — | Yes | — | — | No |
+| SEC EDGAR | — | — | — | — | — | — | — | No |
+| World Bank | — | — | — | — | — | — | — | No |
+| Brave | Yes | — | — | — | Yes | — | — | Yes |
+| Exa | — | — | — | — | — | — | — | Yes |
+| Tavily | — | — | — | — | — | — | — | Yes |
+| SearXNG | Yes | — | — | — | — | — | — | No* |
+| Yep | Yes | — | — | — | — | — | — | Yes |
 
 \* No key required for baseline access (rate-limited); key increases quota.
