@@ -164,7 +164,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021e`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021f`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -252,6 +252,9 @@ WHEN `fetch_page` receives a crawl request, the tool SHALL fetch the given URL a
 
 **REQ-021e — `fetch_page` structured extraction**
 WHEN `fetch_page` receives an extract request, the tool SHALL parse the fetched document for structured metadata — schema.org, OpenGraph, and microdata — in addition to returning the page content. The response SHALL include the discovered structured objects in a distinct field, or state that none were found. Extraction SHALL NOT alter the returned content. _Check:_ G1.
+
+**REQ-021f — `fetch_page` anti-bot challenge fall-through**
+WHEN a `fetch_page` renderer returns content that indicates an anti-bot challenge — a verification, CAPTCHA, or challenge page rather than the target page — the tool SHALL treat that renderer as failed and SHALL continue to the next renderer in the chain. The response SHALL report the renderer that ultimately served content, or a failure per REQ-002 when every renderer is exhausted. _Check:_ G1.
 
 **REQ-024 — `inspect_providers`**
 `inspect_providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
@@ -939,6 +942,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-021c | fetch_page date detection | 4.3 | G1 |
 | REQ-021d | fetch_page bounded crawl | 4.3 | G1 |
 | REQ-021e | fetch_page structured extraction | 4.3 | G1 |
+| REQ-021f | fetch_page anti-bot challenge fall-through | 4.3 | G1 |
 | REQ-024 | inspect_providers | 4.3 | G0, G1 |
 | REQ-024a | inspect_providers list action | 4.3 | G0, G1 |
 | REQ-024b | inspect_providers health action | 4.3 | G0, G1 |
@@ -1430,7 +1434,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
+| 1 | Core Retrieval | `web_search`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |

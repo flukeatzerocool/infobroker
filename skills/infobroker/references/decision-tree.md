@@ -52,6 +52,7 @@ Given a single step in the pipeline, pick by condition:
 | A claim's truth is contested and needs multi-source cross-reference | `verify_claims` |
 | You have a URL and need readable content | `fetch_page` |
 | You have a URL and a specific question about it | `fetch_page` with `question` |
+| A URL's content is a bot-wall or an empty JS-rendered shell | `playwright-cli` (headless open + find/eval), then `manage_kb` ingest the text |
 | You need BibTeX references for scholarly writing | `get_citations` |
 | You need query autocomplete | `web_search` with `suggest: true` |
 | You need ranked passages from the top results, not links | `web_search` with `deep: true` |
@@ -83,6 +84,8 @@ Below 3, run the `infobroker` pipeline. At 3+, escalate to `analysis-loop`.
 | A provider is exhausted (quota 100%) | Let the fallback chain skip it; retry after reset, or `reload_config` to adjust limits |
 | A provider returns 429/anti-bot | The server holds it in cooldown (`output.rate_limit_cooldown_ms`); retry later or switch task type |
 | Infobroker tool errors | Fall back to built-in `websearch`/`webfetch`, then report the degraded confidence |
+| `fetch_page` returns an anti-bot challenge | The chain falls through to the next renderer (REQ-021f); if all renderers are blocked, use `playwright-cli` for the page |
+| `fetch_page` returns an empty JS-rendered shell | Use `playwright-cli` (headless) → extract → `manage_kb` ingest |
 | KB is locked (encryption) | `manage_kb` action encryption → `status` → `verify` candidate key → `rekey`; see `journeys.md` |
 | No sources found for a finding | Report it as a gap; broaden query angles (see `workflows.md` Monitoring/Delta for baseline reuse) |
 | Sources disagree | Report both sides with reliability grades; do not pick the loudest (see `corroboration.md`) |

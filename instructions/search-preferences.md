@@ -12,6 +12,10 @@ Infobroker tools provide multi-provider search with fallback chains,
 quota tracking, and cross-source verification. Prefer them over
 built-in `websearch`/`webfetch` equivalents. If an Infobroker tool returns
 an error or is quota-exhausted, retry with the built-in equivalent.
+When `fetch_page` returns an anti-bot challenge page or an empty JS-rendered
+shell instead of content, retry the URL with the `playwright-cli` skill
+(headless `open` + `find`/`eval`) and archive the extracted text with
+`manage_kb` (action ingest).
 
 `infobroker_infobroker_web_search` performs knowledge-base recall
 automatically before external providers, so do not issue a separate
@@ -25,7 +29,9 @@ After producing a report or written research deliverable, archive it with
 `infobroker_infobroker_manage_kb` (action ingest) using `source_type: "report"`,
 so it is stored in the knowledge base by default (`save_to` defaults to
 `manage_kb`) and can be revisited later. To review past reports, use `manage_kb` (action
-list) to enumerate them and `manage_kb` (action get) to retrieve one in full. A
+list) to enumerate them and `manage_kb` (action get) to retrieve one in full —
+pass `collection: "reports"` to list/search, since they default to the
+`default` collection. A
 stored report carries a `source_updated_at` date when its source date was
 known at ingest. To refresh an outdated report, retrieve it with `manage_kb`
 (action get), then fetch the current state of its sources with

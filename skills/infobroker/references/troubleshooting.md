@@ -49,6 +49,21 @@ retrieve it (`manage_kb` get), fetch the live source, and compare dates:
 unchanged → still current; changed or absent → re-research and re-ingest under
 the same title.
 
+## `fetch_page` returns an anti-bot page or an empty page
+
+1. **Anti-bot challenge** — the renderer returned a CAPTCHA or verification
+   interstitial instead of the page. `fetch_page` now treats this as a failed
+   render and falls through to the next renderer in the chain (REQ-021f), so a
+   challenge page should surface as real content or a clean exhaustion error,
+   not as the fetched text. If every renderer is blocked, the page's edge
+   protection is rejecting the server's fetchers.
+2. **JS-rendered page with no content** — the fetched text is an empty shell
+   (`<div id="root"></div>` or similar). A plain HTTP renderer cannot execute
+   JavaScript. Use the `playwright-cli` skill instead: headless
+   `playwright-cli open --browser=firefox <url>`, extract the rendered text
+   (`find` or `eval`), then archive it with `manage_kb` (action ingest) so it
+   is searchable from the knowledge base.
+
 ## A `verify_claims` run returns `corroboration: "partial"`
 
 The run hit `max_http_calls` or `max_iterations` before every finding cleared

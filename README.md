@@ -544,6 +544,10 @@ race and the first result wins. The common path uses one provider call;
 the hedge fires only when the primary is slow or failing. `fetch_page`
 additionally prefers the primary renderer in a short grace window so a
 marginally slow `jina` is not displaced by a lower-quality `native_fetch`.
+A renderer whose content is an anti-bot challenge page (a CAPTCHA or
+verification interstitial rather than the target page) is treated as a
+failed render, so `fetch_page` falls through to the next renderer instead
+of serving the challenge as content.
 Tune the window with `output.hedge_enabled`, `hedge_min_delay_ms`,
 `hedge_max_delay_ms`, and `hedge_grace_ms`; set `hedge_enabled` to
 `false` for the sequential chain. A provider that returns a rate-limit

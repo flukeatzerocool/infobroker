@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.09.05 — Anti-bot challenge fall-through for `fetch_page`
+
+- `fetch_page` now treats a renderer whose content is an anti-bot challenge
+  page (CAPTCHA or verification interstitial) as a failed render and falls
+  through to the next renderer in the chain, instead of serving the challenge
+  page as the fetched content. Detection is conservative (title and
+  distinctive-body markers, plus challenge-widget script markers on
+  near-empty pages). REQ-021f.
+- The Infobroker skill and client search-preferences now document the browser
+  handoff for bot-walled or JS-rendered pages (headless playwright-cli →
+  `manage_kb` ingest) and note that stored reports are recalled with
+  `collection: "reports"` since search/list default to the `default` collection.
+- `.playwright-cli/` browser-session artifacts are now git-ignored so they never
+  dirty the working tree.
+
 ## 2026.09.05 — README spec-reconciliation gate and feature-taxonomy check
 
 - The push pipeline now fails when a REQ body changed this run but `README.md`

@@ -7,3 +7,4 @@ knowledge-base/
 *.vector-store.json
 vector-store*.json
 .infobroker/
+.playwright-cli/
