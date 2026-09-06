@@ -1,5 +1,5 @@
 // @implements REQ-055
-// Clause-coverage detection for the G3 gate. Pure and unit-tested so that the
+// Clause-coverage detection for the G3 gate. It is pure and unit-tested so that the
 // gate itself is provably able to catch the "unimplemented branch" regression
 // class (REQ-013's degraded "or" legs, REQ-003's "when ... declares" dead
 // conditional). See scripts/validate-spec.ts for the calling gate.

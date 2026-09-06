@@ -318,7 +318,7 @@ Each provider SHALL enforce a configurable minimum interval between requests. Th
 The fallback chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. The server SHALL hedge on latency by dispatching lower-priority providers once the serving provider exceeds a configurable threshold, and SHALL return the first provider to succeed. On error, response timeout, or empty results, the server SHALL try the next provider, counting a blocked or non-parseable response as a provider failure. The maximum fallback depth SHALL be configurable. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns empty, the server SHALL return a successful empty result. _Check:_ G1.
 
 **REQ-031a — Cross-task fallback**
-WHEN every provider in the serving task's dispatch chain is exhausted by errors and the serving task is not `general_web`, THE server SHALL attempt the `general_web` chain before returning the `all_providers_exhausted` error. A provider already attempted in the serving chain SHALL NOT be retried in the fallback chain. _Check:_ G1.
+WHEN every provider in the serving task's dispatch chain is exhausted by errors and the serving task is not `general_web`, the server SHALL attempt the `general_web` chain before returning the `all_providers_exhausted` error. A provider already attempted in the serving chain SHALL NOT be retried in the fallback chain. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -348,7 +348,7 @@ values. On reload, an invalid configuration SHALL leave the previous
 configuration active without interruption. _Check:_ G1.
 
 **REQ-038 — Rate-Limit Cooldown**
-WHEN a provider returns a rate-limit response or an anti-bot challenge, THE server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. _Check:_ G1.
+WHEN a provider returns a rate-limit response or an anti-bot challenge, the server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. _Check:_ G1.
 
 ### 4.5 State and Configuration
 
@@ -1535,7 +1535,7 @@ explicitly named here so the security posture is auditable without guessing.
 | A04 Cryptographic Failures | REQ-084–REQ-086 (KB at-rest encryption), REQ-100 (state-file permissions) |
 | A05 Injection | REQ-003/REQ-020d (parameter normalization and transparency), REQ-102 (error hygiene) |
 | A06 Insecure Design | REQ-096 (this model) |
-| A07 Authentication Failures | REQ-011, REQ-012 (key handling) — residual: stdio transport has no authentication by design (SR-002) |
+| A07 Authentication Failures | REQ-011 (key handling) — residual: stdio transport has no authentication by design (SR-002) |
 | A08 Software and Data Integrity Failures | REQ-085 (KB data preservation), REQ-100 (state validation) |
 | A09 Security Logging and Alerting Failures | REQ-098 (audit trail) |
 | A10 Mishandling of Exceptional Conditions | REQ-102 (exceptional-condition hygiene) |

@@ -395,6 +395,22 @@ function checkManifest(): Set<string> {
 
 const manifestReqs = checkManifest();
 
+// --- Dangling REQ citation scan ---
+//
+// Every REQ-\d{3}[a-z]? token anywhere in the spec must resolve to a manifest
+// REQ. A citation to a merged/removed REQ (e.g. a §E.2 row that still cited
+// REQ-012 after it folded into REQ-011) is a spec defect the gate must catch.
+function checkDanglingCitations(manifest: Set<string>): void {
+  const tokenRe = /\bREQ-(\d{3}[a-z]?)\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(specText)) !== null) {
+    if (!manifest.has(`REQ-${m[1]}`)) {
+      error(`Dangling REQ citation "REQ-${m[1]}" — no such REQ in the §9.5 manifest`);
+    }
+  }
+}
+checkDanglingCitations(manifestReqs);
+
 // --- Block-reservation paragraph coverage ---
 //
 // §1.6 enumerates every REQ ID in block-reservation ranges. Expand those

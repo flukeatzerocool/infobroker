@@ -45,6 +45,10 @@
   language and §7.3 deprioritization wording, and added G1 catalogue items
   for resolution, content policy, audit, confinement, state validation, and
   error hygiene. REQ-021a, REQ-026d, REQ-004, REQ-033, REQ-011.
+- Fixed a dangling REQ-012 citation in §E.2 (OWASP A07 row now cites REQ-011
+  alone), normalized EARS casing in REQ-031a/038, and added a `validate-spec`
+  dangling-citation scan so any REQ token in the spec that fails to resolve
+  to a manifest REQ fails the gate.
 
 ## 2026.09.05 — Tool-description enrichment and `search_web` rename (TDQS 5/5 campaign)
 
