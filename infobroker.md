@@ -138,7 +138,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
 | **Fallback chain** | The ordered provider list for a task type (§7.2) as exercised on failure: the first entry is primary and remaining entries are tried in sequence per REQ-031. The same object as the dispatch chain. |
 | **Content renderer** | A backend that fetches and formats a URL's content (Jina Reader, native HTTP). A renderer is a provider (e.g. Jina, Wikipedia) or an inline tool-handler fallback (`native_fetch`, §5.2), and is not necessarily a standalone provider module. Task type for dispatch: `content_fetch`. |
-| **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `web_search` auto-selection |
+| **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `search_web` auto-selection |
 | **Corroboration** | The multi-pass truth-finding loop in `verify_claims` |
 | **Synthesis** | The summary statement in a `verify_claims` response (§8.1), and a task type for queries needing a synthesized, citation-backed answer (§7.1). |
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
@@ -160,7 +160,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
 | **Provider priority** | A configuration value ordering providers within a dispatch chain (REQ-010). |
-| **Routing priority** | The `web_search` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
+| **Routing priority** | The `search_web` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
 
 ---
 
@@ -214,26 +214,26 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 
 ### 4.3 Core Tools
 
-**REQ-020 — `web_search`**
-`web_search` is the unified search tool. Parameters: `query` (required) which SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `content_type` (default all), `region`, and `research` (default false). When `suggest` is true, the tool SHALL return query-autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and SHALL fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response with per-input provenance. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+**REQ-020 — `search_web`**
+`search_web` is the unified search tool. Parameters: `query` (required) which SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `content_type` (default all), `region`, and `research` (default false). When `suggest` is true, the tool SHALL return query-autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and SHALL fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response with per-input provenance. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
-**REQ-020a — `web_search` auto-selection**
+**REQ-020a — `search_web` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
 
-**REQ-020b — `web_search` suggestion mode**
+**REQ-020b — `search_web` suggestion mode**
 WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
 
-**REQ-020c — `web_search` priority routing**
-Parameters: the `web_search` tool accepts `priority` with values `privacy`, `free_only`, `speed`, and `quality`. WHEN a caller supplies `priority`, the tool SHALL route the query through a chain honoring that value: `privacy` SHALL prefer providers that do not forward queries to third parties, `free_only` SHALL exclude providers requiring an API key or self-hosted instance, `speed` SHALL prefer providers with the lowest recent latency, and `quality` SHALL use the default dispatch chain. The response SHALL identify the serving provider. _Check:_ G1.
+**REQ-020c — `search_web` priority routing**
+Parameters: the `search_web` tool accepts `priority` with values `privacy`, `free_only`, `speed`, and `quality`. WHEN a caller supplies `priority`, the tool SHALL route the query through a chain honoring that value: `privacy` SHALL prefer providers that do not forward queries to third parties, `free_only` SHALL exclude providers requiring an API key or self-hosted instance, `speed` SHALL prefer providers with the lowest recent latency, and `quality` SHALL use the default dispatch chain. The response SHALL identify the serving provider. _Check:_ G1.
 
-**REQ-020d — `web_search` parameter transparency**
-Parameters: the `web_search` tool accepts `time_range`, `page`, `safe_search`, `content_type`, and `region`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
+**REQ-020d — `search_web` parameter transparency**
+Parameters: the `search_web` tool accepts `time_range`, `page`, `safe_search`, `content_type`, and `region`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
 
-**REQ-020e — `web_search` query expansion**
-WHEN `web_search` receives `expand` set to true, the tool SHALL return query-expansion strings instead of search results, derived from a suggestion-capable provider and the query's keywords, presented as results with a title and no URL. WHEN no suggestion-capable provider is available, the tool SHALL derive expansions from the query alone rather than erroring. _Check:_ G0, G1.
+**REQ-020e — `search_web` query expansion**
+WHEN `search_web` receives `expand` set to true, the tool SHALL return query-expansion strings instead of search results, derived from a suggestion-capable provider and the query's keywords, presented as results with a title and no URL. WHEN no suggestion-capable provider is available, the tool SHALL derive expansions from the query alone rather than erroring. _Check:_ G0, G1.
 
-**REQ-020f — `web_search` research compile**
-WHEN `web_search` receives `research` set to true, the tool SHALL derive multiple search variants from the query, search each variant through its dispatch chain, and deep-read the top-ranked pages of each variant per REQ-028. The response SHALL group the ranked passages by originating variant, each with a relevance score and provenance. The number of variants and the pages deep-read SHALL be bounded by configuration. The response SHALL be subject to REQ-004 truncation. When a variant yields no fetchable page, the tool SHALL report that variant's search results rather than fail. _Check:_ G1.
+**REQ-020f — `search_web` research compile**
+WHEN `search_web` receives `research` set to true, the tool SHALL derive multiple search variants from the query, search each variant through its dispatch chain, and deep-read the top-ranked pages of each variant per REQ-028. The response SHALL group the ranked passages by originating variant, each with a relevance score and provenance. The number of variants and the pages deep-read SHALL be bounded by configuration. The response SHALL be subject to REQ-004 truncation. When a variant yields no fetchable page, the tool SHALL report that variant's search results rather than fail. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a short grace; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
@@ -289,8 +289,8 @@ WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHA
 **REQ-027 — `get_citations`**
 The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
 
-**REQ-028 — `web_search` deep reading**
-WHEN `web_search` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. Each ranked passage SHALL include a span anchor identifying the passage's position in the source. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
+**REQ-028 — `search_web` deep reading**
+WHEN `search_web` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. Each ranked passage SHALL include a span anchor identifying the passage's position in the source. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
 
 **REQ-089 — Tool-definition quality**
 Every advertised tool definition SHALL state the tool's purpose, when to use it, and when not to use it, naming the alternatives a caller could choose instead. Every tool definition SHALL disclose behavioral consequences: effects on stored state, external calls, rate limits, authentication requirements, and destructive operations. Every tool definition SHALL state what the tool returns — its response contract — and any non-obvious couplings between its parameters. Every parameter in a tool's input schema SHALL carry a description of its meaning and any non-obvious constraints or interactions. Tool definitions SHALL declare annotations for read-only, destructive, and idempotent behavior. _Check:_ G0, G1.
@@ -375,10 +375,10 @@ The server SHALL support a `financial` task type serving queries for filings, ma
 ### 4.7 Client Artifacts
 
 **REQ-050 — `search-preferences.md`**
-The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. The instruction file SHALL direct the client to rely on the `web_search` tool's built-in knowledge-base-first retrieval for external queries and SHALL reserve a direct `manage_kb` search for answering from stored content alone or inspecting the knowledge base. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
+The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. The instruction file SHALL direct the client to rely on the `search_web` tool's built-in knowledge-base-first retrieval for external queries and SHALL reserve a direct `manage_kb` search for answering from stored content alone or inspecting the knowledge base. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
 
 **REQ-051 — Orchestrator Skill**
-The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `web_search` tool's built-in KB-first behavior satisfies, reserving a direct `manage_kb` search for stored-content-only answers and knowledge-base inspection. _Check:_ G3 (file presence, content verification).
+The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `search_web` tool's built-in KB-first behavior satisfies, reserving a direct `manage_kb` search for stored-content-only answers and knowledge-base inspection. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
 The build SHALL produce an orchestrator skill (REQ-051) that references four pipeline skills — summarization, technical-writing, proofreading, and translation — by name, and that routes research requests to workflow shapes defined in `skills/infobroker/references/workflows.md`. These skills SHALL be shipped in the repository so the build is self-contained and requires no external skill dependency. _Check:_ G3 (content verification).
@@ -450,7 +450,7 @@ WHEN action is get, the tool SHALL return a stored document in full by source UR
 WHEN action is encryption, the tool SHALL operate on the knowledge base's at-rest encryption state per its `operation` sub-parameter: `status` SHALL report the encryption state and on-disk format, `generate_key` SHALL write a new key to a caller-supplied key-file path without returning key material, `verify` SHALL test the active key against the store, `backup` SHALL copy the active key file to a caller-supplied backup path, and a rekey sub-operation SHALL re-seal the store to a new key file without loss of stored content. This action SHALL remain reachable while the store is locked. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
-Search results from `web_search`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
+Search results from `search_web`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
 A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
@@ -525,7 +525,7 @@ The build SHALL publish the server package to the npm registry and SHALL registe
 ### 5.2 Layered Architecture
 
 ```
-Layer 3: Tools                 web_search, fetch_page, verify_claims, get_citations,
+Layer 3: Tools                 search_web, fetch_page, verify_claims, get_citations,
                                inspect_providers, manage_kb, reload_config
 
 Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, brave, searxng,
@@ -584,7 +584,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
 7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
 8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
-9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `web_search`, `fetch_page`, and `verify_claims`, the `manage_kb` MCP tool, content expiry maintenance loop.
+9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `search_web`, `fetch_page`, and `verify_claims`, the `manage_kb` MCP tool, content expiry maintenance loop.
 
 ### 5.5 Corroboration Quality (Single Phase)
 
@@ -603,10 +603,10 @@ responses. The corroboration loop validates against:
 
 ### 6.1 Tool Naming
 
-All tools use `snake_case`. Tool names are domain terminology: `web_search`,
+All tools use `snake_case`. Tool names are domain terminology: `search_web`,
 `fetch_page`, `verify_claims`, `get_citations`, `inspect_providers`, `manage_kb`, `reload_config`. These logical
 names are registered with the MCP client under an `infobroker_` prefix
-(e.g., `infobroker_web_search`).
+(e.g., `infobroker_search_web`).
 
 ### 6.2 Output Format
 
@@ -683,7 +683,7 @@ when Jina returns 429 or error.
 | `semantic` | "Find things like X", conceptual search | Embedding similarity |
 | `synthesis` | Synthesized answer with citations | Factual density |
 | `privacy_critical` | Must not leak query to third party | Data sovereignty |
-| `content_fetch` | Fetch and render a URL's content (renderer dispatch for `fetch_page`; not used by `web_search` auto-selection) | Fidelity |
+| `content_fetch` | Fetch and render a URL's content (renderer dispatch for `fetch_page`; not used by `search_web` auto-selection) | Fidelity |
 
 ### 7.2 Dispatch Table
 
@@ -707,7 +707,7 @@ when Jina returns 429 or error.
 
 ### 7.3 Provider Deprioritization
 
-`web_search` auto-selection SHALL consider current quota remaining when
+`search_web` auto-selection SHALL consider current quota remaining when
 selecting. A provider at >80% usage is demoted one tier in the dispatch table.
 A provider at 100% is removed from selection until reset.
 
@@ -716,7 +716,7 @@ until its cooldown expires, without affecting its quota counters.
 
 ### 7.4 Priority Routing
 
-The `web_search` `priority` parameter (REQ-020c) overrides the task-type
+The `search_web` `priority` parameter (REQ-020c) overrides the task-type
 chain with an intent-first selection:
 
 | Priority | Routing behavior |
@@ -859,7 +859,7 @@ is configurable via `corroboration.similarity_threshold`.
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
 - Config reload: change config → verify new provider active, old inactive
 - Token footprint: call `inspect_providers` spec action → verify `tool_schema_bytes` and `median_response_bytes` are present, numeric, and consistent with live registration
-- Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `web_search` returns mapped results through the dispatch chain
+- Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `search_web` returns mapped results through the dispatch chain
 - Generic provider malformed config: declare a generic provider with an invalid endpoint or result mapping → verify config validation rejects it on load and reload
 - Provider removal: disable a provider in the user configuration layer → verify it is skipped by dispatch and recommendations, and the disabled state survives reload and a simulated update
 - Spec drift: parse all `@implements REQ-NNN` citations from `src/**/*.ts`
@@ -870,7 +870,7 @@ is configurable via `corroboration.similarity_threshold`.
 - KB retrieval consistency: ingest content across multiple calls so the vocabulary grows between calls; query for a term present only in the earliest content → verify it is returned and ranked (REQ-082)
 - KB ingestion: provide text content → verify chunks created and stored
 - KB deletion: add content then issue delete → verify correct count removed
-- KB auto-indexing: execute `web_search` with mock provider → verify store received results after response
+- KB auto-indexing: execute `search_web` with mock provider → verify store received results after response
 - KB collection scoping: insert content into two collections → query scoped to one → verify only scoped results returned
 - KB expiry: insert content with past timestamp → trigger maintenance → verify expired content removed; verify non-expired content retained
 - KB config validation: provide invalid KB config section → verify `manage_kb` search returns config error
@@ -929,13 +929,13 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-013 | Provider Discovery | 4.2 | G1 |
 | REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
-| REQ-020 | web_search | 4.3 | G0, G1 |
-| REQ-020a | web_search auto-selection | 4.3 | G1 |
-| REQ-020b | web_search suggestion mode | 4.3 | G0, G1 |
-| REQ-020c | web_search priority routing | 4.3 | G1 |
-| REQ-020d | web_search parameter transparency | 4.3 | G0, G1 |
-| REQ-020e | web_search query expansion | 4.3 | G0, G1 |
-| REQ-020f | web_search research compile | 4.3 | G1 |
+| REQ-020 | search_web | 4.3 | G0, G1 |
+| REQ-020a | search_web auto-selection | 4.3 | G1 |
+| REQ-020b | search_web suggestion mode | 4.3 | G0, G1 |
+| REQ-020c | search_web priority routing | 4.3 | G1 |
+| REQ-020d | search_web parameter transparency | 4.3 | G0, G1 |
+| REQ-020e | search_web query expansion | 4.3 | G0, G1 |
+| REQ-020f | search_web research compile | 4.3 | G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
 | REQ-021a | fetch_page network-target safety | 4.3 | G1 |
 | REQ-021b | fetch_page question-grounded extraction | 4.3 | G1 |
@@ -954,7 +954,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
 | REQ-027 | get_citations | 4.3 | G0, G1 |
-| REQ-028 | web_search deep reading | 4.3 | G1 |
+| REQ-028 | search_web deep reading | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-092 | Tool-definition quality bar | 4.3 | G1, G3 |
@@ -1098,10 +1098,10 @@ configuration layer is merged over it by the server (REQ-010).
 
 | Old (DuckDuckGo MCP) | New (Infobroker) |
 |----------------------|-------------------|
-| `duckduckgo_web_search` | `web_search` — DuckDuckGo is still the default provider, with fallback |
+| `duckduckgo_web_search` | `search_web` — DuckDuckGo is still the default provider, with fallback |
 | `duckduckgo_get_page_content` | `fetch_page` — Jina Reader as default renderer, native fallback |
-| `duckduckgo_suggest_related_searches` | `web_search` with `suggest` — DuckDuckGo autocomplete, same endpoint |
-| (none) | `web_search` auto-selection — task-type routing (was `choose_provider`) |
+| `duckduckgo_suggest_related_searches` | `search_web` with `suggest` — DuckDuckGo autocomplete, same endpoint |
+| (none) | `search_web` auto-selection — task-type routing (was `choose_provider`) |
 | (none) | `verify_claims` — multi-pass truth-finding |
 | (none) | `get_citations` — academic references as BibTeX |
 | (none) | `inspect_providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
@@ -1203,7 +1203,7 @@ the mapping from response fields to the normalized result shape (REQ-003):
 }
 ```
 
-The slug is then referenced from a dispatch chain so `web_search` picks it up.
+The slug is then referenced from a dispatch chain so `search_web` picks it up.
 Removing the provider means setting `enabled`
 to `false`; the entry and its backend remain installed (REQ-015). A generic
 provider whose endpoint or result mapping is malformed is rejected by
@@ -1434,7 +1434,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `web_search`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |

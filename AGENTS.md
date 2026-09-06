@@ -10,7 +10,7 @@ src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  �
 
 | Tool | Purpose |
 |------|---------|
-| `infobroker_web_search` | Unified search across providers with fallback chain, task-type auto-selection, and suggestion mode |
+| `infobroker_search_web` | Unified search across providers with fallback chain, task-type auto-selection, and suggestion mode |
 | `infobroker_fetch_page` | Fetch URL content via Jina Reader (default) or native HTTP |
 | `infobroker_verify_claims` | Multi-pass truth-finding with cross-source verification |
 | `infobroker_get_citations` | Academic references as BibTeX citations |

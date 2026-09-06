@@ -32,7 +32,7 @@ description: >
 
 ## When NOT to Use
 
-- Simple factual lookup (single Wikipedia visit) — use `web_search` directly
+- Simple factual lookup (single Wikipedia visit) — use `search_web` directly
 - Purely conversational questions with no research component
 - Tasks that require only the AI's internal knowledge, no web lookup
 
@@ -65,8 +65,8 @@ structured analytic techniques — score it with the rubric in
 Default shape for reports, articles, documentation, and analysis.
 
 ```
-RECALL     Infobroker `web_search` KB-first (automatic); `manage_kb` search only for stored-only answers
-SEARCH     Infobroker `web_search`; `verify_claims` for contested claims
+RECALL     Infobroker `search_web` KB-first (automatic); `manage_kb` search only for stored-only answers
+SEARCH     Infobroker `search_web`; `verify_claims` for contested claims
 EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
            reading a page to answer a specific question, pass `question` to get
            the ranked passages that address it instead of the whole page
@@ -98,9 +98,9 @@ research complete. <N> sources | <K> findings | <gap> gaps noted
 Use when the user wants to verify specific claims.
 
 ```
-RECALL       Infobroker `web_search` KB-first (automatic); `manage_kb` search only for stored-only answers
+RECALL       Infobroker `search_web` KB-first (automatic); `manage_kb` search only for stored-only answers
 EXTRACT      claims from the user's input
-SEARCH       each claim with Infobroker `web_search` (per-claim queries)
+SEARCH       each claim with Infobroker `search_web` (per-claim queries)
 CROSS-CHECK  Infobroker `verify_claims` for multi-source verification
 VERDICT      assign True→Unverifiable + confidence + justification
 SUMMARIZE    `summarization` skill — executive summary
@@ -135,10 +135,10 @@ early.
 
 | Intent | Tool | Provider hint |
 |--------|------|--------------|
-| Search web broadly | `web_search` | Auto-selected (default: DuckDuckGo) |
+| Search web broadly | `search_web` | Auto-selected (default: DuckDuckGo) |
 | Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown); pass `question` to extract ranked passages |
-| Autocomplete a query | `web_search` (`suggest: true`) | DuckDuckGo |
-| "Which tool should I use?" | `web_search` | Auto-selection returns serving provider |
+| Autocomplete a query | `search_web` (`suggest: true`) | DuckDuckGo |
+| "Which tool should I use?" | `search_web` | Auto-selection returns serving provider |
 | Multi-source truth-finding | `verify_claims` | Uses all active providers |
 | Academic citations | `get_citations` | BibTeX references from scholarly sources |
 | Check provider status | `inspect_providers` (action list/health) | N/A |
@@ -160,8 +160,8 @@ path; `analysis-loop` runs the disciplined, gated path.
 
 ## Best Practices
 
-- Always use `web_search` before `fetch_page` — verify the URL exists
-- Use `verify_claims` for claims where the truth might be contested; use `web_search` for simple lookups
+- Always use `search_web` before `fetch_page` — verify the URL exists
+- Use `verify_claims` for claims where the truth might be contested; use `search_web` for simple lookups
 - When writing output, route through the full pipeline (search → verify → summarize → write → polish)
 - Cite sources with URLs for every factual claim
 - Fall back to built-in `websearch`/`webfetch` only when Infobroker tools error

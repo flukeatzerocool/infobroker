@@ -37,7 +37,7 @@ metadata:
    `skills/infobroker/references/workflows.md` — recall → search → extract →
    verify → write → polish → cite — into this shape's sequence. Every
    pipeline that may answer from the knowledge base MUST include a
-   knowledge-base retrieval phase before external search (the `web_search`
+   knowledge-base retrieval phase before external search (the `search_web`
    tool's built-in KB-first behavior satisfies this).
 4. **Output contract.** A canonical output structure (link or embed a block
    from `skills/infobroker/references/report-template.md`) and edge cases.

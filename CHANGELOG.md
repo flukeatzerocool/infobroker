@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.09.05 — Tool-description enrichment and `search_web` rename (TDQS 5/5 campaign)
+
+- `infobroker_web_search` renamed to `infobroker_search_web`, completing the
+  verb-noun pattern across the tool surface (Glama naming-consistency
+  dimension). Capability tokens (`capabilities: ["web_search"]`,
+  `duckduckgo_web_search`, authority weights) are unchanged. REQ-020/020a–f
+  and REQ-028 titles and references updated; spec §5.2/§6.1/§7/§9/§10,
+  README, AGENTS.md, skills, instructions, and test fixtures follow. D-046.
+- Tool descriptions enriched to close the remaining Glama TDQS dimension
+  gaps: `fetch_page`, `get_citations`, `inspect_providers`, `manage_kb`,
+  `verify_claims`, and `reload_config` now state parameter semantics and
+  interactions beyond the schema (question↔passage sizing, renderer fallback,
+  action-enum meaning, per-action parameter maps and defaults, response shape
+  per action), disclose error scenarios and rate limits, and reference
+  sibling tools by their exact `infobroker_`-prefixed names. The
+  alternative-tool gates in `validate-spec` and `tool-surface.test.ts`
+  accept the prefixed form; REQ-089/090/092 gate phrases are preserved.
+
 ## 2026.09.05 — Anti-bot challenge fall-through for `fetch_page`
 
 - `fetch_page` now treats a renderer whose content is an anti-bot challenge

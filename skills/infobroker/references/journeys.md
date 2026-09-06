@@ -23,8 +23,8 @@ row below.
 
 | Intent | Tools | Steps |
 |--------|-------|-------|
-| Search broadly | `web_search` | KB-first recall → classify task → dispatch chain → fallback on failure; batch several queries by passing an array |
-| Autocomplete a query | `web_search` (`suggest: true`) | suggestion provider → next suggestion-capable provider → error if none |
+| Search broadly | `search_web` | KB-first recall → classify task → dispatch chain → fallback on failure; batch several queries by passing an array |
+| Autocomplete a query | `search_web` (`suggest: true`) | suggestion provider → next suggestion-capable provider → error if none |
 | Read a URL | `fetch_page` | SSRF guard → renderer chain (Jina → native) → anti-bot challenge falls through to the next renderer → truncate → auto-index; pass `question` for ranked passages; for JS-rendered pages with no readable content, use `playwright-cli` (headless) and archive the extracted text via `manage_kb` ingest |
 | Multi-source truth-finding | `verify_claims` | search → iterate → cross-source verify → confidence-scored findings |
 | Academic references | `get_citations` | search scholarly sources → BibTeX citation per reference |

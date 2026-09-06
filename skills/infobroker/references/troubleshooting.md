@@ -13,7 +13,7 @@ The server itself reports operational detail through `inspect_providers`
 3. A provider may be in **cooldown** after a 429/anti-bot response
    (`output.rate_limit_cooldown_ms`, default 30 s). Retry later.
 4. Rephrase the query — a too-specific query can empty every provider. Use
-   `web_search` with `expand: true` to generate variants.
+   `search_web` with `expand: true` to generate variants.
 
 ## A provider keeps returning 429 / rate-limit errors
 

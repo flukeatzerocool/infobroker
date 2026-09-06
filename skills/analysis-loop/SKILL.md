@@ -34,7 +34,7 @@ completes its full cycle before the next starts.
 
 ## When NOT to Use
 
-- Single-source factual lookup — use `web_search` directly.
+- Single-source factual lookup — use `search_web` directly.
 - The user wants the AI's internal knowledge, not web research.
 - The `infobroker` skill is already loaded and routed the request to a
   lighter workflow shape — those handle lighter research. This skill is for

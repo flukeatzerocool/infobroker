@@ -47,21 +47,21 @@ Given a single step in the pipeline, pick by condition:
 
 | Condition | Tool |
 |-----------|------|
-| Broad search; KB may already hold the answer | `web_search` (KB-first is automatic) |
+| Broad search; KB may already hold the answer | `search_web` (KB-first is automatic) |
 | Answer entirely from stored content, or inspect/maintain the KB | `manage_kb` (action search / list / stats / get) |
 | A claim's truth is contested and needs multi-source cross-reference | `verify_claims` |
 | You have a URL and need readable content | `fetch_page` |
 | You have a URL and a specific question about it | `fetch_page` with `question` |
 | A URL's content is a bot-wall or an empty JS-rendered shell | `playwright-cli` (headless open + find/eval), then `manage_kb` ingest the text |
 | You need BibTeX references for scholarly writing | `get_citations` |
-| You need query autocomplete | `web_search` with `suggest: true` |
-| You need ranked passages from the top results, not links | `web_search` with `deep: true` |
-| You need query variants before a deep search | `web_search` with `expand: true` |
+| You need query autocomplete | `search_web` with `suggest: true` |
+| You need ranked passages from the top results, not links | `search_web` with `deep: true` |
+| You need query variants before a deep search | `search_web` with `expand: true` |
 | Unsure which backend to trust | `inspect_providers` (action list / health) |
 | Config changed and must take effect now | `reload_config` |
 | Archive a finished report | `manage_kb` (action ingest, `source_type: "report"`) |
 
-Rule of thumb: `web_search` for lookups and uncontested breadth;
+Rule of thumb: `search_web` for lookups and uncontested breadth;
 `verify_claims` when agreement across independent sources decides the answer.
 
 ## 3. Escalate to `analysis-loop`?
@@ -80,7 +80,7 @@ Below 3, run the `infobroker` pipeline. At 3+, escalate to `analysis-loop`.
 
 | Symptom | Action |
 |---------|--------|
-| `web_search` returns empty or slow | `inspect_providers` (health) → a provider may be exhausted or in cooldown; rephrase the query |
+| `search_web` returns empty or slow | `inspect_providers` (health) → a provider may be exhausted or in cooldown; rephrase the query |
 | A provider is exhausted (quota 100%) | Let the fallback chain skip it; retry after reset, or `reload_config` to adjust limits |
 | A provider returns 429/anti-bot | The server holds it in cooldown (`output.rate_limit_cooldown_ms`); retry later or switch task type |
 | Infobroker tool errors | Fall back to built-in `websearch`/`webfetch`, then report the degraded confidence |

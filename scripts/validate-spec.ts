@@ -539,7 +539,7 @@ for (const f of toolLayerFiles) {
 }
 
 // B) The max_results default declared in the spec SHALL match the zod schema
-// default for web_search and kb (REQ-020, REQ-060a).
+// default for search_web and kb (REQ-020, REQ-060a).
 const indexText = readFileSync(join(SRC, "index.ts"), "utf-8");
 function schemaDefault(slug: string, param: string, max: number): string | undefined {
   const toolRe = new RegExp(`registerTool\\(\\s*"infobroker_${slug}"[\\s\\S]*?${param}:\\s*z\\.number\\(\\)\\.min\\(1\\)\\.max\\(${max}\\)\\.optional\\(\\)\\.default\\((\\d+)\\)`);
@@ -559,7 +559,7 @@ function requireDefault(re: RegExp, label: string, schema: string | undefined): 
     error(`${label}: schema default ${schema} diverges from spec-declared default ${declared} — violates REQ-080`);
   }
 }
-requireDefault(/`max_results`\s+\(default\s+(\d+)\s*,/ , "REQ-020 web_search max_results", schemaDefault("web_search", "max_results", 30));
+requireDefault(/`max_results`\s+\(default\s+(\d+)\s*,/ , "REQ-020 search_web max_results", schemaDefault("search_web", "max_results", 30));
 requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a manage_kb max_results", schemaDefault("manage_kb", "max_results", 50));
 
 // --- Tool-definition quality bar (REQ-092) ---
@@ -581,7 +581,7 @@ function checkToolDefinitionBar(): void {
     const label = `infobroker_${slug}`;
     if (!/Use when/i.test(desc)) error(`${label}: description missing 'Use when' (REQ-092)`);
     if (!/Do NOT use/i.test(desc)) error(`${label}: description missing 'Do NOT use' (REQ-092)`);
-    if (!/use\s+(fetch_page|verify_claims|manage_kb|get_citations|inspect_providers|reload_config|web_search)/i.test(desc)) {
+    if (!/use\s+(?:infobroker_)?(fetch_page|verify_claims|manage_kb|get_citations|inspect_providers|reload_config|search_web)/i.test(desc)) {
       error(`${label}: description missing an alternative-tool reference (REQ-092)`);
     }
     if (!/\[OK\]/.test(desc)) error(`${label}: description missing [OK] return contract (REQ-092)`);

@@ -13,10 +13,10 @@ reaches a verdict, see `corroboration.md`.
 Every shape composes from these steps; a shape names the steps it uses
 rather than restating them.
 
-- **RECALL** — `web_search` performs KB-first recall automatically before
+- **RECALL** — `search_web` performs KB-first recall automatically before
   external providers; use a direct `manage_kb` (action search) only when stored
   content alone can answer the task or to inspect the store.
-- **SEARCH** — `web_search` (multi-provider, auto-selection, fallback
+- **SEARCH** — `search_web` (multi-provider, auto-selection, fallback
   chain). Use `verify_claims` when a claim is contested; use `deep: true`
   when you want passages read from the top results, not just snippets.
   Use `research: true` (multi-variant fan-out with deep reads) only for the
@@ -25,7 +25,7 @@ rather than restating them.
 - **EXTRACT** — `fetch_page` on promising URLs for full content; pass
   `question` to a page you are reading to answer a specific question, so only
   the ranked passages that address it are returned. For a one-call
-  search-and-read, `web_search` with `deep: true` returns ranked passages per
+  search-and-read, `search_web` with `deep: true` returns ranked passages per
   source.
 - **VERIFY** — cross-reference across sources, score confidence, flag
   contradictions explicitly. Use `verify_claims` for contested claims and

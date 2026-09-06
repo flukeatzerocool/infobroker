@@ -1,6 +1,6 @@
 # Provider Dispatch Map
 
-Quick reference for `web_search` auto-selection. The server classifies the
+Quick reference for `search_web` auto-selection. The server classifies the
 query into a task type and routes to the primary provider of that type's
 dispatch chain, falling back in order.
 

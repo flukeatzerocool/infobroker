@@ -2,6 +2,31 @@
 
 ## Active Decisions
 
+### D-046: `search_web` Rename and Tool-Description TDQS Enrichment (2026.09.06)
+
+Glama's tool-definition quality audit (TDQS) scored the server 4.6/5 with a
+4.3 minimum (`get_citations`) after the D-038 rework. The remaining gaps
+were one server-level dimension — naming consistency, where `web_search`
+was the single tool breaking the verb-noun pattern — and description
+dimensions across six tools: parameter semantics (baseline 3/5 when the
+description restates schema facts), behavioral disclosure (error scenarios,
+rate limits, live-probe side effects), conciseness (density), completeness
+(response shape per action), and usage guidance (alternative tools named as
+bare slugs instead of exact `infobroker_`-prefixed names).
+
+`web_search` was renamed to `search_web`, completing verb-noun naming across
+the surface; the capability token `web_search` (provider `capabilities`,
+`duckduckgo_web_search`, authority weights) is a separate vocabulary and is
+unchanged. Tool descriptions were rewritten to state parameter semantics
+beyond the schema, disclose error/rate-limit behavior, name alternatives by
+exact tool name, and (for `manage_kb`) specify the response shape per
+action. The alternative-tool gates in `scripts/validate-spec.ts` and
+`src/tool-surface.test.ts` now accept the prefixed form.
+
+Alternatives rejected: keeping `web_search` (accepts a 4/5 naming-consistency
+ceiling); keeping slug names in descriptions (the audit explicitly warned
+that bare slugs "could cause an agent to look for a nonexistent tool").
+
 ### D-045: README Spec-Reconciliation Gate and Feature-Taxonomy Check (2026.09.05)
 
 The README auto-update step relied solely on the model reading `infobroker.md`

@@ -17,7 +17,7 @@ README DESIGN:
     Infobroker.
 
   Demo: Natural-language prompts in blockquotes ("Search for..."), never
-    full tool names (`infobroker_web_search`). Show the reader how to
+    full tool names (`infobroker_search_web`). Show the reader how to
     express what they want — the AI maps intent to tools. Every demo
     prompt SHALL be a valid natural-language command the reader could
     actually run; broken prompts are a README defect.
@@ -204,7 +204,7 @@ spec.
 > "Find scholarly papers on hyperspace travel theories."
 > "Search the latest astromech specs and show me the passages that answer: does the R2 unit pre-date the Clone Wars?"
 
-`web_search` sends one query to every provider that can answer it. Search
+`search_web` sends one query to every provider that can answer it. Search
 across DuckDuckGo, Wikipedia, academic databases, news, code repositories —
 or describe your task and the server picks the best source. Pass an array of
 queries to batch several searches in one call. Ask for a deep read and it
@@ -245,7 +245,7 @@ to paste into a reference list.
 > "Which source should I use to research the Death Star's weakness?"
 > "Show me all available sources and their quota status."
 
-The server knows its own capabilities. `web_search` auto-selects the
+The server knows its own capabilities. `search_web` auto-selects the
 best backend for your task, weighing capability, quota, and latency —
 or routes by your intent when you ask for privacy, speed, or free-only
 sources. `inspect_providers` surfaces every configured source and drills into a
@@ -314,7 +314,7 @@ Infobroker produces finished work.
 Quota counters persist to disk and survive restarts. Rate limits are
 enforced per-provider, not globally. Configuration is hot-reloadable
 via `reload_config` — change providers, adjust chains, or tweak
-thresholds without dropping connections. `web_search` doubles as
+thresholds without dropping connections. `search_web` doubles as
 DuckDuckGo query autocomplete. `inspect_providers` reports the server's build
 health and request stats. You always know what your search server is
 doing and how much capacity remains.
@@ -537,7 +537,7 @@ Two optional keys tune per-provider behavior in `config.json`:
 
 ### Hedged fallback
 
-`web_search` and `fetch_page` fall back with a hedge instead of waiting
+`search_web` and `fetch_page` fall back with a hedge instead of waiting
 out a slow provider's full timeout: the primary (first-choice) provider
 runs alone for a latency-derived window, then the remaining providers
 race and the first result wins. The common path uses one provider call;

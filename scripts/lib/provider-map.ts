@@ -124,7 +124,7 @@ export function writeProviderMap(config: Config): string {
   const lines: string[] = [];
   lines.push("# Provider Dispatch Map");
   lines.push("");
-  lines.push("Quick reference for `web_search` auto-selection. The server classifies the");
+  lines.push("Quick reference for `search_web` auto-selection. The server classifies the");
   lines.push("query into a task type and routes to the primary provider of that type's");
   lines.push("dispatch chain, falling back in order.");
   lines.push("");

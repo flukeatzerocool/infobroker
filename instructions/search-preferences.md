@@ -6,7 +6,7 @@ the skill tool) and follow it before invoking tools directly. It
 classifies the request into a workflow shape and routes through the
 writing pipeline. For high-stakes, decision-driving questions, it
 escalates to the `analysis-loop` skill. Simple factual lookups may use
-`infobroker_infobroker_web_search` directly without loading a skill.
+`infobroker_infobroker_search_web` directly without loading a skill.
 
 Infobroker tools provide multi-provider search with fallback chains,
 quota tracking, and cross-source verification. Prefer them over
@@ -17,7 +17,7 @@ shell instead of content, retry the URL with the `playwright-cli` skill
 (headless `open` + `find`/`eval`) and archive the extracted text with
 `manage_kb` (action ingest).
 
-`infobroker_infobroker_web_search` performs knowledge-base recall
+`infobroker_infobroker_search_web` performs knowledge-base recall
 automatically before external providers, so do not issue a separate
 `infobroker_infobroker_manage_kb` (action search) for the same query before it.
 Use `infobroker_infobroker_manage_kb` (action search) directly only to answer
@@ -39,25 +39,25 @@ known at ingest. To refresh an outdated report, retrieve it with `manage_kb`
 against the stored `source_updated_at`. When a source's last-updated date
 is unchanged, the report on that source remains current; when it has
 changed or is absent, re-research the fresh state with
-`infobroker_infobroker_web_search` and ingest the updated report under the
+`infobroker_infobroker_search_web` and ingest the updated report under the
 same title to replace it. Stored reports are dated snapshots — verify them
 against fresh sources before treating their content as current.
 
-Use `infobroker_infobroker_web_search` instead of the built-in
+Use `infobroker_infobroker_search_web` instead of the built-in
 `websearch` tool.
 Use `infobroker_infobroker_fetch_page` instead of the built-in
 `webfetch` tool.
-Use `infobroker_infobroker_web_search` with `suggest: true` for query
+Use `infobroker_infobroker_search_web` with `suggest: true` for query
 autocomplete (no built-in equivalent).
 Use `infobroker_infobroker_verify_claims` for multi-source truth-finding and
 deep research tasks.
 Use `infobroker_infobroker_inspect_providers` (action list or health) when unsure
 which search backend to use or to check provider status.
-Use `infobroker_infobroker_web_search` with an array of queries to batch
+Use `infobroker_infobroker_search_web` with an array of queries to batch
 several searches in one call (no built-in equivalent).
-Use `infobroker_infobroker_web_search` with `expand: true` to generate query
+Use `infobroker_infobroker_search_web` with `expand: true` to generate query
 variants before a deep search (no built-in equivalent).
-Use `infobroker_infobroker_web_search` with `deep: true` to read the top
+Use `infobroker_infobroker_search_web` with `deep: true` to read the top
 results and return each page's passages ranked against the query, so a
 deep search yields the answering text rather than links (no built-in
 equivalent).

@@ -10,7 +10,7 @@ const SPEC_TAXONOMY = `## §D Appendix: Feature Taxonomy
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | \`web_search\`, \`fetch_page\`, \`get_citations\` | REQ-003 | G0, G1 |
+| 1 | Core Retrieval | \`search_web\`, \`fetch_page\`, \`get_citations\` | REQ-003 | G0, G1 |
 | 2 | Provider Intelligence | \`inspect_providers\` | REQ-010 | G0, G1 |
 | 3 | Corroboration | \`verify_claims\` | REQ-026 | G0, G1 |
 | 4 | Knowledge Base | \`manage_kb\` | REQ-060 | G0, G1 |

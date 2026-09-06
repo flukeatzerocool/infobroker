@@ -27,7 +27,7 @@ metadata:
 2. **Research terminology.** Build a glossary for technical, legal, or
    domain-specific terms. Use the user's translation memory if available.
 
-   **Infobroker Integration**: Use `web_search` with Wiktionary or Wikipedia
+   **Infobroker Integration**: Use `search_web` with Wiktionary or Wikipedia
    for domain terminology research. Use `fetch_page` for bilingual glossaries
    or parallel texts.
 
@@ -76,6 +76,6 @@ detected.
 ## Infobroker Integration
 
 This skill can be inserted at any point in the Infobroker pipeline for
-multilingual output. Use `web_search` with Wiktionary for terminology
+multilingual output. Use `search_web` with Wiktionary for terminology
 research before translating. The translated output goes through
 `proofreading` regardless of language.

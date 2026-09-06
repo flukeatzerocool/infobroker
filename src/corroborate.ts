@@ -38,7 +38,7 @@ export function resolveSearcher(
   return resolveProvider(slug)?.search as Searcher | undefined;
 }
 
-// Wrap a searcher call in a per-provider timeout race, mirroring web_search's
+// Wrap a searcher call in a per-provider timeout race, mirroring search_web's
 // timeout guard (index.ts), so a slow provider cannot stall corroboration
 // beyond its configured timeout.
 function timedSearch(
@@ -280,7 +280,7 @@ function providerOperational(
 }
 
 // Apply the user's priority intent to the corroboration pool without the
-// fallback_depth slice that governs web_search's sequential chain — the
+// fallback_depth slice that governs search_web's sequential chain — the
 // corroboration pool must stay broad for cross-referencing.
 function applyPriority(
   slugs: string[],
@@ -317,7 +317,7 @@ function pickGapProvider(
   config: ReturnType<typeof getConfig>,
   startIndex: number,
 ): string | null {
-  // Prefer non-warned providers (parity with web_search's quota-warning
+  // Prefer non-warned providers (parity with search_web's quota-warning
   // demotion): an exhausted provider is never returned; a warned provider is
   // returned only when no clean alternative remains.
   const warned: number[] = [];

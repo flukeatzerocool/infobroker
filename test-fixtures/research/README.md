@@ -32,7 +32,7 @@ entry declares:
 - `absent` tokens do not appear.
 - `sections` are present (case-insensitive OR-match).
 - `tool_audit.kb_before_search`: a `manage_kb` tool call precedes the first
-  `web_search`. (Only asserted when the scenario sets it `true`.)
+  `search_web`. (Only asserted when the scenario sets it `true`.)
 - `tool_audit.uses_infobroker`: at least one `infobroker_infobroker_*` tool
   is called. Built-in `websearch`/`webfetch` do **not** fail this — they are
   legitimate fallback when an Infobroker tool errors.

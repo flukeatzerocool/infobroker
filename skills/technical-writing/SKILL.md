@@ -29,7 +29,7 @@ metadata:
    documents, and commit history. Identify authoritative sources.
 
    **Infobroker Integration**: Source material comes from the extract and
-   verify phases of the Infobroker pipeline — `web_search` and `fetch_page`.
+   verify phases of the Infobroker pipeline — `search_web` and `fetch_page`.
    Use `fetch_page` with Jina Reader for clean Markdown of web sources.
 
 3. **Design the structure.** Create an outline that follows conventions for

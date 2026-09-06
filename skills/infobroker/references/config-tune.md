@@ -22,7 +22,7 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 
 | Key | Default | Effect |
 |-----|---------|--------|
-| `max_pages` / `max_total_pages` | 3 / 8 | Pages fetched when `web_search` runs with `deep: true`. Lower both to cut the most token-heavy mode. |
+| `max_pages` / `max_total_pages` | 3 / 8 | Pages fetched when `search_web` runs with `deep: true`. Lower both to cut the most token-heavy mode. |
 | `concurrency` | 4 | Parallel page fetches. |
 | `max_ms` | 8000 | Wall-time budget for the deep pass. |
 | `early_exit_score` | 0.3 | Stop fetching when a passage already scores this well. Raise to exit sooner. |

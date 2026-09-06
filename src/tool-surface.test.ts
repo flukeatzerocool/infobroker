@@ -113,13 +113,13 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
     "infobroker_inspect_providers",
     "infobroker_manage_kb",
     "infobroker_reload_config",
+    "infobroker_search_web",
     "infobroker_verify_claims",
-    "infobroker_web_search",
   ]);
 
   // REQ-090: the operation must name a real verb, not just any lowercase
-  // token. `web_search` names the domain first, so the verb may appear in
-  // either position.
+  // token. `search_web` names the verb first; the test accepts a verb in
+  // either position for legacy tolerance.
   const operationVerbs = ["search", "fetch", "verify", "get", "inspect", "manage", "reload"];
 
   for (const tool of tools) {
@@ -136,9 +136,10 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
     expect(tool.description!, `${tool.name} missing 'Use when'`).toMatch(/Use when/i);
     expect(tool.description!, `${tool.name} missing 'Do NOT use'`).toMatch(/Do NOT use/i);
 
-    // REQ-089/092: description names at least one alternative tool.
+    // REQ-089/092: description names at least one alternative tool. Tool
+    // references may carry the infobroker_ prefix or use the bare slug.
     expect(tool.description!, `${tool.name} missing alternative-tool naming`).toMatch(
-      /use\s+(fetch_page|verify_claims|manage_kb|get_citations|inspect_providers|reload_config|web_search)/i
+      /use\s+(?:infobroker_)?(fetch_page|verify_claims|manage_kb|get_citations|inspect_providers|reload_config|search_web)/i
     );
 
     // REQ-089: description states the response contract ([OK]/[ERROR] envelope).

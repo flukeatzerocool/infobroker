@@ -37,7 +37,7 @@ of the documentation can stay lean.
   orchestrator maps intent to (research & write, fact-check, deep-dive, …).
 - **Completion token.** The grep-able one-line status that ends a workflow
   shape's deliverable, e.g. `research complete. <N> sources | <K> findings`.
-- **KB-first.** `web_search` recalls the knowledge base before external
+- **KB-first.** `search_web` recalls the knowledge base before external
   providers, so cached answers never re-query the network.
 
 ## Server behavior
