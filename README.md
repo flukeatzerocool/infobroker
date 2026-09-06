@@ -615,7 +615,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-09-05.
+Last updated: 2026-09-06.
 
 ## Contribute
 
@@ -645,7 +645,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.09.05), which defines every requirement and the gates that verify it.
+(v2026.09.06), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers.
