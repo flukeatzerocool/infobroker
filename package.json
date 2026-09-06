@@ -1,6 +1,6 @@
 {
   "name": "infobroker",
-  "version": "2026.09.05",
+  "version": "2026.09.06",
   "description": "Infobroker MCP Server — multi-provider research & writing backend",
   "type": "module",
   "main": "dist/index.js",
@@ -32,8 +32,9 @@
     "generate-provider-map": "npx tsx scripts/generate-provider-map.ts",
     "version-bump": "npx tsx scripts/version.ts bump",
     "version-sync": "npx tsx scripts/version.ts check",
+    "audit": "npm audit --audit-level=high",
     "push": "bash scripts/push-pipeline.sh",
-    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run check-script-discipline && npm run test && npx tsx scripts/check-shipped-kb-empty.ts"
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run check-script-discipline && npm run test && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts"
   },
   "keywords": [
     "search",

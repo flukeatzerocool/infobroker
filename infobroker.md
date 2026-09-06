@@ -16,6 +16,7 @@
 12. [§B Appendix: REQ Authoring Conventions](#b-appendix-req-authoring-conventions)
 13. [§C Appendix: Spec-Driven Development Discipline](#c-appendix-spec-driven-development-discipline)
 14. [§D Appendix: Feature Taxonomy](#d-appendix-feature-taxonomy)
+15. [§E Appendix: Security Model](#e-appendix-security-model)
 
 ## §1 Mission and Capability Model
 
@@ -82,7 +83,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
 - **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `inspect_providers` health responses.
-- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE (all free HTTP, no API key required) provide a functional default.
+- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek, Wiby (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE, OpenAlex, Europe PMC, Hacker News, GDELT, SEC EDGAR, World Bank (all free HTTP, no API key required) provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Quota state persists.** Quota counters survive restarts via a JSON state file.
@@ -161,10 +162,15 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
 | **Provider priority** | A configuration value ordering providers within a dispatch chain (REQ-010). |
 | **Routing priority** | The `search_web` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
+| **Provenance** | The recorded origin of a result or response — the serving provider, the source URL, and, for corroboration, the analytic settings and per-source contributions (REQ-020, REQ-026d). |
+| **Span anchor** | An identifier locating a passage within its source page, used in ranked-passage responses (REQ-028). |
+| **Content policy** | The configurable assessment applied to retrieved content before knowledge-base storage (REQ-097). |
+| **Audit trail** | The persistent, owner-only record of security-relevant events (REQ-098). |
+| **Keys directory** | The directory designated by the configuration within which tool-surface key-material file operations are confined (REQ-099). |
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021f`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021f`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -184,7 +190,7 @@ Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `ra
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, `source_type`, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
 
 **REQ-004 — Truncation**
-Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at `$TMPDIR/infobroker/`. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
+Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at the truncation location defined in §10.1. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
 
 **REQ-073 — Minimum Viable Result**
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
@@ -198,10 +204,7 @@ The server SHALL support a configurable output verbosity that applies to all too
 Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The configuration SHALL be composed of a shipped default configuration and a user configuration layer. Values in the user layer SHALL take precedence over values in the shipped default. The user configuration layer SHALL be preserved when the software is updated. The config declares each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section supplying values inherited by providers that do not override them. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
-API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
-
-**REQ-012 — Environment Variable Mapping**
-The env var prefix is `INFOBROKER_` followed by the provider slug in uppercase, suffixed `_API_KEY`. For URL-based providers (SearXNG), the env var is `INFOBROKER_<PROVIDER>_URL`. _Check:_ G1.
+API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`; for URL-based providers the endpoint SHALL be accepted via `INFOBROKER_<PROVIDER>_URL`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
 The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
@@ -236,7 +239,7 @@ WHEN `search_web` receives `expand` set to true, the tool SHALL return query-exp
 WHEN `search_web` receives `research` set to true, the tool SHALL derive multiple search variants from the query, search each variant through its dispatch chain, and deep-read the top-ranked pages of each variant per REQ-028. The response SHALL group the ranked passages by originating variant, each with a relevance score and provenance. The number of variants and the pages deep-read SHALL be bounded by configuration. The response SHALL be subject to REQ-004 truncation. When a variant yields no fetchable page, the tool SHALL report that variant's search results rather than fail. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a short grace; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
+Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
 
 **REQ-021b — `fetch_page` question-grounded extraction**
 WHEN `fetch_page` receives a `question`, the tool SHALL split the fetched content into passages at sentence boundaries and SHALL return the passages ranked by relevance to the question, each with a relevance score, up to the configured passage count. The response SHALL identify the extraction mode: passage content when ranking produced a match, or full content with a note when no passage matched or the content was unreadable. A low top score SHALL be reported as the page not answering the question rather than as a ranking failure. _Check:_ G1.
@@ -278,10 +281,10 @@ When `verify_claims` computes a finding's confidence, the confidence SHALL refle
 Each finding returned by `verify_claims` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
 
 **REQ-026c — corroboration source preservation**
-WHEN source preservation is enabled in the configuration, `verify_claims` SHALL best-effort capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
+WHEN source preservation is enabled in the configuration, `verify_claims` SHALL attempt to capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
 
 **REQ-026d — corroboration provenance record**
-The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding, formatted so a downstream citation can document the analytic tooling used. The record SHALL be present in verbose output. _Check:_ G1.
+The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding. The record SHALL be present in verbose output. _Check:_ G1.
 
 **REQ-026e — corroboration knowledge-base recall**
 WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
@@ -321,7 +324,7 @@ WHEN every provider in the serving task's dispatch chain is exhausted by errors 
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
 
 **REQ-033 — Persistent Quota Tracking**
-Daily and monthly quota counters SHALL persist to `$TMPDIR/infobroker/quota.json`. Counter state SHALL be durably written to disk such that quota enforcement survives server restarts. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). _Check:_ G1.
+Daily and monthly quota counters SHALL persist to the quota state file defined in §10.1. Counter state SHALL be durably written to disk such that quota enforcement survives server restarts. Counters reset on schedule (daily at midnight UTC, monthly at month boundary). _Check:_ G1.
 
 **REQ-034 — Quota Warning Threshold**
 At 80% of quota usage, the `inspect_providers` health action SHALL report status `degraded` with a `quota_warning` field. At 100%, status becomes `exhausted` and the provider is skipped by fallback chains until reset. _Check:_ G1.
@@ -509,6 +512,29 @@ requiring reconfiguration. _Check:_ G1.
 **REQ-091 — Registry-Published Distribution**
 The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1, G3.
 
+### 4.11 Security and Content Safety
+
+**REQ-096 — Security Model Completeness**
+The specification SHALL document a security model that names the trust boundary, the principal threat actors, and a mapping of the OWASP Top 10:2025 and OWASP LLM Top 10:2025 categories to controlling requirements or named residual risks. The validation gate SHALL fail when a category is unmapped or a security requirement is not traceable to a gate. The security model SHALL be updated whenever a security requirement changes. _Check:_ G3.
+
+**REQ-097 — Content Policy**
+When the server retrieves content from an external source and the content policy is enabled, the tool SHALL assess the content against the policy before storing it in the knowledge base. Content the policy flags SHALL NOT be stored, and the response SHALL report the flag with a code that distinguishes the policy decision from a fetch failure. The policy SHALL support a strictest mode in which flagged content is refused to the caller, and SHALL support a mode in which assessment is disabled. Assessment outcomes SHALL be recorded in the audit trail. The policy SHALL consult an external assessment service when configured, and SHALL apply its built-in assessment when the external service is unavailable. _Check:_ G0, G1.
+
+**REQ-098 — Audit Trail**
+The server SHALL record security-relevant events — refused network targets, content-policy flags, configuration reloads, knowledge-base encryption transitions, key-material operations, and quota exhaustion — in a persistent audit trail that survives restarts. Audit entries SHALL be time-stamped, append-only, and stored with owner-only permissions. The audit trail SHALL NOT contain secret material or full retrieved content. When the audit trail cannot be written, the triggering operation SHALL proceed without relying on it. _Check:_ G1.
+
+**REQ-099 — Key-Material Confinement**
+Operations that create, back up, or read key material through the tool surface SHALL confine file access to a directory designated by the configuration. A requested path outside the designated directory SHALL be refused with an error identifying the confinement. The designated directory SHALL be created with owner-only permissions when absent. _Check:_ G1.
+
+**REQ-100 — State-File Hardening**
+Persisted server state SHALL be stored with owner-only file permissions in a directory with owner-only permissions. When reading persisted state, the server SHALL validate the structure and numeric bounds of every value before use, and SHALL discard and reset state that fails validation. The server SHALL refuse to read or write state in a directory it does not own. _Check:_ G1.
+
+**REQ-101 — Dependency Vulnerability Gate**
+The build process SHALL run a dependency-vulnerability check against the locked dependency set as a mandatory gate, and SHALL fail the build when the check reports vulnerabilities above the declared severity threshold. _Check:_ G3.
+
+**REQ-102 — Exceptional-Condition Hygiene**
+Tool error responses SHALL NOT expose stack traces, internal file paths, or environment configuration. When an operation fails on malformed external data, the error SHALL describe the failure generically and SHALL NOT include the malformed payload. _Check:_ G1.
+
 ---
 
 ## §5 Build Process
@@ -531,7 +557,9 @@ Layer 3: Tools                 search_web, fetch_page, verify_claims, get_citati
 Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, brave, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
-                               github, jina, internet_archive, exa, tavily, yep
+                               github, jina, internet_archive, exa, tavily, yep,
+                               openalex, europe_pmc, hacker_news, gdelt, sec_edgar,
+                               world_bank
 
 Layer 1.5: Knowledge Base      Chunking, embedding generation, vector store,
                                auto-indexing hooks, collection scoping, expiry
@@ -708,8 +736,9 @@ when Jina returns 429 or error.
 ### 7.3 Provider Deprioritization
 
 `search_web` auto-selection SHALL consider current quota remaining when
-selecting. A provider at >80% usage is demoted one tier in the dispatch table.
-A provider at 100% is removed from selection until reset.
+selecting. A provider at >80% usage is demoted in the dispatch chain ordering
+per REQ-020a and REQ-034. A provider at 100% is removed from selection until
+reset.
 
 A provider in rate-limit cooldown (REQ-038) is excluded from fallback selection
 until its cooldown expires, without affecting its quota counters.
@@ -851,6 +880,12 @@ is configurable via `corroboration.similarity_threshold`.
 - Fallback depth: configure `output.fallback_depth` → verify the chain dispatches at most that many providers before reporting `all_providers_exhausted`
 - Renderer hedge: mock a slow `jina` plus a fast `native_fetch` → verify `native_fetch` serves only after the hedge window; mock a marginally-slow `jina` → verify `jina` still serves within the grace period
 - Redirect hops: configure `output.max_redirect_hops` → verify `fetch_page` follows at most that many redirect hops, re-applying the guard each hop
+- SSRF resolution: mock a hostname resolving to a loopback, private, or metadata address → verify `fetch_page` refuses the fetch with the safety-refusal code; mock a DNS failure → verify the fetch is refused (REQ-021a)
+- Content policy: retrieve content the policy flags → verify it is not stored in the knowledge base and the response reports the policy code distinct from a fetch failure; in the strictest mode verify the flagged content is refused to the caller (REQ-097)
+- Audit trail: perform a security-relevant event (refused target, config reload, key operation, quota exhaustion) → verify the audit file gains an owner-only, append-only entry containing no secret material (REQ-098)
+- Key confinement: request a key operation with a path outside the keys directory → verify the operation is refused with a confinement error (REQ-099)
+- State validation: write a poisoned quota state file → verify the server resets state and continues rather than trusting the invalid values (REQ-100)
+- Error hygiene: force an internal error → verify the tool response contains no stack trace or absolute filesystem path (REQ-102)
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
 - Rate-limit cooldown: mock a provider returning a rate-limit or anti-bot response → verify it is skipped without a new outbound call on the following request within the cooldown window, and its quota counters are unchanged (REQ-038)
@@ -925,7 +960,6 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-079 | Output Verbosity | 4.1 | G1 |
 | REQ-010 | Config File | 4.2 | G1 |
 | REQ-011 | API Key Safety | 4.2 | G1 |
-| REQ-012 | Environment Variable Mapping | 4.2 | G1 |
 | REQ-013 | Provider Discovery | 4.2 | G1 |
 | REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
@@ -1008,6 +1042,13 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 | REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
+| REQ-096 | Security Model Completeness | 4.11 | G3 |
+| REQ-097 | Content Policy | 4.11 | G0, G1 |
+| REQ-098 | Audit Trail | 4.11 | G1 |
+| REQ-099 | Key-Material Confinement | 4.11 | G1 |
+| REQ-100 | State-File Hardening | 4.11 | G1 |
+| REQ-101 | Dependency Vulnerability Gate | 4.11 | G3 |
+| REQ-102 | Exceptional-Condition Hygiene | 4.11 | G1 |
 
 ---
 
@@ -1421,7 +1462,7 @@ manifest (§9.5) is the index; version-control history is the record.
 
 ## §D Appendix: Feature Taxonomy
 
-This appendix groups every feature of the server into eight thematic areas.
+This appendix groups every feature of the server into nine thematic areas.
 Each area is a self-contained unit of work — a sprint-sized chunk — defined by
 the tools it surfaces and the requirements that govern it. The group-to-tool
 mapping lets a maintainer plan an improvement sprint as "harden the Knowledge
@@ -1435,13 +1476,14 @@ secondary concerns rather than duplicating the REQ.
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
-| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
+| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
+| 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 
 Notes:
 
@@ -1451,6 +1493,79 @@ Notes:
 - **Group 7** and **Group 8** are build-and-spec concerns with no runtime tool
   surface; they are verified by file presence and by the G3 drift detector
   rather than by live tool calls.
-- The README documents Groups 1–5 as the user-facing feature tour and
-  surfaces Group 7 (Client Artifacts) in its Skills section; Group 8 is a
+- The README documents Groups 1–5 as the user-facing feature tour, surfaces
+  Group 7 (Client Artifacts) in its Skills section, and documents Group 9
+  (Security & Content Safety) in its security section; Group 8 is a
   maintainer concern surfaced only in this spec.
+
+---
+
+## §E Appendix: Security Model
+
+REQ-096 requires this model. It names the trust boundary, the threat actors,
+and the OWASP mapping that governs which security obligations the server
+carries. The mapping is normative only through the REQs it cites; a row whose
+category is handled by a residual risk rather than a requirement is
+explicitly named here so the security posture is auditable without guessing.
+
+### E.1 Trust Boundary and Threat Actors
+
+- **Trust boundary.** The server is a single-user local process speaking MCP
+  over stdio. The operator who launches the process, its environment
+  variables, and its configuration files are inside the boundary. Everything
+  else is outside: provider backends, fetched web content, the MCP client,
+  and any other user of the machine.
+- **Threat actors.**
+  - **Malicious or compromised web content** — the primary external actor.
+    Fetched pages, search snippets, and archived documents are untrusted
+    input that the server reads, may persist, and may later recall.
+  - **Compromised or untrusted MCP client** — a client (or agent) that has
+    gained the right to call tools can drive the server's capabilities,
+    including its outbound fetches and its file-touching operations.
+  - **Local multi-user host** — other users of a shared machine with access
+    to the process's temp and state directories.
+
+### E.2 OWASP Top 10:2025 Mapping
+
+| Category | Controlling REQ / disposition |
+|----------|-------------------------------|
+| A01 Broken Access Control | REQ-099 (key-material confinement), REQ-100 (state ownership) |
+| A02 Security Misconfiguration | REQ-037, REQ-040 (config validation and reload) |
+| A03 Software Supply Chain Failures | REQ-101 (dependency vulnerability gate) |
+| A04 Cryptographic Failures | REQ-084–REQ-086 (KB at-rest encryption), REQ-100 (state-file permissions) |
+| A05 Injection | REQ-003/REQ-020d (parameter normalization and transparency), REQ-102 (error hygiene) |
+| A06 Insecure Design | REQ-096 (this model) |
+| A07 Authentication Failures | REQ-011, REQ-012 (key handling) — residual: stdio transport has no authentication by design (SR-002) |
+| A08 Software and Data Integrity Failures | REQ-085 (KB data preservation), REQ-100 (state validation) |
+| A09 Security Logging and Alerting Failures | REQ-098 (audit trail) |
+| A10 Mishandling of Exceptional Conditions | REQ-102 (exceptional-condition hygiene) |
+
+### E.3 OWASP LLM Top 10:2025 Mapping
+
+| Risk | Controlling REQ / disposition |
+|------|-------------------------------|
+| LLM01 Prompt Injection | REQ-097 (content policy flags injection-style content and refuses storage of flagged material); residual: retrieved content that passes the policy still reaches the client and is treated as data, not instructions |
+| LLM02 Sensitive Information Disclosure | REQ-011 (keys never surfaced), REQ-084 (KB at-rest encryption), REQ-004 + truncation permissions |
+| LLM03 Supply Chain | REQ-101 |
+| LLM04 Data and Model Poisoning | REQ-097 (policy before storage), REQ-026e/REQ-076 (KB recall limited to corroboration, never sole source) |
+| LLM05 Improper Output Handling | Residual: output shaping is the client skills' responsibility (REQ-051/052) |
+| LLM06 Excessive Agency | REQ-099 (tool-surface file confinement), REQ-021a (fetch target safety), REQ-090/092 (tool behavioral disclosure) |
+| LLM07 System Prompt Leakage | Residual: the server never inspects client prompts; keys are env-only (REQ-011) |
+| LLM08 Vector and Embedding Weaknesses | REQ-097 (flagged content not stored), REQ-082 (embedding reconciliation) |
+| LLM09 Misinformation | REQ-026 family (corroboration, authority weighting, provenance) |
+| LLM10 Unbounded Consumption | REQ-030, REQ-033, REQ-034 (throttling and quota), REQ-028/REQ-020f/REQ-021d bounds |
+
+### E.4 Residual Risks
+
+- **Resolve-vs-connect TOCTOU (DNS rebinding).** REQ-021a and the
+  implementation resolve the hostname and validate every resolved address
+  before connecting, but the address used by the underlying fetch may differ
+  from the validated set in a narrow rebinding window. No DNS pinning is
+  performed because the transport does not expose the connected address.
+- **KB plaintext by default.** At-rest encryption (REQ-084) is opt-in and the
+  shipped default is plaintext (gate-enforced). Operators serving sensitive
+  audiences should enable encryption.
+- **External content-policy service trust.** When an external assessment
+  service is configured (REQ-097), its verdict is advisory to the built-in
+  assessment; a compromised external service cannot cause storage of content
+  the built-in policy flags, but can add false positives.

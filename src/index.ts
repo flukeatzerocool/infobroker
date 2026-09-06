@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -14,10 +14,12 @@ import { retryWithBackoff, ParseError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
-import { assertPublicUrl, fetchFollowRedirects, type FetchLike } from "./lib/url-guard.js";
+import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
+import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
+import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
@@ -30,6 +32,7 @@ import { deriveExpansions } from "./expand.js";
 import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
 import { infobrokerFetch } from "./http.js";
 import { stripHtml } from "./lib/html.js";
+import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 
 const START_TIME = Date.now();
@@ -492,7 +495,24 @@ async function doWebSearch(
   // "the serving provider was not the chain's first-choice provider" (the
   // hedge raced ahead of the primary), not merely "a provider errored".
   const buildSuccess = async (slug: string, filtered: SearchResult[], elapsed: number): Promise<string> => {
-    autoIndex(filtered, slug, undefined, undefined, query, timeRange);
+    // REQ-097: search results are assessed before storage; in the strictest
+    // mode flagged results are also withheld from the response.
+    let policyFlags = 0;
+    if (policyMode() !== "off") {
+      const partitioned = await Promise.all(
+        filtered.map(async (r) => ({ r, policy: await checkContent(`${r.title}\n${r.snippet}`, r.url) }))
+      );
+      policyFlags = partitioned.filter((p) => p.policy.flagged).length;
+      const storable = partitioned.filter((p) => disposition(p.policy.flagged) !== "refuse");
+      const blocked = partitioned.filter((p) => disposition(p.policy.flagged) === "refuse").map((p) => p.r);
+      if (blocked.length > 0) {
+        filtered = filtered.filter((r) => !blocked.includes(r));
+      }
+      autoIndex(storable.map((p) => p.r), slug, undefined, undefined, query, timeRange);
+    } else {
+      autoIndex(filtered, slug, undefined, undefined, query, timeRange);
+    }
+    const policyNote = policyMeta(policyFlags, policyMode());
 
     if (deep && !compactMode()) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
@@ -507,12 +527,22 @@ async function doWebSearch(
         config.fetch?.max_passages ?? 1,
         maxPages,
         async (url) => {
-          const fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
+          let fetched;
+          try {
+            fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
+          } catch (e) {
+            // REQ-021a: a refused page falls back to its snippet (REQ-028).
+            if (e instanceof SsrRefusalError) return null;
+            throw e;
+          }
           if (!fetched) return null;
+          // REQ-097: the strictest mode refuses flagged pages to the caller.
+          const policy = await checkContent(fetched.content, url);
+          if (disposition(policy.flagged) === "refuse") return null;
           return { content: fetched.content, slug: fetched.slug };
         },
         {
-          detectDate: deepConf.detect_date ? detectPageDate : undefined,
+          detectDate: deepConf.detect_date ? (u: string) => detectPageDate(u, allowPrivateDeep) : undefined,
           rank: rankPassages,
           autoIndex: (r, content, provider) =>
             autoIndex([{ title: r.title, url: r.url, snippet: content, ...(r.last_updated ? { source_updated_at: r.last_updated } : {}) }], provider, undefined, "deep"),
@@ -526,6 +556,7 @@ async function doWebSearch(
         ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
         deep: true,
         pages_read: deepMeta.pages_read,
+        ...(policyNote ?? {}),
       }))}`;
     }
 
@@ -534,6 +565,7 @@ async function doWebSearch(
       fallback_used: slug !== primarySlug,
       quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
       ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
+      ...(policyNote ?? {}),
     }))}`;
   };
 
@@ -603,8 +635,11 @@ async function doWebSearch(
 // via a manual-redirect HEAD, then falls back to parsing HTML metadata via a
 // manual-redirect GET. Manual redirects avoid following a hop to a new host,
 // so the SSRF guard (already asserted for the requested URL) is not bypassed.
-async function detectPageDate(url: string): Promise<{ date: string; source: string; confidence: string } | undefined> {
+async function detectPageDate(url: string, allowPrivate: boolean): Promise<{ date: string; source: string; confidence: string } | undefined> {
   try {
+    // REQ-021a: the date-detection requests also resolve the target so a
+    // rebinding hostname cannot reach a private address via this path.
+    await assertPublicUrlResolved(url, allowPrivate);
     const head = await infobrokerFetch(url, { method: "HEAD", redirect: "manual", providerSlug: "native_fetch" });
     const headerData: Record<string, string | string[] | undefined> = {};
     head.headers.forEach((v, k) => (headerData[k] = v));
@@ -681,6 +716,9 @@ async function fetchPageContent(
       providerLastSuccess[slug] = Date.now();
       return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
     } catch (e) {
+      // REQ-021a: a safety refusal must surface with its distinct code, not
+      // as a generic provider failure.
+      if (e instanceof SsrRefusalError) throw e;
       providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
@@ -760,7 +798,9 @@ async function doFetchPage(
   try {
     assertPublicUrl(url, allowPrivate);
   } catch (e) {
-    return `[ERROR] ${json(err("none", "invalid_input", e instanceof Error ? e.message : String(e), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+    // REQ-098: refused network targets are recorded in the audit trail.
+    audit("network_target_refused", Array.isArray(url) ? url.join(", ") : url);
+    return `[ERROR] ${json(err("none", "invalid_input", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), `Set fetch.allow_private_urls=true to permit private targets`))}`;
   }
 
   // REQ-021d: bounded same-origin crawl. Fetches the start page raw, discovers
@@ -772,20 +812,35 @@ async function doFetchPage(
     const pages: Array<{ url: string; depth: number; title: string; snippet: string }> = [];
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url, depth: 0 }];
+    let policyFlags = 0;
     while (queue.length > 0 && pages.length < maxPages) {
       const cur = queue.shift()!;
       if (visited.has(cur.url) || cur.depth > maxDepth) continue;
       visited.add(cur.url);
-      const fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate);
+      let fetched;
+      try {
+        fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate);
+      } catch (e) {
+        // REQ-021a/021d: a refused crawl hop is skipped, not listed.
+        if (e instanceof SsrRefusalError) continue;
+        throw e;
+      }
       if (fetched === null) continue;
       const text = stripHtml(fetched.content);
+      // REQ-097: crawled pages pass the content policy per hop.
+      const policy = await checkContent(text, cur.url);
+      const disp = disposition(policy.flagged);
+      if (disp === "refuse") continue;
+      if (policy.flagged) policyFlags++;
       pages.push({
         url: cur.url,
         depth: cur.depth,
         title: new URL(cur.url).hostname,
         snippet: text.slice(0, effectiveMax),
       });
-      autoIndex([{ title: new URL(cur.url).hostname, url: cur.url, snippet: text.slice(0, 4000) }], "native_fetch", undefined, "crawl");
+      if (disp === "store") {
+        autoIndex([{ title: new URL(cur.url).hostname, url: cur.url, snippet: text.slice(0, 4000) }], "native_fetch", undefined, "crawl");
+      }
       if (cur.depth < maxDepth) {
         for (const link of extractLinks(fetched.content, cur.url)) {
           if (!visited.has(link) && isSameOrigin(link, url)) {
@@ -804,6 +859,7 @@ async function doFetchPage(
         pages: pages.length,
         max_pages: maxPages,
         max_depth: maxDepth,
+        ...(policyMeta(policyFlags, policyMode()) ?? {}),
       },
     })}`;
   }
@@ -812,9 +868,22 @@ async function doFetchPage(
   // microdata alongside the page content. Uses the raw native_fetch render so
   // the embedded metadata is still present.
   if (extract) {
-    const fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate);
+    let fetched;
+    try {
+      fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate);
+    } catch (e) {
+      if (e instanceof SsrRefusalError) {
+        return `[ERROR] ${json(err("none", "invalid_input", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+      }
+      throw e;
+    }
     if (fetched === null) {
       return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
+    }
+    // REQ-097: the strictest mode refuses flagged content to the caller.
+    const policy = await checkContent(fetched.content, url);
+    if (disposition(policy.flagged) === "refuse") {
+      return `[ERROR] ${json(err("none", "content_policy_flagged", `Content at ${url} was refused by the content policy (${policy.reason})`, "Configure the content policy or retry with a different source"))}`;
     }
     const structured = extractStructured(fetched.content);
     const hasData = structured.jsonld.length > 0 || structured.microdata.length > 0 || Object.keys(structured.open_graph).length > 0;
@@ -833,22 +902,42 @@ async function doFetchPage(
       meta: {
         query_time_ms: fetched.elapsed,
         fallback_used: false,
+        ...(policyMeta(policy.flagged ? 1 : 0, policyMode()) ?? {}),
       },
     })}`;
   }
 
-  const fetched = await fetchPageContent(url, renderers, effectiveMax, allowPrivate);
+  let fetched;
+  try {
+    fetched = await fetchPageContent(url, renderers, effectiveMax, allowPrivate);
+  } catch (e) {
+    if (e instanceof SsrRefusalError) {
+      return `[ERROR] ${json(err("none", "invalid_input", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+    }
+    throw e;
+  }
   if (fetched === null) {
     return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
   }
   const { slug, content, truncated, elapsed } = fetched;
 
-  const pageDate = effectiveDetectDate ? await detectPageDate(url) : undefined;
+  // REQ-097: assess before storing; block mode refuses the caller, flag mode
+  // returns the content but never stores it.
+  const policy = await checkContent(content, url);
+  const disp = disposition(policy.flagged);
+  if (disp === "refuse") {
+    return `[ERROR] ${json(err("none", "content_policy_flagged", `Content at ${url} was refused by the content policy (${policy.reason})`, "Configure the content policy or retry with a different source"))}`;
+  }
+  const policyNote = policyMeta(policy.flagged ? 1 : 0, policyMode());
+
+  const pageDate = effectiveDetectDate ? await detectPageDate(url, allowPrivate) : undefined;
   const dateMeta = pageDate
     ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
     : {};
 
-  autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
+  if (disp === "store") {
+    autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
+  }
 
   if (question) {
     const passages = rankPassages(content, question, effectivePassageSize ?? 100, effectiveMaxPassages ?? 1);
@@ -870,6 +959,7 @@ async function doFetchPage(
         meta: {
           query_time_ms: elapsed,
           fallback_used: false,
+          ...(policyNote ?? {}),
         },
       })}`;
     }
@@ -889,6 +979,7 @@ async function doFetchPage(
       meta: {
         query_time_ms: elapsed,
         fallback_used: false,
+        ...(policyNote ?? {}),
       },
       ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
     })}`;
@@ -907,6 +998,7 @@ async function doFetchPage(
     meta: {
       query_time_ms: elapsed,
       fallback_used: false,
+      ...(policyNote ?? {}),
     },
     ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
   })}`;
@@ -1087,7 +1179,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.05",
+  version: "2026.09.06",
 });
 
 // --- search_web ---
@@ -1143,7 +1235,7 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question, need the page's last-updated date (detect_date), a bounded same-origin crawl (crawl), or structured metadata (extract). Do NOT use for a general topic search (use infobroker_search_web) or for claim verification across sources (use infobroker_verify_claims). Parameter interactions: `question` switches the response from the whole page to passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` recursively fetches same-origin pages up to config caps; `max_length` caps the characters returned (default 50000); `extract` adds JSON-LD, OpenGraph, and microdata alongside the content; `renderer` selects the extraction backend — jina needs no API key and native_fetch is the fallback when Jina is throttled. Makes external HTTP calls, truncates very long pages, and needs no API key. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question, need the page's last-updated date (detect_date), a bounded same-origin crawl (crawl), or structured metadata (extract). Do NOT use for a general topic search (use infobroker_search_web) or for claim verification across sources (use infobroker_verify_claims). Parameter interactions: `question` switches the response from the whole page to passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` recursively fetches same-origin pages up to config caps; `max_length` caps the characters returned (default 50000); `extract` adds JSON-LD, OpenGraph, and microdata alongside the content; `renderer` selects the extraction backend — jina needs no API key and native_fetch is the fallback when Jina is throttled. Makes external HTTP calls, truncates very long pages, and needs no API key. Fetched pages are auto-indexed into the knowledge base unless the content policy flags them (see `manage_kb`), in which case flag mode returns them without storage and block mode refuses them. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
@@ -1350,7 +1442,8 @@ server.registerTool(
           }
           let target: ResolvedKey | null = null;
           try {
-            target = { kind: "raw", dek: readKeyFile(keyFile) };
+            // REQ-099: the rekey target key file is confined to the keys directory.
+            target = { kind: "raw", dek: readKeyFile(resolveKeyFile(keyFile)) };
           } catch {
             target = null;
           }
@@ -1409,6 +1502,11 @@ server.registerTool(
             return { content: [{ type: "text" as const, text: fetched }] };
           }
           const parsed = JSON.parse(fetched.slice(5));
+          // REQ-097: a fetched URL that the policy flagged in flag mode was
+          // returned by the fetch but must not be persisted by the ingest.
+          if (parsed.content_policy?.flagged) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "content_policy_flagged", "Fetched content was flagged by the content policy and was not stored", "Configure the content policy or ingest different content"))}` }] };
+          }
           content = parsed.results?.[0]?.snippet || "";
           if (!sourceUpdatedAt && parsed.last_updated) {
             sourceUpdatedAt = parsed.last_updated;
@@ -1462,7 +1560,7 @@ server.registerTool(
       const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "deleted", url: "", snippet: `${count} chunks removed` }], meta: { chunks_removed: count } });
       return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
     } catch (e) {
-      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", e instanceof Error ? e.message : String(e), "Check knowledge base configuration"))}` }] };
+      return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), "Check knowledge base configuration"))}` }] };
     }
   }
 );
@@ -1489,6 +1587,8 @@ server.registerTool(
         initKb(newConfig.kb);
         console.error("[infobroker] Knowledge base re-initialized");
       }
+      // REQ-098: config reloads are recorded in the audit trail.
+      audit("config_reload", `success (${Object.keys(newConfig.providers).length} providers)`);
       const lock = getKbLockError();
       const state = getKbEncryptionState();
       const guidance =
@@ -1502,11 +1602,12 @@ server.registerTool(
         (lock ? ` Knowledge base LOCKED: ${lock.message}` : "");
       return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message, provider_count: Object.keys(newConfig.providers).length }] })}` }] };
     } catch (e) {
+      audit("config_reload", "failed — previous config remains active");
       return {
         content: [
           {
             type: "text" as const,
-            text: `[ERROR] ${json(err("system", "config_error", (e instanceof Error ? e.message : String(e)) + ". Previous config remains active.", "Fix config.json and retry"))}`,
+            text: `[ERROR] ${json(err("system", "config_error", sanitizeErrorMessage((e instanceof Error ? e.message : String(e)) + ". Previous config remains active."), "Fix config.json and retry"))}`,
           },
         ],
       };
@@ -1574,8 +1675,10 @@ process.on("SIGHUP", () => {
       initKb(newConfig.kb);
     }
     console.error("[infobroker] Configuration reloaded via SIGHUP");
+    audit("config_reload", "success via SIGHUP");
   } catch (e) {
     console.error("[infobroker] SIGHUP reload failed:", e instanceof Error ? e.message : String(e));
+    audit("config_reload", "failed via SIGHUP — previous config remains active");
   }
 });
 

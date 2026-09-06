@@ -481,15 +481,57 @@ move to a new key without losing content. After re-keying, point
 confirm the new key opens the store.
 
 ```
-infobroker_manage_kb action=encryption operation=generate_key key_file=~/.config/infobroker/kb.key
-infobroker_manage_kb action=encryption operation=backup    key_file=~/.backup/kb.key.bak
+infobroker_manage_kb action=encryption operation=generate_key key_file=~/.local/share/infobroker/keys/kb.key
+infobroker_manage_kb action=encryption operation=backup    key_file=~/.local/share/infobroker/keys/kb.key.bak
 infobroker_reload_config
 ```
+
+Tool-surface key operations (`generate_key`, `backup`, `rekey`'s target)
+are confined to the keys directory: `kb.keys_dir` when configured, else the
+`keys` sibling of the knowledge base storage path
+(`~/.local/share/infobroker/keys` by default). A path outside that
+directory is refused. The `kb.encryption.key_file` *configuration* value is
+operator-owned and not subject to the confinement.
 
 Add the `kb.encryption` block to `config.local.json` before reloading to
 enable, or remove it before reloading to disable. When the store is locked,
 `status`, `verify`, and `rekey` remain reachable so you can recover without
 first unlocking.
+
+### Content policy
+
+Infobroker reads the open web and caches what it retrieves, so retrieved
+content is assessed against a configurable policy before it is stored (and,
+in the strictest mode, before it is returned). The policy flags content
+that matches heuristic categories — prompt-injection instructions,
+credential phishing, malware/exploit material, and adult content — and can
+consult an external assessment service when one is configured. It is on by
+default in `flag` mode: flagged content is still returned to you for
+legitimate research, but it is never written to the knowledge base, and
+every flag is recorded in the audit trail.
+
+```json
+{
+  "content_policy": {
+    "mode": "flag",
+    "threshold": 0.2,
+    "patterns": { "prompt_injection": ["ignore previous instructions"] }
+  }
+}
+```
+
+Modes: `off` disables assessment; `flag` (default) returns but never stores
+flagged content; `block` refuses flagged content to the caller. `threshold`
+tunes sensitivity (0–1, default 0.2 — a single match flags). `patterns`
+extend or override the built-in categories per category name. `external_url_env`
+names an environment variable holding the URL of an external assessor, and
+`external_api_key_env` optionally names one holding its bearer key; when the
+external service is unreachable the built-in assessment applies.
+
+Security-relevant events — refused network targets, policy flags, config
+reloads, encryption transitions, key operations, and quota exhaustion — are
+appended to an owner-only audit log at `output.audit_log_path` (default
+`~/.local/share/infobroker/audit.log`).
 
 ### Bring your own endpoint
 

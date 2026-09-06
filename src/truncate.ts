@@ -1,4 +1,4 @@
-// @implements REQ-004
+// @implements REQ-004 REQ-100
 import { writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -18,11 +18,11 @@ export function maybeTruncate(text: string, maxChars: number): TruncatedText {
 
   const tmpDir = join(tmpdir(), "infobroker");
   if (!existsSync(tmpDir)) {
-    mkdirSync(tmpDir, { recursive: true });
+    mkdirSync(tmpDir, { recursive: true, mode: 0o700 });
   }
   const fname = `trunc-${Date.now()}.txt`;
   const fpath = join(tmpDir, fname);
-  writeFileSync(fpath, text);
+  writeFileSync(fpath, text, { mode: 0o600 });
   try {
     chmodSync(fpath, 0o600);
   } catch {

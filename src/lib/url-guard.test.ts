@@ -1,6 +1,13 @@
-// @implements REQ-021a
+// @implements REQ-021a resolved-address
 import { describe, it, expect } from "vitest";
-import { assertPublicUrl, isPrivateHostname, fetchFollowRedirects } from "./url-guard.js";
+import { assertPublicUrl, assertPublicUrlResolved, isPrivateHostname, fetchFollowRedirects, SsrRefusalError } from "./url-guard.js";
+
+const stubResolver = async (host: string) => {
+  if (host === "private.example") return [{ address: "10.0.0.5", family: 4 }];
+  if (host === "rebind.example") return [{ address: "169.254.169.254", family: 4 }];
+  if (host === "unresolvable.example") throw new Error("ENOTFOUND");
+  return [{ address: "93.184.216.34", family: 4 }];
+};
 
 describe("url-guard", () => {
   it("rejects loopback, private, link-local, and metadata hosts", () => {
@@ -30,6 +37,35 @@ describe("url-guard", () => {
   });
 });
 
+describe("assertPublicUrlResolved (REQ-021a resolved-address)", () => {
+  it("refuses a hostname that resolves to a private address", async () => {
+    await expect(assertPublicUrlResolved("http://private.example/x", false, stubResolver))
+      .rejects.toThrow(SsrRefusalError);
+    await expect(assertPublicUrlResolved("http://private.example/x", false, stubResolver))
+      .rejects.toThrow(/resolved private\/internal address/);
+  });
+
+  it("refuses a hostname that resolves to a metadata address", async () => {
+    await expect(assertPublicUrlResolved("http://rebind.example/latest", false, stubResolver))
+      .rejects.toThrow(/resolved private\/internal address/);
+  });
+
+  it("fails closed when resolution fails", async () => {
+    await expect(assertPublicUrlResolved("http://unresolvable.example/x", false, stubResolver))
+      .rejects.toThrow(SsrRefusalError);
+    await expect(assertPublicUrlResolved("http://unresolvable.example/x", false, stubResolver))
+      .rejects.toThrow(/Could not resolve host/);
+  });
+
+  it("accepts a hostname that resolves publicly", async () => {
+    await expect(assertPublicUrlResolved("http://example.com/x", false, stubResolver)).resolves.toBeUndefined();
+  });
+
+  it("skips resolution for private targets when opted out", async () => {
+    await expect(assertPublicUrlResolved("http://private.example/x", true, stubResolver)).resolves.toBeUndefined();
+  });
+});
+
 describe("fetchFollowRedirects", () => {
   function resp(status: number, location?: string, body = "content") {
     return {
@@ -40,9 +76,12 @@ describe("fetchFollowRedirects", () => {
     };
   }
 
+  const guard = (fetchImpl: never, url = "https://example.com/a") =>
+    fetchFollowRedirects(url, false, fetchImpl, 5, "Infobroker/1.0", stubResolver);
+
   it("returns body for a direct 200 response", async () => {
     const fetchImpl = async () => resp(200);
-    await expect(fetchFollowRedirects("https://example.com/a", false, fetchImpl as never)).resolves.toBe("content");
+    await expect(guard(fetchImpl as never)).resolves.toBe("content");
   });
 
   it("follows a chain of redirects and returns the final body", async () => {
@@ -53,7 +92,7 @@ describe("fetchFollowRedirects", () => {
       if (url === "https://example.com/next") return resp(301, "https://example.com/final");
       return resp(200, undefined, "final-body");
     };
-    await expect(fetchFollowRedirects("https://example.com/start", false, fetchImpl as never)).resolves.toBe("final-body");
+    await expect(guard(fetchImpl as never, "https://example.com/start")).resolves.toBe("final-body");
     expect(calls).toEqual([
       "https://example.com/start",
       "https://example.com/next",
@@ -63,8 +102,14 @@ describe("fetchFollowRedirects", () => {
 
   it("refuses a redirect that resolves to a private host", async () => {
     const fetchImpl = async () => resp(302, "http://169.254.169.254/latest");
-    await expect(fetchFollowRedirects("https://example.com/start", false, fetchImpl as never))
+    await expect(guard(fetchImpl as never, "https://example.com/start"))
       .rejects.toThrow(/private\/internal/);
+  });
+
+  it("refuses a redirect to a public host that resolves privately", async () => {
+    const fetchImpl = async () => resp(302, "http://private.example/x");
+    await expect(guard(fetchImpl as never, "https://example.com/start"))
+      .rejects.toThrow(/resolved private\/internal address/);
   });
 
   it("allows a redirect to a private host when opted out", async () => {
@@ -72,18 +117,18 @@ describe("fetchFollowRedirects", () => {
       if (url === "https://example.com/start") return resp(302, "http://localhost:8080/x");
       return resp(200, undefined, "private-body");
     };
-    await expect(fetchFollowRedirects("https://example.com/start", true, fetchImpl as never)).resolves.toBe("private-body");
+    await expect(fetchFollowRedirects("https://example.com/start", true, fetchImpl as never, 5, "Infobroker/1.0", stubResolver))
+      .resolves.toBe("private-body");
   });
 
   it("throws when a redirect hop exceeds the maximum", async () => {
     const fetchImpl = async () => resp(302, "/loop");
-    await expect(fetchFollowRedirects("https://example.com/loop", false, fetchImpl as never, 3))
+    await expect(fetchFollowRedirects("https://example.com/loop", false, fetchImpl as never, 3, "Infobroker/1.0", stubResolver))
       .rejects.toThrow(/Too many redirects/);
   });
 
   it("throws when a redirect has no Location header", async () => {
     const fetchImpl = async () => resp(302);
-    await expect(fetchFollowRedirects("https://example.com/start", false, fetchImpl as never))
-      .rejects.toThrow(/no Location header/);
+    await expect(guard(fetchImpl as never)).rejects.toThrow(/no Location header/);
   });
 });

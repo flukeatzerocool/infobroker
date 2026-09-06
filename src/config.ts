@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-012 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084
+// @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
@@ -193,6 +193,36 @@ function validateConfig(config: Config): void {
   if (config.output.rate_limit_cooldown_ms !== undefined && (typeof config.output.rate_limit_cooldown_ms !== "number" || config.output.rate_limit_cooldown_ms < 0)) {
     errors.push("output.rate_limit_cooldown_ms must be a non-negative number");
   }
+  if (config.output.audit_log_path !== undefined && typeof config.output.audit_log_path !== "string") {
+    errors.push("output.audit_log_path must be a string");
+  }
+
+  if (config.content_policy) {
+    const cp = config.content_policy;
+    if (!["off", "flag", "block"].includes(cp.mode)) {
+      errors.push("content_policy.mode must be one of: off, flag, block");
+    }
+    if (cp.threshold !== undefined && (typeof cp.threshold !== "number" || cp.threshold < 0 || cp.threshold > 1)) {
+      errors.push("content_policy.threshold must be a number between 0 and 1");
+    }
+    if (cp.external_url_env !== undefined && typeof cp.external_url_env !== "string") {
+      errors.push("content_policy.external_url_env must be a string");
+    }
+    if (cp.external_api_key_env !== undefined && typeof cp.external_api_key_env !== "string") {
+      errors.push("content_policy.external_api_key_env must be a string");
+    }
+    if (cp.patterns !== undefined) {
+      if (typeof cp.patterns !== "object" || cp.patterns === null || Array.isArray(cp.patterns)) {
+        errors.push("content_policy.patterns must be an object");
+      } else {
+        for (const [cat, pats] of Object.entries(cp.patterns)) {
+          if (!Array.isArray(pats) || pats.some((p) => typeof p !== "string")) {
+            errors.push(`content_policy.patterns.${cat} must be an array of strings`);
+          }
+        }
+      }
+    }
+  }
 
   if (config.fetch) {
     if (config.fetch.passage_size !== undefined && (typeof config.fetch.passage_size !== "number" || config.fetch.passage_size < 1)) {
@@ -302,6 +332,9 @@ function validateConfig(config: Config): void {
     }
     if (kb.kb_first_confidence_threshold !== undefined && typeof kb.kb_first_confidence_threshold !== "number") {
       errors.push("kb.kb_first_confidence_threshold must be a number");
+    }
+    if (kb.keys_dir !== undefined && (typeof kb.keys_dir !== "string" || kb.keys_dir.length === 0)) {
+      errors.push("kb.keys_dir must be a non-empty string when present");
     }
     if (kb.encryption !== undefined) {
       if (typeof kb.encryption !== "object" || kb.encryption === null || Array.isArray(kb.encryption)) {

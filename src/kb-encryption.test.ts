@@ -1,9 +1,9 @@
-// @implements REQ-084 REQ-085 REQ-086
+// @implements REQ-084 REQ-085 REQ-086 REQ-099
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, utimesSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbStats, kbGet, kbSearch, flushKbWrites, getKbLockError, getKbEncryptionState, runTruncSweep, rekeyStore, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo } from "./kb.js";
+import { initKb, kbIngest, kbStats, kbGet, kbSearch, flushKbWrites, getKbLockError, getKbEncryptionState, runTruncSweep, rekeyStore, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile } from "./kb.js";
 import { openEnvelope, readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { KbConfig } from "./types.js";
 
@@ -28,6 +28,9 @@ function makeConfig(dir: string, encryption: { enabled: boolean; key_file?: stri
       default_tier: "stable",
     },
     encryption,
+    // REQ-099: key-material operations are confined to the keys directory,
+    // which these tests designate as the store's own directory.
+    keys_dir: dir,
   };
 }
 
@@ -265,6 +268,7 @@ describe("KB encryption user journey (enable/disable/recover)", () => {
 
   it("generateKeyFile writes a 0600 key file and never returns the secret", () => {
     const dir = mkdtempSync(join(tmpdir(), "ibk-keygen-"));
+    initKb(makeConfig(dir, { enabled: false }));
     const keyPath = join(dir, "sub", "kb.key");
     const returned = generateKeyFile(keyPath);
     expect(returned).toBe(keyPath);
@@ -332,6 +336,7 @@ describe("KB encryption user journey (enable/disable/recover)", () => {
 
   it("backupKeyFile copies the active key file to a backup path", () => {
     const dir = mkdtempSync(join(tmpdir(), "ibk-bkp-"));
+    initKb(makeConfig(dir, { enabled: false }));
     const keyPath = join(dir, "kb.key");
     generateKeyFile(keyPath);
     initKb(makeConfig(dir, { enabled: true, key_file: keyPath }));
@@ -344,6 +349,19 @@ describe("KB encryption user journey (enable/disable/recover)", () => {
     expect(existsSync(backupPath)).toBe(true);
     expect(readKeyFile(backupPath).equals(readKeyFile(keyPath))).toBe(true);
 
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses key-material paths outside the keys directory (REQ-099)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-keyconf-"));
+    initKb(makeConfig(dir, { enabled: false }));
+    const keyPath = join(dir, "kb.key");
+    const outside = join(dir, "..", "outside.key");
+    expect(() => resolveKeyFile(outside)).toThrow(/outside the keys directory/);
+    expect(() => generateKeyFile(outside)).toThrow(/outside the keys directory/);
+    generateKeyFile(keyPath);
+    initKb(makeConfig(dir, { enabled: true, key_file: keyPath }));
+    expect(() => backupKeyFile(join(dir, "..", "leak.bak"))).toThrow(/outside the keys directory/);
     rmSync(dir, { recursive: true, force: true });
   });
 });

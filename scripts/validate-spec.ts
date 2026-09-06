@@ -60,11 +60,11 @@ while ((match = reqPattern.exec(specText)) !== null) {
 }
 
 // Client- and distribution-artifact REQs verified by file presence (skills,
-// docs, server.json), not by src/ source citations.
-const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091"]);
+// docs, server.json, build wiring), not by src/ source citations.
+const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091", "REQ-101"]);
 
 // Meta-REQs that describe the spec process itself
-const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080"]);
+const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080", "REQ-096"]);
 
 // --- Collect @implements citations from source files ---
 
@@ -678,6 +678,46 @@ function checkAgentsDoc(): void {
 }
 
 checkAgentsDoc();
+
+// --- Security model completeness (REQ-096) ---
+//
+// §E must exist and name both OWASP mappings, and every security REQ must be
+// traceable into the model so a security requirement that loses its gate or
+// its model row is a spec defect.
+function checkSecurityModel(): void {
+  const eIdx = specText.indexOf("## §E Appendix: Security Model");
+  if (eIdx === -1) {
+    error("Security model appendix (§E) missing — REQ-096");
+    return;
+  }
+  const appendix = specText.slice(eIdx);
+  if (!/OWASP Top 10:2025/.test(appendix)) {
+    error("Security model (§E) missing OWASP Top 10:2025 mapping — REQ-096");
+  }
+  if (!/OWASP LLM Top 10:2025/.test(appendix)) {
+    error("Security model (§E) missing OWASP LLM Top 10:2025 mapping — REQ-096");
+  }
+  for (const req of ["REQ-096", "REQ-097", "REQ-098", "REQ-099", "REQ-100", "REQ-101", "REQ-102"]) {
+    if (!new RegExp(`\\b${req}\\b`).test(appendix)) {
+      error(`Security model (§E) does not reference ${req} — REQ-096`);
+    }
+  }
+}
+checkSecurityModel();
+
+// --- Dependency vulnerability gate wiring (REQ-101) ---
+function checkDependencyGate(): void {
+  try {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+    const check = String(pkg?.scripts?.check ?? "");
+    if (!/\baudit\b/.test(check)) {
+      error("package.json check script does not include a dependency audit — REQ-101");
+    }
+  } catch {
+    error("package.json missing or unparseable — REQ-101 dependency gate check unable to run");
+  }
+}
+checkDependencyGate();
 
 // --- Report ---
 

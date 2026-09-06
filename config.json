@@ -302,7 +302,18 @@
     "hedge_min_delay_ms": 200,
     "hedge_max_delay_ms": 1500,
     "hedge_grace_ms": 300,
-    "rate_limit_cooldown_ms": 30000
+    "rate_limit_cooldown_ms": 30000,
+    "audit_log_path": "~/.local/share/infobroker/audit.log"
+  },
+  "content_policy": {
+    "mode": "flag",
+    "threshold": 0.2,
+    "patterns": {
+      "prompt_injection": ["ignore previous instructions", "ignore all previous instructions", "disregard prior instructions", "you are now", "system prompt is"],
+      "credential_phishing": ["verify your account", "confirm your password", "update your billing", "login credentials"],
+      "malware_exploit": ["reverse shell", "exploit code", "payload delivery", "malware download"],
+      "adult_content": ["sexually explicit", "adult content"]
+    }
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",
@@ -327,6 +338,7 @@
     },
     "kb_first_relevance_threshold": 0.3,
     "kb_first_confidence_threshold": 0.5,
-    "maintenance_interval_minutes": 60
+    "maintenance_interval_minutes": 60,
+    "keys_dir": "~/.local/share/infobroker/keys"
   }
 }

@@ -58,7 +58,9 @@ export interface Config {
     hedge_max_delay_ms?: number;
     hedge_grace_ms?: number;
     rate_limit_cooldown_ms?: number;
+    audit_log_path?: string;
   };
+  content_policy?: ContentPolicyConfig;
   fetch?: {
     allow_private_urls?: boolean;
     passage_size?: number;
@@ -197,6 +199,15 @@ export interface KbConfig {
   kb_first_confidence_threshold: number;
   maintenance_interval_minutes: number;
   encryption?: KbEncryptionConfig;
+  keys_dir?: string;
+}
+
+export interface ContentPolicyConfig {
+  mode: "off" | "flag" | "block";
+  threshold?: number;
+  external_url_env?: string;
+  external_api_key_env?: string;
+  patterns?: Record<string, string[]>;
 }
 
 export interface KbEncryptionConfig {

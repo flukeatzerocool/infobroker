@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087 REQ-097 REQ-098 REQ-099
 import { randomUUID, randomBytes } from "node:crypto";
 import {
   readFileSync,
@@ -15,7 +15,7 @@ import {
   statSync,
   chmodSync,
 } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { join, dirname, basename, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import type { KbConfig, KbChunk, KbSearchResult, KbListEntry, KbStats } from "./types.js";
 import {
@@ -28,6 +28,8 @@ import {
   readKeyFile,
   type ResolvedKey,
 } from "./kb-crypto.js";
+import { checkContent } from "./content-policy.js";
+import { audit } from "./audit-log.js";
 
 interface VectorStore {
   chunks: KbChunk[];
@@ -513,6 +515,7 @@ export function initKb(config: KbConfig): void {
       console.warn(
         "[infobroker] Knowledge base encryption has been enabled. Enabling encryption makes the store unrecoverable without the key — back up your key now."
       );
+      audit("kb_encryption_enabled", storagePath ?? "");
       // Eager migration: encrypt the legacy plaintext store immediately so no
       // plaintext copy lingers on disk.
       if (store !== null && resolvedKey) saveStore();
@@ -527,6 +530,7 @@ export function initKb(config: KbConfig): void {
     try {
       saveStore();
       console.warn("[infobroker] Knowledge base encryption has been disabled. The store has been decrypted to plaintext on disk.");
+      audit("kb_encryption_disabled", storagePath ?? "");
     } catch (e) {
       console.error(`[infobroker] decryption-on-disable failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -884,21 +888,58 @@ export function autoIndex(
   if (!kbConfig || !kbConfig.auto_index) return;
   if (!store) return;
 
-  setImmediate(() => {
+  setImmediate(async () => {
     try {
       let totalChunks = 0;
+      let flagged = 0;
       const tier = classifyFreshness(query, timeRange, provider, sourceType || provider);
       for (const r of results) {
         if (!r.snippet && !r.title) continue;
         const text = r.snippet || r.title;
         const sourceUrl = r.url || "";
+        // REQ-097: content the policy flags is never stored, in every mode.
+        const policy = await checkContent(`${r.title}\n${text}`, sourceUrl);
+        if (policy.flagged) {
+          flagged++;
+          continue;
+        }
         totalChunks += kbIngest(text, r.title, sourceUrl, provider, collection, sourceType || provider, tier, r.source_updated_at);
+      }
+      if (flagged > 0 && store) {
+        store.events.push(`Auto-index skipped ${flagged} flagged item(s) at ${new Date().toISOString()}`);
       }
       if (totalChunks > 0) flushWrite();
     } catch {
       if (store) store.events.push(`Auto-index error at ${new Date().toISOString()}`);
     }
   });
+}
+
+/**
+ * REQ-099: the directory within which tool-surface key-material file
+ * operations are confined. Defaults to a `keys` sibling of the storage path
+ * when not configured; always resolves `~` to the home directory.
+ */
+function resolveKeysDir(): string {
+  const configured = kbConfig?.keys_dir;
+  if (configured) return resolvePath(configured);
+  if (storagePath) return join(resolvePath(storagePath), "..", "keys");
+  return join(homedir(), ".local", "share", "infobroker", "keys");
+}
+
+/**
+ * REQ-099: resolve a caller-supplied key path and refuse it when it escapes
+ * the keys directory. Returns the resolved absolute path on success.
+ */
+export function resolveKeyFile(path: string): string {
+  const dir = resolveKeysDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const resolved = resolvePath(path);
+  const rel = relative(dir, resolved);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`Key file path "${path}" is outside the keys directory (${dir})`);
+  }
+  return resolved;
 }
 
 export function runMaintenance(): void {
@@ -964,6 +1005,7 @@ export function rekeyStoreTo(from: ResolvedKey | null, to: ResolvedKey): string 
   atomicWriteFile(fpath, sealed);
   const st = statSync(fpath);
   loadedStat = { mtimeMs: st.mtimeMs, size: st.size };
+  audit("key_rekeyed", fpath);
 
   // Load the re-keyed content directly (no file re-read, so the new key need
   // not be resolvable from config yet) and register the new key for writes.
@@ -1009,10 +1051,12 @@ export function rekeyStore(): string | null {
  */
 export function generateKeyFile(path: string): string {
   const key = randomBytes(32).toString("base64");
-  const dir = dirname(path);
+  const resolved = resolveKeyFile(path);
+  const dir = dirname(resolved);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  atomicWriteFile(path, Buffer.from(`${key}\n`, "utf-8"));
-  return path;
+  atomicWriteFile(resolved, Buffer.from(`${key}\n`, "utf-8"));
+  audit("key_generated", resolved);
+  return resolved;
 }
 
 /**
@@ -1048,12 +1092,14 @@ export function backupKeyFile(backupPath: string): string | null {
   if (!keyFile || !resolved || resolved.kind !== "raw") return null;
   const src = resolvePath(keyFile);
   if (!existsSync(src)) return null;
-  const dir = dirname(backupPath);
+  const dst = resolveKeyFile(backupPath);
+  const dir = dirname(dst);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  copyFileSync(src, backupPath);
-  chmodSync(backupPath, 0o600);
-  if (store) store.events.push(`Encryption key backed up at ${new Date().toISOString()}: ${backupPath}`);
-  return backupPath;
+  copyFileSync(src, dst);
+  chmodSync(dst, 0o600);
+  if (store) store.events.push(`Encryption key backed up at ${new Date().toISOString()}: ${dst}`);
+  audit("key_backed_up", dst);
+  return dst;
 }
 
 /** On-disk format of the store at rest: "encrypted", "plaintext", or "none". */

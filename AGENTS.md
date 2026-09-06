@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.09.05)
+# AGENTS.md — Infobroker MCP Server (v2026.09.06)
 
 ## Layer Map
 
@@ -223,6 +223,7 @@ This runs:
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch |
 | `npm run test`       | Vitest unit and integration tests                  |
+| `npm run audit`      | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |
 | `scripts/check-shipped-kb-empty.ts` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited

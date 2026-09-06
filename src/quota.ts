@@ -1,7 +1,8 @@
-// @implements REQ-033 REQ-034
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+// @implements REQ-033 REQ-034 REQ-100
+import { chmodSync, mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { audit } from "./audit-log.js";
 
 interface QuotaCounter {
   daily: { count: number; resetAt: string };
@@ -19,10 +20,43 @@ let quotaState: QuotaState = { providers: {} };
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 const WRITE_INTERVAL_MS = 30_000;
 
+// REQ-100: the state directory is owner-only, and the server refuses to
+// operate on a directory it does not own (pre-creation/symlink hardening).
 function ensureDir(): void {
   if (!existsSync(QUOTA_DIR)) {
-    mkdirSync(QUOTA_DIR, { recursive: true });
+    mkdirSync(QUOTA_DIR, { recursive: true, mode: 0o700 });
   }
+  if (typeof process.getuid === "function") {
+    const st = statSync(QUOTA_DIR);
+    if (st.uid !== process.getuid()) {
+      throw new Error(`Refusing to use quota directory "${QUOTA_DIR}" — not owned by this user`);
+    }
+  }
+}
+
+function sanitizeCounter(c: unknown): { count: number; resetAt: string } | null {
+  if (!c || typeof c !== "object") return null;
+  const cc = c as Record<string, unknown>;
+  if (typeof cc.count !== "number" || !Number.isFinite(cc.count) || cc.count < 0) return null;
+  if (typeof cc.resetAt !== "string" || Number.isNaN(Date.parse(cc.resetAt))) return null;
+  return { count: Math.floor(cc.count), resetAt: cc.resetAt };
+}
+
+// REQ-100: parsed state is validated structurally and by numeric bounds before
+// use; invalid state is discarded and reset rather than trusted.
+function sanitizeQuotaState(raw: unknown): QuotaState {
+  const out: QuotaState = { providers: {} };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const providers = (raw as Record<string, unknown>).providers;
+  if (!providers || typeof providers !== "object" || Array.isArray(providers)) return out;
+  for (const [slug, counter] of Object.entries(providers)) {
+    if (typeof counter !== "object" || counter === null) continue;
+    const c = counter as Record<string, unknown>;
+    const daily = sanitizeCounter(c.daily);
+    const monthly = sanitizeCounter(c.monthly);
+    if (daily && monthly) out.providers[slug] = { daily, monthly };
+  }
+  return out;
 }
 
 function scheduleWrite(): void {
@@ -60,11 +94,22 @@ function isExpired(resetAt: string): boolean {
 }
 
 export function loadQuotaState(): void {
-  ensureDir();
+  try {
+    ensureDir();
+  } catch (e) {
+    audit("state_dir_refused", e instanceof Error ? e.message : String(e));
+    quotaState = { providers: {} };
+    return;
+  }
   try {
     if (existsSync(QUOTA_FILE)) {
       const raw = readFileSync(QUOTA_FILE, "utf-8");
-      quotaState = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as unknown;
+      const cleaned = sanitizeQuotaState(parsed);
+      if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
+        audit("quota_state_reset", "persisted quota state failed validation and was reset");
+      }
+      quotaState = cleaned;
     }
   } catch {
     quotaState = { providers: {} };
@@ -72,8 +117,17 @@ export function loadQuotaState(): void {
 }
 
 function saveQuotaState(): void {
-  ensureDir();
-  writeFileSync(QUOTA_FILE, JSON.stringify(quotaState, null, 2));
+  try {
+    ensureDir();
+    writeFileSync(QUOTA_FILE, JSON.stringify(quotaState, null, 2), { mode: 0o600 });
+    try {
+      chmodSync(QUOTA_FILE, 0o600);
+    } catch {
+      // best effort
+    }
+  } catch (e) {
+    audit("quota_state_write_refused", e instanceof Error ? e.message : String(e));
+  }
 }
 
 export function getOrCreateCounter(slug: string): QuotaCounter {

@@ -2,7 +2,45 @@
 
 ## Active Decisions
 
-### D-046: `search_web` Rename and Tool-Description TDQS Enrichment (2026.09.06)
+### D-047: OWASP Security Baseline, Content Policy, and Spec-Quality Pass (2026.09.06)
+
+A spec-review baseline (8 dimensions) and a threat-modeling pass surfaced two
+demonstrated gaps: the server auto-ingests unfiltered web content into a
+persistent KB that is later recalled into answers (a data-protection exposure
+for professional/educational audiences), and security detail was thin at the
+edges (no audit trail, no tool-surface file confinement, no persisted-state
+integrity, no documented security model). OWASP is adopted as the baseline —
+Top 10:2025 and LLM Top 10:2025 mapped in a new §E appendix, every category
+to a controlling REQ or a named residual risk (REQ-096, G3-verified).
+
+Design decisions:
+
+- **Content policy default is `flag`, not `off` or `block`** (REQ-097).
+  `flag` returns flagged content to the caller (legitimate research on
+  sensitive topics still works) but never stores it; `block` is the
+  opt-in strictest mode; `off` preserves legacy behavior. The built-in
+  assessment is zero-dependency (pattern categories), with an optional
+  external assessor whose failure falls back to the built-in. Assessment
+  sits at the storage boundary (auto-index choke point) plus the return
+  boundary of the content-returning tools.
+- **Key confinement applies to the tool surface, not configuration**
+  (REQ-099). `kb.encryption.key_file` is operator-owned and unrestricted;
+  only caller-supplied `key_file` tool parameters are confined to the keys
+  directory, so existing configs keep working while a compromised client
+  cannot exfiltrate key material to an arbitrary path.
+- **SSRF resolution is a deny-list refinement, not an allow-list** (REQ-021a
+  alignment). Hostnames are resolved and every resolved address is validated
+  per hop and per request; the residual resolve-vs-connect TOCTOU is a named
+  residual risk in §E because the transport exposes no connected address.
+- **REQ-096/101 are gate-level, not runtime, REQs**: 096 is a meta-REQ
+  (like REQ-077/078), 101 is an artifact REQ (like REQ-091), so neither
+  needs a source-file citation; the gate enforces both.
+
+Alternatives rejected: ASVS 5.0 as a full L1 requirement manifest (heavy,
+no demonstrated gap beyond the mapped categories); a block-by-default
+content policy (breaks sensitive-topic research); DNS pinning (not possible
+with the current transport).
+Resolved findings: SR-1..SR-10 from the spec-review baseline.
 
 Glama's tool-definition quality audit (TDQS) scored the server 4.6/5 with a
 4.3 minimum (`get_citations`) after the D-038 rework. The remaining gaps

@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026.09.06 — OWASP security model, content policy, and spec-quality pass
+
+- Adopted OWASP as the security baseline (D-047): new §4.11 "Security and
+  Content Safety" and §E "Security Model" map every OWASP Top 10:2025 and
+  LLM Top 10:2025 category to a controlling REQ or a named residual risk,
+  verified by a new G3 gate. REQ-096 (security model completeness), REQ-098
+  (audit trail), REQ-099 (key-material confinement), REQ-100 (state-file
+  hardening), REQ-101 (dependency vulnerability gate), REQ-102
+  (exceptional-condition hygiene).
+- Added a content policy (REQ-097) that assesses retrieved web content
+  before knowledge-base storage: `flag` (default) returns but never stores
+  flagged content, `block` refuses it to the caller, `off` disables
+  assessment. Built-in heuristic categories (prompt injection, credential
+  phishing, malware/exploit, adult content) plus an optional external
+  assessment service with built-in fallback. Applied at every ingest path —
+  search caching, `fetch_page`, crawl, deep reading, and `manage_kb`
+  URL-ingest — with a distinct `content_policy_flagged` error code.
+- `fetch_page` now resolves hostnames and validates every resolved address
+  against the private/metadata blocklist before connecting, per hop and in
+  date detection, closing the DNS-rebinding gap in REQ-021a; resolution
+  failure fails closed, and refusals surface a distinct `invalid_input`
+  safety code via a typed `SsrRefusalError`.
+- Hardened persisted state (REQ-100): quota state is validated structurally
+  and by numeric bounds and reset rather than trusted; the quota and
+  truncation directories are owner-only (0700/0600); a foreign-owned state
+  directory is refused.
+- Confined tool-surface key operations to a designated keys directory
+  (REQ-099): `generate_key`, `backup`, and `rekey` refuse paths outside
+  `kb.keys_dir` (default: `keys` sibling of the storage path). Config-owned
+  `kb.encryption.key_file` is unaffected.
+- Added an owner-only, append-only audit trail (REQ-098) recording refused
+  network targets, content-policy flags, config reloads, KB encryption
+  transitions, key operations, and quota-state resets; failures never block
+  the triggering operation.
+- Error messages no longer leak absolute filesystem paths or stack-frame
+  markers (REQ-102); config-reload errors are sanitized the same way.
+- `npm run check` now runs `npm audit --audit-level=high` as a mandatory
+  gate (REQ-101); `AGENTS.md` gates table updated.
+- Spec-quality remediation closing the spec-review baseline findings:
+  merged REQ-012 into REQ-011, re-pointed REQ-004/033 state paths at §10.1,
+  refreshed the §3 SR-004 and §5.2 provider lists, defined "provenance" and
+  "span anchor" in Terminology, tightened REQ-021/026c/026d acceptance
+  language and §7.3 deprioritization wording, and added G1 catalogue items
+  for resolution, content policy, audit, confinement, state validation, and
+  error hygiene. REQ-021a, REQ-026d, REQ-004, REQ-033, REQ-011.
+
 ## 2026.09.05 — Tool-description enrichment and `search_web` rename (TDQS 5/5 campaign)
 
 - `infobroker_web_search` renamed to `infobroker_search_web`, completing the
