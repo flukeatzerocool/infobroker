@@ -147,6 +147,11 @@ src/index.ts descriptions and annotations in validate-spec). All seven tools
 now declare a `destructiveHint` (previously only `manage_kb` did). REQ-091 also
 gained a G3 gate: validate-spec verifies server.json and glama.json presence
 and that the registered version equals the npm-canonical package version.
+On 2026.09.10 the bar was extended to a fourth hint: the M8ven directory audit
+requires all four ToolAnnotations (read-only, destructive, idempotent,
+open-world), and `inspect_providers`, `manage_kb`, `reload_config`, and
+`get_citations` had never declared `openWorldHint`. REQ-089/092 now name the
+open-world dimension and G1/G3 enforce all four hints.
 
 ### D-041: Rate-Limit Cooldown and Cross-Task Fallback (REQ-038, REQ-031a; 2026.09.03)
 

@@ -156,12 +156,13 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
       expect(couplingNotes[tool.name], `${tool.name} is multi-action but has no coupling note in the gate`).toBeDefined();
     }
 
-    // REQ-089/092: annotations declare all three behavioral hints.
+    // REQ-089/092: annotations declare all four behavioral hints.
     expect(tool.annotations, `${tool.name} missing annotations`).toBeDefined();
     const a = tool.annotations!;
     expect(a.readOnlyHint, `${tool.name} missing readOnlyHint`).toBeDefined();
     expect(a.destructiveHint, `${tool.name} missing destructiveHint`).toBeDefined();
     expect(a.idempotentHint, `${tool.name} missing idempotentHint`).toBeDefined();
+    expect(a.openWorldHint, `${tool.name} missing openWorldHint`).toBeDefined();
 
     // REQ-089: every parameter carries a description.
     const props = tool.inputSchema?.properties ?? {};

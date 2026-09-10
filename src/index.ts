@@ -1285,6 +1285,7 @@ server.registerTool(
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   async (params) => {
@@ -1383,6 +1384,7 @@ server.registerTool(
       destructiveHint: true,
       readOnlyHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     },
   },
   async (params) => {
@@ -1576,6 +1578,7 @@ server.registerTool(
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   async () => {
@@ -1629,6 +1632,7 @@ server.registerTool(
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     },
   },
   async (params) => {

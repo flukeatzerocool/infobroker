@@ -604,7 +604,7 @@ function checkToolDefinitionBar(): void {
     if (!/\[ERROR\]/.test(desc)) error(`${label}: description missing [ERROR] return contract (REQ-092)`);
     const annMatch = block.match(/annotations:\s*\{([^}]*)\}/);
     const ann = annMatch?.[1] ?? "";
-    for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint"]) {
+    for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
       if (!new RegExp(`\\b${hint}:`).test(ann)) {
         error(`${label}: annotations missing ${hint} (REQ-092)`);
       }

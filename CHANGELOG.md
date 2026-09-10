@@ -49,6 +49,13 @@
   alone), normalized EARS casing in REQ-031a/038, and added a `validate-spec`
   dangling-citation scan so any REQ token in the spec that fails to resolve
   to a manifest REQ fails the gate.
+- All seven tools now declare `openWorldHint` in their annotations
+  (`inspect_providers`, `manage_kb`, `reload_config`, and `get_citations`
+  previously omitted it), so every tool declares all four
+  read-only/destructive/idempotent/open-world hints with explicit booleans.
+  REQ-089 and REQ-092 now name the open-world dimension, and the G1
+  tool-surface gate (`src/tool-surface.test.ts`) plus the G3 static scan
+  (`scripts/validate-spec.ts`) enforce the fourth hint (REQ-089, REQ-092).
 
 ## 2026.09.05 — Tool-description enrichment and `search_web` rename (TDQS 5/5 campaign)
 
