@@ -1,5 +1,7 @@
 # Changelog
 
+## 2026.09.10 — 
+
 ## 2026.09.06 — OWASP security model, content policy, and spec-quality pass
 
 - Adopted OWASP as the security baseline (D-047): new §4.11 "Security and
