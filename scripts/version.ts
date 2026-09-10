@@ -62,6 +62,16 @@ function bump(): void {
     ok = false;
   }
 
+  const agentsPath = join(ROOT, "AGENTS.md");
+  const agents = readFileSync(agentsPath, "utf-8");
+  if (!/\(v[0-9.]+\)/.test(agents)) {
+    console.error(`  FAIL  AGENTS.md: version stamp '(vX.Y.Z)' not found`);
+    ok = false;
+  } else {
+    writeFileSync(agentsPath, agents.replace(/\(v[0-9.]+\)/, `(v${version})`));
+    console.log(`  OK   AGENTS.md: → (v${version})`);
+  }
+
   if (!ok) {
     console.error("\nVersion bump FAILED.");
     process.exit(1);
@@ -174,6 +184,10 @@ function check(): void {
     console.error("  FAIL  server.json version: missing or unparseable server.json");
     ok = false;
   }
+
+  const agentsPath = join(ROOT, "AGENTS.md");
+  const agentsStamp = grepVersion(agentsPath, /\(v([0-9.]+)\)/);
+  ok = assert("AGENTS.md version stamp", agentsStamp ? `v${agentsStamp}` : null, `v${rootVersion}`) && ok;
 
   if (!ok) {
     console.error("\nVersion sync FAILED. Update all version references to match root package.json.");
