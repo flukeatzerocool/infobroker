@@ -124,6 +124,7 @@ client skills transform raw research into polished writing. Free first.
 Privacy always.
 
 [![infobroker MCP server](https://glama.ai/mcp/servers/flukeatzerocool/infobroker/badges/card.svg)](https://glama.ai/mcp/servers/flukeatzerocool/infobroker)
+[![M8ven Live Monitored](https://m8ven.ai/badge/mcp/flukeatzerocool-infobroker-1q5c6g)](https://m8ven.ai/mcp/flukeatzerocool-infobroker-1q5c6g)
 
 - [North Star](#north-star)
 - [Quick Start](#quick-start)
