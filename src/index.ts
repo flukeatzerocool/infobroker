@@ -1179,7 +1179,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.10",
+  version: "2026.09.11",
 });
 
 // --- search_web ---
@@ -1235,7 +1235,7 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default, with native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question, need the page's last-updated date (detect_date), a bounded same-origin crawl (crawl), or structured metadata (extract). Do NOT use for a general topic search (use infobroker_search_web) or for claim verification across sources (use infobroker_verify_claims). Parameter interactions: `question` switches the response from the whole page to passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` recursively fetches same-origin pages up to config caps; `max_length` caps the characters returned (default 50000); `extract` adds JSON-LD, OpenGraph, and microdata alongside the content; `renderer` selects the extraction backend — jina needs no API key and native_fetch is the fallback when Jina is throttled. Makes external HTTP calls, truncates very long pages, and needs no API key. Fetched pages are auto-indexed into the knowledge base unless the content policy flags them (see `manage_kb`), in which case flag mode returns them without storage and block mode refuses them. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question, or need its last-updated date. Do NOT use for a general topic search (use infobroker_search_web) or for claim verification across sources (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` fetches same-origin pages up to config caps; `max_length` caps characters; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` picks the backend — jina needs no API key, native_fetch is the fallback when Jina is throttled or a page returns an anti-bot challenge. Makes external HTTP calls, truncates very long pages, and needs no API key. Fetched pages are auto-indexed into the local knowledge base unless the content policy flags them (see infobroker_manage_kb), in which case flag mode returns them without storage and block mode refuses them. An unreachable URL returns an [ERROR] envelope with remediation. Returns a JSON envelope prefixed [OK] or [ERROR] with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
@@ -1248,7 +1248,7 @@ server.registerTool(
       extract: z.boolean().optional().default(false).describe("Return structured metadata (JSON-LD, OpenGraph, microdata) alongside the content (default off)"),
     },
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
@@ -1311,7 +1311,7 @@ server.registerTool(
   "infobroker_verify_claims",
   {
     title: "Verify Claims",
-    description: "Run a truth-finding loop that searches across providers, reconciles claims across independent sources, and returns confidence-scored findings with per-claim source attribution. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use infobroker_search_web) or for citation formatting (use infobroker_get_citations). `max_iterations` bounds the search-refinement passes and per-provider rate limits apply; the loop recalls prior findings from the knowledge base and indexes its findings back into it. Parameter semantics: `query` should state the claim plainly rather than as a question; `priority` routes the corroboration pool by intent (speed, quality, privacy, free_only); `providers` restricts the pool to the given slugs, and omitting it uses the full dispatch chain; `confidence_threshold` is the bar for a finding to be reported confirmed. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
+    description: "Verify a contested claim against independent sources and return confidence-scored findings. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use infobroker_search_web) or for citation formatting (use infobroker_get_citations). The loop recalls prior findings from the local knowledge base, then searches providers and writes its findings back into it; `max_iterations` bounds the search-refinement passes and per-provider rate limits apply. `query` states the claim plainly; `priority` routes the corroboration pool by intent (speed, quality, privacy, free_only); `providers` restricts the pool to the given slugs and omitting it uses the full dispatch chain; `confidence_threshold` sets the bar for a finding to be confirmed — findings below it are reported unverified. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` listing confirmed, contested, and unverified findings with per-source claims and confidence scores.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_iterations: z.number().min(1).max(10).optional().default(5).describe("Maximum search-refinement passes (1-10, default 5)"),
@@ -1623,7 +1623,7 @@ server.registerTool(
   "infobroker_get_citations",
   {
     title: "Get Citations",
-    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use infobroker_search_web) or for verifying a contested claim (use infobroker_verify_claims). Operates without an API key when at least one scholarly source is reachable; when every scholarly source is unreachable it returns an [ERROR] envelope with remediation, and queries respect each provider's rate limits. Parameter semantics: `query` should name the topic in natural language; `max_results` bounds the reference list (1–30, default 8) — larger values take longer and span more sources. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
+    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use infobroker_search_web) or for verifying a contested claim (use infobroker_verify_claims). Operates without an API key when at least one scholarly source is reachable; when every scholarly source is unreachable it returns an [ERROR] envelope with remediation, and queries respect each provider's rate limits. `query` names the topic in natural language; larger `max_results` values take longer and span more sources. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_results: z.number().min(1).max(30).optional().default(8).describe("Maximum references to return (1-30, default 8)"),

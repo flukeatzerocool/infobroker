@@ -2,6 +2,34 @@
 
 ## Active Decisions
 
+### D-048: TDQS 5/5 Completion Pass (2026.09.11)
+
+The 2026-09-09 Glama re-inspection (post v0.1.2) left three tools below 5/5
+on the tool-definition quality audit (TDQS): `fetch_page` 4.0 (Behavior 1/5 —
+its description said pages are "auto-indexed into the knowledge base" while
+its `readOnlyHint` was `true`), `verify_claims` 4.3 (Conciseness 2/5, plus
+unnamed KB write and vague response structure), and `get_citations` 4.9
+(Conciseness 4/5 — a parameter clause restating the schema).
+
+Three fixes close the gap. `fetch_page` now declares `readOnlyHint: false`,
+because the tool does write state (the KB auto-index in `doFetchPage`); the
+alternative of keeping `readOnlyHint: true` and rewording "auto-indexed" to
+"cached" (mirroring `search_web`'s accepted phrasing) was rejected as
+rubric-gaming that still left the annotation false. Its description also
+gained the two edge cases the audit named as missing: anti-bot challenge
+pages fall through to the next renderer, and unreachable URLs return an
+`[ERROR]` envelope. `verify_claims` was rewritten compactly, made its KB
+write explicit, and named its confirmed/contested/unverified response
+structure and the `confidence_threshold` below-bar behavior. `get_citations`
+dropped the schema-duplicated "(1–30, default 8)" clause while keeping the
+cost coupling ("larger values take longer"). No REQ body changed: REQ-089/092
+require declaring the four hints and disclosing consequences, and pinning a
+hint's value would be an implementation detail, not a contract.
+
+TDQS is an LLM-rubric audit, not a deterministic gate, so 5/5 is not
+mechanically guaranteed; the pass aligns each description with the rubric's
+stated dimensions and relies on Glama re-scoring after the next inspection.
+
 ### D-047: OWASP Security Baseline, Content Policy, and Spec-Quality Pass (2026.09.06)
 
 A spec-review baseline (8 dimensions) and a threat-modeling pass surfaced two

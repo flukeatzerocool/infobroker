@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.09.11 — TDQS 5/5 completion pass (D-048)
+
+- Closed the three remaining Glama TDQS tool-level gaps below 5/5. `fetch_page`
+  now declares `readOnlyHint: false` — it auto-indexes fetched pages into the
+  knowledge base, so the old read-only declaration contradicted its own
+  description — and its description gained anti-bot fall-through and
+  unreachable-URL error disclosure. `verify_claims` was rewritten compactly
+  (was scored 2/5 conciseness) and now states its knowledge-base write, its
+  confirmed/contested/unverified response structure, and the
+  `confidence_threshold` below-bar behavior. `get_citations` dropped a
+  schema-duplicated parameter clause while keeping the cost coupling.
+  REQ-089/092 gate phrases and the `[OK]`/`[ERROR]`/alternative-tool tokens are
+  preserved; no REQ body changed.
+
 ## 2026.09.10 — 
 
 ## 2026.09.06 — OWASP security model, content policy, and spec-quality pass
