@@ -17,7 +17,7 @@ interface EnvelopeOk {
 interface EnvelopeError {
   status: "error";
   provider: string;
-  error?: unknown;
+  error?: { code: string; message: string; remediation?: string };
 }
 
 type Envelope = EnvelopeOk | EnvelopeError;
@@ -71,7 +71,7 @@ export function mergeItems(items: BatchItem[]): Envelope {
     try {
       env = parseEnvelope(item.envelope);
     } catch {
-      env = { status: "error", provider: "system", error: { code: "internal_error", message: "batch item failed to parse" } };
+      env = { status: "error", provider: "system", error: { code: "internal_error", message: "batch item failed to parse", remediation: "retry the query individually to isolate the failing provider" } };
     }
     if (env.status === "ok") {
       okItems.push({ query: item.query, env });
@@ -89,7 +89,7 @@ export function mergeItems(items: BatchItem[]): Envelope {
   }
 
   if (okItems.length === 0) {
-    return firstError ?? { status: "error", provider: "none", error: { code: "internal_error", message: "no results" } };
+    return firstError ?? { status: "error", provider: "none", error: { code: "internal_error", message: "no results", remediation: "retry with a different query or provider" } };
   }
 
   const firstOk = okItems[0].env;

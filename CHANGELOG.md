@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.09.11 — Spec-sync conformance fixes
+
+- Batch searches and fetches that fail end-to-end now return a complete error
+  envelope, including a remediation hint for the operator, where previously
+  the fallback error omitted it and produced a non-conforming response.
+  (REQ-002)
+- Requesting a knowledge base document that does not exist now reports the
+  standard `internal_error` code rather than an undeclared `not_found` code,
+  keeping every error on the documented taxonomy. (REQ-002)
+- Compact output now trims per-result fields down to title, URL, and snippet
+  as specified, so low-verbosity responses no longer carry optional metadata
+  such as source type and original source. (REQ-079)
+
 ## 2026.09.11 — TDQS 5/5 completion pass (D-048)
 
 - Closed the three remaining Glama TDQS tool-level gaps below 5/5. `fetch_page`

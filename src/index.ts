@@ -93,7 +93,9 @@ function ok(provider: string, results: SearchResult[], meta: Record<string, unkn
   const base: ToolOkResponse = {
     status: "ok",
     provider,
-    results,
+    results: compactMode()
+      ? results.map(({ title, url, snippet }) => ({ title, url, snippet }))
+      : results,
   };
   if (!compactMode()) {
     base.meta = {
@@ -1486,7 +1488,7 @@ server.registerTool(
         }
         const doc = kbGet(sourceUrl);
         if (!doc) {
-          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "not_found", `No document with source_url "${sourceUrl}"`, "Use list action to enumerate stored documents"))}` }] };
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", `No document with source_url "${sourceUrl}"`, "Use list action to enumerate stored documents"))}` }] };
         }
         return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [doc] })}` }] };
       }

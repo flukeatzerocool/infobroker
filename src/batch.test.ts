@@ -59,4 +59,22 @@ describe("mergeItems (REQ-020/REQ-021 array inputs)", () => {
     expect(merged.meta.per_query[0].truncated).toBe(true);
     expect(merged.meta.per_query[0].output_path).toBe("/tmp/x");
   });
+
+  it("emits a remediation field on the internal_error envelope when an item fails to parse (REQ-002)", () => {
+    const merged = mergeItems([
+      { query: "q1", envelope: "not an envelope" },
+    ]) as { status: string; provider: string; error: { code: string; message: string; remediation: string } };
+
+    expect(merged.status).toBe("error");
+    expect(merged.error.code).toBe("internal_error");
+    expect(merged.error.remediation).toBeTruthy();
+  });
+
+  it("emits a remediation field on the internal_error envelope when there are no items (REQ-002)", () => {
+    const merged = mergeItems([]) as { status: string; provider: string; error: { code: string; message: string; remediation: string } };
+
+    expect(merged.status).toBe("error");
+    expect(merged.error.code).toBe("internal_error");
+    expect(merged.error.remediation).toBeTruthy();
+  });
 });
