@@ -421,12 +421,12 @@ SearXNG instance sees your queries.
 
 ## Configuration
 
-| Variable | Purpose |
-|----------|---------|
-| `INFOBROKER_CONFIG` | Path to config.json (default: `./config.json`) |
-| `INFOBROKER_CONFIG_LOCAL` | Optional path to a user config layer (default: `config.local.json`) |
-| `INFOBROKER_<NAME>_API_KEY` | API key for keyed providers |
-| `INFOBROKER_<NAME>_URL` | URL for self-hosted providers |
+Four environment variables tune a deployment. `INFOBROKER_CONFIG` points
+at a different config file (default `./config.json`),
+`INFOBROKER_CONFIG_LOCAL` at a user config layer (default
+`config.local.json`), `INFOBROKER_<NAME>_API_KEY` supplies a keyed
+provider's credential, and `INFOBROKER_<NAME>_URL` points at a self-hosted
+provider.
 
 `config.json` ships with the repository and holds the defaults: which
 providers are enabled, their priority in fallback chains, rate limits,

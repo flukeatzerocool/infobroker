@@ -1,4 +1,4 @@
-// @implements REQ-021b REQ-103
+// @implements REQ-021b REQ-028 REQ-103
 import { rankDocs } from "./embed.js";
 
 export interface RankedPassage {
@@ -50,15 +50,36 @@ export function splitPassages(text: string, passageSize = 100): string[] {
 // (REQ-103). LSA groups passages that match intent without shared words; the
 // lexical model is the automatic fallback on tiny corpora. A low top score
 // means the page does not address the question, not that ranking failed.
-export function scorePassages(passages: string[], question: string): RankedPassage[] {
+//
+// REQ-028: each ranked passage carries a span anchor locating it in the source
+// page. Passages are cleaned before ranking, so the offsets are recovered by
+// matching each passage back into the source text.
+function sourceOffsets(source: string, passages: string[]): Array<{ start: number; end: number }> {
+  let cursor = 0;
+  return passages.map((p) => {
+    const needle = p.slice(0, Math.min(80, p.length));
+    let idx = needle ? source.indexOf(needle, cursor) : -1;
+    if (idx === -1 && needle) idx = source.indexOf(needle);
+    if (idx === -1) return { start: 0, end: p.length };
+    cursor = idx + p.length;
+    return { start: idx, end: idx + p.length };
+  });
+}
+
+export function scorePassages(
+  passages: string[],
+  question: string,
+  offsets?: Array<{ start: number; end: number }>,
+): RankedPassage[] {
   const ranked = rankDocs(question, passages, "lsa");
   return ranked.map((r) => {
     const text = passages[r.index];
-    return { text, score: r.score, index: r.index, start: 0, end: text.length };
+    const span = offsets?.[r.index] ?? { start: 0, end: text.length };
+    return { text, score: r.score, index: r.index, start: span.start, end: span.end };
   });
 }
 
 export function rankPassages(text: string, question: string, passageSize = 100, topk = 1): RankedPassage[] {
   const passages = splitPassages(text, passageSize);
-  return scorePassages(passages, question).slice(0, topk);
+  return scorePassages(passages, question, sourceOffsets(text, passages)).slice(0, topk);
 }

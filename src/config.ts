@@ -174,10 +174,14 @@ function validateConfig(config: Config): void {
     if (typeof provider.priority !== "number") {
       errors.push(`Provider "${slug}": missing or invalid "priority"`);
     }
-    if (provider.rate_limit) {
-      for (const [key, value] of Object.entries(provider.rate_limit)) {
-        if (typeof value === "number" && value < 0) {
-          errors.push(`Provider "${slug}": rate_limit.${key} must be non-negative`);
+    if (provider.rate_limit !== undefined) {
+      if (typeof provider.rate_limit !== "object" || provider.rate_limit === null || Array.isArray(provider.rate_limit)) {
+        errors.push(`Provider "${slug}": rate_limit must be an object`);
+      } else {
+        for (const [key, value] of Object.entries(provider.rate_limit)) {
+          if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+            errors.push(`Provider "${slug}": rate_limit.${key} must be a non-negative finite number`);
+          }
         }
       }
     }

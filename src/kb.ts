@@ -135,7 +135,7 @@ function storeFilePath(): string | null {
 
 function atomicWriteFile(fpath: string, bytes: Buffer): void {
   const dir = dirname(fpath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   const tmp = join(dir, `.${basename(fpath)}.tmp-${randomUUID()}`);
   try {
     const fd = openSync(tmp, "w", 0o600);
@@ -249,8 +249,10 @@ function loadStore(): void {
     return;
   }
 
-  backupCorruptStore();
-  store = { chunks: [], idf: {}, docCount: 0, events: [] };
+  // REQ-060c: the corruption-recovery event must survive onto the fresh store
+  // it is reported from, not the store object it replaces.
+  const corruptionEvent = backupCorruptStore();
+  store = { chunks: [], idf: {}, docCount: 0, events: corruptionEvent ? [corruptionEvent] : [] };
 }
 
 function scheduleWrite(): void {
@@ -337,16 +339,17 @@ function saveStore(): void {
   }
 }
 
-function backupCorruptStore(): void {
+function backupCorruptStore(): string | null {
   const fpath = storeFilePath();
-  if (!fpath || !existsSync(fpath)) return;
+  if (!fpath || !existsSync(fpath)) return null;
   try {
     const backup = join(storagePath!, `vector-store.corrupt.${Date.now()}.json`);
     renameSync(fpath, backup);
     chmodSync(backup, 0o600);
-    if (store) store.events.push(`Storage corruption detected at ${new Date().toISOString()}. Backup: ${backup}`);
+    return `Storage corruption detected at ${new Date().toISOString()}. Backup: ${backup}`;
   } catch {
-    // best effort
+    // best effort — a failed rename still allows a fresh empty store
+    return null;
   }
 }
 
@@ -435,7 +438,7 @@ export function initKb(config: KbConfig): void {
     storagePath = raw;
     resolvedKey = null;
     lockError = null;
-    if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
+    if (!existsSync(raw)) mkdirSync(raw, { recursive: true, mode: 0o700 });
     loadStore();
     const event =
       `Storage path changed at ${new Date().toISOString()}: ${oldPath} → ${raw}. ` +
@@ -445,7 +448,7 @@ export function initKb(config: KbConfig): void {
   } else {
     kbConfig = config;
     storagePath = raw;
-    if (!existsSync(raw)) mkdirSync(raw, { recursive: true });
+    if (!existsSync(raw)) mkdirSync(raw, { recursive: true, mode: 0o700 });
     resolvedKey = null;
     lockError = null;
     loadStore();
@@ -508,7 +511,11 @@ export function initKb(config: KbConfig): void {
   if (store) ensureStableEmbeddings();
   runMaintenance();
   if (maintenanceTimer) clearInterval(maintenanceTimer);
-  maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+  // REQ-066: a non-positive interval disables periodic maintenance rather than
+  // scheduling a tight zero-delay loop.
+  if (config.maintenance_interval_minutes > 0) {
+    maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+  }
 }
 
 function ensureStableEmbeddings(): void {
@@ -1054,7 +1061,7 @@ export function generateKeyFile(path: string): string {
   const key = randomBytes(32).toString("base64");
   const resolved = resolveKeyFile(path);
   const dir = dirname(resolved);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   atomicWriteFile(resolved, Buffer.from(`${key}\n`, "utf-8"));
   audit("key_generated", resolved);
   return resolved;
@@ -1095,7 +1102,7 @@ export function backupKeyFile(backupPath: string): string | null {
   if (!existsSync(src)) return null;
   const dst = resolveKeyFile(backupPath);
   const dir = dirname(dst);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   copyFileSync(src, dst);
   chmodSync(dst, 0o600);
   if (store) store.events.push(`Encryption key backed up at ${new Date().toISOString()}: ${dst}`);

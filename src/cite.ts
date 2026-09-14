@@ -65,13 +65,14 @@ async function searchSemanticScholar(query: string, limit: number): Promise<Cita
   return (data.data || []).map((item) => {
     const year = item.year ? String(item.year) : undefined;
     const authors = (item.authors || []).map((a) => a.name);
+    const url = item.url || `https://api.semanticscholar.org/paper/${item.title}`;
     return {
       title: item.title,
-      url: item.url || `https://api.semanticscholar.org/paper/${item.title}`,
+      url,
       year,
       authors,
       venue: item.venue,
-      bibtex: citationFor(item.title, authors, year, item.venue, undefined),
+      bibtex: citationFor(item.title, authors, year, item.venue, url),
     };
   });
 }

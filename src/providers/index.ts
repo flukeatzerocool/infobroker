@@ -60,6 +60,12 @@ export const PROVIDERS: Record<string, Provider> = {
 
 const genericCache: Record<string, Provider> = {};
 
+// REQ-040: a config reload must rebuild generic providers from the new
+// configuration; the per-slug cache would otherwise serve stale endpoints.
+export function resetGenericProviderCache(): void {
+  for (const key of Object.keys(genericCache)) delete genericCache[key];
+}
+
 export function resolveProvider(slug: string): Provider | undefined {
   const registered = PROVIDERS[slug];
   if (registered) return registered;

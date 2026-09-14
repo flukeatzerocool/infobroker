@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
-import { PROVIDERS, resolveProvider } from "./providers/index.js";
+import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
 import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
@@ -115,7 +115,9 @@ function err(provider: string, code: string, message: string, remediation: strin
   return {
     status: "error",
     provider,
-    error: { code, message, remediation, ...(details ? { details } : {}) },
+    // REQ-102: centralize exceptional-condition hygiene so no call site can
+    // leak an absolute path or stack-frame marker in an error message.
+    error: { code, message: sanitizeErrorMessage(message), remediation, ...(details ? { details } : {}) },
   };
 }
 
@@ -291,10 +293,17 @@ async function doWebSearch(
       if (config.providers[slug] && !config.providers[slug].enabled) continue;
       try {
         const suggestions = await provider.suggest(query);
+        // REQ-020b: order suggestions by semantic relatedness to the query;
+        // preserve provider order when no embedding capability is available.
+        const ranked = suggestions.length > 1 ? rankDocs(query, suggestions) : [];
+        const rankedIndexes = new Set(ranked.map((r) => r.index));
+        const ordered = ranked.length > 0
+          ? [...ranked.map((r) => suggestions[r.index]), ...suggestions.filter((_, i) => !rankedIndexes.has(i))]
+          : suggestions;
         return `[OK] ${json({
           status: "ok",
           provider: slug,
-          results: suggestions.map((s) => ({ title: s, url: "", snippet: s })),
+          results: ordered.map((s) => ({ title: s, url: "", snippet: s })),
           meta: { query_time_ms: 0, fallback_used: false },
         })}`;
       } catch (e) {
@@ -398,7 +407,10 @@ async function doWebSearch(
   if (preferredProvider && config.providers[preferredProvider]?.enabled) {
     chain = [preferredProvider, ...getDispatchChain(taskType).filter((p) => p !== preferredProvider)];
   } else if (preferredProvider) {
-    chain = [preferredProvider, ...getDispatchChain(taskType)];
+    // REQ-015: a disabled or undeclared provider is removed from dispatch and
+    // SHALL be skipped by all provider-selection logic, even when explicitly
+    // requested — never call it.
+    return `[ERROR] ${json(err(preferredProvider, "invalid_input", `Provider "${preferredProvider}" is disabled or not configured`, "Choose an enabled provider or omit the provider parameter"))}`;
   } else {
     chain = getDispatchChain(taskType);
   }
@@ -423,6 +435,8 @@ async function doWebSearch(
   // error `rate_limited` in preference to a generic provider-unavailable code.
   let rateLimited = false;
   const quotaExhausted: Record<string, number> = {};
+  // Audit quota exhaustion once per provider per session, not on every attempt.
+  const quotaAudited = new Set<string>();
 
   const primarySlug = chain[0];
   const hedgeConf = config.output;
@@ -450,6 +464,12 @@ async function doWebSearch(
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) {
         quotaExhausted[slug] = quota.daily.remaining;
+        // REQ-098: quota exhaustion is a security-relevant event for the audit
+        // trail, recorded once per provider per session.
+        if (!quotaAudited.has(slug)) {
+          quotaAudited.add(slug);
+          audit("quota_exhausted", slug);
+        }
         return null;
       }
 
@@ -471,7 +491,8 @@ async function doWebSearch(
             setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
           ),
         ]);
-      const results = (await retryWithBackoff(timedCall)).slice(0, maxResults);
+      // REQ-032: retry backoff and count are configurable per provider.
+      const results = (await retryWithBackoff(timedCall, config.providers[slug])).slice(0, maxResults);
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -558,8 +579,12 @@ async function doWebSearch(
           try {
             fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
           } catch (e) {
-            // REQ-021a: a refused page falls back to its snippet (REQ-028).
-            if (e instanceof SsrRefusalError) return null;
+            // REQ-021a: a refused page falls back to its snippet (REQ-028);
+            // REQ-098: the refusal is recorded in the audit trail.
+            if (e instanceof SsrRefusalError) {
+              audit("network_target_refused", url);
+              return null;
+            }
             throw e;
           }
           if (!fetched) return null;
@@ -733,7 +758,8 @@ async function fetchPageContent(
             setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
           ),
         ]);
-      const content = await retryWithBackoff(timedCall);
+      // REQ-032: retry backoff and count are configurable per provider.
+      const content = await retryWithBackoff(timedCall, config.providers[slug]);
 
       // REQ-021f: a renderer that returns an anti-bot challenge rather than the
       // target page is treated as failed, so the chain falls through to the
@@ -832,7 +858,9 @@ async function doFetchPage(
   } catch (e) {
     // REQ-098: refused network targets are recorded in the audit trail.
     audit("network_target_refused", Array.isArray(url) ? url.join(", ") : url);
-    return `[ERROR] ${json(err("none", "invalid_input", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+    // REQ-021a: a distinct code distinguishes the safety refusal from a
+    // malformed-URL or general fetch failure.
+    return `[ERROR] ${json(err("none", "network_target_refused", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), `Set fetch.allow_private_urls=true to permit private targets`))}`;
   }
 
   // REQ-021d: bounded same-origin crawl. Fetches the start page raw, discovers
@@ -853,8 +881,12 @@ async function doFetchPage(
       try {
         fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate);
       } catch (e) {
-        // REQ-021a/021d: a refused crawl hop is skipped, not listed.
-        if (e instanceof SsrRefusalError) continue;
+        // REQ-021a/021d: a refused crawl hop is skipped, not listed;
+        // REQ-098: the refusal is recorded in the audit trail.
+        if (e instanceof SsrRefusalError) {
+          audit("network_target_refused", cur.url);
+          continue;
+        }
         throw e;
       }
       if (fetched === null) continue;
@@ -905,7 +937,8 @@ async function doFetchPage(
       fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate);
     } catch (e) {
       if (e instanceof SsrRefusalError) {
-        return `[ERROR] ${json(err("none", "invalid_input", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+        audit("network_target_refused", url);
+        return `[ERROR] ${json(err("none", "network_target_refused", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;
       }
       throw e;
     }
@@ -944,7 +977,8 @@ async function doFetchPage(
     fetched = await fetchPageContent(url, renderers, effectiveMax, allowPrivate);
   } catch (e) {
     if (e instanceof SsrRefusalError) {
-      return `[ERROR] ${json(err("none", "invalid_input", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;
+      audit("network_target_refused", url);
+      return `[ERROR] ${json(err("none", "network_target_refused", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;
     }
     throw e;
   }
@@ -1061,8 +1095,14 @@ function doListProviders(filter?: string): string {
   const config = getConfig();
   const entries = Object.entries(config.providers);
 
+  // REQ-024a: supported task types per provider, derived from the dispatch table.
+  const taskTypesBySlug: Record<string, string[]> = {};
+  for (const [taskType, chain] of Object.entries(config.dispatch)) {
+    for (const slug of chain) (taskTypesBySlug[slug] ??= []).push(taskType);
+  }
+
   const filtered = filter === "active"
-    ? entries.filter(([, p]) => providerOperational(p))
+    ? entries.filter(([slug, p]) => providerOperational(p) && !checkQuota(slug, p.rate_limit).exhausted)
     : entries;
 
   const list = filtered.map(([slug, p]) => {
@@ -1072,12 +1112,23 @@ function doListProviders(filter?: string): string {
     const cooldownRemaining = inCooldown(slug) ? cooldownRemainingMs(slug) : undefined;
     // REQ-104: report pool health (index + availability), never key material.
     const pool = keyPoolStatus(slug);
+    // REQ-013/REQ-024a: the list status uses the same assessment as health, so
+    // a quota-warning or over-threshold-latency provider is reported degraded.
+    const status = resolveHealthStatus({
+      baseStatus: operational ? "active" : "inactive",
+      quotaExhausted: quota.exhausted,
+      quotaWarning: quota.warning,
+      avgLatencyMs: avgLatency(slug) || undefined,
+      degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
+    });
     return {
       slug,
       tier: p.tier,
       capabilities: p.capabilities,
+      task_types: taskTypesBySlug[slug] ?? [],
+      rate_limit: p.rate_limit,
       enabled: p.enabled,
-      status: quota.exhausted ? "exhausted" : (operational ? "active" : "inactive"),
+      status,
       ...(reason ? { inactive_reason: reason } : {}),
       ...(cooldownRemaining !== undefined ? { cooldown_remaining_ms: cooldownRemaining } : {}),
       ...(pool.length > 1 ? { key_pool: pool } : {}),
@@ -1105,7 +1156,8 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
 
   const quota = checkQuota(providerSlug, p.rate_limit);
   const keyEnv = p.auth_env;
-  const authOk = keyEnv ? !!process.env[keyEnv] : true;
+  // REQ-104/REQ-024b: auth presence is pool-aware (single key or key pool).
+  const authOk = authPresent(keyEnv);
   let status: HealthStatus = authOk ? "active" : "inactive";
 
   let avgLatencyMs: number | undefined;
@@ -1119,7 +1171,8 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
       // history exists, falling back to the provider's own live measurement
       // (e.g. first call, no recorded requests yet).
       avgLatencyMs = avgLatency(providerSlug) || h.avgLatencyMs;
-      providerLastSuccess[providerSlug] = Date.now();
+      // REQ-024b: the live probe must not overwrite the recorded last-success
+      // timestamp — last_success reflects operational history, not this probe.
     } catch (e) {
       providerLastError[providerSlug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
       if (status === "active") {
@@ -1375,6 +1428,7 @@ server.registerTool(
         confidence_threshold: Number(params.confidence_threshold),
         providers: params.providers as string[] | undefined,
         priority: params.priority as "speed" | "quality" | "privacy" | "free_only" | undefined,
+        latency: avgLatency,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
@@ -1547,8 +1601,9 @@ server.registerTool(
           }
           const parsed = JSON.parse(fetched.slice(5));
           // REQ-097: a fetched URL that the policy flagged in flag mode was
-          // returned by the fetch but must not be persisted by the ingest.
-          if (parsed.content_policy?.flagged) {
+          // returned by the fetch but must not be persisted by the ingest. The
+          // policy note lives under `meta.content_policy` in the fetch envelope.
+          if (parsed.meta?.content_policy?.flagged) {
             return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "content_policy_flagged", "Fetched content was flagged by the content policy and was not stored", "Configure the content policy or ingest different content"))}` }] };
           }
           content = parsed.results?.[0]?.snippet || "";
@@ -1639,6 +1694,8 @@ server.registerTool(
       }
       const newConfig = reloadConfig();
       configureAllProviders(newConfig);
+      // REQ-040: rebuild generic providers so reload applies endpoint/mapping changes.
+      resetGenericProviderCache();
       if (newConfig.kb) {
         flushKbWrites();
         initKb(newConfig.kb);

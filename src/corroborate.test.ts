@@ -41,6 +41,7 @@ import {
   reconcileClaims,
   computeConfidence,
   corroborate,
+  applyPriority,
 } from "../src/corroborate.js";
 import type { CorroborationFinding as CF } from "../src/types.js";
 
@@ -817,5 +818,21 @@ describe("corroborate", () => {
     });
 
     expect(calls).toEqual(["wikipedia", "wikidata", "arxiv", "openalex"]);
+  });
+});
+
+describe("applyPriority speed ordering (REQ-026)", () => {
+  it("orders the corroboration pool by ascending recent latency", () => {
+    const lat = (s: string) => ({ a: 300, b: 100, c: 50 } as Record<string, number>)[s] ?? 0;
+    expect(applyPriority(["a", "b", "c"], "speed", lat)).toEqual(["c", "b", "a"]);
+  });
+
+  it("keeps providers with no recorded latency after those with a measurement", () => {
+    const lat = (s: string) => ({ a: 300, b: 0 } as Record<string, number>)[s] ?? 0;
+    expect(applyPriority(["a", "b"], "speed", lat)).toEqual(["a", "b"]);
+  });
+
+  it("is a no-op for the quality intent", () => {
+    expect(applyPriority(["a", "b"], "quality")).toEqual(["a", "b"]);
   });
 });

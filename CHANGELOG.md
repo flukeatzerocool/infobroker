@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026.09.14 — Implementation sync with the specification
+
+- Fetching a loopback, private, or metadata address now reports a dedicated
+  safety-refusal code instead of a generic bad-input error, and every such
+  refusal — at the initial URL, on a redirect hop, or during a bounded crawl —
+  is recorded in the audit trail, so an operator can see attempted SSRF probes.
+  (REQ-021a, REQ-098)
+- Quota exhaustion is now written to the audit trail once per provider per
+  session, giving operators a durable signal when a provider stops serving.
+  (REQ-098)
+- Archiving a fetched URL into the knowledge base now honors the content-policy
+  decision, so a page the policy flagged can no longer be persisted through the
+  ingest path. (REQ-097)
+- Every tool error message now passes through the internal-error sanitizer, so
+  stack frames, absolute paths, and environment details cannot leak through a
+  tool response regardless of which code path raised the error. (REQ-102)
+- Explicitly requesting a disabled or unknown provider is now refused rather
+  than silently dispatched, so a configured disable list is honored even when a
+  caller names the provider directly. (REQ-015)
+- Provider inspection is more informative: the list action reports each
+  provider's rate limits and the task types it serves, reports `degraded` when a
+  provider is at its quota warning or above its latency threshold, and its
+  active filter excludes exhausted providers. The health action recognizes
+  credentials supplied as a key pool, not just a single key, and no longer
+  overwrites a provider's recorded last-success time with the probe itself.
+  (REQ-013, REQ-024a, REQ-024b, REQ-104)
+- Query suggestions are now ordered by relevance to the query rather than by
+  provider order, while still preserving provider order when no embedding model
+  is available. (REQ-020b)
+- Per-provider retry counts and backoff delays from the configuration are now
+  applied to search and fetch calls, so the retry behavior the config declares
+  is the behavior the server uses. (REQ-032)
+- Editing a generic provider's endpoint or response mapping and reloading now
+  takes effect, because generic providers are rebuilt from the new configuration
+  on reload instead of serving a stale cached instance. (REQ-040)
+- Invalid rate-limit configuration is now rejected on load and reload, including
+  non-numeric and non-object values, so a malformed limit cannot silently
+  disable throttling. (REQ-037)
+- `verify_claims` now honors the `speed` priority by ordering its provider pool
+  by recent average latency, matching how `search_web` routes that intent.
+  (REQ-026)
+- Ranked passages now carry a span anchor that locates the passage in the source
+  page, so a deep-read result can be tied back to its position in the document
+  rather than reporting a placeholder. (REQ-028)
+- BibTeX citations for Semantic Scholar references now include the paper URL, so
+  generated reference lists link back to the source. (REQ-027)
+- A corrupt knowledge-base store's recovery event now appears in the stats
+  output instead of being lost when the store is replaced, and a maintenance
+  interval of zero disables the periodic cleanup rather than scheduling a tight
+  loop. Knowledge-base directories are now created with owner-only permissions.
+  (REQ-060c, REQ-066, REQ-100)
+
 ## 2026.09.14 — User-config migration and integration pass
 
 - Implemented REQ-105 (User Configuration Layer Migration): the shipped config

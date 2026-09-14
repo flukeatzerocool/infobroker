@@ -1,4 +1,4 @@
-// @implements REQ-021b content-mode REQ-021b full-content-mode
+// @implements REQ-021b content-mode REQ-021b full-content-mode REQ-028
 import { describe, it, expect } from "vitest";
 import { splitPassages, scorePassages, rankPassages } from "./rerank.js";
 
@@ -49,5 +49,19 @@ describe("rankPassages (REQ-021b full-content-mode)", () => {
     if (top.length > 0) {
       expect(top[0].score).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("span anchors (REQ-028)", () => {
+  it("locates a ranked passage at its position in the source text", () => {
+    const intro = "Apples and pears grow in temperate orchards across many northern regions of the world. ".repeat(2);
+    const tail = "Quantum entanglement enables teleportation protocols in quantum information science experiments.";
+    const text = intro + tail;
+    const top = rankPassages(text, "quantum entanglement teleportation protocols", 12, 1);
+    expect(top.length).toBe(1);
+    const { start, end } = top[0];
+    expect(start).toBeGreaterThan(0);
+    expect(text.slice(start, end)).toContain("Quantum entanglement");
+    expect(end).toBeGreaterThan(start);
   });
 });

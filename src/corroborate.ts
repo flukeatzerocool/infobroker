@@ -337,10 +337,13 @@ function providerOperational(
 
 // Apply the user's priority intent to the corroboration pool without the
 // fallback_depth slice that governs search_web's sequential chain — the
-// corroboration pool must stay broad for cross-referencing.
-function applyPriority(
+// corroboration pool must stay broad for cross-referencing. REQ-026/§7.4:
+// `speed` orders the pool by the caller-supplied recent average latency;
+// providers with no recorded latency retain their pool position.
+export function applyPriority(
   slugs: string[],
   priority: "speed" | "quality" | "privacy" | "free_only" | undefined,
+  latency?: (slug: string) => number,
 ): string[] {
   if (priority === "privacy") {
     const privacyChain = getDispatchChain("privacy_critical");
@@ -352,6 +355,15 @@ function applyPriority(
       return p && p.tier !== "keyed_http" && p.tier !== "self_hosted_http";
     });
     if (filtered.length > 0) return filtered;
+  } else if (priority === "speed" && latency) {
+    return [...slugs].sort((a, b) => {
+      const la = latency(a);
+      const lb = latency(b);
+      if (la <= 0 && lb <= 0) return 0;
+      if (la <= 0) return 1;
+      if (lb <= 0) return -1;
+      return la - lb;
+    });
   }
   return slugs;
 }
@@ -402,6 +414,7 @@ export async function corroborate(
     confidence_threshold?: number;
     providers?: string[];
     priority?: "speed" | "quality" | "privacy" | "free_only";
+    latency?: (slug: string) => number;
     searchers?: Record<string, Searcher>;
   } = {}
 ): Promise<CorroborationResult> {
@@ -430,7 +443,7 @@ export async function corroborate(
     || getActiveProviders()
          .filter(([slug]) => providerOperational(slug, config))
          .map(([slug]) => slug);
-  const pool = applyPriority(providerList, options.priority);
+  const pool = applyPriority(providerList, options.priority, options.latency);
   const availableProviders = pool.filter((p) => resolveSearcher(p, searchers));
 
   if (availableProviders.length === 0) {

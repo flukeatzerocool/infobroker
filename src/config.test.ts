@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-042 REQ-043
+// @implements REQ-010 REQ-042 REQ-043 REQ-037
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -260,6 +260,24 @@ describe("configuration overlay", () => {
     });
     expect(cfg.providers.duckduckgo.degraded_latency_ms).toBe(1500);
     expect(cfg.providers.duckduckgo.resells).toBe(true);
+  });
+
+  it("rejects a non-numeric rate_limit value (REQ-037)", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { duckduckgo: { rate_limit: { per_second: "fast" } } } })
+    ).rejects.toThrow(/rate_limit\.per_second/);
+  });
+
+  it("rejects a non-object rate_limit (REQ-037)", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { duckduckgo: { rate_limit: 5 } } })
+    ).rejects.toThrow(/rate_limit must be an object/);
+  });
+
+  it("rejects a negative rate_limit value (REQ-037)", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { duckduckgo: { rate_limit: { per_day: -1 } } } })
+    ).rejects.toThrow(/rate_limit\.per_day/);
   });
 
   it("rejects a non-positive deep.max_pages", async () => {
