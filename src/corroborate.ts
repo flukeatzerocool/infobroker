@@ -6,6 +6,7 @@ import { throttle } from "./rate-limiter.js";
 import { checkQuota, increment } from "./quota.js";
 import { retryWithBackoff } from "./retry.js";
 import { isKbConfigured, kbSearch } from "./kb.js";
+import { pairwiseSimilarity } from "./embed.js";
 import { getDomain } from "tldts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -93,6 +94,53 @@ export function jaccardSimilarity(a: string, b: string): number {
   return intersection / (ta.size + tb.size - intersection);
 }
 
+const NEGATION_RE = /\b(not|no|never|none|without|cannot|can't|won't|doesn't|don't|isn't|aren't|wasn't|weren't|nor|neither|false|denies|denied|refutes|refuted|debunked|debunks|rises?|increases?|reduces?|reduction|growth|decline|higher|lower|more|less|benefit|harm|safe|unsafe|effective|ineffective|positive|negative|supports?|contradicts?|causes?|prevents?)\b/g;
+
+// Directional/antonym pairs. Embeddings place a claim and its opposite close
+// together (they share topic), so agreement clustering alone would merge them
+// into one cluster and silently drop the `contested` verdict. Explicit
+// polarity, antonym, and value checks keep contradiction visible (REQ-026f).
+const OPPOSITE_PAIRS: Array<[string, string]> = [
+  ["increase", "decrease"], ["increases", "decreases"], ["increase", "reduce"],
+  ["increases", "reduces"], ["rise", "fall"], ["rises", "falls"],
+  ["higher", "lower"], ["high", "low"], ["more", "less"], ["grow", "shrink"],
+  ["improve", "worsen"], ["improves", "worsens"], ["benefit", "harm"],
+  ["beneficial", "harmful"], ["safe", "unsafe"], ["effective", "ineffective"],
+  ["confirm", "refute"], ["confirms", "refutes"], ["supports", "contradicts"],
+  ["cause", "prevent"], ["causes", "prevents"], ["good", "bad"],
+  ["positive", "negative"], ["growth", "decline"], ["gain", "loss"],
+];
+
+function negates(text: string): boolean {
+  NEGATION_RE.lastIndex = 0;
+  const matches = text.toLowerCase().match(NEGATION_RE) ?? [];
+  return matches.length % 2 === 1;
+}
+
+function numbersIn(text: string): Set<string> {
+  return new Set((text.match(/\d+(?:\.\d+)?%?/g) ?? []).map((n) => n.replace(/\.0+$/, "")));
+}
+
+export function claimsConflict(a: string, b: string): boolean {
+  if (negates(a) !== negates(b)) return true;
+
+  const lowerA = a.toLowerCase();
+  const lowerB = b.toLowerCase();
+  for (const [x, y] of OPPOSITE_PAIRS) {
+    if ((lowerA.includes(x) && lowerB.includes(y)) || (lowerA.includes(y) && lowerB.includes(x))) {
+      return true;
+    }
+  }
+
+  const na = numbersIn(a);
+  const nb = numbersIn(b);
+  if (na.size > 0 && nb.size > 0) {
+    const shared = [...na].some((n) => nb.has(n));
+    if (!shared) return true;
+  }
+  return false;
+}
+
 interface Source {
   title: string;
   url: string;
@@ -138,20 +186,25 @@ export function reconcileClaims(
       continue;
     }
 
-    interface Cluster { members: Source[]; representative: string }
+    interface Cluster { members: Source[]; representative: string; repIndex: number }
     const clusters: Cluster[] = [];
+    const snippets = sources.map((s) => s.snippet || s.claim || s.title);
+    const sim = pairwiseSimilarity(snippets, "lsa");
 
-    for (const source of sources) {
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
       let placed = false;
       for (const cluster of clusters) {
-        if (jaccardSimilarity(source.snippet, cluster.representative) >= similarityThreshold) {
+        const similar = sim[i][cluster.repIndex] >= similarityThreshold;
+        const conflict = claimsConflict(snippets[i], cluster.representative);
+        if (similar && !conflict) {
           cluster.members.push(source);
           placed = true;
           break;
         }
       }
       if (!placed) {
-        clusters.push({ members: [source], representative: source.snippet });
+        clusters.push({ members: [source], representative: snippets[i], repIndex: i });
       }
     }
 
@@ -274,7 +327,10 @@ function providerOperational(
 ): boolean {
   const p = config.providers[slug];
   if (!p) return false;
-  if (p.auth_env && !process.env[p.auth_env]) return false;
+  if (p.auth_env) {
+    const many = p.auth_env.replace(/_API_KEY$/, "_API_KEYS");
+    if (!process.env[p.auth_env] && !process.env[many]) return false;
+  }
   if (p.url_env && !process.env[p.url_env]) return false;
   return true;
 }

@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026.09.11 — Semantic retrieval, key-pool rotation, and rate_limited
+
+- Implemented REQ-103 (Local Embedding Execution) with no new dependencies:
+  `src/embed.ts` is an in-process embedding seam with two models —
+  `signed-hash-tfidf` (default) and `lsa` (latent semantic analysis via a
+  deterministic randomized SVD). `kb.embedding_model` is now read and
+  validated; an unknown reference degrades with a remediation and reports
+  `model_available: false` (F9). Passage ranking (`rerank.ts`) and the
+  duplicated hashed vectorizer were unified onto the seam, and the REQ-103
+  waiver was removed (D-050).
+- Semantic corroboration reconciliation (REQ-026f): paraphrased agreeing claims
+  group by embedding similarity, while an explicit polarity/antonym/numeric
+  conflict check keeps contradictory claims as separate perspectives so the
+  `contested` verdict survives (D-051).
+- Cross-provider result reconciliation (REQ-020g): near-duplicate results
+  collapse to one representative preserving provenance, and results are ordered
+  by semantic relevance to the query.
+- Semantic query expansion and suggestion ordering (REQ-020b, REQ-020e); report
+  near-duplicate detection on ingest (REQ-072); semantic KB-first relevance
+  (REQ-076); semantic task-type classification fallback (§7.1).
+- Persistent key-pool rotation (REQ-104): `INFOBROKER_<PROVIDER>_API_KEYS`
+  supplies an ordered credential pool; rejected keys are disabled for the
+  session, rate-limited keys cool down individually, selection state persists
+  to `$TMPDIR/infobroker/key-pool.json` keyed by a hash (no key material on
+  disk), and `inspect_providers` reports per-key availability. The four keyed
+  providers no longer cache credentials at module scope (D-052).
+- `rate_limited` conformance (REQ-002): a 429 or a cooldown skip is reported as
+  `rate_limited` in preference to `provider_unavailable`, including on chain
+  exhaustion.
+
 ## 2026.09.11 — Local embedding contract and spec-waiver gate
 
 - Added REQ-103 (Local Embedding Execution): knowledge-base and passage

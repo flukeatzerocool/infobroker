@@ -69,7 +69,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
 | F8 | Corroboration loop stalls | `verify_claims` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
-| F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available (REQ-103). |
+| F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with a remediation naming the configured model reference and the built-in fallback; retrieval continues on the fallback model where possible, and non-knowledge-base operation is unaffected (REQ-103). |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `manage_kb` stats action reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
 | F12 | Generic provider misconfiguration | Empty results or parse errors from a user-defined endpoint | Config validation rejects a malformed endpoint or result mapping (REQ-014); a provider whose mapping produces no results advances the fallback chain (REQ-031) |
@@ -171,7 +171,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021f`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -185,7 +185,7 @@ REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 01
 Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
-Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
+Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). A failure attributable to rate limiting — including a provider skipped for cooling down — SHALL be reported as `rate_limited` in preference to a generic provider-unavailable error. Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, `source_type`, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
@@ -216,6 +216,9 @@ The server SHALL support a provider tier whose search behavior is defined by con
 **REQ-015 — Provider Removal by Disable**
 A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appear in fallback chains or provider recommendations, and it SHALL be skipped by all provider-selection logic. Disabling a provider SHALL require only a configuration change in the user configuration layer, SHALL NOT remove its configuration entry or backend module, and SHALL NOT require source-code changes. The disabled state SHALL be preserved across software updates. _Check:_ G1.
 
+**REQ-104 — Key-Pool Rotation**
+Credential-requiring providers SHALL accept an ordered pool of credentials supplied through the environment per REQ-011. WHEN a provider rejects a credential for authentication, the server SHALL NOT retry that credential during the session; WHEN a credential is rate-limited, the server SHALL exclude that credential until its cooldown expires while other credentials remain usable. Credential selection state SHALL persist across restarts. Credentials SHALL NOT appear in configuration values, tool output, logs, errors, or provider reports. WHEN every credential in a pool is unavailable, the provider SHALL be treated as unavailable and SHALL NOT block fallback. _Check:_ G1.
+
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
@@ -225,7 +228,7 @@ A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appe
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
 
 **REQ-020b — `search_web` suggestion mode**
-WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
+WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. Suggestions SHALL be ordered by semantic relatedness to the query; when no embedding capability is available, provider order SHALL be preserved. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
 
 **REQ-020c — `search_web` priority routing**
 Parameters: the `search_web` tool accepts `priority` with values `privacy`, `free_only`, `speed`, and `quality`. WHEN a caller supplies `priority`, the tool SHALL route the query through a chain honoring that value: `privacy` SHALL prefer providers that do not forward queries to third parties, `free_only` SHALL exclude providers requiring an API key or self-hosted instance, `speed` SHALL prefer providers with the lowest recent latency, and `quality` SHALL use the default dispatch chain. The response SHALL identify the serving provider. _Check:_ G1.
@@ -234,10 +237,13 @@ Parameters: the `search_web` tool accepts `priority` with values `privacy`, `fre
 Parameters: the `search_web` tool accepts `time_range`, `page`, `safe_search`, `content_type`, and `region`. WHEN the serving provider does not support a caller-supplied parameter, the response SHALL list that parameter in `meta.ignored_params`. The list SHALL be empty when every supplied parameter is supported. _Check:_ G0, G1.
 
 **REQ-020e — `search_web` query expansion**
-WHEN `search_web` receives `expand` set to true, the tool SHALL return query-expansion strings instead of search results, derived from a suggestion-capable provider and the query's keywords, presented as results with a title and no URL. WHEN no suggestion-capable provider is available, the tool SHALL derive expansions from the query alone rather than erroring. _Check:_ G0, G1.
+WHEN `search_web` receives `expand` set to true, the tool SHALL return query-expansion strings instead of search results, derived from a suggestion-capable provider and the query, deduplicated and ordered by semantic relatedness to the query, presented as results with a title and no URL. WHEN no suggestion-capable provider is available, the tool SHALL derive expansions from the query alone rather than erroring. _Check:_ G0, G1.
 
 **REQ-020f — `search_web` research compile**
 WHEN `search_web` receives `research` set to true, the tool SHALL derive multiple search variants from the query, search each variant through its dispatch chain, and deep-read the top-ranked pages of each variant per REQ-028. The response SHALL group the ranked passages by originating variant, each with a relevance score and provenance. The number of variants and the pages deep-read SHALL be bounded by configuration. The response SHALL be subject to REQ-004 truncation. When a variant yields no fetchable page, the tool SHALL report that variant's search results rather than fail. _Check:_ G1.
+
+**REQ-020g — Cross-provider result reconciliation**
+WHEN `search_web` assembles results from more than one provider or query variant, the tool SHALL collapse results that express the same content into a single representative and SHALL order the returned results by semantic relevance to the query. The representative SHALL preserve the contributing providers and the original source. Collapsing SHALL NOT reduce the count of distinct retrieved results below the caller's requested maximum. WHEN no embedding capability is available, the tool SHALL still return results ordered by its non-semantic ranking. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
@@ -289,6 +295,9 @@ The `verify_claims` response SHALL include a provenance record naming the server
 
 **REQ-026e — corroboration knowledge-base recall**
 WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
+
+**REQ-026f — Semantic claim reconciliation**
+WHEN `verify_claims` reconciles claims, sources whose claims express the same proposition SHALL be grouped even when paraphrased, and sources whose claims conflict SHALL be reported as contested with their perspectives. Reconciliation SHALL distinguish agreement from contradiction rather than relying on textual overlap alone. A finding SHALL NOT be marked confirmed from sources that express conflicting propositions. _Check:_ G1.
 
 **REQ-027 — `get_citations`**
 The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
@@ -466,7 +475,7 @@ Indexed content SHALL be removable by age. The removal interval for content SHAL
 The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
-Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. The chunk count reported by the `manage_kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
+Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. Content whose meaning substantially matches an already-indexed document SHALL be recognized as the same document even when its title or source URL differs. The chunk count reported by the `manage_kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
 
 **REQ-074 — Freshness Classification**
 Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
@@ -475,7 +484,7 @@ Content ingested into the knowledge base SHALL be classified into a freshness ti
 Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL be proportional to the content's freshness tier and the elapsed time since ingestion. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
 
 **REQ-076 — KB-First Sufficiency**
-When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
+When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search; the relevance threshold SHALL be evaluated with the configured embedding capability when one is available. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
 
 **REQ-082 — KB Retrieval Consistency**
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
@@ -717,6 +726,8 @@ when Jina returns 429 or error.
 | `privacy_critical` | Must not leak query to third party | Data sovereignty |
 | `content_fetch` | Fetch and render a URL's content (renderer dispatch for `fetch_page`; not used by `search_web` auto-selection) | Fidelity |
 
+Task-type classification MAY consider semantic similarity between the query and each type's prototype, not only literal keyword presence (REQ-020a).
+
 ### 7.2 Dispatch Table
 
 | Task type | Primary | Fallback 1 | Fallback 2 | Fallback 3 |
@@ -849,7 +860,10 @@ Independence: Two sources are independent if they have different registrable
 domains (e.g., wikipedia.org and britannica.com are independent; two pages on
 wikipedia.org, or two subdomains of the same registrable domain, are not).
 The similarity threshold at which claims are grouped into an agreement cluster
-is configurable via `corroboration.similarity_threshold`.
+is configurable via `corroboration.similarity_threshold`. Agreement grouping is
+semantic — paraphrased claims join the same cluster — while an explicit conflict
+check keeps contradictory claims in separate perspectives so the `contested`
+verdict is preserved (REQ-026f).
 
 ### 8.3 Iteration Limits
 
@@ -896,6 +910,12 @@ is configurable via `corroboration.similarity_threshold`.
 - Cross-task fallback: mock every provider in a non-`general_web` chain failing → verify the `general_web` chain serves, without re-trying an already-attempted provider (REQ-031a)
 - Normalizer: input from each provider format → verify common output shape
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
+- Semantic claim reconciliation: mock two providers with paraphrased agreeing claims → verify one confirmed finding; mock a claim with opposed polarity or a conflicting value → verify the `contested` verdict with perspectives is preserved (REQ-026f)
+- Cross-provider reconciliation: mock results where two providers return the same page at different URLs → verify the results collapse to one representative with provenance retained and distinct results preserved (REQ-020g)
+- Rate-limit error code: mock an explicitly requested provider returning HTTP 429 → verify the error code is `rate_limited`, not `provider_unavailable` (REQ-002)
+- Key-pool rotation: supply two credentials; mock the first returning 401 then a success → verify the rejected credential is not reused and the second serves; mock 429 → verify that credential cools down while the other remains usable (REQ-104)
+- Embedding model unavailable: configure an unknown `embedding_model` → verify KB tools report degraded availability with a remediation and non-knowledge-base tools still work (REQ-103, F9)
+- Semantic passage ranking: rank a page's passages where an intent-matching passage shares no literal query words → verify it is returned above a disjoint passage (REQ-021b)
 - Config reload: change config → verify new provider active, old inactive
 - Token footprint: call `inspect_providers` spec action → verify `tool_schema_bytes` and `median_response_bytes` are present, numeric, and consistent with live registration
 - Generic provider: add a configuration-defined provider against a mock JSON endpoint → verify `search_web` returns mapped results through the dispatch chain
@@ -976,6 +996,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-020d | search_web parameter transparency | 4.3 | G0, G1 |
 | REQ-020e | search_web query expansion | 4.3 | G0, G1 |
 | REQ-020f | search_web research compile | 4.3 | G1 |
+| REQ-020g | cross-provider result reconciliation | 4.3 | G1 |
 | REQ-021 | fetch_page | 4.3 | G0, G1 |
 | REQ-021a | fetch_page network-target safety | 4.3 | G1 |
 | REQ-021b | fetch_page question-grounded extraction | 4.3 | G1 |
@@ -993,6 +1014,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-026c | corroboration source preservation | 4.3 | G1 |
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
+| REQ-026f | semantic claim reconciliation | 4.3 | G1 |
 | REQ-027 | get_citations | 4.3 | G0, G1 |
 | REQ-028 | search_web deep reading | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
@@ -1046,6 +1068,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-086 | KB Encryption Transitions and Recovery | 4.9 | G1 |
 | REQ-087 | KB Source Date Preservation | 4.9 | G1 |
 | REQ-103 | Local Embedding Execution | 4.9 | G1 |
+| REQ-104 | Key-Pool Rotation | 4.2 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 | REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
@@ -1483,9 +1506,9 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
-| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
-| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
+| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
+| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092 | G0 |

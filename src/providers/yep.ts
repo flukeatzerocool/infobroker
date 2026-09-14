@@ -2,19 +2,13 @@
 import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
-import { getEnvVar } from "../config.js";
+import { resolveApiKey, noteAuthStatus } from "../key-pool.js";
 import { infobrokerFetch } from "../http.js";
 
 const YEP_API = "https://platform.yep.com/api/search";
 
-let _yepApiKey: string | undefined;
-function yepApiKey(): string | undefined {
-  if (_yepApiKey === undefined) _yepApiKey = getEnvVar("yep", "_API_KEY");
-  return _yepApiKey;
-}
-
 async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
-  const apiKey = yepApiKey();
+  const apiKey = resolveApiKey("yep");
   if (!apiKey) throw new Error("INFOBROKER_YEP_API_KEY not set");
 
   const body: Record<string, unknown> = {
@@ -42,7 +36,10 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   });
 
   if (resp.status === 402) throw new RetryableError("Yep returned HTTP 402 (insufficient balance)", 402);
-  if (!resp.ok) throw new RetryableError(`Yep returned HTTP ${resp.status}`, resp.status);
+  if (!resp.ok) {
+    noteAuthStatus("yep", apiKey, resp.status);
+    throw new RetryableError(`Yep returned HTTP ${resp.status}`, resp.status);
+  }
 
   const data = (await resp.json()) as {
     results?: Array<{ title?: string; url?: string; description?: string; highlights?: string[]; published_date?: string; source?: { site?: string; name?: string; url?: string } }>;
@@ -61,7 +58,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 }
 
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {
-  const apiKey = yepApiKey();
+  const apiKey = resolveApiKey("yep");
   if (!apiKey) return { status: "inactive", avgLatencyMs: 0 };
 
   const start = Date.now();

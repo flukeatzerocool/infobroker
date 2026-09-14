@@ -393,7 +393,10 @@ export function getDispatchChain(taskType: string): string[] {
   return chain.filter((slug) => {
     const provider = config.providers[slug];
     if (!provider || !provider.enabled) return false;
-    if (provider.tier === "keyed_http" && provider.auth_env && !process.env[provider.auth_env]) return false;
+    if (provider.tier === "keyed_http" && provider.auth_env) {
+      const many = provider.auth_env.replace(/_API_KEY$/, "_API_KEYS");
+      if (!process.env[provider.auth_env] && !process.env[many]) return false;
+    }
     if (provider.tier === "self_hosted_http" && provider.url_env && !process.env[provider.url_env]) return false;
     return true;
   });

@@ -30,6 +30,14 @@ import {
 } from "./kb-crypto.js";
 import { checkContent } from "./content-policy.js";
 import { audit } from "./audit-log.js";
+import {
+  createModel,
+  cosineSimilarity,
+  pairwiseSimilarity,
+  tokenize,
+  DEFAULT_MODEL,
+  type EmbeddingModel,
+} from "./embed.js";
 
 interface VectorStore {
   chunks: KbChunk[];
@@ -37,6 +45,7 @@ interface VectorStore {
   docCount: number;
   events: string[];
   model?: string;
+  embed_state?: Record<string, unknown>;
 }
 
 let store: VectorStore | null = null;
@@ -48,7 +57,6 @@ let resolvedKey: ResolvedKey | null = null;
 let lockError: { code: string; message: string; remediation: string } | null = null;
 let loadedStat: { mtimeMs: number; size: number } | null = null;
 const WRITE_INTERVAL_MS = 30_000;
-const modelAvailable = true;
 const CONFIG_ERROR_CODE = "config_error";
 const TRUNC_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -59,90 +67,56 @@ function resolvePath(p: string): string {
   return p;
 }
 
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1);
-}
+// The active in-process embedding model (REQ-103). It is selected from
+// `kb.embedding_model` at init; an unknown reference is reported as
+// unavailable (F9) while retrieval falls back to the built-in model so the
+// server keeps operating. Model state is loaded from the persisted store
+// before each use so queries project into the same basis as stored chunks.
+let activeModel: EmbeddingModel = createModel(DEFAULT_MODEL)!;
+let modelConfiguredName: string = DEFAULT_MODEL;
+let modelAvailable = true;
 
-function computeTf(tokens: string[]): Record<string, number> {
-  const tf: Record<string, number> = {};
-  for (const t of tokens) {
-    tf[t] = (tf[t] || 0) + 1;
+function configureModel(name: string | undefined): void {
+  const requested = name && name.length > 0 ? name : DEFAULT_MODEL;
+  modelConfiguredName = requested;
+  const model = createModel(requested);
+  if (!model) {
+    modelAvailable = false;
+    activeModel = createModel(DEFAULT_MODEL)!;
+    if (store) {
+      store.events.push(
+        `Embedding model "${requested}" is unavailable at ${new Date().toISOString()}; retrieval degraded to "${DEFAULT_MODEL}"`
+      );
+    }
+    return;
   }
-  const total = tokens.length || 1;
-  for (const k of Object.keys(tf)) {
-    tf[k] /= total;
+  activeModel = model;
+  modelAvailable = true;
+}
+
+// Mirror the persisted model state into the active model before embedding.
+function syncModelState(): void {
+  if (!store) return;
+  if (activeModel.name === "signed-hash-tfidf") {
+    activeModel.load({ idf: store.idf, docCount: store.docCount });
+  } else if (store.embed_state) {
+    activeModel.load(store.embed_state);
   }
-  return tf;
 }
 
-function computeTfIdfVector(tokens: string[], idf: Record<string, number>, docCount: number): number[] {
-  return activeModel.vectorize(tokens, idf, docCount);
-}
-
-interface EmbeddingModel {
-  name: string;
-  vectorize(tokens: string[], idf: Record<string, number>, docCount: number): number[];
-}
-
-// The built-in, zero-dependency model. A richer model can be registered at
-// startup without changing call sites: assign `activeModel` to a new
-// implementation and report its `name` via kbStats (REQ-060c).
-const HASH_DIMS = 4096;
-
-function hashIndex(token: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < token.length; i++) {
-    h ^= token.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
+// Re-fit a fitted model (LSA) over all stored text and re-embed every chunk so
+// stored and query vectors share one basis. Stateless models no-op.
+function refitFittedModel(): void {
+  if (!store || !activeModel.requiresFit) return;
+  const texts = store.chunks.map((c) => c.text);
+  if (texts.length === 0) {
+    store.embed_state = undefined;
+    return;
   }
-  return h >>> 0;
-}
-
-function hashSign(token: string): number {
-  let h = 5381;
-  for (let i = 0; i < token.length; i++) {
-    h = ((h << 5) + h) ^ token.charCodeAt(i);
-  }
-  return h >>> 0;
-}
-
-const activeModel: EmbeddingModel = {
-  name: "signed-hash-tfidf",
-  vectorize(tokens, idf, docCount) {
-    return tfIdfVectorize(tokens, idf, docCount);
-  },
-};
-
-function tfIdfVectorize(tokens: string[], idf: Record<string, number>, docCount: number): number[] {
-  const tf = computeTf(tokens);
-  const nDocs = docCount || 1;
-  const vec: number[] = new Array(HASH_DIMS).fill(0);
-  for (const term of Object.keys(tf)) {
-    const idfVal = Math.log((nDocs + 1) / ((idf[term] || 0) + 1)) + 1;
-    const weight = tf[term] * idfVal;
-    const idx = hashIndex(term) % HASH_DIMS;
-    const sign = (hashSign(term) & 1) === 0 ? 1 : -1;
-    vec[idx] += sign * weight;
-  }
-  return vec;
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length === 0 || b.length === 0) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (normA === 0 || normB === 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  activeModel.fit(texts);
+  for (const chunk of store.chunks) chunk.embedding = activeModel.embed(chunk.text);
+  store.embed_state = activeModel.serialize();
+  store.model = activeModel.name;
 }
 
 function keywordScore(regexes: RegExp[], text: string): number {
@@ -376,14 +350,6 @@ function backupCorruptStore(): void {
   }
 }
 
-function getIdf(): Record<string, number> {
-  return store?.idf ?? {};
-}
-
-function getDocCount(): number {
-  return store?.docCount ?? 0;
-}
-
 function updateIdf(tokens: string[]): void {
   if (!store) return;
   const seen = new Set<string>();
@@ -536,6 +502,7 @@ export function initKb(config: KbConfig): void {
     }
   }
 
+  configureModel(config.embedding_model);
   runTruncSweep();
 
   if (store) ensureStableEmbeddings();
@@ -546,12 +513,23 @@ export function initKb(config: KbConfig): void {
 
 function ensureStableEmbeddings(): void {
   if (!store) return;
-  if (store.model === activeModel.name) return;
+  const fitted = activeModel.requiresFit;
+  const stateMissing = fitted && !store.embed_state;
+  if (store.model === activeModel.name && !stateMissing) {
+    syncModelState();
+    return;
+  }
   let reembedded = 0;
+  if (fitted) {
+    activeModel.fit(store.chunks.map((c) => c.text));
+  } else {
+    syncModelState();
+  }
   for (const chunk of store.chunks) {
-    chunk.embedding = activeModel.vectorize(tokenize(chunk.text), store.idf, store.docCount);
+    chunk.embedding = activeModel.embed(chunk.text);
     reembedded++;
   }
+  if (fitted) store.embed_state = activeModel.serialize();
   store.model = activeModel.name;
   store.events.push(
     `Embedding model reconciled at ${new Date().toISOString()}: "${activeModel.name}", ${reembedded} chunk(s) re-embedded`
@@ -627,8 +605,9 @@ export function kbSearch(
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!store) return [];
 
+  syncModelState();
   const queryTokens = tokenize(query);
-  const queryVec = computeTfIdfVector(queryTokens, getIdf(), getDocCount());
+  const queryVec = activeModel.embed(query);
   const kwRegexes = queryTokens.map((t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
   const actualMax = Math.min(maxResults, kbConfig.max_results);
   const results: KbSearchResult[] = [];
@@ -690,6 +669,25 @@ export function kbIngest(
 
   const now = Date.now();
 
+  // REQ-072: a report whose content substantially matches an already-stored
+  // report is treated as the same document even when its title (and therefore
+  // its derived identity) differs. The incoming text takes over the existing
+  // identity so the store is updated in place rather than duplicated.
+  if (sourceUrl && sourceUrl.startsWith("report://")) {
+    const existingIds = [...new Set(s.chunks.filter((c) => c.source_url.startsWith("report://")).map((c) => c.source_url))];
+    const incoming = `${title} ${text.slice(0, 500)}`;
+    for (const id of existingIds) {
+      if (id === sourceUrl) continue;
+      const existingText = s.chunks.find((c) => c.source_url === id)?.text ?? "";
+      if (!existingText) continue;
+      const sim = pairwiseSimilarity([incoming, `${title} ${existingText.slice(0, 500)}`], "lsa")[0]?.[1] ?? 0;
+      if (sim >= 0.92) {
+        sourceUrl = id;
+        break;
+      }
+    }
+  }
+
   if (sourceUrl) {
     // Preserve a previously stored source date when the re-ingest supplies none
     // (REQ-087), so a transient detection miss does not discard known recency.
@@ -700,12 +698,11 @@ export function kbIngest(
     s.chunks = s.chunks.filter((c) => c.source_url !== sourceUrl);
   }
 
-  const preIngestIdf = { ...s.idf };
-  const preIngestDocCount = s.docCount;
+  const useFitted = activeModel.requiresFit;
+  if (!useFitted) syncModelState();
 
   chunks.forEach((chunkText, index) => {
-    const tokens = tokenize(chunkText);
-    const embedding = computeTfIdfVector(tokens, preIngestIdf, preIngestDocCount);
+    const embedding = useFitted ? [] : activeModel.embed(chunkText);
     const id = randomUUID();
     s.chunks.push({
       id,
@@ -726,6 +723,8 @@ export function kbIngest(
   for (const chunkText of chunks) {
     updateIdf(tokenize(chunkText));
   }
+
+  if (useFitted) refitFittedModel();
 
   scheduleWrite();
   return chunks.length;
@@ -769,7 +768,7 @@ export function kbStats(): KbStats {
     storage_size_bytes: sizeBytes,
     last_ingestion: lastIngestion ? new Date(lastIngestion).toISOString() : null,
     model_available: modelAvailable,
-    model_name: activeModel.name,
+    model_name: modelAvailable ? activeModel.name : modelConfiguredName,
     events: store?.events ?? [],
     encryption: getKbEncryptionState(),
   };
@@ -856,6 +855,7 @@ export function kbDelete(collection?: string, sourceUrl?: string): number {
 
   if (removed > 0) {
     rebuildIdf();
+    refitFittedModel();
     scheduleWrite();
   }
   return removed;
@@ -959,6 +959,7 @@ export function runMaintenance(): void {
   const removed = before - store.chunks.length;
   if (removed > 0) {
     rebuildIdf();
+    refitFittedModel();
     scheduleWrite();
     store.events.push(`Maintenance at ${new Date().toISOString()}: removed ${removed} expired chunks`);
   }

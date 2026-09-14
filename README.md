@@ -285,7 +285,8 @@ falling back to the network when the cached results aren't fresh enough
 or relevant enough. Its actions ingest new text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
 freshness schedule, and deduplicated by source. Retrieval runs on your
-machine — your content is never sent to a third party to be embedded. Beyond
+machine with a configurable in-process embedding model — your content is
+never sent to a third party to be embedded. Beyond
 the cache, `manage_kb` archives the reports you generate: ingest with
 `source_type: "report"`
 (and default to the knowledge base) and revisit them with `manage_kb` list and
@@ -402,6 +403,12 @@ export INFOBROKER_SEARXNG_URL="http://localhost:8080"
 ```
 
 Then set `"enabled": true` in `config.json` for the provider.
+
+Keyed providers also accept an ordered credential pool via
+`INFOBROKER_<NAME>_API_KEYS` (comma-separated). Infobroker rotates to the
+next key when one is rejected or rate-limited, and reports per-key
+availability through `inspect_providers` without ever surfacing key
+material.
 
 SearXNG is the only shipped self-hosted provider, and it is optional
 through and through. Nothing in the server requires it, and nothing is

@@ -2,19 +2,13 @@
 import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
-import { getEnvVar } from "../config.js";
+import { resolveApiKey, noteAuthStatus } from "../key-pool.js";
 import { infobrokerFetch } from "../http.js";
 
 const EXA_API = "https://api.exa.ai/search";
 
-let _exaApiKey: string | undefined;
-function exaApiKey(): string | undefined {
-  if (_exaApiKey === undefined) _exaApiKey = getEnvVar("exa", "_API_KEY");
-  return _exaApiKey;
-}
-
 async function search(query: string): Promise<SearchResult[]> {
-  const apiKey = exaApiKey();
+  const apiKey = resolveApiKey("exa");
   if (!apiKey) throw new Error("INFOBROKER_EXA_API_KEY not set");
 
   const resp = await infobrokerFetch(EXA_API, {
@@ -27,7 +21,10 @@ async function search(query: string): Promise<SearchResult[]> {
     providerSlug: "exa",
   });
 
-  if (!resp.ok) throw new RetryableError(`Exa returned HTTP ${resp.status}`, resp.status);
+  if (!resp.ok) {
+    noteAuthStatus("exa", apiKey, resp.status);
+    throw new RetryableError(`Exa returned HTTP ${resp.status}`, resp.status);
+  }
 
   const data = (await resp.json()) as {
     results?: Array<{ title: string; url: string; text?: string; publishedDate?: string }>;
@@ -45,7 +42,7 @@ async function search(query: string): Promise<SearchResult[]> {
 }
 
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {
-  const apiKey = exaApiKey();
+  const apiKey = resolveApiKey("exa");
   if (!apiKey) return { status: "inactive", avgLatencyMs: 0 };
 
   const start = Date.now();

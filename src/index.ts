@@ -10,7 +10,7 @@ import { loadConfig, reloadConfig, getConfig, getDispatchChain } from "./config.
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
-import { retryWithBackoff, ParseError } from "./retry.js";
+import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
@@ -24,6 +24,9 @@ import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolEr
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { capInputs, mergeItems } from "./batch.js";
+import { reconcileResults } from "./dedup.js";
+import { rankDocs } from "./embed.js";
+import { keyPoolStatus } from "./key-pool.js";
 import { rankPassages } from "./rerank.js";
 import { deepRead } from "./deep-search.js";
 import { detectUpdatedAt } from "./datetime.js";
@@ -217,6 +220,17 @@ function classifyTaskType(task: string): string {
   for (const [type, keywords] of Object.entries(TASK_TYPE_KEYWORDS)) {
     if (keywords.some((kw) => lower.includes(kw))) return type;
   }
+  // No keyword matched: fall back to semantic similarity against each task
+  // type's prototype vocabulary (REQ-020a). A high bar keeps ambiguous queries
+  // on the general_web chain.
+  try {
+    const types = Object.keys(TASK_TYPE_KEYWORDS);
+    const prototypes = types.map((t) => TASK_TYPE_KEYWORDS[t].join(" "));
+    const ranked = rankDocs(task, prototypes, "lsa");
+    if (ranked.length > 0 && ranked[0].score >= 0.5) return types[ranked[0].index];
+  } catch {
+    // Model unavailable — keep the general_web default.
+  }
   return "general_web";
 }
 
@@ -405,6 +419,9 @@ async function doWebSearch(
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType };
   let lastError: ToolErrorResponse | null = null;
+  // REQ-002: any rate-limit-attributable failure in the chain makes the final
+  // error `rate_limited` in preference to a generic provider-unavailable code.
+  let rateLimited = false;
   const quotaExhausted: Record<string, number> = {};
 
   const primarySlug = chain[0];
@@ -425,6 +442,7 @@ async function doWebSearch(
     // even when it is the chain primary. The skip is recorded as a rate-limit
     // failure so a fully-cooled chain reports exhaustion rather than empty.
     if (inCooldown(slug)) {
+      rateLimited = true;
       lastError = err(slug, "rate_limited", "Provider is cooling down", "Retry after the cooldown window");
       return null;
     }
@@ -484,7 +502,10 @@ async function doWebSearch(
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
       }
-      if (e instanceof ParseError) {
+      if (e instanceof RetryableError && e.status === 429) {
+        rateLimited = true;
+        lastError = err(slug, "rate_limited", msg, "Retry after the cooldown window");
+      } else if (e instanceof ParseError) {
         lastError = err(slug, "parse_error", msg, "Trying next provider in fallback chain");
       } else {
         lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
@@ -515,6 +536,10 @@ async function doWebSearch(
       autoIndex(filtered, slug, undefined, undefined, query, timeRange);
     }
     const policyNote = policyMeta(policyFlags, policyMode());
+
+    // REQ-020g: collapse results expressing the same content across providers
+    // and order survivors by semantic relevance to the query.
+    filtered = reconcileResults(filtered, query);
 
     if (deep && !compactMode()) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
@@ -628,7 +653,12 @@ async function doWebSearch(
       exhausted_chain: [...chain, ...crossTaskAttempted],
       quota_exhausted: quotaExhaustedList,
     };
-    return `[ERROR] ${json(err("none", "all_providers_exhausted", `Fallback chain exhausted: ${chain.join(", ")}`, "Retry later or check provider configuration", details))}`;
+    // REQ-002: rate limiting takes precedence over the generic exhaustion code.
+    const exhaustionCode = rateLimited ? "rate_limited" : "all_providers_exhausted";
+    const exhaustionHint = rateLimited
+      ? "Retry after the cooldown window"
+      : "Retry later or check provider configuration";
+    return `[ERROR] ${json(err("none", exhaustionCode, `Fallback chain exhausted: ${chain.join(", ")}`, exhaustionHint, details))}`;
   }
   return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [] }))}`;
 }
@@ -1006,16 +1036,23 @@ async function doFetchPage(
   })}`;
 }
 
+function authPresent(authEnv?: string): boolean {
+  if (!authEnv) return true;
+  if (process.env[authEnv]) return true;
+  const many = authEnv.replace(/_API_KEY$/, "_API_KEYS");
+  return !!process.env[many];
+}
+
 function providerOperational(p: ProviderConfig): boolean {
   if (!p.enabled) return false;
-  if (p.auth_env && !process.env[p.auth_env]) return false;
+  if (!authPresent(p.auth_env)) return false;
   if (p.url_env && !process.env[p.url_env]) return false;
   return true;
 }
 
 function providerInactiveReason(p: ProviderConfig): "disabled" | "no_api_key" | "no_url" | null {
   if (!p.enabled) return "disabled";
-  if (p.auth_env && !process.env[p.auth_env]) return "no_api_key";
+  if (!authPresent(p.auth_env)) return "no_api_key";
   if (p.url_env && !process.env[p.url_env]) return "no_url";
   return null;
 }
@@ -1033,6 +1070,8 @@ function doListProviders(filter?: string): string {
     const operational = providerOperational(p);
     const reason = quota.exhausted ? "exhausted" : (operational ? null : providerInactiveReason(p));
     const cooldownRemaining = inCooldown(slug) ? cooldownRemainingMs(slug) : undefined;
+    // REQ-104: report pool health (index + availability), never key material.
+    const pool = keyPoolStatus(slug);
     return {
       slug,
       tier: p.tier,
@@ -1041,6 +1080,7 @@ function doListProviders(filter?: string): string {
       status: quota.exhausted ? "exhausted" : (operational ? "active" : "inactive"),
       ...(reason ? { inactive_reason: reason } : {}),
       ...(cooldownRemaining !== undefined ? { cooldown_remaining_ms: cooldownRemaining } : {}),
+      ...(pool.length > 1 ? { key_pool: pool } : {}),
       quota_used: quota.daily.used,
       quota_remaining: quota.daily.remaining,
       quota_warning: quota.warning,

@@ -2,6 +2,62 @@
 
 ## Active Decisions
 
+### D-052: Persistent Key-Pool Rotation (REQ-104; 2026.09.14)
+
+Deferred from the competitive batch (D-043) because every keyed provider cached
+its key at module scope. The pool is now env-only: `INFOBROKER_<PROVIDER>_API_KEYS`
+(comma/whitespace separated) is preferred, falling back to the single
+`INFOBROKER_<PROVIDER>_API_KEY` of REQ-011, so existing installs are unchanged.
+`src/key-pool.ts` resolves the next available credential round-robin per call;
+a 401/403 disables that credential for the session and a 429 cools it down
+individually, so the next call rotates without an in-call retry loop (matching
+REQ-104's "SHALL NOT retry that credential"). Selection state persists under
+`$TMPDIR/infobroker/key-pool.json`, keyed by a non-reversible hash so no
+credential material is written to disk; `inspect_providers` reports per-key
+availability and reason only. The four keyed providers (Brave, Exa, Tavily,
+Yep) dropped their module-scope caches in favour of per-call resolution.
+Alternatives rejected: config-declared key lists (would change the config schema
+and the generated auth reference for no user benefit — env pools cover the
+free-tier multi-key case); in-call rotation loops (unnecessary given
+session-disable semantics).
+
+### D-051: Semantic Reconciliation with Explicit Contradiction Detection (REQ-026f, REQ-020g, REQ-020b/e; 2026.09.14)
+
+The roadmap's semantic-retrieval items shipped on the REQ-103 embedding seam.
+Corroboration groups paraphrased agreeing claims by embedding similarity
+(replacing token Jaccard clustering, D-013) and cross-provider results collapse
+by semantic near-duplication and order by relevance to the query (REQ-020g).
+Critically, embedding similarity places a claim and its opposite close together
+(they share topic), so agreement clustering alone would merge contradictions and
+silently drop the `contested` verdict required by §8.1. An explicit conflict
+check — negation polarity, a small antonym/direction pair table, and unequal
+numeric/date values — keeps contradictory claims in separate perspectives
+(REQ-026f). The lexical fallback still applies on tiny corpora, where LSA has no
+co-occurrence to learn from.
+
+### D-050: In-Process Embedding Seam, LSA, and the Rejected LSA Default (REQ-103; 2026.09.14)
+
+REQ-103 is implemented with **no new dependencies**: `src/embed.ts` is a pure
+TypeScript embedding seam holding two in-process models — `signed-hash-tfidf`
+(the historical fixed-dimension lexical vectorizer, D-031) and `lsa` (latent
+semantic analysis via a deterministic randomized SVD, which groups paraphrases
+and synonyms through co-occurrence). `kb.embedding_model` selects the model and
+is now read; an unknown reference degrades to the built-in model with an event
+and `model_available: false` (F9), so non-KB operation is unaffected. Both the
+knowledge base and passage retrieval route through the seam; the duplicated
+hashed vectorizer in `rerank.ts` is gone. Transient consumers (passage ranking,
+claim reconciliation, cross-provider collapse, query expansion, intent
+classification) fit LSA per call over their small candidate set, where the cost
+is bounded.
+
+Setting LSA as the shipped KB default was rejected: on a populated store the KB
+re-fits and re-embeds every chunk synchronously at startup, which blocked the
+MCP `initialize` handshake past its timeout in the live tool-surface test
+(measured, not hypothetical). The shipped default therefore remains
+`signed-hash-tfidf`; `lsa` is opt-in, and the persisted model name triggers the
+REQ-082 reconciliation on switch. A hosted embedding API remains rejected per
+D-049 (content never leaves the process).
+
 ### D-049: Local In-Process Embedding Capability (REQ-103; 2026.09.14)
 
 REQ-103 formalizes that knowledge-base and passage retrieval use an embedding
@@ -842,4 +898,4 @@ REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a
 listed REQ for traceability and reports it as waived; any uncited REQ not
 listed here is an error. Remove a line when its REQ is implemented and cited.
 
-- REQ-103 — Local Embedding Execution: specified, implementation deferred; see D-049.
+- (none)

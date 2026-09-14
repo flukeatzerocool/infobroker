@@ -2,19 +2,13 @@
 import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
-import { getEnvVar } from "../config.js";
+import { resolveApiKey, noteAuthStatus } from "../key-pool.js";
 import { infobrokerFetch } from "../http.js";
 
 const BRAVE_API = "https://api.search.brave.com/res/v1/web/search";
 
-let _braveApiKey: string | undefined;
-function braveApiKey(): string | undefined {
-  if (_braveApiKey === undefined) _braveApiKey = getEnvVar("brave", "_API_KEY");
-  return _braveApiKey;
-}
-
 async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
-  const apiKey = braveApiKey();
+  const apiKey = resolveApiKey("brave");
   if (!apiKey) throw new Error("INFOBROKER_BRAVE_API_KEY not set");
 
   const params = new URLSearchParams({ q: query, count: "10" });
@@ -32,7 +26,10 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     },
   });
 
-  if (!resp.ok) throw new RetryableError(`Brave returned HTTP ${resp.status}`, resp.status);
+  if (!resp.ok) {
+    noteAuthStatus("brave", apiKey, resp.status);
+    throw new RetryableError(`Brave returned HTTP ${resp.status}`, resp.status);
+  }
 
   const data = (await resp.json()) as {
     web?: { results?: Array<{ title: string; url: string; description: string; page_age?: string; meta_url?: { hostname?: string }; profile?: { name?: string; long_name?: string } }> };
@@ -51,7 +48,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 }
 
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {
-  const apiKey = braveApiKey();
+  const apiKey = resolveApiKey("brave");
   if (!apiKey) return { status: "inactive", avgLatencyMs: 0 };
 
   const start = Date.now();
