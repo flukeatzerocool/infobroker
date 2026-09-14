@@ -3,6 +3,7 @@ dist/
 *.log
 .DS_Store
 config.local.json
+config.local.json.bak-*
 knowledge-base/
 *.vector-store.json
 vector-store*.json

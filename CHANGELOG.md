@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.09.14 — User-config migration and integration pass
+
+- Implemented REQ-105 (User Configuration Layer Migration): the shipped config
+  carries a `config_version`, and the server detects user-layer entries that no
+  longer match the current schema, reporting the drift without modifying user
+  state. `reload_config` gains an opt-in `migrate` parameter that backs up the
+  user layer to a timestamped `*.bak-*` sibling (0600), applies registered key
+  relocations and the version stamp, and commits atomically. Entries the schema
+  does not recognize are retained; a user layer newer than the server is
+  rejected rather than downgraded. The `kb.expiry` deprecation is now surfaced
+  through the migration registry (D-053).
+- Documented `kb.embedding_model` — the configurable in-process embedding model
+  REQ-103 made live — in the README configuration section.
+- Removed the untracked Docker build scaffolding and tidied the roadmap.
+
 ## 2026.09.11 — Semantic retrieval, key-pool rotation, and rate_limited
 
 - Implemented REQ-103 (Local Embedding Execution) with no new dependencies:

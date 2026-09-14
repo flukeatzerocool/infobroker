@@ -1,10 +1,21 @@
-// @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084
+// @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084 REQ-105
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
+import {
+  detectConfigDrift,
+  applyConfigMigrations,
+  CURRENT_CONFIG_VERSION,
+  type ConfigDrift,
+} from "./config-migrations.js";
+import { atomicWriteFile, backupFile } from "./lib/atomic-write.js";
 
 let configPath: string;
 let cachedConfig: Config | null = null;
+// The parsed user configuration layer and the shipped top-level key set, kept
+// so REQ-105 drift detection can run without re-reading the files.
+let userConfigLayer: Record<string, unknown> | null = null;
+let shippedTopLevel: string[] = [];
 
 export function getConfigPath(): string {
   if (!configPath) {
@@ -63,11 +74,66 @@ function readJson(path: string): unknown {
 
 function loadConfigFromDisk(): Config {
   const base = readJson(getConfigPath()) as Config;
+  shippedTopLevel = Object.keys(base as unknown as Record<string, unknown>);
   const userPath = getUserConfigPath();
-  const merged = userPath && existsSync(userPath)
-    ? mergeLayer(base, readJson(userPath))
+  const rawUser = userPath && existsSync(userPath) ? readJson(userPath) : null;
+  userConfigLayer = isPlainObject(rawUser) ? rawUser : null;
+  const merged = userConfigLayer
+    ? mergeLayer(base, userConfigLayer)
     : base;
-  return applyDefaults(merged);
+  const result = applyDefaults(merged);
+  warnOnConfigDrift();
+  return result;
+}
+
+// REQ-105: report user-layer drift without modifying user state. Non-blocking —
+// the server operates on the merged config regardless.
+function warnOnConfigDrift(): void {
+  if (!userConfigLayer) return;
+  const drift = detectConfigDrift(userConfigLayer, shippedTopLevel);
+  if (!drift.hasDrift) return;
+  const notes: string[] = [];
+  if (drift.outdatedVersion) {
+    notes.push(`written for schema v${drift.declaredVersion}, current is v${drift.currentVersion}`);
+  }
+  for (const r of drift.renames) notes.push(`legacy key "${r.from}" → "${r.to}"`);
+  for (const d of drift.deprecated) notes.push(`deprecated "${d.path}" — use ${d.replacement}`);
+  for (const u of drift.unrecognized) notes.push(`unrecognized key "${u}"`);
+  console.warn(
+    `[infobroker] user config drift detected (${notes.join("; ")}). No user state was changed. ` +
+      `Run reload_config with migrate=true to back up and apply registered migrations.`
+  );
+}
+
+/** REQ-105: read-only drift assessment for the current user configuration layer. */
+export function getUserConfigDrift(): ConfigDrift | null {
+  if (!userConfigLayer) return null;
+  return detectConfigDrift(userConfigLayer, shippedTopLevel);
+}
+
+/**
+ * REQ-105: opt-in migration of the user configuration layer. Backs up the
+ * existing file, applies registered migrations and the current schema stamp,
+ * and commits atomically. Returns the applied changes and the backup path, or
+ * null when there is no user layer or nothing to change.
+ */
+export function migrateUserConfigLayer(): {
+  changes: string[];
+  backup: string | null;
+  path: string;
+} | null {
+  const userPath = getUserConfigPath();
+  if (!userPath || !existsSync(userPath)) return null;
+  if (!userConfigLayer) return null;
+
+  const drift = detectConfigDrift(userConfigLayer, shippedTopLevel);
+  const { layer, changes } = applyConfigMigrations(userConfigLayer, drift);
+  if (changes.length === 0) return null;
+
+  const backup = backupFile(userPath);
+  atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(layer, null, 2)}\n`, "utf-8"));
+  userConfigLayer = layer;
+  return { changes, backup, path: userPath };
 }
 
 function applyDefaults(config: Config): Config {
@@ -83,6 +149,17 @@ function applyDefaults(config: Config): Config {
 
 function validateConfig(config: Config): void {
   const errors: string[] = [];
+
+  if (config.config_version !== undefined) {
+    if (!Number.isInteger(config.config_version) || config.config_version < 1) {
+      errors.push("config_version must be a positive integer");
+    } else if (config.config_version > CURRENT_CONFIG_VERSION) {
+      errors.push(
+        `config_version ${config.config_version} is newer than this server supports (${CURRENT_CONFIG_VERSION}); ` +
+          `update the server or remove the field from the user configuration layer`
+      );
+    }
+  }
 
   for (const [slug, provider] of Object.entries(config.providers)) {
     if (!provider.tier || !["builtin", "free_http", "keyed_http", "self_hosted_http", "generic_http"].includes(provider.tier)) {

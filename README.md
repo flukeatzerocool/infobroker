@@ -440,10 +440,20 @@ This file is git-ignored, so pulling updates from the repository never
 overwrites your settings. Values in the user layer take precedence over
 the shipped defaults; anything left out falls back to `config.json`.
 
-The knowledge base ships empty. By default it writes to a user-scoped
-path (`~/.local/share/infobroker/knowledge-base`) outside the repository,
-so the content you research and cache stays on your machine and is never
-committed. Each deployed instance accumulates its own store.
+`config.json` carries a schema stamp (`config_version`). If your user layer
+was written for an older schema, or holds a key the current schema no longer
+recognizes, the server reports the drift at startup and in every
+`reload_config` response without changing your file. Apply the registered
+migrations on demand by calling `reload_config` with `migrate` true: the
+server first copies your layer to a timestamped `*.bak-*` file, then updates
+it atomically, leaving anything it does not recognize untouched.
+
+The knowledge base ships empty. Retrieval runs on a configurable in-process
+embedding model selected by `kb.embedding_model`. By default the store
+writes to a user-scoped path (`~/.local/share/infobroker/knowledge-base`)
+outside the repository, so the content you research and cache stays on your
+machine and is never committed. Each deployed instance accumulates its own
+store.
 
 ### Knowledge base encryption
 
@@ -625,7 +635,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-09-11.
+Last updated: 2026-09-14.
 
 ## Contribute
 
@@ -655,7 +665,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.09.11), which defines every requirement and the gates that verify it.
+(v2026.09.14), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers.

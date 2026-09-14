@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
@@ -1221,7 +1221,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.11",
+  version: "2026.09.14",
 });
 
 // --- search_web ---
@@ -1614,8 +1614,15 @@ server.registerTool(
   "infobroker_reload_config",
   {
     title: "Reload Configuration",
-    description: "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json and want the changes applied immediately. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). The tool takes no arguments: the configuration source is fixed at startup (INFOBROKER_CONFIG, merged with config.local.json), and this call simply re-reads it from disk. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
-    inputSchema: {},
+    description:
+      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json and want the changes applied immediately. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). By default the call re-reads the configuration source fixed at startup (INFOBROKER_CONFIG, merged with config.local.json) and reports any user-layer schema drift; pass `migrate` true to back up and apply registered user-layer migrations before reloading. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
+    inputSchema: {
+      migrate: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Back up and apply registered user-configuration-layer migrations before reloading (default false)"),
+    },
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -1623,8 +1630,13 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async () => {
+  async (params) => {
     try {
+      let migration: { changes: string[]; backup: string | null } | null = null;
+      if (params.migrate) {
+        const result = migrateUserConfigLayer();
+        if (result) migration = { changes: result.changes, backup: result.backup };
+      }
       const newConfig = reloadConfig();
       configureAllProviders(newConfig);
       if (newConfig.kb) {
@@ -1633,7 +1645,12 @@ server.registerTool(
         console.error("[infobroker] Knowledge base re-initialized");
       }
       // REQ-098: config reloads are recorded in the audit trail.
-      audit("config_reload", `success (${Object.keys(newConfig.providers).length} providers)`);
+      audit(
+        "config_reload",
+        migration
+          ? `success with user-config migration (${migration.changes.length} change(s))`
+          : `success (${Object.keys(newConfig.providers).length} providers)`
+      );
       const lock = getKbLockError();
       const state = getKbEncryptionState();
       const guidance =
@@ -1642,10 +1659,42 @@ server.registerTool(
           : state === "disabled"
             ? " Encryption disabled. If the store was previously encrypted it is now decrypted on disk; remove the key material only after confirming (kb 'encryption' action, 'status')."
             : "";
+      const drift = getUserConfigDrift();
+      const driftSummary = drift && drift.hasDrift
+        ? ` User config drift: ${[
+            drift.outdatedVersion ? `schema v${drift.declaredVersion} → v${drift.currentVersion}` : "",
+            ...drift.renames.map((r) => `rename "${r.from}" → "${r.to}"`),
+            ...drift.deprecated.map((d) => `deprecated "${d.path}"`),
+            ...drift.unrecognized.map((u) => `unrecognized "${u}"`),
+          ]
+            .filter(Boolean)
+            .join("; ")}.`
+        : "";
+      const migrationSummary = migration
+        ? ` Migrated user config layer: ${migration.changes.join("; ")}${migration.backup ? ` (backup: ${migration.backup})` : ""}.`
+        : "";
       const message =
-        `Configuration reloaded. Knowledge base encryption: ${state}.${guidance}` +
+        `Configuration reloaded. Knowledge base encryption: ${state}.${guidance}${driftSummary}${migrationSummary}` +
         (lock ? ` Knowledge base LOCKED: ${lock.message}` : "");
-      return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "system", results: [{ message, provider_count: Object.keys(newConfig.providers).length }] })}` }] };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `[OK] ${json({
+              status: "ok",
+              provider: "system",
+              results: [
+                {
+                  message,
+                  provider_count: Object.keys(newConfig.providers).length,
+                  config_drift: drift && drift.hasDrift ? drift : null,
+                  migration,
+                },
+              ],
+            })}`,
+          },
+        ],
+      };
     } catch (e) {
       audit("config_reload", "failed — previous config remains active");
       return {

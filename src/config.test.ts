@@ -1,6 +1,6 @@
 // @implements REQ-010 REQ-042 REQ-043
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./types.js";
@@ -280,5 +280,51 @@ describe("configuration overlay", () => {
     });
     expect(cfg.deep?.max_pages).toBe(4);
     expect(cfg.deep?.early_exit_score).toBe(0.5);
+  });
+
+  it("rejects a non-positive config_version", async () => {
+    await expect(
+      loadWithOverlay(BASE, { config_version: 0 })
+    ).rejects.toThrow(/config_version/);
+  });
+
+  it("rejects a config_version newer than this server supports", async () => {
+    await expect(
+      loadWithOverlay(BASE, { config_version: 999 })
+    ).rejects.toThrow(/newer/);
+  });
+
+  it("accepts the current config_version", async () => {
+    const cfg = await loadWithOverlay(BASE, { config_version: 1 });
+    expect(cfg.config_version).toBe(1);
+  });
+
+  it("warns about unrecognized user-layer keys without modifying them", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await loadWithOverlay(BASE, { frobnicate: true });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("drift"));
+    warn.mockRestore();
+  });
+
+  it("migrates an outdated user layer to the current schema with a recoverable backup", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ib-cfg-"));
+    const basePath = join(dir, "config.json");
+    const overlayPath = join(dir, "config.local.json");
+    writeFileSync(basePath, JSON.stringify({ ...BASE, config_version: 1 }));
+    writeFileSync(overlayPath, JSON.stringify({}));
+    process.env["INFOBROKER_CONFIG"] = basePath;
+    process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
+    vi.resetModules();
+    const mod = await import("./config.js");
+    mod.loadConfig();
+
+    const result = mod.migrateUserConfigLayer();
+    expect(result).not.toBeNull();
+    expect(result!.changes.length).toBeGreaterThan(0);
+    expect(result!.backup).toBeTruthy();
+    expect(existsSync(result!.backup!)).toBe(true);
+    const written = JSON.parse(readFileSync(overlayPath, "utf-8")) as { config_version?: number };
+    expect(written.config_version).toBe(1);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -7,5 +7,3 @@
 -->
 
 <!-- No upcoming items. Remove entries once they ship to CHANGELOG.md. -->
-
-<!-- No upcoming items. Remove entries once they ship to CHANGELOG.md. -->

@@ -1,4 +1,5 @@
 {
+  "config_version": 1,
   "defaults": {
     "timeout": 12000,
     "retry_count": 2,

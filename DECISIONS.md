@@ -2,6 +2,35 @@
 
 ## Active Decisions
 
+### D-053: Opt-In User-Config Migration with Drift Reporting (REQ-105; 2026.09.14)
+
+The user configuration layer is deep-merged over the shipped default, so a
+release that renames, moves, or removes a config key leaves the old entry in the
+user's file, silently ignored. REQ-105 makes that drift observable and migratable
+without the server ever rewriting user state on its own.
+
+A top-level `config_version` stamps the shipped schema (`1` today). At load the
+server compares the user layer against the shipped top-level key set and the
+registered migration/deprecation registry and emits one stderr warning naming the
+drift — it does not touch the file. Drift is also reported in every
+`reload_config` response. The migration itself is opt-in: `reload_config` gains a
+`migrate` parameter (default false) that copies the user layer to a timestamped
+`*.bak-*` sibling at 0600, applies registered key relocations plus the version
+stamp, and commits with an atomic temp+rename. Entries the schema does not
+recognize are copied through untouched; the user layer version is validated
+against the shipped version, and a layer newer than the server is rejected rather
+than downgraded.
+
+Alternatives rejected: **automatic migration at load** (writes a user-owned file
+without consent and risks a half-migrated layer if the process dies), **a separate
+migration tool** (grows the fixed seven-tool surface for a rare operation), and a
+**sidecar overlay file** (a second user-state file to preserve and document, for
+no gain). `applyConfigMigrations` is pure and tested with injected renames; the
+registry ships with the live `kb.expiry` deprecation as its first entry, so the
+transform path is exercised rather than dead. Lossy migrations (where the new
+shape carries information the old one lacks) are reported for manual edit, never
+auto-rewritten.
+
 ### D-052: Persistent Key-Pool Rotation (REQ-104; 2026.09.14)
 
 Deferred from the competitive batch (D-043) because every keyed provider cached

@@ -28,6 +28,10 @@ export interface ProviderConfig {
 }
 
 export interface Config {
+  // Schema version of the shipped configuration layer (REQ-105). The user
+  // configuration layer may carry its own copy to declare which schema version
+  // it was written against.
+  config_version?: number;
   providers: Record<string, ProviderConfig>;
   dispatch: Record<string, string[]>;
   defaults?: {

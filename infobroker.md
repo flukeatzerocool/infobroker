@@ -171,7 +171,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -521,6 +521,9 @@ user-owned state: the user configuration layer (REQ-010), indexed
 knowledge base content (REQ-067), and accumulated quota state (REQ-033).
 The server SHALL operate on preserved user state after an update without
 requiring reconfiguration. _Check:_ G1.
+
+**REQ-105 — User Configuration Layer Migration**
+WHEN a release advances the configuration schema, the server SHALL detect entries in the user configuration layer that no longer match the current schema and SHALL report the drift without modifying user state. The server SHALL provide an opt-in operation that migrates the user layer in place. Before writing, the operation SHALL preserve a recoverable backup of the user layer; the write SHALL be atomic; and entries the current schema does not recognize SHALL be retained rather than discarded. The operation SHALL report the changes it applied. _Check:_ G1.
 
 **REQ-091 — Registry-Published Distribution**
 The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1, G3.
@@ -938,6 +941,7 @@ verdict is preserved (REQ-026f).
 - Normalizer discard: normalize results with empty URL → verify zero results returned, max_results count preserved for downstream provider
 - Config overlay: load shipped default plus user configuration layer → verify user values take precedence over shipped values
 - Update preservation: apply updated shipped defaults over an existing user layer, knowledge base store, and quota file → verify all user-owned state is retained and the server operates without reconfiguration
+- User config migration: supply a user configuration layer behind the shipped schema version → verify drift is reported and the layer is left unmodified; run the opt-in migrate operation → verify a recoverable backup is written, the layer is updated atomically, and unrecognized entries are retained (REQ-105)
 
 ### 9.3 G2 — Live Smoke Tests (Optional)
 
@@ -1071,6 +1075,7 @@ verdict is preserved (REQ-026f).
 | REQ-104 | Key-Pool Rotation | 4.2 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
+| REQ-105 | User Configuration Layer Migration | 4.10 | G1 |
 | REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
 | REQ-096 | Security Model Completeness | 4.11 | G3 |
 | REQ-097 | Content Policy | 4.11 | G0, G1 |
@@ -1510,7 +1515,7 @@ secondary concerns rather than duplicating the REQ.
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091 | G0, G1 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
