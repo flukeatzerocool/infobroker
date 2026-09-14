@@ -227,9 +227,11 @@ This runs:
 | `scripts/check-shipped-kb-empty.ts` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
-REQs with no waiver in DECISIONS.md, undocumented source files, Appendix B
-mechanical-limit violations, REQ manifest mismatches, stale generated auth
-reference).
+REQs with no waiver in the `## Spec Waivers` section of DECISIONS.md,
+undocumented source files, Appendix B mechanical-limit violations, REQ
+manifest mismatches, stale generated auth reference). A REQ listed in
+`## Spec Waivers` is accepted as intentionally unimplemented and reported as
+waived; remove its line when it is implemented and cited.
 
 Shell scripts (`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`) are
 gate-checked with `bash -n`. Running `shellcheck` on them before committing

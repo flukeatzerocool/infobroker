@@ -2,6 +2,27 @@
 
 ## Active Decisions
 
+### D-049: Local In-Process Embedding Capability (REQ-103; 2026.09.14)
+
+REQ-103 formalizes that knowledge-base and passage retrieval use an embedding
+model that executes inside the server process, with content never transmitted
+to a third party for embedding. The capability is specified now and
+implemented later; the requirement is recorded as intentionally unimplemented
+(see `## Spec Waivers`).
+
+A hosted embedding API was rejected: it would send knowledge-base content
+off-box, contradicting the "privacy always" principle and the at-rest
+encryption guarantee (REQ-084). The model posture is an English-first shipped
+default with a configurable multilingual swap; the concrete model name is an
+implementation detail recorded here rather than in REQ prose (SR-011).
+
+This decision also records a gap REQ-103 makes explicit: `embedding_model`
+exists in the configuration schema but no runtime code reads it, so D-023's
+pluggable `EmbeddingModel` seam is defined but never wired to configuration.
+Until REQ-103 is implemented, F9's model-unavailable branch is likewise
+unreachable (`modelAvailable` is a constant). Implementing REQ-103 makes both
+paths real and the configuration reference meaningful.
+
 ### D-048: TDQS 5/5 Completion Pass (2026.09.11)
 
 The 2026-09-09 Glama re-inspection (post v0.1.2) left three tools below 5/5
@@ -814,3 +835,11 @@ are replaced wholesale — before validation and reload. The knowledge base
 (`$TMPDIR/infobroker/quota.json`) live outside the repository, so they are
 preserved across updates. API keys remain environment-variable-only
 (REQ-011) and are therefore update-safe.
+
+## Spec Waivers
+
+REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a
+listed REQ for traceability and reports it as waived; any uncited REQ not
+listed here is an error. Remove a line when its REQ is implemented and cited.
+
+- REQ-103 — Local Embedding Execution: specified, implementation deferred; see D-049.

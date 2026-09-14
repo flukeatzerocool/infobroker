@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.09.11 — Local embedding contract and spec-waiver gate
+
+- Added REQ-103 (Local Embedding Execution): knowledge-base and passage
+  retrieval must use an embedding model that runs inside the server, content
+  is never sent to a third party for embedding, the model reference is
+  configurable, and retrieval degrades rather than failing when no model is
+  available. Implementation is deferred; the requirement is recorded as an
+  intentional waiver (D-049).
+- Implemented the DECISIONS.md `## Spec Waivers` mechanism in `validate-spec`:
+  an uncited REQ with no waiver is now an error (previously a warning), and
+  waived REQs are reported as intentionally unimplemented.
+- Documented in the README that knowledge-base retrieval runs locally and
+  content is never sent to a third party to be embedded.
+
 ## 2026.09.11 — Spec-sync conformance fixes
 
 - Batch searches and fetches that fail end-to-end now return a complete error

@@ -69,7 +69,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
 | F8 | Corroboration loop stalls | `verify_claims` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
-| F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available. |
+| F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with remediation "run once with network access to download the embedding model." Auto-indexing silently skips until model is available (REQ-103). |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `manage_kb` stats action reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
 | F12 | Generic provider misconfiguration | Empty results or parse errors from a user-defined endpoint | Config validation rejects a malformed endpoint or result mapping (REQ-014); a provider whose mapping produces no results advances the fallback chain (REQ-031) |
@@ -145,6 +145,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Collection** | A named namespace that scopes knowledge base content. Collections are implicit — they exist when first used. |
 | **Chunk** | A segment of text stored with its embedding vector in the knowledge base. Each chunk retains the source URL, provider, and ingestion timestamp of the content it was derived from. |
 | **Vector store** | The local database that indexes chunks by their embedding vectors and supports semantic (vector similarity) and keyword (full-text) retrieval. |
+| **Embedding model** | The in-process component that converts text into the embedding vectors stored in the knowledge base and used for retrieval; it executes within the server instance (REQ-103). |
 | **KB** | Abbreviation for "knowledge base." |
 | **Freshness tier** | A classification assigned to knowledge base content at ingest time that determines how quickly its retrieval confidence decays and when it expires. Tiers range from volatile content that loses accuracy rapidly to stable content that remains accurate indefinitely. |
 | **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `brave`). |
@@ -170,7 +171,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021f`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020f`, `021a`–`021f`, `024a`–`024c`, `026a`–`026e`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -494,6 +495,9 @@ The knowledge base SHALL support enable and disable of at-rest encryption (REQ-0
 **REQ-087 — KB Source Date Preservation**
 WHEN knowledge-base ingest knows a source's last-updated date, whether supplied by the caller or determined from a fetched URL per REQ-021c, the tool SHALL store that date with the ingested content. The list, get, and search actions SHALL report the stored source date alongside their other fields. WHEN no date is known, the actions SHALL omit the date field rather than guess. Re-ingesting a source SHALL preserve a previously stored date when the new ingest supplies none. _Check:_ G1.
 
+**REQ-103 — Local Embedding Execution**
+Knowledge-base and passage retrieval SHALL be performed with an embedding model that executes within the server instance, and content submitted for embedding SHALL NOT be transmitted to a third party. The model reference SHALL be configurable so an alternative model can be selected without a specification change. WHEN no model is available, retrieval SHALL degrade with a remediation message and SHALL NOT prevent non-knowledge-base operation. Changing the configured model SHALL reconcile stored content per REQ-082. The active model name and availability SHALL be reported per REQ-060c. _Check:_ G1.
+
 ### 4.10 Deployment and Updates
 
 **REQ-042 — Source Distribution**
@@ -612,7 +616,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
 7. **Auth Reference Generation**: Read `config.json` for `auth_env`/`url_env` fields; generate `skills/infobroker/references/provider-auth.md` with the provider-to-auth mapping.
 8. **Verification**: G0 MCP conformance, G1 mock provider tests, G2 live smoke tests (key-gated).
-9. **Knowledge Base**: Embedding model loader, vector store initialization, chunking pipeline, auto-indexing hooks wired to `search_web`, `fetch_page`, and `verify_claims`, the `manage_kb` MCP tool, content expiry maintenance loop.
+9. **Knowledge Base**: Embedding model loader (REQ-103), vector store initialization, chunking pipeline, auto-indexing hooks wired to `search_web`, `fetch_page`, and `verify_claims`, the `manage_kb` MCP tool, content expiry maintenance loop.
 
 ### 5.5 Corroboration Quality (Single Phase)
 
@@ -899,8 +903,9 @@ is configurable via `corroboration.similarity_threshold`.
 - Provider removal: disable a provider in the user configuration layer → verify it is skipped by dispatch and recommendations, and the disabled state survives reload and a simulated update
 - Spec drift: parse all `@implements REQ-NNN` citations from `src/**/*.ts`
   and cross-reference against the REQ manifest in this specification. Report
-  any REQ with zero citations (excluding §4.7 artifact REQs) as unimplemented;
-  report any source file without citations as undocumented.
+  any REQ with zero citations (excluding §4.7 artifact REQs and REQs recorded
+  in `## Spec Waivers`) as unimplemented; report any source file without
+  citations as undocumented.
 - KB search: mock vector store with known embeddings; query → verify results ranked by relevance
 - KB retrieval consistency: ingest content across multiple calls so the vocabulary grows between calls; query for a term present only in the earliest content → verify it is returned and ranked (REQ-082)
 - KB ingestion: provide text content → verify chunks created and stored
@@ -926,7 +931,8 @@ is configurable via `corroboration.similarity_threshold`.
 - `npm run validate-spec` exits zero
 - Every REQ in §4 has at least one source-file citation
   (`@implements REQ-NNN`) or belongs to §4.7 (client artifacts verified by
-  file presence) or has a recorded waiver in DECISIONS.md
+  file presence) or is listed in the `## Spec Waivers` section of DECISIONS.md;
+  an uncited REQ with no waiver is an error
 - Every source file in `src/` has at least one `@implements` header comment
 - No REQ body exceeds the Appendix B mechanical limits: more than 800
   characters, more than 8 sentences, more than 8 SHALL clauses, more than one
@@ -1039,6 +1045,7 @@ is configurable via `corroboration.similarity_threshold`.
 | REQ-085 | KB Data Preservation | 4.9 | G1 |
 | REQ-086 | KB Encryption Transitions and Recovery | 4.9 | G1 |
 | REQ-087 | KB Source Date Preservation | 4.9 | G1 |
+| REQ-103 | Local Embedding Execution | 4.9 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 | REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
@@ -1419,8 +1426,9 @@ mechanical guarantee that spec and code remain aligned:
 **C.6 Drift detection.** `npm run validate-spec` (G3) is the automated drift
 detector. It must exit zero before any commit that changes `infobroker.md` or
 any file in `src/`. The check surfaces:
-- REQs with no implementing source file (spec-only, needs implementation or
-  explicit waiver recorded in DECISIONS.md)
+- REQs with no implementing source file (spec-only; needs implementation or
+  an entry in the `## Spec Waivers` section of DECISIONS.md — an uncited,
+  unwaived REQ is an error)
 - Source files with no REQ citation (undocumented code)
 - REQ bodies that violate SR-011 (implementation detail in a contract)
 - REQ bodies that violate the Appendix B mechanical limits (errors) or the
@@ -1478,7 +1486,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e | G0, G1 |
-| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087 | G0, G1 |
+| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
@@ -1545,13 +1553,13 @@ explicitly named here so the security posture is auditable without guessing.
 | Risk | Controlling REQ / disposition |
 |------|-------------------------------|
 | LLM01 Prompt Injection | REQ-097 (content policy flags injection-style content and refuses storage of flagged material); residual: retrieved content that passes the policy still reaches the client and is treated as data, not instructions |
-| LLM02 Sensitive Information Disclosure | REQ-011 (keys never surfaced), REQ-084 (KB at-rest encryption), REQ-004 + truncation permissions |
+| LLM02 Sensitive Information Disclosure | REQ-011 (keys never surfaced), REQ-084 (KB at-rest encryption), REQ-103 (embedding stays local), REQ-004 + truncation permissions |
 | LLM03 Supply Chain | REQ-101 |
 | LLM04 Data and Model Poisoning | REQ-097 (policy before storage), REQ-026e/REQ-076 (KB recall limited to corroboration, never sole source) |
 | LLM05 Improper Output Handling | Residual: output shaping is the client skills' responsibility (REQ-051/052) |
 | LLM06 Excessive Agency | REQ-099 (tool-surface file confinement), REQ-021a (fetch target safety), REQ-090/092 (tool behavioral disclosure) |
 | LLM07 System Prompt Leakage | Residual: the server never inspects client prompts; keys are env-only (REQ-011) |
-| LLM08 Vector and Embedding Weaknesses | REQ-097 (flagged content not stored), REQ-082 (embedding reconciliation) |
+| LLM08 Vector and Embedding Weaknesses | REQ-097 (flagged content not stored), REQ-082 (embedding reconciliation), REQ-103 (in-process model, no third-party egress) |
 | LLM09 Misinformation | REQ-026 family (corroboration, authority weighting, provenance) |
 | LLM10 Unbounded Consumption | REQ-030, REQ-033, REQ-034 (throttling and quota), REQ-028/REQ-020f/REQ-021d bounds |
 

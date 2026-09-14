@@ -8,6 +8,36 @@
 
 <!-- No upcoming items. Remove entries once they ship to CHANGELOG.md. -->
 
+## Semantic corroboration reconciliation (REQ-026 family)
+
+- Replace the token-Jaccard claim clustering in `corroborate` (D-013) with
+  embedding similarity, so paraphrased agreeing and contradicting claims
+  group correctly.
+- Depends on the local embedding model (REQ-103).
+
+## Semantic passage ranking for deep search and question-grounded fetch (REQ-021b, REQ-028)
+
+- Use the local embedding model in place of the hashed-TF-IDF passage
+  scorer in `rerank.ts` for `deep` and `fetch_page question` responses.
+- Improves ranking of passages that match intent without shared words.
+
+## Cross-provider semantic deduplication and rerank (REQ-003, REQ-020 family)
+
+- Collapse near-duplicate results across providers and order results by
+  semantic match to intent, beyond today's URL/domain dedup.
+- Depends on the local embedding model (REQ-103).
+
+## Semantic query expansion and suggestion (REQ-020b, REQ-020e)
+
+- Rank and cluster query variants and suggestions by meaning rather than
+  lexical rules.
+
+## Further embedding reuse (REQ-103 follow-on)
+
+- Embedding-based intent classification to replace keyword task-type routing.
+- Cross-lingual retrieval once the multilingual model swap (D-049) is active.
+- Semantic KB sufficiency thresholds and near-duplicate report detection.
+
 ## Persistent key-pool rotation (deferred from competitive batch, 2026.09.04)
 
 - Search Toolkit-style multi-key pools: ordered key lists per keyed provider,

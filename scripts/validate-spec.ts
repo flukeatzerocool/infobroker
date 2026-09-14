@@ -2,6 +2,9 @@
 // validate-spec.ts — gate: spec-code traceability, REQ-body hygiene, manifest
 // and taxonomy reconciliation. Wired into `npm run check` (G3).
 //
+// A REQ with no `@implements` citation is an error unless it is recorded in
+// the `## Spec Waivers` section of DECISIONS.md (intentionally unimplemented).
+//
 // Exit codes: 0 = all checks pass; 1 = errors found.
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
@@ -95,12 +98,40 @@ function scanDir(dir: string): void {
 
 scanDir(SRC);
 
+// --- Recorded spec waivers (DECISIONS.md `## Spec Waivers` section) ---
+//
+// A REQ listed in the waiver section is intentionally unimplemented and is
+// accepted for traceability without an @implements citation. Any uncited REQ
+// not listed here is an error (spec-code drift).
+
+const waivedReqs = new Set<string>();
+{
+  const decisionsPath = join(ROOT, "DECISIONS.md");
+  if (existsSync(decisionsPath)) {
+    const decisions = readFileSync(decisionsPath, "utf-8");
+    const start = decisions.indexOf("## Spec Waivers");
+    if (start !== -1) {
+      const rest = decisions.slice(start + "## Spec Waivers".length);
+      const nextSection = rest.indexOf("\n## ");
+      const section = nextSection === -1 ? rest : rest.slice(0, nextSection);
+      for (const m of section.matchAll(/REQ-\d{3}[a-z]?/g)) waivedReqs.add(m[0]);
+    }
+  }
+}
+
 // --- Cross-reference ---
 
+const waivedUncited: string[] = [];
 for (const req of allReqs) {
   if (artifactReqs.has(req) || metaReqs.has(req)) continue;
   if (!reqCitedBy.has(req)) {
-    warn(`REQ ${req}: no @implements citation found in any source file`);
+    if (waivedReqs.has(req)) {
+      waivedUncited.push(req);
+    } else {
+      error(
+        `REQ ${req}: no @implements citation found in any source file and no waiver in DECISIONS.md \`## Spec Waivers\``
+      );
+    }
   }
 }
 
@@ -744,6 +775,11 @@ console.log(`${filesWithoutCitation.length} source file(s) without @implements`)
 
 const errors = violations.filter((v) => v.severity === "error");
 const warnings = violations.filter((v) => v.severity === "warning");
+
+if (waivedUncited.length > 0) {
+  console.log(`\n${waivedUncited.length} waived REQ(s) (unimplemented, recorded in DECISIONS.md):`);
+  for (const w of waivedUncited) console.log(`  WAIVED: ${w}`);
+}
 
 if (errors.length > 0) {
   console.log(`\n${errors.length} error(s):`);

@@ -284,8 +284,10 @@ base. `manage_kb` checks the cache before hitting external providers — only
 falling back to the network when the cached results aren't fresh enough
 or relevant enough. Its actions ingest new text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
-freshness schedule, and deduplicated by source. Beyond the cache, `manage_kb`
-archives the reports you generate: ingest with `source_type: "report"`
+freshness schedule, and deduplicated by source. Retrieval runs on your
+machine — your content is never sent to a third party to be embedded. Beyond
+the cache, `manage_kb` archives the reports you generate: ingest with
+`source_type: "report"`
 (and default to the knowledge base) and revisit them with `manage_kb` list and
 `manage_kb` get, or write them to a local directory instead. Each archived report
 records its source's last-updated date, so you can compare it against the
