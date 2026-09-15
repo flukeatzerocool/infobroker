@@ -8,18 +8,25 @@
 #
 # Usage:
 #   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--resume] [--from=<step>]
-#                              [--parallel] [--force-tag] [--force-push]
+#                              [--to=<step>] [--parallel] [--scan-ai]
+#                              [--force-tag] [--force-push]
 #                              [--allow-secrets] [--help]
 #   --dry-run        Assemble, check, typecheck — skip commit, push, tag.
 #   --yes (-y)       Skip confirmation prompt before commit/push.
 #   --no-push        Commit but skip push, tag, and mirror sync.
 #   --resume         Skip steps already recorded complete in the state journal.
-#   --from=<step>    Start at a named step (readthrough|sync|changelog|scan|readme).
-#   --parallel       Run independent steps concurrently (scan ∥ readme; auth ∥ readthrough).
+#   --from=<step>    Start at a named step (readthrough|sync|auth|changelog|scan|readme).
+#   --to=<step>      Stop after a named step (inclusive).
+#   --parallel       Run independent steps concurrently (auth ∥ readthrough).
+#   --scan-ai        Also run the AI scan prompts (default: deterministic scan only).
 #   --force-tag      Overwrite an existing version tag that is not an ancestor.
 #   --force-push     Force push with lease (otherwise refuse if diverged).
 #   --allow-secrets  Warn but do not block when staged content matches secret patterns.
 #   --help (-h)      Show this message.
+#
+# Model tiering: review-only steps (read-through, changelog, scan, README) run
+# under $PIPELINE_LIGHT_AGENT (default: pipeline-fast, a non-thinking agent);
+# the server sync keeps the full build agent.
 #
 # Recovery guide
 #   Undo a push:  git revert <sha> && git push origin $(git branch --show-current)
@@ -32,8 +39,8 @@ set -euo pipefail
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
-NO_PUSH=false
-START_STEP=""
+NO_PUSH=false; SCAN_AI=false
+START_STEP=""; END_STEP=""
 
 for arg in "$@"; do
   case "$arg" in
@@ -41,21 +48,25 @@ for arg in "$@"; do
     --yes|-y) FORCE=true ;;
     --resume) RESUME=true ;;
     --parallel) PARALLEL=true ;;
+    --scan-ai) SCAN_AI=true ;;
     --force-tag) FORCE_TAG=true ;;
     --force-push) FORCE_PUSH=true ;;
     --allow-secrets) ALLOW_SECRETS=true ;;
     --no-push) NO_PUSH=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
+    --to=*) END_STEP="${arg#--to=}" ;;
     --help|-h)
-      printf '%s\n' "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--resume] [--from=<step>]"
-      printf '%s\n' "                              [--parallel] [--force-tag] [--force-push] [--allow-secrets]"
+      printf '%s\n' "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--resume] [--from=<step>] [--to=<step>]"
+      printf '%s\n' "                              [--parallel] [--scan-ai] [--force-tag] [--force-push] [--allow-secrets]"
       printf '%s\n' ""
       printf '%s\n' "  --dry-run   Spec audit, read-through, sync, checks, scans — skip commit, push, tag."
       printf '%s\n' "  --yes (-y)  Skip confirmation prompt before commit/push."
       printf '%s\n' "  --no-push   Commit but skip push, tag, and mirror sync."
       printf '%s\n' "  --resume    Skip steps already recorded complete."
-      printf '%s\n' "  --from=S    Start at step (readthrough|sync|changelog|scan|readme)."
-      printf '%s\n' "  --parallel  Run independent steps concurrently."
+      printf '%s\n' "  --from=S    Start at step (readthrough|sync|auth|changelog|scan|readme)."
+      printf '%s\n' "  --to=S      Stop after step (inclusive)."
+      printf '%s\n' "  --parallel  Run independent steps concurrently (auth ∥ readthrough)."
+      printf '%s\n' "  --scan-ai   Also run the AI scan prompts (default: deterministic scan only)."
       printf '%s\n' "  --force-tag Overwrite an existing version tag that is not an ancestor of HEAD."
       printf '%s\n' "  --force-push Force-push with lease if diverged."
       printf '%s\n' "  --allow-secrets  Warn only on secret patterns."
@@ -103,10 +114,13 @@ OPC_TIMEOUT="${OPC_TIMEOUT:-1800}"
 # Model tiering: full model for sync, light model for review-only steps.
 PIPELINE_MODEL="${PIPELINE_MODEL:-}"
 PIPELINE_LIGHT_MODEL="${PIPELINE_LIGHT_MODEL:-${PIPELINE_MODEL:-}}"
+# Non-thinking agent for review-only steps (read-through, changelog, scan, README).
+PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
 
 : > "$PIPELINE_LOG_FILE"
+printf '{}' > "$PIPELINE_RUN_DIR/timings.json"
 
 # ── State journal ────────────────────────────────────────────────────────────
 state_done() { [[ "$(json_from_file "$STATE_FILE" "$1")" == "true" ]]; }
@@ -124,6 +138,11 @@ step_skip() {
     local before="${STEP_ORDER%%$START_STEP*}"
     [[ "$before" == "$STEP_ORDER" ]] && return 1   # START_STEP not found → skip nothing
     [[ " $before " == *" $1 "* ]] && return 0
+  fi
+  if [[ -n "$END_STEP" ]]; then
+    # Skip any step at or after END_STEP (END_STEP itself is inclusive).
+    local upto="${STEP_ORDER%%$END_STEP*}"
+    [[ "$upto" == "$STEP_ORDER" ]] || [[ " $upto " == *" $1 "* ]] || [[ "$1" == "$END_STEP" ]] || return 0
   fi
   return 1
 }
@@ -223,7 +242,7 @@ else
   fi
 
   warn "Launching read-through session..."
-  run_pipeline_step "$PIPELINE_RUN_DIR/readthrough.prompt.md" "$OUT_READTHROUGH" --model "$PIPELINE_LIGHT_MODEL" --retry
+  run_pipeline_step "$PIPELINE_RUN_DIR/readthrough.prompt.md" "$OUT_READTHROUGH" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
   READTHROUGH_RC=$OPC_RC
   [[ $READTHROUGH_RC -ne 0 ]] && die "Read-through FAILED. Check $OUT_READTHROUGH."
 
@@ -265,7 +284,8 @@ if step_skip sync; then
   info "Server sync: SKIPPED (state journal)"
 else
   warn "Launching server sync session..."
-  run_pipeline_step "$PROMPT_DIR/sync.md" "$OUT_SYNC" --model "$PIPELINE_MODEL" --retry
+  sed "s|<READTHROUGH_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/sync.md" > "$PIPELINE_RUN_DIR/sync.prompt.md"
+  run_pipeline_step "$PIPELINE_RUN_DIR/sync.prompt.md" "$OUT_SYNC" --model "$PIPELINE_MODEL" --retry
   SYNC_RC=$OPC_RC
   [[ $SYNC_RC -ne 0 ]] && die "Server sync FAILED. Check $OUT_SYNC."
 
@@ -411,7 +431,7 @@ if step_skip changelog; then
   info "Changelog update: SKIPPED (state journal)"
 else
   warn "Launching changelog update session..."
-  run_pipeline_step "$PROMPT_DIR/changelog.md" "$OUT_CHANGELOG" --model "$PIPELINE_LIGHT_MODEL" --retry
+  run_pipeline_step "$PROMPT_DIR/changelog.md" "$OUT_CHANGELOG" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
   CHANGELOG_RC=$OPC_RC
   [[ $CHANGELOG_RC -ne 0 ]] && die "Changelog update FAILED. Check $OUT_CHANGELOG."
 
@@ -427,71 +447,67 @@ else
 fi
 echo ""
 
-# ── steps 6 (scan) and 7 (readme) — parallelizable ──────────────────────────
-if $PARALLEL; then
-  # Run the scan in a FORKED session so it does not collide with the README
-  # step, which continues the main session. Each writes disjoint files.
-  info "Running scan and README update in parallel..."
+# ── scan helpers ─────────────────────────────────────────────────────────────
+# run_scan_deterministic — reference + git-ref hygiene scripts (fast, no model).
+run_scan_deterministic() {
+  time_it "scan-refs" npx tsx scripts/scan-refs.ts --out "$PIPELINE_RUN_DIR/scan-refs.json"
+  time_it "scan-git-refs" npx tsx scripts/scan-git-refs.ts --out "$PIPELINE_RUN_DIR/scan-git-refs.json"
+}
+# run_scan_ai_one <prompt.md> <out.txt> <title-suffix> — one AI scan in its own
+# forked session, so it neither collides with the main transcript nor inherits
+# the prior steps' context.
+run_scan_ai_one() {
   (
-    # The scan runs in its own session so it does not collide with the README
-    # step, which continues the main session. Ensure it bootstraps a fresh
-    # session under a distinct title rather than deriving from the resolved
-    # ses_ id of the main session.
     unset PIPELINE_SESSION_ID
-    PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-scan"
+    PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-$3"
     ensure_session
-    sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
-      "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
-    run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
-    [[ $OPC_RC -ne 0 ]] && exit 1
-    sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
-      "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
-    run_pipeline_step "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" --model "$PIPELINE_LIGHT_MODEL" --retry
-    [[ $OPC_RC -ne 0 ]] && exit 1
-  ) &
-  SCAN_PID=$!
-  run_pipeline_step "$PROMPT_DIR/readme.md" "$OUT_README" --model "$PIPELINE_LIGHT_MODEL" --retry
-  README_RC=$OPC_RC
-  wait "$SCAN_PID"; SCAN_RC=$?
-  [[ $SCAN_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN / $OUT_SCAN_GIT."
-  [[ $README_RC -ne 0 ]] && die "README update FAILED. Check $OUT_README."
-  state_mark scan
-  state_mark readme
-else
-  info "═══════════════════════════════════════════════"
-  info "Step 6: Dead-code scan (project folder + git repo + MCP server source)"
-  info "═══════════════════════════════════════════════"
-  echo ""
-  if step_skip scan; then
-    info "Dead-code scan: SKIPPED (state journal)"
-  else
-    sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
-      "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
-    run_pipeline_step "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" --model "$PIPELINE_LIGHT_MODEL" --retry
-    [[ $OPC_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN."
-    sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
-      "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
-    run_pipeline_step "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" --model "$PIPELINE_LIGHT_MODEL" --retry
-    [[ $OPC_RC -ne 0 ]] && die "Dead-code scan FAILED. Check $OUT_SCAN_GIT."
-    echo ""
-    info "Dead-code scan: DONE — $(scan_findings) finding(s)"
-    state_mark scan
-  fi
-  echo ""
+    run_pipeline_step "$1" "$2" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
+    exit "$OPC_RC"
+  )
+}
 
-  info "═══════════════════════════════════════════════"
-  info "Step 7: Update README.md and skill references"
-  info "═══════════════════════════════════════════════"
-  echo ""
-  if step_skip readme; then
-    info "README update: SKIPPED (state journal)"
-  else
-    warn "Launching README update session..."
-    run_pipeline_step "$PROMPT_DIR/readme.md" "$OUT_README" --model "$PIPELINE_LIGHT_MODEL" --retry
-    README_RC=$OPC_RC
-    [[ $README_RC -ne 0 ]] && die "README update FAILED. Check $OUT_README."
-    state_mark readme
+# ── step 6: scan ─────────────────────────────────────────────────────────────
+info "═══════════════════════════════════════════════"
+info "Step 6: Reference + git hygiene scan"
+info "═══════════════════════════════════════════════"
+echo ""
+if step_skip scan; then
+  info "Scan: SKIPPED (state journal / --from / --to)"
+else
+  warn "Running deterministic scan (scan-refs + scan-git-refs)..."
+  run_scan_deterministic
+  info "Deterministic scan: $(scan_findings) finding(s)"
+  if $SCAN_AI; then
+    warn "AI scan enabled (--scan-ai) — running scan and scan-git concurrently in forked sessions..."
+    sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
+      "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
+    sed -e "s|<LABEL>|INFOBROKER|g" -e "s|<GIT_SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-git.json|g" \
+      "$PROMPT_DIR/scan-git.md" > "$PIPELINE_RUN_DIR/scan-git.prompt.md"
+    run_scan_ai_one "$PIPELINE_RUN_DIR/scan.prompt.md" "$OUT_SCAN" "scan" &
+    SCAN_PID=$!
+    run_scan_ai_one "$PIPELINE_RUN_DIR/scan-git.prompt.md" "$OUT_SCAN_GIT" "scan-git" &
+    SCAN_GIT_PID=$!
+    wait "$SCAN_PID" || die "AI scan FAILED. Check $OUT_SCAN."
+    wait "$SCAN_GIT_PID" || die "AI scan-git FAILED. Check $OUT_SCAN_GIT."
+    info "AI scan: $(scan_findings) total finding(s)"
   fi
+  state_mark scan
+fi
+echo ""
+
+# ── step 7: README update ────────────────────────────────────────────────────
+info "═══════════════════════════════════════════════"
+info "Step 7: Update README.md and skill references"
+info "═══════════════════════════════════════════════"
+echo ""
+if step_skip readme; then
+  info "README update: SKIPPED (state journal / --from / --to)"
+else
+  warn "Launching README update session..."
+  run_pipeline_step "$PROMPT_DIR/readme.md" "$OUT_README" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
+  README_RC=$OPC_RC
+  [[ $README_RC -ne 0 ]] && die "README update FAILED. Check $OUT_README."
+  state_mark readme
 fi
 
 SCAN_FINDINGS=$(scan_findings)
@@ -536,7 +552,7 @@ for f in infobroker.md README.md CHANGELOG.md AGENTS.md package.json package-loc
 done
 # Stage everything under these directories — INCLUDING new untracked files,
 # so a sync that adds a source file actually ships it.
-git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/
+git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/ .opencode/
 
 # Secret scan over staged content.
 SECRETS=$(scan_staged_for_secrets)
@@ -703,6 +719,11 @@ if $NO_PUSH; then
   echo "  Committed locally — push skipped (--no-push)."
 else
   echo "  Pushed to origin — v${VERSION}"
+fi
+if [[ -f "$PIPELINE_RUN_DIR/timings.json" ]]; then
+  echo "  Step timings (seconds):"
+  node -e 'const j=require(process.argv[1]);let t=0;for(const [k,v] of Object.entries(j)){t+=v;console.log(`    ${k}: ${v}`)}console.log(`    total: ${t}`)' \
+    "$PIPELINE_RUN_DIR/timings.json" 2>/dev/null || true
 fi
 echo "  Logs: $PIPELINE_RUN_DIR"
 echo ""

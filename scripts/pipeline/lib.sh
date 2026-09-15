@@ -108,15 +108,39 @@ ensure_session() {
   fi
 }
 
-# run_pipeline_step <prompt-file> <out-file> [--model <m>] [--retry]
+# ── Timing ───────────────────────────────────────────────────────────────────
+# record_timing <file> <key> <seconds> — merge a duration into a JSON map.
+record_timing() {
+  local file="$1" key="$2" secs="$3"
+  node -e 'const fs=require("fs");const p=process.argv[1];let j={};try{j=JSON.parse(fs.readFileSync(p,"utf8"))}catch{};j[process.argv[2]]=Number(process.argv[3]);fs.writeFileSync(p,JSON.stringify(j,null,2))' \
+    "$file" "$key" "$secs" 2>/dev/null || true
+}
+# time_it <label> <command...> — run a command, record its wall time, return its
+# exit code unchanged (so callers keep `set -e` semantics).
+time_it() {
+  local label="$1"; shift
+  local start end rc
+  start=$(date +%s)
+  set +e
+  "$@"
+  rc=$?
+  set -e
+  end=$(date +%s)
+  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings.json" "$label" "$((end - start))"
+  return $rc
+}
+
+# run_pipeline_step <prompt-file> <out-file> [--model <m>] [--agent <a>] [--retry]
 # Runs one step in the shared session. On retry, forks a fresh session.
+# Records the step's wall time (key = prompt basename without .prompt.md/.md).
 run_pipeline_step() {
   local prompt_file="$1" out_file="$2"
-  local model="${PIPELINE_MODEL:-}" retry=false
+  local model="${PIPELINE_MODEL:-}" agent="${PIPELINE_AGENT:-build}" retry=false
   shift 2
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --model) model="$2"; shift 2 ;;
+      --agent) agent="$2"; shift 2 ;;
       --retry) retry=true; shift ;;
       *) shift ;;
     esac
@@ -131,9 +155,11 @@ run_pipeline_step() {
   fi
 
   local args=()
-  args+=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --agent build --auto)
+  args+=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --agent "$agent" --auto)
   [[ -n "$model" ]] && args+=(--model "$model")
 
+  local start end
+  start=$(date +%s)
   set +e
   "${timeout_cmd[@]}" "${args[@]}" "$prompt" > "$out_file" 2>> "$PIPELINE_LOG_FILE"
   OPC_RC=$?
@@ -142,7 +168,7 @@ run_pipeline_step() {
   if [[ $OPC_RC -ne 0 ]] && $retry; then
     warn "Session step '${prompt_file}' failed (exit ${OPC_RC}) — retrying once in a forked session..."
     # Fork: use a fresh continuation to avoid a poisoned conversation state.
-    local retry_args=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --fork --agent build --auto)
+    local retry_args=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --fork --agent "$agent" --auto)
     [[ -n "$model" ]] && retry_args+=(--model "$model")
     set +e
     "${timeout_cmd[@]}" "${retry_args[@]}" "$prompt" > "${out_file}.retry" 2>> "$PIPELINE_LOG_FILE"
@@ -150,6 +176,10 @@ run_pipeline_step() {
     if [[ $OPC_RC -eq 0 ]]; then mv "${out_file}.retry" "$out_file"; fi
     set -e
   fi
+
+  end=$(date +%s)
+  local label="${prompt_file##*/}"; label="${label%.prompt.md}"; label="${label%.md}"
+  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings.json" "$label" "$((end - start))"
 }
 
 # stop_server — tear down the persistent backend.

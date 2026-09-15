@@ -59,6 +59,19 @@ Findings fixed and verified in-session.
   `skills/infobroker/references/{glossary,troubleshooting}.md` are now linked
   from `SKILL.md`. Verified by `npm run check` and `npm run build`.
 
+- **Push-pipeline step 3/6 latency (2026.09.14)** — the first pipeline run
+  spent 14m37s in server sync and 4m00s in the AI scan: every step ran the
+  `build` agent at `variant: high` (the script's model tiering was inert),
+  sync spawned two `@explore` subagents that re-audited all 102 REQs over
+  5m37s, and the scan ran two sequential full-repo AI audits whose mechanical
+  checks duplicate `validate-spec`/`validate-readme`/`version-sync`. Resolved
+  by phasing A–E: review-only steps now run the non-thinking `pipeline-fast`
+  agent, step 6 is deterministic (`scan-refs.ts`, `scan-git-refs.ts`) with the
+  AI scan opt-in via `--scan-ai`, sync is scoped to changed REQs, the AI scan
+  pair runs concurrently in isolated sessions, and per-step timings are
+  recorded. Verified by `bash -n`, `check-script-discipline`, the agent
+  resolution spike, and `npm run check`. See CHANGELOG 2026.09.14.
+
 ## Scheduled-roadmap
 
 Findings scheduled on `ROADMAP.md` for a future increment.

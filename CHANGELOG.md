@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.09.14 — Faster push pipeline: model tiering, deterministic scan, scoped sync
+
+- Review-only pipeline steps (spec read-through, changelog, scan, README) now
+  run under a dedicated non-thinking agent, `pipeline-fast`, instead of the
+  full `build` agent; the server-sync step keeps the stronger agent. Each step's
+  wall time is recorded and summarized at the end of a run, so regressions are
+  visible. (`scripts/push-pipeline.sh`, `scripts/pipeline/lib.sh`,
+  `.opencode/agents/pipeline-fast.md`)
+- The scan step is deterministic and near-instant: `scripts/scan-refs.ts`
+  reports orphaned reference files and broken documented paths, and
+  `scripts/scan-git-refs.ts` reports merged branches and non-ancestor tags. The
+  deep AI scan is now opt-in via `--scan-ai` and runs its two prompts
+  concurrently in isolated sessions instead of sequentially in the shared one.
+- Server sync is scoped to the REQs added or modified this run rather than
+  re-auditing all 102 REQs, and runs its typecheck/test gates once instead of
+  per batch. (`scripts/pipeline/prompts/sync.md`)
+- Added `--to=<step>` to run a bounded step range for testing.
+
 ## 2026.09.14 — Spec-quality pass from the push-pipeline findings
 
 - The dispatch table gains a `Fallback 4` column so `general_web`'s five-provider

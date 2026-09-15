@@ -59,6 +59,17 @@ npm run start       # start server via tsx
 npm run typecheck   # tsc --noEmit
 ```
 
+## Push Pipeline
+
+`scripts/push-pipeline.sh` runs its review-only AI steps (read-through,
+changelog, scan, README) under the non-thinking `pipeline-fast` agent
+(`.opencode/agents/pipeline-fast.md`); the server-sync step keeps the full
+`build` agent. Step 6 is deterministic (`scripts/scan-refs.ts`,
+`scripts/scan-git-refs.ts`); pass `--scan-ai` for the deep AI scan, which runs
+its two prompts concurrently in isolated sessions. Per-step wall times are
+recorded under the run directory (`timings.json`) and printed at the end;
+`--from=<step>` / `--to=<step>` run a bounded range for testing.
+
 ## Script Discipline
 
 All scripts in `scripts/` — the spec tooling, shell entry points

@@ -1,32 +1,26 @@
-Scan the project directories listed in `<SCAN_DIRS>` for dead and outdated
-data. This is a read-only audit — do NOT modify any files. `<SCAN_DIRS>` is a
-space-separated list of project directories; also scan the root files
-(README.md, infobroker.md, config.json, package.json, tsconfig.json,
-AGENTS.md, DECISIONS.md) and the other tracked project directories (src/,
-scripts/, skills/, instructions/, test-fixtures/) for stale references into
-and out of these directories.
+Deep semantic scan of the project directories in `<SCAN_DIRS>` plus the root
+docs (README.md, infobroker.md, config.json, package.json, tsconfig.json,
+AGENTS.md, DECISIONS.md). This is a read-only audit — do NOT modify files.
 
-Checklist:
-1. REQ citations in source code — grep for REQ-\d+ patterns. Each REQ number
-   must exist in infobroker.md. Report any that don't.
-2. Deprecated or renamed terms — grep for any stale references to removed
-   REQs, tools, or providers no longer configured.
-3. Hardcoded counts — check if provider count, tool count, REQ count, or
-   other numeric constants in source code match the `inspect_providers` spec action
-   output or current infobroker.md.
-4. Stale file paths — check import paths, config references, and README
-   paths exist on disk.
-5. Dangling cross-references in DECISIONS.md — verify every cited REQ and
-   spec section reference resolves in infobroker.md.
-6. Provider references — check config.json provider entries against
-   src/providers/ files. Report providers in source with no config entry
-   and vice versa.
-7. Project-folder staleness — report root config/docs entries (paths, tool
-   names, provider slugs, file references) that point at files no longer
-   present in the tree, and files present on disk that nothing references.
+The deterministic scan (`scripts/scan-refs.ts`, `scripts/scan-git-refs.ts`)
+and the step-1 gates (`validate-spec`, `validate-readme`, `version-sync`)
+already cover the mechanical checks: REQ citations resolving, provider parity,
+hardcoded counts and versions, broken documented paths, orphaned reference
+files, merged branches, and non-ancestor tags. Do NOT repeat those. Focus on
+semantic staleness a gate cannot see:
 
-For each finding, report: file:line, what's dead/outdated, and the suggested
-fix.
+1. Deprecated or renamed terms — prose that names a removed REQ, tool, or
+   provider as if it were still current.
+2. Contradicted prose — statements in docs or skills that describe a file,
+   flag, or behavior that no longer exists in the tree.
+3. Cross-reference staleness — DECISIONS.md or skill references that cite a
+   spec section or REQ whose meaning has since changed.
+4. Dead exports in src/ — report only symbols that are neither imported
+   elsewhere nor named by any exported declaration (a type named in an
+   exported signature must stay exported for declaration emit). This class is
+   P3-informational; report it, do not treat it as blocking.
+
+For each finding, report: file:line, what is stale, and the suggested fix.
 
 Write a machine-parseable summary to <SUMMARY_JSON> with the JSON shape
 {"status":"complete","findings":N} and end your reply with the line:
