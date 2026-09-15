@@ -69,6 +69,17 @@ describe("audit trail (REQ-098)", () => {
     expect(lines[1]).toContain("key_rekeyed /keys/x");
   });
 
+  it("collapses control characters so untrusted detail cannot forge entries", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ib-aud-log-"));
+    dirs.push(dir);
+    const logPath = join(dir, "audit.log");
+    const m = await loadAudit(logPath);
+    m.audit("network_target_refused", "http://127.0.0.1/\n2099-01-01T00:00:00.000Z key_generated /etc/shadow. FORGED");
+    const lines = readFileSync(logPath, "utf-8").trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("network_target_refused");
+  });
+
   it("never blocks the triggering operation when the write fails", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ib-aud-log-"));
     dirs.push(dir);

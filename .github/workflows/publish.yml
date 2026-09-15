@@ -18,13 +18,19 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Pinned to commit SHAs (not floating tags) so a compromised or moved
+      # action tag cannot inject code into the publish job.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
       - run: npm ci
+      # REQ-101: the dependency-vulnerability gate is mandatory on the publish
+      # path, not only in the local (bypassable) pre-push hook.
+      - name: Gate (typecheck, spec, readme, tests, dependency audit)
+        run: npm run check
       - name: Determine if version is already published
         id: check
         run: |

@@ -9,6 +9,21 @@ restate it. `ROADMAP.md` is the tracking surface for scheduled work.
 
 Findings fixed and verified in-session.
 
+- **Security audit findings SEC-1..SEC-9 (2026.09.14)** — full-stack audit
+  (spec traceability, implementation controls, adversarial runtime probing,
+  supply chain). Fixed and verified by D-054. SEC-1 (P0, SSRF bypass for
+  `0.0.0.0` and IPv4-mapped IPv6) reproduced against a loopback server before
+  the fix and blocked after; SEC-2 (key-pool state dir `755`, no validation)
+  now `0700` with structural/numeric reset; SEC-3 (`sealReportBytes` plaintext
+  fallback under enabled encryption) now refuses and the enabling invariant
+  locks on any start; SEC-4 (audit-log newline injection) now one line per
+  event; SEC-5 (publish path skipped the dependency gate) now runs
+  `npm run check` and pins actions by SHA; SEC-6 (content-policy whitespace /
+  zero-width bypass) now normalized; SEC-7 (error sanitizer left credentials)
+  now redacts; SEC-8 (`hono`/`@vitest/mocker` advisories) updated to patched
+  versions; SEC-9 (hook discipline) now `bash` + `set -euo pipefail`. Verified
+  by `npm run check` green (345 tests, 0 vulnerabilities) and the four PoCs
+  (`/tmp/opencode/{ssrf,audit,policy,state}-poc.mts`) now fail closed.
 - **Spec-review baseline SR-1..SR-10 (2026.09.06)** — OWASP security and
   spec-quality findings from the 8-dimension baseline. Resolved by D-047:
   SR-1/SR-8 → REQ-096/097/098/099/100/101/102 (§4.11, §E); SR-2 → terminology

@@ -1,6 +1,6 @@
 // @implements REQ-104
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -87,5 +87,28 @@ describe("key pool (REQ-104)", () => {
     expect(raw).not.toContain("supersecret1");
     expect(raw).not.toContain("supersecret2");
     expect(existsSync(stateFile)).toBe(true);
+  });
+
+  it("creates the state directory with owner-only permissions (REQ-100)", () => {
+    const nested = join(dir, "nested", "key-pool.json");
+    process.env["INFOBROKER_KEYPOOL_STATE"] = nested;
+    resetKeyPoolStateForTests();
+    process.env["INFOBROKER_ACME_API_KEY"] = "k1";
+    resolveApiKey("acme");
+    expect(existsSync(nested)).toBe(true);
+    if (process.platform !== "win32") {
+      expect(statSync(join(dir, "nested")).mode & 0o777).toBe(0o700);
+      expect(statSync(nested).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it("discards and resets malformed persisted state (REQ-100)", () => {
+    writeFileSync(stateFile, JSON.stringify({ cursor: "not-a-number", keys: "nope" }));
+    resetKeyPoolStateForTests();
+    process.env["INFOBROKER_ACME_API_KEY"] = "k1";
+    expect(resolveApiKey("acme")).toBe("k1");
+    const raw = JSON.parse(readFileSync(stateFile, "utf-8")) as { cursor: unknown; keys: unknown };
+    expect(typeof raw.cursor).toBe("number");
+    expect(raw.keys).toEqual({});
   });
 });

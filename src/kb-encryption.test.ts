@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, mkdirSync, utimesSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbStats, kbGet, kbSearch, flushKbWrites, getKbLockError, getKbEncryptionState, runTruncSweep, rekeyStore, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile } from "./kb.js";
+import { initKb, kbIngest, kbStats, kbGet, kbSearch, flushKbWrites, getKbLockError, getKbEncryptionState, runTruncSweep, rekeyStore, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, sealReportBytes } from "./kb.js";
 import { openEnvelope, readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import type { KbConfig } from "./types.js";
 
@@ -83,6 +83,35 @@ describe("KB at-rest encryption (REQ-084)", () => {
     expect(getKbLockError()).not.toBeNull();
     expect(getKbEncryptionState()).toBe("locked");
     expect(readFileSync(fpath).equals(before)).toBe(true);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses to seal report bytes when enabled with no key (REQ-084)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-seal-"));
+    cleanEnv();
+    initKb(makeConfig(dir, { enabled: true }));
+    expect(getKbEncryptionState()).toBe("locked");
+    expect(() => sealReportBytes(Buffer.from("sensitive report"))).toThrow(/no key is available/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("locks a plaintext store when encryption is enabled and the key is gone on reload (REQ-084)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-plainlock-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("content", "t", "https://example.com/s", "test");
+    flushKbWrites();
+
+    // Simulate a plaintext store under an already-enabled config (e.g. an
+    // operator restoring a plaintext backup).
+    const fpath = join(dir, "vector-store.json");
+    writeFileSync(fpath, JSON.stringify({ chunks: [], idf: {}, docCount: 0, events: [] }));
+
+    cleanEnv();
+    initKb(makeConfig(dir, { enabled: true }));
+    expect(getKbEncryptionState()).toBe("locked");
+    expect(getKbLockError()).not.toBeNull();
 
     rmSync(dir, { recursive: true, force: true });
   });

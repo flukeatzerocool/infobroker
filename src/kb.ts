@@ -491,6 +491,20 @@ export function initKb(config: KbConfig): void {
     }
   }
 
+  // REQ-084: encryption enabled is an invariant of the store's at-rest state.
+  // On any init — not just the enabling transition — if the store is present
+  // but the key does not resolve, refuse KB operations rather than risk a
+  // plaintext write on the next save or report. This closes the config-reload
+  // path where the on-disk store is plaintext and the key source was removed.
+  if (config.encryption?.enabled && !resolvedKey && store !== null) {
+    lockError = {
+      code: "config_error",
+      message: "Knowledge base encryption is enabled but no key is available",
+      remediation: "Set INFOBROKER_KB_KEY / INFOBROKER_KB_PASSPHRASE or kb.encryption.key_file, then reload.",
+    };
+    store = null;
+  }
+
   // Disabling encryption is an explicit, immediate transition: the store is
   // already decrypted in memory (loadStore requires the key regardless of the
   // enabled flag), so flush it to plaintext now rather than deferring to the
@@ -980,11 +994,17 @@ export function runMaintenance(): void {
 export function sealReportBytes(clear: Buffer): Buffer {
   if (kbConfig?.encryption?.enabled) {
     const key = resolvedKey ?? resolveKeySource(kbConfig.encryption.key_file);
-    if (key) {
-      const sealed = sealEnvelope(key, clear);
-      const rechecked = openEnvelope(key, sealed);
-      if (rechecked.equals(clear)) return sealed;
+    // REQ-084: with encryption enabled there is no plaintext fallback. A
+    // missing key is an error, never a silent plaintext report on disk.
+    if (!key) {
+      throw new Error("Knowledge base encryption is enabled but no key is available");
     }
+    const sealed = sealEnvelope(key, clear);
+    const rechecked = openEnvelope(key, sealed);
+    if (!rechecked.equals(clear)) {
+      throw new Error("report encryption self-verify failed");
+    }
+    return sealed;
   }
   return clear;
 }

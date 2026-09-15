@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.09.14 — Security audit remediation
+
+- Fetching a URL whose host is an unspecified address (`0.0.0.0`), an
+  IPv4-mapped IPv6 address (`::ffff:127.0.0.1`), or an address in the
+  non-public CGNAT, benchmarking, documentation, multicast, or reserved
+  ranges no longer bypasses the public-target guard; the guard now covers
+  those IPv4 and IPv6 forms and is re-applied per redirect hop as before.
+  (REQ-021a)
+- The credential-pool state file is now written in an owner-only directory
+  and its persisted state is validated and reset when malformed, matching
+  the quota state. (REQ-100)
+- With knowledge-base encryption enabled, the server now refuses
+  knowledge-base operations when the key is unavailable instead of ever
+  writing a report in plaintext, on every start rather than only the
+  enabling transition. (REQ-084)
+- Audit entries can no longer be forged through newline or control
+  characters embedded in untrusted detail such as a refused URL. (REQ-098)
+- The content policy now normalizes whitespace and zero-width characters
+  before matching, so trivial obfuscation no longer evades the built-in
+  assessment. (REQ-097)
+- Tool error messages now redact credential-shaped values in addition to
+  filesystem paths and stack frames. (REQ-102)
+- The publish workflow now runs the full gate — including the
+  dependency-vulnerability check — before publishing and pins its actions to
+  commit SHAs, so the gate cannot be skipped by bypassing the local hook.
+  (REQ-101)
+- Updated `vitest` and the transitive `hono` dependency to patched versions;
+  `npm audit` reports zero vulnerabilities.
+
 ## 2026.09.14 — Implementation sync with the specification
 
 - Fetching a loopback, private, or metadata address now reports a dedicated

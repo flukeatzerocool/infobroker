@@ -12,6 +12,8 @@ import {
   writeSync,
   existsSync,
   mkdirSync,
+  chmodSync,
+  statSync,
   renameSync,
   openSync,
   closeSync,
@@ -19,6 +21,7 @@ import {
 } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { tmpdir } from "node:os";
+import { audit } from "./audit-log.js";
 
 interface KeyState {
   disabled?: boolean;
@@ -42,11 +45,60 @@ function resolveStatePath(): string {
   return statePath;
 }
 
+// REQ-100: the state directory is owner-only, and the server refuses to
+// operate on a directory it does not own (mirrors quota.ts).
+function ensureStateDir(dir: string): void {
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } else {
+    try {
+      chmodSync(dir, 0o700);
+    } catch {
+      // best effort — a pre-existing directory may be owned by another user
+    }
+  }
+  if (typeof process.getuid === "function") {
+    const st = statSync(dir);
+    if (st.uid !== process.getuid()) {
+      throw new Error(`Refusing to use key-pool state directory "${dir}" — not owned by this user`);
+    }
+  }
+}
+
+// REQ-100: parsed state is validated structurally and by numeric bounds before
+// use; invalid state is discarded and reset rather than trusted.
+function sanitizePoolState(raw: unknown): PoolState {
+  const out: PoolState = { cursor: 0, keys: {} };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.cursor === "number" && Number.isInteger(r.cursor) && r.cursor >= 0) {
+    out.cursor = r.cursor;
+  }
+  const keys = r.keys;
+  if (keys && typeof keys === "object" && !Array.isArray(keys)) {
+    for (const [id, value] of Object.entries(keys as Record<string, unknown>)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const v = value as Record<string, unknown>;
+      const entry: KeyState = {};
+      if (v.disabled === true) entry.disabled = true;
+      if (typeof v.cooldownUntil === "number" && Number.isFinite(v.cooldownUntil)) {
+        entry.cooldownUntil = v.cooldownUntil;
+      }
+      if (Object.keys(entry).length > 0) out.keys[id] = entry;
+    }
+  }
+  return out;
+}
+
 function loadState(): PoolState {
   if (state) return state;
   try {
-    const raw = JSON.parse(readFileSync(resolveStatePath(), "utf-8")) as Partial<PoolState>;
-    state = { cursor: typeof raw.cursor === "number" ? raw.cursor : 0, keys: raw.keys ?? {} };
+    const raw = JSON.parse(readFileSync(resolveStatePath(), "utf-8")) as unknown;
+    const cleaned = sanitizePoolState(raw);
+    if (JSON.stringify(cleaned) !== JSON.stringify(raw)) {
+      audit("key_pool_state_reset", "persisted key-pool state failed validation and was reset");
+    }
+    state = cleaned;
   } catch {
     state = { cursor: 0, keys: {} };
   }
@@ -58,7 +110,7 @@ function saveState(): void {
   const p = resolveStatePath();
   try {
     const dir = dirname(p);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    ensureStateDir(dir);
     const tmp = join(dir, `.${basename(p)}.tmp-${randomBytes(6).toString("hex")}`);
     const fd = openSync(tmp, "w", 0o600);
     try {
@@ -68,8 +120,10 @@ function saveState(): void {
       closeSync(fd);
     }
     renameSync(tmp, p);
-  } catch {
-    // Persistence is best-effort; rotation still works in memory.
+  } catch (e) {
+    // Persistence is best-effort; rotation still works in memory. A refusal to
+    // use the state directory is recorded so the operator can see it.
+    audit("key_pool_state_write_refused", e instanceof Error ? e.message : String(e));
   }
 }
 

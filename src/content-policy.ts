@@ -59,17 +59,28 @@ function mergedPatterns(): Record<string, string[]> {
   return out;
 }
 
+// REQ-097: normalize before matching so trivial obfuscation — extra or
+// missing whitespace, newlines, and zero-width characters — cannot evade the
+// built-in assessment.
+function normalizeForMatch(text: string): string {
+  return text
+    .normalize("NFC")
+    .replace(/[\u200b-\u200d\ufeff]/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
 function builtinAssess(text: string): { flagged: boolean; reason: string | null } {
   const cfg = getConfig();
   // With the default threshold of 0.2, a single matching pattern in the
   // largest category (5 patterns) already flags the content.
   const threshold = cfg.content_policy?.threshold ?? 0.2;
-  const lower = text.toLowerCase();
+  const lower = normalizeForMatch(text);
   for (const [category, patterns] of Object.entries(mergedPatterns())) {
     if (patterns.length === 0) continue;
     let hits = 0;
     for (const pattern of patterns) {
-      if (pattern && lower.includes(pattern.toLowerCase())) hits++;
+      if (pattern && lower.includes(normalizeForMatch(pattern))) hits++;
     }
     if (hits / patterns.length >= threshold) {
       return { flagged: true, reason: category };

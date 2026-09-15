@@ -17,14 +17,54 @@ describe("url-guard", () => {
   });
 
   it("accepts public hosts", () => {
-    for (const host of ["example.com", "1.1.1.1", "2606:4700:4700::1111"]) {
+    for (const host of ["example.com", "1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"]) {
       expect(isPrivateHostname(host)).toBe(false);
+    }
+  });
+
+  it("refuses unspecified, CGNAT, benchmarking, multicast, and reserved IPv4", () => {
+    for (const host of [
+      "0.0.0.0",
+      "0.255.255.255",
+      "100.64.0.1",
+      "100.127.255.255",
+      "192.0.0.1",
+      "192.0.2.5",
+      "198.18.0.1",
+      "198.51.100.7",
+      "203.0.113.9",
+      "224.0.0.1",
+      "239.255.255.255",
+      "240.0.0.1",
+      "255.255.255.255",
+    ]) {
+      expect(isPrivateHostname(host), host).toBe(true);
+    }
+  });
+
+  it("refuses IPv4-mapped IPv6 addresses by their embedded IPv4 address", () => {
+    for (const host of ["::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:10.0.0.5", "::ffff:0a00:5", "0:0:0:0:0:ffff:7f00:1", "::ffff:169.254.169.254"]) {
+      expect(isPrivateHostname(host), host).toBe(true);
+    }
+  });
+
+  it("accepts IPv4-mapped IPv6 addresses whose embedded IPv4 is public", () => {
+    for (const host of ["::ffff:93.184.216.34", "::ffff:5db8:d822"]) {
+      expect(isPrivateHostname(host), host).toBe(false);
+    }
+  });
+
+  it("refuses IPv6 transition, multicast, documentation, and discard ranges", () => {
+    for (const host of ["ff02::1", "2001:db8::1", "2002:7f00:1::1", "2001:0:1::1", "64:ff9b::7f00:1", "100::1"]) {
+      expect(isPrivateHostname(host), host).toBe(true);
     }
   });
 
   it("refuses a private URL when the guard is not opted out", () => {
     expect(() => assertPublicUrl("http://169.254.169.254/latest", false)).toThrow(/private\/internal/);
     expect(() => assertPublicUrl("http://localhost:8080/x", false)).toThrow(/private\/internal/);
+    expect(() => assertPublicUrl("http://0.0.0.0:8080/x", false)).toThrow(/private\/internal/);
+    expect(() => assertPublicUrl("http://[::ffff:127.0.0.1]:8080/x", false)).toThrow(/private\/internal/);
   });
 
   it("allows a private URL when opted out", () => {
@@ -130,5 +170,29 @@ describe("fetchFollowRedirects", () => {
   it("throws when a redirect has no Location header", async () => {
     const fetchImpl = async () => resp(302);
     await expect(guard(fetchImpl as never)).rejects.toThrow(/no Location header/);
+  });
+
+  it("refuses an unspecified-address start URL without invoking fetch", async () => {
+    let called = false;
+    const fetchImpl = async () => {
+      called = true;
+      return resp(200);
+    };
+    await expect(
+      fetchFollowRedirects("http://0.0.0.0:8080/", false, fetchImpl as never, 5, "Infobroker/1.0", stubResolver)
+    ).rejects.toThrow(/private\/internal/);
+    expect(called).toBe(false);
+  });
+
+  it("refuses an IPv4-mapped start URL without invoking fetch", async () => {
+    let called = false;
+    const fetchImpl = async () => {
+      called = true;
+      return resp(200);
+    };
+    await expect(
+      fetchFollowRedirects("http://[::ffff:127.0.0.1]:8080/", false, fetchImpl as never, 5, "Infobroker/1.0", stubResolver)
+    ).rejects.toThrow(/private\/internal/);
+    expect(called).toBe(false);
   });
 });

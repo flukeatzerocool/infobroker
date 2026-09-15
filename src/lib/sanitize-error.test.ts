@@ -14,6 +14,13 @@ describe("sanitizeErrorMessage (REQ-102)", () => {
     expect(out).not.toMatch(/\.ts:\d+:\d+/);
   });
 
+  it("redacts credential-shaped values", () => {
+    expect(sanitizeErrorMessage("INFOBROKER_BRAVE_API_KEY=sk-live-abcdef123456 rejected")).not.toContain("sk-live-abcdef123456");
+    expect(sanitizeErrorMessage("auth failed with Bearer eyJhbGciOiJIUzI1NiJ9.abc.def")).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    expect(sanitizeErrorMessage("key AKIAIOSFODNN7EXAMPLE rejected")).not.toContain("AKIAIOSFODNN7EXAMPLE");
+    expect(sanitizeErrorMessage("SERVICE_TOKEN: ghp_abcdefghijklmnopqrstuvwxyz0123")).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
+  });
+
   it("leaves ordinary messages intact", () => {
     const out = sanitizeErrorMessage("Provider duckduckgo returned HTTP 429");
     expect(out).toBe("Provider duckduckgo returned HTTP 429");

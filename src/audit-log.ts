@@ -17,6 +17,15 @@ function auditPath(): string {
 }
 
 /**
+ * REQ-098: one audit entry is one line. Strip CR/LF and other control
+ * characters from the detail so untrusted text (for example a refused URL)
+ * cannot inject additional, forged entries into the append-only trail.
+ */
+function sanitizeDetail(detail: string): string {
+  return detail.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ");
+}
+
+/**
  * Record one audit entry: an ISO timestamp, an event kind, and a short
  * detail string. Never pass secrets or full retrieved content here — the
  * detail field is meant for URLs, slugs, and counts. Failures are swallowed
@@ -35,7 +44,7 @@ export function audit(event: string, detail: string): void {
         // best effort — a non-owner-readable audit file is not a blocker
       }
     }
-    appendFileSync(path, `${new Date().toISOString()} ${event} ${detail}\n`);
+    appendFileSync(path, `${new Date().toISOString()} ${event} ${sanitizeDetail(detail)}\n`);
   } catch {
     // REQ-098: audit failure must not break the triggering operation.
   }

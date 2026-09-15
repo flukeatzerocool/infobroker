@@ -2,6 +2,39 @@
 
 ## Active Decisions
 
+### D-054: Security Audit Remediation (REQ-021a, REQ-084, REQ-097, REQ-098, REQ-100, REQ-101, REQ-102; 2026.09.14)
+
+A full-stack security audit (spec traceability, implementation controls,
+adversarial probing, supply chain) found one demonstrated P0 and a cluster of
+conformance gaps; all are fixed in-session.
+
+- **SSRF deny-list completed** (REQ-021a). The guard missed the unspecified
+  address (`0.0.0.0`, which connecting to reaches the local host on Linux),
+  CGNAT, benchmarking, documentation, multicast, and reserved IPv4 ranges,
+  and IPv4-mapped IPv6 (`::ffff:127.0.0.1`) — the latter reached a loopback
+  server through `fetch_page`'s native path. The address predicate now
+  delegates a mapped address's embedded IPv4 to the IPv4 check and blocks the
+  IPv6 transition/documentation/discard forms. It remains a deny-list per
+  D-047; the resolve-vs-connect residual is unchanged.
+- **Encryption is an invariant, not a transition** (REQ-084). When encryption
+  is enabled the store must never be plaintext: any start with no resolvable
+  key now locks and refuses knowledge-base operations, not only the enabling
+  transition, and `sealReportBytes` refuses rather than falling back to
+  plaintext. Previously a reload with a plaintext store and a removed key
+  wrote reports unencrypted while reporting the store "enabled".
+- **Single-line, single-choke-point hardening**: audit detail has control
+  characters collapsed (REQ-098); the content-policy matcher normalizes
+  whitespace and zero-width characters (REQ-097); the error sanitizer redacts
+  credential-shaped values (REQ-102).
+- **The publish path carries the gate** (REQ-101): the workflow runs
+  `npm run check` before publishing and pins its actions to commit SHAs; the
+  local pre-push hook alone was bypassable. `vitest` and the transitive `hono`
+  were updated to patched releases, taking `npm audit` to zero.
+
+Alternatives rejected: an allow-list SSRF model (contradicts D-047 and needs a
+maintained list), a new IP-range dependency (avoidable with node built-ins),
+and a block-by-default content policy (breaks sensitive-topic research).
+
 ### D-053: Opt-In User-Config Migration with Drift Reporting (REQ-105; 2026.09.14)
 
 The user configuration layer is deep-merged over the shipped default, so a
