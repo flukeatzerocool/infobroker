@@ -262,10 +262,11 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
   `ROADMAP.md`. P2 = improvement preventing a demonstrated failure —
   bounded, else downgraded. P3 = informational — record-and-close, no
   action. "Audit X" is P3 unless a failure is demonstrated.
-- **Register hygiene.** Findings live in `REVIEW-REGISTER.md` with terminal
-  dispositions: `Resolved` / `Scheduled-roadmap` / `Closed-P3` /
-  `Deferred-by-user`. `ROADMAP.md` is the tracking surface for scheduled
-  work; the AAR references it and never restates it as recommendations.
+- **Finding dispositions.** The AAR carries its own register: each finding
+  gets a terminal disposition — resolved in-session, scheduled on
+  `ROADMAP.md`, closed as informational (P3), or deferred by the user.
+  `ROADMAP.md` is the tracking surface for scheduled work; the AAR
+  references it and never restates it as recommendations.
 - **Loop status.** Every AAR ends with `LOOP PAUSED` or `LOOP OPEN`.
   PAUSED requires: gates green, no open P0/P1 beyond the scheduled
   roadmap. When PAUSED, the AAR lists zero new action items; the next plan

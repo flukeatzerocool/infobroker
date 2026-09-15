@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.09.14 — Consolidate review-loop findings into the AAR and ROADMAP
+
+- Removed `REVIEW-REGISTER.md`. The after-action report carries its own
+  finding register and `ROADMAP.md` remains the tracking surface for
+  scheduled work, so the standalone file was a third, redundant surface.
+  (`AGENTS.md` §Review-Loop Governance, `infobroker.md` §10.1)
+- The two informational findings it recorded needed no separate home: the
+  exported-symbol report is a declaration-emit false positive already
+  handled by `scripts/pipeline/prompts/scan-git.md`, and the REQ-089/092
+  overlap is recorded as D-042.
+
 ## 2026.09.14 — Faster push pipeline: model tiering, deterministic scan, scoped sync
 
 - Review-only pipeline steps (spec read-through, changelog, scan, README) now
