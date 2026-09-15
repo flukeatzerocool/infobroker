@@ -41,7 +41,8 @@ description: >
 Map the request to one workflow shape before any search. Consult
 `references/workflows.md` for the full definition of the chosen shape and
 `references/decision-tree.md` for the ordered disambiguation questions, the
-tool-selection conditions, and the escalation rubric.
+tool-selection conditions, and the escalation rubric. `references/glossary.md`
+defines the shared terminology these references use.
 
 | Intent marker | Workflow shape |
 |---------------|----------------|
@@ -166,3 +167,4 @@ path; `analysis-loop` runs the disciplined, gated path.
 - Cite sources with URLs for every factual claim
 - Fall back to built-in `websearch`/`webfetch` only when Infobroker tools error
 - Check `inspect_providers` (action health) if searches return empty or slow — a provider may be exhausted
+- When a tool errors or the server will not start, follow the symptom → cause → fix entries in `references/troubleshooting.md`

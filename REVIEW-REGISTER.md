@@ -47,6 +47,18 @@ Findings fixed and verified in-session.
   corrected; a `validate-spec` gate reconciles the paragraph against the
   §9.5 manifest.
 
+- **Push-pipeline findings, read-through High 1/3/4/5/6 + 12 Info + 2 orphans
+  (2026.09.14)** — resolved in-session. H1 added the §7.2 `Fallback 4` column;
+  H3 added the quota-warning cause to the `degraded` definition and its clause
+  tag; H4 added `expand`/`deep` to REQ-020; H5 fixed REQ-055's lowercase modal;
+  H6 restated REQ-075 as an outcome. Info items: REQ-021a ordering, manifest
+  title alignment, REQ-024 `status` parameter, `rekey` naming, `ProviderHealth`
+  → `inspect_providers`, dropped the undefined "Holonovel" reference, §10.3
+  action list, "capability" wording, REQ-083 embedded default, §8.1 three-source
+  report cap, and REQ-060a/026a mechanism wording. The orphaned
+  `skills/infobroker/references/{glossary,troubleshooting}.md` are now linked
+  from `SKILL.md`. Verified by `npm run check` and `npm run build`.
+
 ## Scheduled-roadmap
 
 Findings scheduled on `ROADMAP.md` for a future increment.
@@ -54,6 +66,17 @@ Findings scheduled on `ROADMAP.md` for a future increment.
 ## Closed-P3
 
 Informational findings recorded with no action.
+
+- **50 exported symbols with no external importer (2026.09.14)** — false
+  positives for this repository. `tsconfig.json` sets `declaration: true`, so a
+  type or value named in an exported declaration must remain exported for
+  declaration emit; `npm run build` (a publish-CI gate) would fail if the
+  `export` were dropped. No code change; `scripts/pipeline/prompts/scan-git.md`
+  refined to exclude declaration-referenced symbols from the dead-export report.
+- **REQ-089/REQ-092 restatement, read-through High 2 (2026.09.14)** — closed as
+  intentional. REQ-092 is the named quality-bar contract bound to G1/G3
+  enforcement while REQ-089 states the per-definition requirements; the overlap
+  is by design per D-042. No spec edit.
 
 ## Deferred-by-user
 

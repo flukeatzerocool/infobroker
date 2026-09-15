@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.09.14 — Spec-quality pass from the push-pipeline findings
+
+- The dispatch table gains a `Fallback 4` column so `general_web`'s five-provider
+  chain (brave → duckduckgo → marginalia → mojeek → wiby) is represented fully
+  and every row has the same column count. (§7.2)
+- The `degraded` provider status now names its third cause — quota at the warning
+  threshold (REQ-034) — in both the §3 terminology table and REQ-013, with a
+  matching clause tag. (REQ-013)
+- REQ-020's parameter list now names the `expand` and `deep` modes, which were
+  already implemented under REQ-020e and REQ-028 but absent from the tool
+  signature. (REQ-020)
+- REQ-055 states its traceability obligation with SHALL instead of a lowercase
+  "must", and REQ-075 states the freshness adjustment as an outcome (the score
+  falls as content ages) rather than a proportionality formula. (REQ-055,
+  REQ-075)
+- REQ-024 documents its `status` list filter; REQ-060a and REQ-026a state their
+  ranking and authority behavior as contracts rather than mechanisms; REQ-083
+  drops an embedded default; REQ-086 uses the tool's `rekey` token. The REQ
+  manifest titles now match the REQ bodies, REQ-021a precedes its siblings, and
+  §8.1 shows the three-source report cap that the implementation applies.
+  (REQ-024, REQ-060a, REQ-026a, REQ-083, REQ-086)
+- Stale references cleaned up: `ProviderHealth` → `inspect_providers` in the §2
+  failure table, the undefined "Holonovel" comparison removed from §5.5, the
+  §10.3 `manage_kb` action list completed, and "ability" → "capability" in
+  §A.7. The orphaned skill references `glossary.md` and `troubleshooting.md` are
+  now linked from `skills/infobroker/SKILL.md`.
+- The dead-code scan prompt now excludes symbols required by `declaration: true`
+  declaration emit, ending the recurring false-positive report.
+
 ## 2026.09.14 — Query-filter reporting, report destinations, and encryption recovery
 
 - Providers now report which query filters they actually honor, so a caller

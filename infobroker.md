@@ -63,11 +63,11 @@ route to Infobroker first, falling back to built-ins only on error.
 |----|---------|----------|------------|
 | F1 | Provider API down | Timeout, HTTP 5xx | Fallback chain advances to next provider |
 | F2 | DuckDuckGo HTML scraping breaks | Zero results, parse errors | Scraped providers extract results via CSS selectors targeting known HTML layouts. Upstream layout changes cause selector mismatch (zero results extracted), which advances the fallback chain per REQ-031. Provider restoration requires a build update with corrected selectors. |
-| F3 | API key misconfiguration | HTTP 401/403 from keyed provider | ProviderHealth reports auth status; server skips unauthenticated providers |
+| F3 | API key misconfiguration | HTTP 401/403 from keyed provider | `inspect_providers` reports auth status; server skips unauthenticated providers |
 | F4 | Result format inconsistency | Null fields, unexpected types | normalizer coerces all providers to a single JSON shape; unknown fields dropped |
 | F5 | MCP protocol errors | tools/list returns wrong schema | G0 conformance gate catches schema drift |
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
-| F7 | Quota exhaustion without fallback | Provider returns rate-limit error | ProviderHealth tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
+| F7 | Quota exhaustion without fallback | Provider returns rate-limit error | `inspect_providers` tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
 | F8 | Corroboration loop stalls | `verify_claims` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with a remediation naming the configured model reference and the built-in fallback; retrieval continues on the fallback model where possible, and non-knowledge-base operation is unaffected (REQ-103). |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `manage_kb` stats action reports the event. |
@@ -151,7 +151,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `brave`). |
 | **Dispatch chain** | The ordered provider list for a task type (§7.2), primary first; used for auto-selection (REQ-020a) and, on failure, as the fallback chain (REQ-031). |
 | **Capability** | A function a provider declares (e.g. `web_search`, `academic`, `content_fetch`). Capability tokens overlap the task types (§7.1); the `web_search` capability serves the `general_web` task type. |
-| **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed) (REQ-013, REQ-034). |
+| **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed) (REQ-013, REQ-034). |
 | **Source type** | A label carried by a normalized result, a corroborating source, or a KB document. On results it is the provider-declared content kind (e.g. `academic`, `news`); in corroboration it denotes the source-authority class (REQ-026a); on KB documents it is a caller-assigned tag (e.g. `report`). |
 | **Quota** | Per-provider daily and monthly usage counters, persisted across restarts (REQ-033). |
 | **Throttling** | The per-provider minimum interval between requests (REQ-030); distinct from quota. |
@@ -208,7 +208,7 @@ Provider configuration SHALL reside in a JSON file at a path specified by the `I
 API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`; for URL-based providers the endpoint SHALL be accepted via `INFOBROKER_<PROVIDER>_URL`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
-The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold or partial results), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
+The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
 
 **REQ-014 — Generic HTTP Provider Tier**
 The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and referencing it from a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
@@ -222,7 +222,7 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
-`search_web` is the unified search tool. Parameters: `query` (required) which SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `content_type` (default all), `region`, and `research` (default false). When `suggest` is true, the tool SHALL return query-autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and SHALL fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response with per-input provenance. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `expand` (default false), `content_type` (default all), `region`, `research` (default false), and `deep` (default false). When `suggest` is true, the tool SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response with per-input provenance. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
 **REQ-020a — `search_web` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -248,14 +248,14 @@ WHEN `search_web` assembles results from more than one provider or query variant
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
 
+**REQ-021a — `fetch_page` network-target safety**
+WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
+
 **REQ-021b — `fetch_page` question-grounded extraction**
 WHEN `fetch_page` receives a `question`, the tool SHALL split the fetched content into passages at sentence boundaries and SHALL return the passages ranked by relevance to the question, each with a relevance score, up to the configured passage count. The response SHALL identify the extraction mode: passage content when ranking produced a match, or full content with a note when no passage matched or the content was unreadable. A low top score SHALL be reported as the page not answering the question rather than as a ranking failure. _Check:_ G1.
 
 **REQ-021c — `fetch_page` date detection**
 WHEN `fetch_page` receives a `detect_date` request, the tool SHALL report the page's last-updated date when determinable from HTTP headers or document metadata, together with the evidence source and a confidence rating. WHEN no date is determinable, the tool SHALL omit the date field rather than guess. The detected date SHALL be surfaced alongside the content in the same response. _Check:_ G1.
-
-**REQ-021a — `fetch_page` network-target safety**
-WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
 
 **REQ-021d — `fetch_page` bounded crawl**
 WHEN `fetch_page` receives a crawl request, the tool SHALL fetch the given URL and then recursively fetch same-origin pages reachable from it, bounded by configurable page-count and depth caps. The REQ-021a safety guard SHALL be applied at every hop including each redirect. The response SHALL include each fetched page with its URL and depth, and SHALL stop without error when a cap is reached. _Check:_ G1.
@@ -267,10 +267,10 @@ WHEN `fetch_page` receives an extract request, the tool SHALL parse the fetched 
 WHEN a `fetch_page` renderer returns content that indicates an anti-bot challenge — a verification, CAPTCHA, or challenge page rather than the target page — the tool SHALL treat that renderer as failed and SHALL continue to the next renderer in the chain. The response SHALL report the renderer that ultimately served content, or a failure per REQ-002 when every renderer is exhausted. _Check:_ G1.
 
 **REQ-024 — `inspect_providers`**
-`inspect_providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
+`inspect_providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health), and `status` (optional; list action filter selecting only active providers). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-024a — `inspect_providers` list action**
-WHEN action is list, the tool SHALL report every configured provider with its status, capabilities, rate limits, quota usage, and supported task types, with an optional filter selecting only active providers. WHEN a provider is not active, the tool SHALL report the reason for its state, distinguishing a missing API key, a missing endpoint URL, a provider disabled by configuration, and quota exhaustion. _Check:_ G0, G1.
+WHEN action is list, the tool SHALL report every configured provider with its status, capabilities, rate limits, quota usage, and supported task types, with an optional `status` filter selecting only active providers. WHEN a provider is not active, the tool SHALL report the reason for its state, distinguishing a missing API key, a missing endpoint URL, a provider disabled by configuration, and quota exhaustion. _Check:_ G0, G1.
 
 **REQ-024b — `inspect_providers` health action**
 WHEN action is health, the tool SHALL perform a live connectivity check against the named provider and report its resulting status, average latency, current quota counters, and the timestamps of the most recent error and success from operational history. _Check:_ G0, G1.
@@ -282,7 +282,7 @@ WHEN action is spec, the tool SHALL report build identity, provider counts, upti
 Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
 **REQ-026a — corroboration source authority**
-When `verify_claims` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. Source authority SHALL be determined by each source's `source_type`, such that scholarly, encyclopedia, and primary sources contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
+When `verify_claims` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. A source's authority SHALL reflect its `source_type`: scholarly, encyclopedia, and primary sources SHALL contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
 
 **REQ-026b — corroboration claim attribution**
 Each finding returned by `verify_claims` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
@@ -410,7 +410,7 @@ The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md
 **REQ-055 — Spec-Code Traceability**
 Every source file in `src/` SHALL cite in a header comment each REQ it
 implements, using the format `@implements REQ-NNN`. A file may satisfy multiple
-REQs; every implemented REQ must appear in at least one source file's citation.
+REQs; every implemented REQ SHALL appear in at least one source file's citation.
 The `validate-spec` script (§9.4) verifies bidirectional coverage: every REQ
 with an implementation must be cited, and every source file must cite at least
 one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
@@ -442,7 +442,7 @@ The `inspect_providers` spec action SHALL report a token-footprint record measur
 `manage_kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-060a — `manage_kb` search action**
-WHEN action is search, the tool SHALL return chunks ranked by combined vector similarity and full-text relevance, each with source URL, score, collection, `source_type`, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a `source_type` filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
+WHEN action is search, the tool SHALL return chunks ranked by relevance to the query, each with source URL, score, collection, `source_type`, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a `source_type` filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `manage_kb` ingest action**
 WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
@@ -481,7 +481,7 @@ Content ingested into the knowledge base SHALL be deduplicated by source URL. In
 Content ingested into the knowledge base SHALL be classified into a freshness tier at the time of ingestion. The knowledge base SHALL support multiple freshness tiers whose definitions are configurable. Each freshness tier SHALL define a rate at which retrieval confidence decays as the content ages, and a maximum age beyond which the content is removed from the knowledge base. Content for which the classification mechanism produces no determination SHALL be assigned a configurable default tier. The classification strategy SHALL be hot-reloadable per REQ-040. _Check:_ G1.
 
 **REQ-075 — Confidence Decay**
-Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL be proportional to the content's freshness tier and the elapsed time since ingestion. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
+Knowledge base search results SHALL include a freshness-adjusted score that accounts for both semantic relevance and content age. The adjustment SHALL reflect the content's freshness tier and the elapsed time since ingestion, reducing the score as the content ages. Content whose freshness tier defines zero decay SHALL be reported with its relevance score unchanged. Results SHALL be ranked by freshness-adjusted score. _Check:_ G1.
 
 **REQ-076 — KB-First Sufficiency**
 When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search; the relevance threshold SHALL be evaluated with the configured embedding capability when one is available. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
@@ -490,7 +490,7 @@ When the knowledge base is configured, every web search SHALL query the knowledg
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
 
 **REQ-083 — Report Storage**
-The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report `source_type` and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base, defaulting to the knowledge base. _Check:_ G1.
+The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report `source_type` and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base. _Check:_ G1.
 
 **REQ-084 — KB At-Rest Encryption**
 The knowledge base SHALL support optional at-rest encryption of its stored content and of reports written to disk, where the key SHALL be derived from a user-supplied secret that is never stored with the content. WHEN encryption is enabled, the server SHALL NOT persist knowledge-base content or reports in plaintext, SHALL refuse knowledge-base operations when the required secret is unavailable or invalid, reporting the refusal as an error per REQ-002, and SHALL report the encryption state in the stats action. The server SHALL support changing the secret without loss of stored content. WHEN encryption is disabled, stored content SHALL remain readable. _Check:_ G1.
@@ -499,7 +499,7 @@ The knowledge base SHALL support optional at-rest encryption of its stored conte
 WHEN the knowledge base store cannot be read — because the encryption key is unavailable, decryption fails, or the file format is unrecognized or newer than supported — the server SHALL NOT modify, overwrite, rename, or delete the store file, SHALL NOT persist new content, and SHALL report the failure as an error per REQ-002, leaving the store unchanged for recovery. The server SHALL persist knowledge-base content only through atomic writes such that a crash leaves either the previous complete store or the new complete store, never a partial file. A store written in an unrecognized or newer format SHALL NOT be rewritten by this version. _Check:_ G1.
 
 **REQ-086 — KB Encryption Transitions and Recovery**
-The knowledge base SHALL support enable and disable of at-rest encryption (REQ-084) as explicit, immediate transitions. WHEN encryption is enabled while the store is plaintext, the server SHALL encrypt the store in place; WHEN encryption is disabled while the store is encrypted and the secret is available, the server SHALL decrypt the store in place. Each transition SHALL commit atomically and verify the result before replacing the store. WHEN the store is locked, the server SHALL expose the encryption state, the on-disk format, and a recovery directive through a knowledge-base operation that remains reachable while locked. The server SHALL support verifying a candidate secret against the store and re-keying the store to a new secret without loss of stored content. _Check:_ G1.
+The knowledge base SHALL support enable and disable of at-rest encryption (REQ-084) as explicit, immediate transitions. WHEN encryption is enabled while the store is plaintext, the server SHALL encrypt the store in place; WHEN encryption is disabled while the store is encrypted and the secret is available, the server SHALL decrypt the store in place. Each transition SHALL commit atomically and verify the result before replacing the store. WHEN the store is locked, the server SHALL expose the encryption state, the on-disk format, and a recovery directive through a knowledge-base operation that remains reachable while locked. The server SHALL support verifying a candidate secret against the store and rekeying the store to a new secret without loss of stored content. _Check:_ G1.
 
 **REQ-087 — KB Source Date Preservation**
 WHEN knowledge-base ingest knows a source's last-updated date, whether supplied by the caller or determined from a fetched URL per REQ-021c, the tool SHALL store that date with the ingested content. The list, get, and search actions SHALL report the stored source date alongside their other fields. WHEN no date is known, the actions SHALL omit the date field rather than guess. Re-ingesting a source SHALL preserve a previously stored date when the new ingest supplies none. _Check:_ G1.
@@ -632,7 +632,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 
 ### 5.5 Corroboration Quality (Single Phase)
 
-Unlike Holonovel (which has a ruleset extraction phase), Infobroker has a single
+Infobroker has a single
 construction quality phase: tool schemas are author-declared and verified against
 the MCP specification at build time. Provider backends are tested with mock
 responses. The corroboration loop validates against:
@@ -733,23 +733,23 @@ Task-type classification MAY consider semantic similarity between the query and 
 
 ### 7.2 Dispatch Table
 
-| Task type | Primary | Fallback 1 | Fallback 2 | Fallback 3 |
-|-----------|---------|-----------|-----------|-----------|
+| Task type | Primary | Fallback 1 | Fallback 2 | Fallback 3 | Fallback 4 |
+|-----------|---------|-----------|-----------|-----------|-----------|
 | `general_web` | brave (if keyed) | duckduckgo | marginalia | mojeek | wiby |
-| `small_web` | marginalia | mojeek | wiby | duckduckgo |
-| `encyclopedia` | wikipedia | duckduckgo | — | — |
-| `definition` | wiktionary | duckduckgo | — | — |
-| `structured_fact` | wikidata | wikipedia | duckduckgo | — |
-| `financial` | sec_edgar | world_bank | duckduckgo | — |
-| `location` | openstreetmap | wikipedia | duckduckgo | — |
-| `academic` | semantic_scholar | arxiv | openalex | europe_pmc |
-| `code` | stack_exchange | github | duckduckgo | — |
-| `news` | brave (if keyed) | duckduckgo | gdelt | hacker_news |
-| `archive` | internet_archive | duckduckgo | — | — |
-| `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo | — |
-| `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo | — |
-| `privacy_critical` | duckduckgo | searxng (if configured) | mojeek | — |
-| `content_fetch` | jina | native_fetch | — | — |
+| `small_web` | marginalia | mojeek | wiby | duckduckgo | — |
+| `encyclopedia` | wikipedia | duckduckgo | — | — | — |
+| `definition` | wiktionary | duckduckgo | — | — | — |
+| `structured_fact` | wikidata | wikipedia | duckduckgo | — | — |
+| `financial` | sec_edgar | world_bank | duckduckgo | — | — |
+| `location` | openstreetmap | wikipedia | duckduckgo | — | — |
+| `academic` | semantic_scholar | arxiv | openalex | europe_pmc | — |
+| `code` | stack_exchange | github | duckduckgo | — | — |
+| `news` | brave (if keyed) | duckduckgo | gdelt | hacker_news | — |
+| `archive` | internet_archive | duckduckgo | — | — | — |
+| `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo | — | — |
+| `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo | — | — |
+| `privacy_critical` | duckduckgo | searxng (if configured) | mojeek | — | — |
+| `content_fetch` | jina | native_fetch | — | — | — |
 
 ### 7.3 Provider Deprioritization
 
@@ -808,13 +808,13 @@ function corroborate(query, max_iterations=5, confidence_threshold=0.8, provider
       if agree.length >= 2:
         findings[topic] = {
           confidence: compute_confidence(agree.length, providers),
-          sources: agree.map(source_info),
+          sources: agree.slice(0, 3).map(source_info),  // REQ-026: report at most three
           verdict: "confirmed"
         }
       else if disagree.length > 0:
         findings[topic] = {
           confidence: low,
-          sources: disagree.map(source_info),
+          sources: disagree.slice(0, 3).map(source_info),
           verdict: "contested",
           perspectives: map_variants(disagree)
         }
@@ -993,34 +993,34 @@ verdict is preserved (REQ-026f).
 | REQ-013 | Provider Discovery | 4.2 | G1 |
 | REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
-| REQ-020 | search_web | 4.3 | G0, G1 |
-| REQ-020a | search_web auto-selection | 4.3 | G1 |
-| REQ-020b | search_web suggestion mode | 4.3 | G0, G1 |
-| REQ-020c | search_web priority routing | 4.3 | G1 |
-| REQ-020d | search_web parameter transparency | 4.3 | G0, G1 |
-| REQ-020e | search_web query expansion | 4.3 | G0, G1 |
-| REQ-020f | search_web research compile | 4.3 | G1 |
-| REQ-020g | cross-provider result reconciliation | 4.3 | G1 |
-| REQ-021 | fetch_page | 4.3 | G0, G1 |
-| REQ-021a | fetch_page network-target safety | 4.3 | G1 |
-| REQ-021b | fetch_page question-grounded extraction | 4.3 | G1 |
-| REQ-021c | fetch_page date detection | 4.3 | G1 |
-| REQ-021d | fetch_page bounded crawl | 4.3 | G1 |
-| REQ-021e | fetch_page structured extraction | 4.3 | G1 |
-| REQ-021f | fetch_page anti-bot challenge fall-through | 4.3 | G1 |
-| REQ-024 | inspect_providers | 4.3 | G0, G1 |
-| REQ-024a | inspect_providers list action | 4.3 | G0, G1 |
-| REQ-024b | inspect_providers health action | 4.3 | G0, G1 |
-| REQ-024c | inspect_providers spec action | 4.3 | G0, G1 |
-| REQ-026 | verify_claims | 4.3 | G0, G1 |
+| REQ-020 | `search_web` | 4.3 | G0, G1 |
+| REQ-020a | `search_web` auto-selection | 4.3 | G1 |
+| REQ-020b | `search_web` suggestion mode | 4.3 | G0, G1 |
+| REQ-020c | `search_web` priority routing | 4.3 | G1 |
+| REQ-020d | `search_web` parameter transparency | 4.3 | G0, G1 |
+| REQ-020e | `search_web` query expansion | 4.3 | G0, G1 |
+| REQ-020f | `search_web` research compile | 4.3 | G1 |
+| REQ-020g | Cross-provider result reconciliation | 4.3 | G1 |
+| REQ-021 | `fetch_page` | 4.3 | G0, G1 |
+| REQ-021a | `fetch_page` network-target safety | 4.3 | G1 |
+| REQ-021b | `fetch_page` question-grounded extraction | 4.3 | G1 |
+| REQ-021c | `fetch_page` date detection | 4.3 | G1 |
+| REQ-021d | `fetch_page` bounded crawl | 4.3 | G1 |
+| REQ-021e | `fetch_page` structured extraction | 4.3 | G1 |
+| REQ-021f | `fetch_page` anti-bot challenge fall-through | 4.3 | G1 |
+| REQ-024 | `inspect_providers` | 4.3 | G0, G1 |
+| REQ-024a | `inspect_providers` list action | 4.3 | G0, G1 |
+| REQ-024b | `inspect_providers` health action | 4.3 | G0, G1 |
+| REQ-024c | `inspect_providers` spec action | 4.3 | G0, G1 |
+| REQ-026 | `verify_claims` | 4.3 | G0, G1 |
 | REQ-026a | corroboration source authority | 4.3 | G1 |
 | REQ-026b | corroboration claim attribution | 4.3 | G1 |
 | REQ-026c | corroboration source preservation | 4.3 | G1 |
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
-| REQ-026f | semantic claim reconciliation | 4.3 | G1 |
-| REQ-027 | get_citations | 4.3 | G0, G1 |
-| REQ-028 | search_web deep reading | 4.3 | G1 |
+| REQ-026f | Semantic claim reconciliation | 4.3 | G1 |
+| REQ-027 | `get_citations` | 4.3 | G0, G1 |
+| REQ-028 | `search_web` deep reading | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-092 | Tool-definition quality bar | 4.3 | G1, G3 |
@@ -1038,7 +1038,7 @@ verdict is preserved (REQ-026f).
 | REQ-070 | Provider Registration | 4.6 | G1 |
 | REQ-071 | Outbound HTTP Identification | 4.6 | G1 |
 | REQ-095 | Financial Task Type | 4.6 | G1 |
-| REQ-050 | search-preferences.md | 4.7 | G3 |
+| REQ-050 | `search-preferences.md` | 4.7 | G3 |
 | REQ-051 | Orchestrator Skill | 4.7 | G3 |
 | REQ-052 | Bundled Skills | 4.7 | G3 |
 | REQ-053 | Pipeline Reference | 4.7 | G3 |
@@ -1049,14 +1049,14 @@ verdict is preserved (REQ-026f).
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
 | REQ-080 | Tool Default Consistency | 4.8 | G3 |
 | REQ-081 | Token Footprint Report | 4.8 | G1 |
-| REQ-060 | manage_kb | 4.9 | G0, G1 |
-| REQ-060a | manage_kb search action | 4.9 | G0, G1 |
-| REQ-060b | manage_kb ingest action | 4.9 | G0, G1 |
-| REQ-060c | manage_kb stats action | 4.9 | G1 |
-| REQ-060d | manage_kb delete action | 4.9 | G0, G1 |
-| REQ-060e | manage_kb list action | 4.9 | G1 |
-| REQ-060f | manage_kb get action | 4.9 | G1 |
-| REQ-060g | manage_kb encryption action | 4.9 | G0, G1 |
+| REQ-060 | `manage_kb` | 4.9 | G0, G1 |
+| REQ-060a | `manage_kb` search action | 4.9 | G0, G1 |
+| REQ-060b | `manage_kb` ingest action | 4.9 | G0, G1 |
+| REQ-060c | `manage_kb` stats action | 4.9 | G1 |
+| REQ-060d | `manage_kb` delete action | 4.9 | G0, G1 |
+| REQ-060e | `manage_kb` list action | 4.9 | G1 |
+| REQ-060f | `manage_kb` get action | 4.9 | G1 |
+| REQ-060g | `manage_kb` encryption action | 4.9 | G0, G1 |
 | REQ-064 | Auto-Indexing | 4.9 | G1 |
 | REQ-065 | Collection Scoping | 4.9 | G1 |
 | REQ-066 | Content Expiry | 4.9 | G1 |
@@ -1181,7 +1181,7 @@ configuration layer is merged over it by the server (REQ-010).
 | (none) | `verify_claims` — multi-pass truth-finding |
 | (none) | `get_citations` — academic references as BibTeX |
 | (none) | `inspect_providers` — operational visibility (was `list_providers` + `provider_health` + `spec_health`) |
-| (none) | `manage_kb` — knowledge base search/ingest/stats/delete (was four `kb_*` tools) |
+| (none) | `manage_kb` — knowledge base search/ingest/list/get/stats/delete/encryption (was four `kb_*` tools) |
 | (none) | `reload_config` — ops tooling |
 | Client `websearch` | Infobroker is preferred; built-in is fallback |
 | Client `webfetch` | Infobroker `fetch_page` is preferred; built-in is fallback |
@@ -1261,7 +1261,7 @@ here by transport, not by a separate tier.
 
 A user adds a generic HTTP provider entirely in the user configuration layer
 (REQ-014) — no provider module is written. The entry declares the tier, the
-ability it serves (for dispatch), the endpoint and request it queries, and
+capability it serves (for dispatch), the endpoint and request it queries, and
 the mapping from response fields to the normalized result shape (REQ-003):
 
 ```json

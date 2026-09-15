@@ -30,7 +30,12 @@ Part B — Infobroker MCP server source (static audit):
    from another.
 7. Dead exports / unused imports — in src/, report exported functions,
    types, or constants never imported elsewhere, and imports of modules or
-   symbols that no longer exist.
+   symbols that no longer exist. When tsconfig.json sets `declaration: true`,
+   an `export` that names a type or value appearing in any exported
+   declaration (a parameter, return type, or property type of an exported
+   symbol) is required for declaration emit — do NOT report it as dead.
+   Report only symbols that are neither imported elsewhere nor referenced by
+   any exported declaration.
 8. Hardcoded drift — compare build-version / numeric constants hardcoded in
    src/index.ts (e.g. the `version` string and any counts) against
    package.json and config.json. Report any mismatch.
