@@ -16,7 +16,7 @@ import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
 import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
 import { audit } from "./audit-log.js";
@@ -1619,29 +1619,38 @@ server.registerTool(
         const freshnessTier = (params.freshness_tier as string) || (isReport ? "report" : undefined);
         const saveTo = (params.save_to as string) || getConfig().kb?.default_save_destination || "kb";
 
+        const dest = ingestDestinations(saveTo);
         let finalUrl = resolveReportIdentity(title, url || params.source_url as string | undefined);
         let diskPath: string | undefined;
-        if (saveTo === "disk" || saveTo === "both") {
+        if (dest.disk) {
           diskPath = saveReportToDisk(title, content, String(params.format || "markdown"));
           finalUrl = `file://${diskPath}`;
         } else if (!url) {
           finalUrl = isReport ? resolveReportIdentity(title, undefined) : "";
         }
 
-        const count = kbIngest(
-          content,
-          title,
-          finalUrl,
-          "explicit",
-          collection,
-          sourceType,
-          freshnessTier,
-          sourceUpdatedAt
-        );
+        // REQ-083: a "disk" destination writes the report to a local file
+        // *instead of* the knowledge base; "kb" and "both" index it.
+        let count = 0;
+        if (dest.kb) {
+          count = kbIngest(
+            content,
+            title,
+            finalUrl,
+            "explicit",
+            collection,
+            sourceType,
+            freshnessTier,
+            sourceUpdatedAt
+          );
+        }
+        const snippet = dest.disk && !dest.kb
+          ? `saved to disk${diskPath ? `: ${diskPath}` : ""}`
+          : `${count} chunks ingested`;
         const msg = json({
           status: "ok",
           provider: "knowledge_base",
-          results: [{ title: "ingested", url: finalUrl, snippet: `${count} chunks ingested` }],
+          results: [{ title: dest.kb ? "ingested" : "saved", url: finalUrl, snippet }],
           meta: { chunks_ingested: count, source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}) },
         });
         return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };

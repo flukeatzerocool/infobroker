@@ -10,7 +10,12 @@ export const SUPPORTED_OPTIONS: Record<
   { time_range?: boolean; page?: boolean; safe_search?: boolean; region?: boolean }
 > = {
   duckduckgo: { time_range: true, safe_search: true, region: true },
-  brave: { time_range: true, region: true },
+  // Brave maps `time_range` to `freshness`; it does not read `region`, so a
+  // caller-supplied region is reported as ignored rather than silently dropped.
+  brave: { time_range: true },
+  // Yep reads `region` (location) and `time_range` (start_published_date); it
+  // applies `safe_search` only for the `strict` value, so `off` stays ignored.
+  yep: { time_range: true, region: true },
 };
 
 export function ignoredParams(

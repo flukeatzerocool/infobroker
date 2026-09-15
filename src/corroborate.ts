@@ -211,7 +211,21 @@ export function reconcileClaims(
     clusters.sort((a, b) => b.members.length - a.members.length);
     const dominant = clusters[0];
 
-    if (clusters.length === 1) {
+    // REQ-026f: a claim and its opposite can be semantically similar (same
+    // topic) yet contradictory. If any two clusters express conflicting
+    // propositions, the finding is contested with perspectives — never
+    // confirmed — even when one cluster is corroborated.
+    const crossClusterConflict =
+      clusters.length > 1 &&
+      clusters.some((a, i) =>
+        clusters.some((b, j) => j > i && claimsConflict(a.representative, b.representative))
+      );
+
+    if (crossClusterConflict) {
+      finding.confidence = Math.max(computeConfidence(dominant.members, authorityWeights), 0.1);
+      finding.verdict = "contested";
+      finding.perspectives = clusters.map((c) => c.representative);
+    } else if (clusters.length === 1) {
       finding.confidence = computeConfidence(dominant.members, authorityWeights);
       if (dominant.members.length >= 2 && finding.confidence >= 0.5) {
         finding.verdict = "confirmed";

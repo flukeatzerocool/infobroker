@@ -17,7 +17,7 @@ Auto-fix findings where safe: typo corrections, missing punctuation,
 whitespace normalization. Do NOT auto-fix: REQ body rewrites, structural
 changes, test ID assignments, or anything that changes semantic meaning.
 
-Write a a machine-parseable summary to <SUMMARY_JSON> with the JSON shape
+Write a machine-parseable summary to <SUMMARY_JSON> with the JSON shape
 {"status":"complete","critical":N,"high":N,"info":N} and end your reply
 with the line: READTHROUGH <crit> critical; <high> high; <info> info.
 

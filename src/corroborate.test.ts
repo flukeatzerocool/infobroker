@@ -310,6 +310,19 @@ describe("reconcileClaims", () => {
     const f = [...findings.values()][0];
     expect(f.sources[0].source_type).toBe("academic");
   });
+
+  it("does not confirm when a corroborated cluster coexists with a conflicting claim (REQ-026f)", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, [
+      makeResult("Coffee Health Effects", "https://a.com/1", "coffee reduces the risk of heart disease"),
+      makeResult("Coffee Health Effects", "https://b.com/2", "coffee reduces the risk of heart disease substantially"),
+      makeResult("Coffee Health Effects", "https://c.com/3", "coffee increases the risk of heart disease"),
+    ]);
+    const f = [...findings.values()][0];
+    expect(f.verdict).toBe("contested");
+    expect(f.perspectives).toBeDefined();
+    expect(f.perspectives!.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe("corroborate", () => {
@@ -331,6 +344,26 @@ describe("corroborate", () => {
     expect(result.findings).toEqual([]);
     expect(result.corroboration).toBe("partial");
     expect(result.iteration_count).toBe(0);
+  });
+
+  it("reconciles a KB-recalled source alongside an external match (REQ-026e)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(kbSearch).mockReturnValue([
+      { title: "Quantum Computing Advances", source_url: "https://kb.local/1", snippet: "quantum computing is progressing rapidly", source_type: "report", score: 0.9, freshness_score: 0.9 },
+    ] as any);
+    const result = await corroborate("quantum computing advances", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Quantum Computing Advances", "https://ext.com/1", "quantum computing is progressing rapidly today")],
+      },
+    });
+    expect(result.findings.length).toBe(1);
+    expect(result.findings[0].sources.length).toBe(2);
   });
 
   it("detects agreement across three providers using DI searchers", async () => {

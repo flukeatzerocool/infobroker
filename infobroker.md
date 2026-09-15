@@ -28,7 +28,7 @@ unified tool surface. Its design goals:
 2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
 4. **Truth by iteration.** A `verify_claims` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
-5. **Writing pipeline.** Server provides raw research materials; bundled client skills handle writing, summarization, proofreading, and translation, while the orchestrator routes requests to research workflow shapes including fact-checking.
+5. **Writing pipeline.** The server provides raw research materials; bundled client skills handle writing, summarization, proofreading, and translation, while the orchestrator routes requests to research workflow shapes including fact-checking.
 6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
 
 The knowledge base is a local caching layer — it does not alter the core
@@ -93,7 +93,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 - **SR-011 Contracts, not implementations.** Requirements state what the server
   must do. The verification gates (§9) enforce quality — do not prescribe how
-  to achieve it. No output format catalogues, no tool-name enumerations outside
+  to achieve it. No output format catalogs, no tool-name enumerations outside
   §6.1, no specific architecture decisions outside §5.2, no worked examples
   disguised as requirements. If a verification gate catches a deviation, trust
   the gate.
@@ -173,7 +173,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
-**Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogues, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
+**Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
 ---
 
@@ -1353,7 +1353,7 @@ reference tables).
 - [ ] Tool-signature exception used only where the REQ declares a tool's
       external parameter contract
 - [ ] No "Default:" clause (SR-011d) — defaults live in config.json
-- [ ] No enumerated catalogues (>5 backtick tokens) outside the tool-signature
+- [ ] No enumerated catalogs (>5 backtick tokens) outside the tool-signature
       exception
 - [ ] No worked examples disguised as requirements
 - [ ] Trust-the-gates test: would G0/G1/G2 catch a deviation?
@@ -1389,7 +1389,7 @@ Provenance for deleted REQs is maintained by the CHANGELOG.
 - Sort orders, algorithms, and scraping heuristics → builder's implementation
   judgment; verified by G1 integration tests
 - Default starting values → `config.json` is the canonical source (REQ-010)
-- Tool name lists and output format catalogues → `tools/list` is the live
+- Tool name lists and output format catalogs → `tools/list` is the live
   registry; the REQ states the category
 - State-machine transition rules → §6.3 provider API conventions table
 - Worked examples and step-by-step procedures → README.md and the bundled

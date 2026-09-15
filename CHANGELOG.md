@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.09.14 — Query-filter reporting, report destinations, and encryption recovery
+
+- Providers now report which query filters they actually honor, so a caller
+  is no longer told a region or time filter was applied when the serving
+  provider ignores it, and Yep's supported filters are no longer falsely
+  reported as dropped. (REQ-020d)
+- Saving a report with `save_to: "disk"` now writes only the file instead of
+  also indexing it into the knowledge base; `"kb"` and `"both"` still index
+  as before. (REQ-083)
+- `verify_claims` no longer marks a claim confirmed when a corroborated
+  cluster sits alongside a contradicting claim; such findings are reported
+  contested with both perspectives. (REQ-026f)
+- A missing or malformed knowledge-base encryption key file now locks the
+  store and reports a remediation, instead of crashing the server at startup,
+  and the encryption status action remains available while the store is
+  locked. (REQ-084, REQ-085, REQ-086)
+
 ## 2026.09.14 — Security audit remediation
 
 - Fetching a URL whose host is an unspecified address (`0.0.0.0`), an

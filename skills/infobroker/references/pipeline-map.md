@@ -8,6 +8,7 @@ flowchart TD
 
     C -->|"Research & Write"| RP
     C -->|"Fact-Check"| FC
+    C -->|"Deep-Dive"| DD
     C -->|"Competitive Evaluation"| EV
     C -->|"Literature Review"| LR
     C -->|"Monitoring / Delta"| MO
@@ -26,6 +27,10 @@ flowchart TD
 
     subgraph FC["Fact-Check"]
         FCc["extract claims → search_web → verify_claims"] --> FCv["assign verdicts"]
+    end
+
+    subgraph DD["Deep-Dive"]
+        DDc["scope & clarify → parallel search → extract → verify"] --> DDs["structured report"]
     end
 
     subgraph EV["Competitive Evaluation"]
@@ -56,6 +61,7 @@ flowchart TD
 
     style RP fill:#e8f5e9,stroke:#2e7d32
     style FC fill:#fff3e0,stroke:#ef6c00
+    style DD fill:#e0f7fa,stroke:#00838f
     style AL fill:#f3e5f5,stroke:#6a1b9a
     style EV fill:#e3f2fd,stroke:#1565c0
     style LR fill:#fce4ec,stroke:#c2185b

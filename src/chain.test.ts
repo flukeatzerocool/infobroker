@@ -136,4 +136,16 @@ describe("ignoredParams", () => {
   it("does not flag region for providers that honor it", () => {
     expect(ignoredParams("duckduckgo", { region: "de-de" })).toEqual([]);
   });
+
+  it("does not flag region or time_range for Yep, which honors both (REQ-020d)", () => {
+    expect(ignoredParams("yep", { region: "DE", time_range: "week" })).toEqual([]);
+  });
+
+  it("flags region for Brave, which declares but does not read it (REQ-020d)", () => {
+    expect(ignoredParams("brave", { region: "DE" })).toEqual(["region"]);
+  });
+
+  it("flags safe_search off for Yep, which applies only strict (REQ-020d)", () => {
+    expect(ignoredParams("yep", { safe_search: "off" })).toEqual(["safe_search"]);
+  });
 });

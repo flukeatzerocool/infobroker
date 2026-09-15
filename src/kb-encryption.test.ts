@@ -87,6 +87,28 @@ describe("KB at-rest encryption (REQ-084)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("locks with a remediation instead of crashing on an invalid key file (REQ-084, REQ-085)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-badkey-"));
+    process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+    initKb(makeConfig(dir, { enabled: true }));
+    kbIngest("payload", "t", "https://example.com/s", "test");
+    flushKbWrites();
+
+    cleanEnv();
+    expect(() =>
+      initKb(makeConfig(dir, { enabled: true, key_file: join(dir, "absent.key") }))
+    ).not.toThrow();
+    expect(getKbLockError()).not.toBeNull();
+    expect(getKbEncryptionState()).toBe("locked");
+
+    // The recovery surface stays usable: status reports the lock without throwing.
+    const status = kbEncryptionStatus();
+    expect(status.state).toBe("locked");
+    expect(status.key_resolvable).toBe(false);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("refuses to seal report bytes when enabled with no key (REQ-084)", () => {
     const dir = mkdtempSync(join(tmpdir(), "ibk-seal-"));
     cleanEnv();

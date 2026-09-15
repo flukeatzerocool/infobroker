@@ -1,9 +1,9 @@
-// @implements REQ-075 REQ-082 REQ-060e REQ-060f REQ-087 REQ-076
+// @implements REQ-075 REQ-082 REQ-060e REQ-060f REQ-087 REQ-076 REQ-083
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, resolveReportIdentity, resolveCollection, flushKbWrites } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
@@ -248,5 +248,13 @@ describe("report storage and retrieval (REQ-060e, REQ-060f)", () => {
       if (prevEnv === undefined) delete process.env["INFOBROKER_KB_COLLECTION"];
       else process.env["INFOBROKER_KB_COLLECTION"] = prevEnv;
     }
+  });
+});
+
+describe("save-destination selection (REQ-083)", () => {
+  it("indexes for 'kb' and 'both', and writes only to disk for 'disk'", () => {
+    expect(ingestDestinations("kb")).toEqual({ kb: true, disk: false });
+    expect(ingestDestinations("both")).toEqual({ kb: true, disk: true });
+    expect(ingestDestinations("disk")).toEqual({ kb: false, disk: true });
   });
 });

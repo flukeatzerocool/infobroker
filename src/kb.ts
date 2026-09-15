@@ -67,6 +67,23 @@ function resolvePath(p: string): string {
   return p;
 }
 
+// Resolve a configured key source without throwing: a missing or malformed key
+// file must lock the store and report a remediation (REQ-084, REQ-085), never
+// crash the server at startup.
+function safeResolveKeySource(keyFile?: string): { key: ResolvedKey | null; error: string | null } {
+  try {
+    return { key: resolveKeySource(keyFile), error: null };
+  } catch (e) {
+    return { key: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// REQ-083: the caller's save destination selects the stores. "disk" writes a
+// report file instead of indexing it; "kb" indexes; "both" does both.
+export function ingestDestinations(saveTo: string): { kb: boolean; disk: boolean } {
+  return { kb: saveTo !== "disk", disk: saveTo === "disk" || saveTo === "both" };
+}
+
 // The active in-process embedding model (REQ-103). It is selected from
 // `kb.embedding_model` at init; an unknown reference is reported as
 // unavailable (F9) while retrieval falls back to the built-in model so the
@@ -193,14 +210,17 @@ function loadStore(): void {
   if (encrypted) {
     // The on-disk state is authoritative: an encrypted store requires a key
     // regardless of the current `enabled` flag. Never rename, never reset.
-    const key = resolveKeySource(kbConfig?.encryption?.key_file);
+    const resolved = safeResolveKeySource(kbConfig?.encryption?.key_file);
+    const key = resolved.key;
     if (!key) {
       store = null;
       lockError = {
         code: "config_error",
-        message: "Knowledge base is encrypted but no key is configured",
+        message: resolved.error
+          ? "Knowledge base is encrypted but the configured key could not be loaded (check kb.encryption.key_file and its contents)"
+          : "Knowledge base is encrypted but no key is configured",
         remediation:
-          "Set INFOBROKER_KB_KEY or INFOBROKER_KB_PASSPHRASE, or point kb.encryption.key_file at a key file, then reload. Data is preserved and untouched. If the key is lost, restore it from a backup (see kb encryption 'backup' action) — without the key the store is unrecoverable by design.",
+          "Set INFOBROKER_KB_KEY or INFOBROKER_KB_PASSPHRASE, or point kb.encryption.key_file at a valid key file, then reload. Data is preserved and untouched. If the key is lost, restore it from a backup (see kb encryption 'backup' action) — without the key the store is unrecoverable by design.",
       };
       return;
     }
@@ -300,7 +320,7 @@ function saveStore(): void {
   const clearJson = Buffer.from(JSON.stringify(store), "utf-8");
 
   if (kbConfig?.encryption?.enabled) {
-    const key = resolvedKey ?? resolveKeySource(kbConfig?.encryption?.key_file);
+    const key = resolvedKey ?? safeResolveKeySource(kbConfig?.encryption?.key_file).key;
     if (!key) {
       // Should not happen after a successful load, but never write plaintext
       // when encryption is enabled.
@@ -459,7 +479,7 @@ export function initKb(config: KbConfig): void {
   const newlyEnabled = config.encryption?.enabled && !wasEncrypted;
   const newlyDisabled = wasEncrypted && !(config.encryption?.enabled ?? false);
   if (config.encryption?.enabled && !resolvedKey && store !== null) {
-    resolvedKey = resolveKeySource(config.encryption?.key_file) ?? null;
+    resolvedKey = safeResolveKeySource(config.encryption?.key_file).key;
   }
   // Re-key runs as a one-shot at init (operator shell, not a client) when the
   // rekey source/target environment variables are present. rekeyStore re-seals
@@ -1098,7 +1118,7 @@ export function verifyStoreKey(key?: ResolvedKey): boolean {
   if (!fpath || !existsSync(fpath)) return false;
   const bytes = readStoreBytes()!;
   if (!isEncryptedEnvelope(bytes)) return false;
-  const candidate = key ?? resolveKeySource(kbConfig?.encryption?.key_file) ?? resolvedKey;
+  const candidate = key ?? safeResolveKeySource(kbConfig?.encryption?.key_file).key ?? resolvedKey;
   if (!candidate) return false;
   try {
     const plain = openEnvelope(candidate, bytes).toString("utf-8");
@@ -1116,7 +1136,7 @@ export function verifyStoreKey(key?: ResolvedKey): boolean {
  */
 export function backupKeyFile(backupPath: string): string | null {
   const keyFile = kbConfig?.encryption?.key_file;
-  const resolved = resolveKeySource(keyFile);
+  const resolved = safeResolveKeySource(keyFile).key;
   if (!keyFile || !resolved || resolved.kind !== "raw") return null;
   const src = resolvePath(keyFile);
   if (!existsSync(src)) return null;
@@ -1151,7 +1171,7 @@ export function kbEncryptionStatus(): {
   lock: { code: string; message: string; remediation: string } | null;
 } {
   const keyFile = kbConfig?.encryption?.key_file;
-  const resolved = resolveKeySource(keyFile);
+  const resolved = safeResolveKeySource(keyFile).key;
   let keySource: "key_file" | "raw_env" | "passphrase" | "none" = "none";
   if (keyFile) keySource = "key_file";
   else if (process.env["INFOBROKER_KB_KEY"]) keySource = "raw_env";
