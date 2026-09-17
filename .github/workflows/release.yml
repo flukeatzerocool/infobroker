@@ -1,0 +1,39 @@
+# release.yml — CI step (GitHub mirror): create a GitHub Release for every
+# `v*` tag pushed to the repository. The project publishes to npm and the MCP
+# registry from publish.yml, but a git tag alone does not register a release,
+# and repository-health signals (e.g. Glama's maintenance score) read GitHub
+# Releases — not tags.
+#
+# Exit contract: the run fails (non-zero) if `gh release create` fails; it
+# exits 0 when the release already exists or is created successfully. The push
+# pipeline can force-move a tag, which re-triggers this workflow, so creation
+# is guarded by `gh release view` to stay idempotent.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a commit SHA (not a floating tag) so a compromised or moved
+      # action tag cannot inject code into the release job.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Create GitHub Release (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — leaving it in place."
+          else
+            gh release create "$tag" --title "$tag" --generate-notes --latest
+          fi

@@ -1,6 +1,7 @@
 ---
 description: Fast, non-thinking agent for push-pipeline review and documentation steps (read-through, changelog, scan, README refresh).
 mode: primary
+hidden: true
 model: opencode-go/deepseek-v4.1-flash
 permission: allow
 ---

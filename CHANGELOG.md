@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026.09.16 — Glama maintenance grade: GitHub Releases and community profile
+
+- Every `v*` tag pushed to the GitHub mirror now creates a GitHub Release
+  (`.github/workflows/release.yml`), idempotently guarded by `gh release view`
+  so a force-moved tag re-runs safely. The maintenance score reads GitHub
+  Releases, not git tags: the project had zero releases despite CalVer tags and
+  npm publishes. Existing tags are backfilled with releases.
+- Added the community-profile files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
+  (Contributor Covenant v2.1, enforcement via the canonical repository's
+  private channel — no personal contact), `.github/ISSUE_TEMPLATE/config.yml`
+  and `bug_report.yml`, and `.github/PULL_REQUEST_TEMPLATE.md`. Contributor
+  links point at the canonical git.gay repository; GitHub remains a read-only
+  mirror.
+- The push pipeline now stages `.github/` and the new root files. It previously
+  staged a fixed root-file list plus four directories, so the new workflow and
+  templates would have been silently dropped from a push.
+  (`scripts/push-pipeline.sh`)
+- Version references bumped to 2026.09.16; the 2026.09.15 pipeline-fast entry
+  ships in this release. (D-055)
+
+## 2026.09.15 — Hide the pipeline-fast agent from the agent picker
+
+- `pipeline-fast` is now declared `hidden: true` while keeping `mode: primary`,
+  so it no longer appears in the TUI agent picker/Tab cycle but is still
+  selected by `opencode run --agent pipeline-fast` for the push pipeline's
+  review steps. Demoting it to `mode: subagent` was rejected because
+  `opencode run` refuses subagent-mode agents and silently falls back to the
+  default agent, which would have dropped the cheap-model tier.
+  (`.opencode/agents/pipeline-fast.md`)
+
 ## 2026.09.14 — Consolidate review-loop findings into the AAR and ROADMAP
 
 - Removed `REVIEW-REGISTER.md`. The after-action report carries its own

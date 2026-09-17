@@ -547,12 +547,12 @@ echo ""
 git -C "$PROJECT_DIR" diff --name-only | grep -q '^node_modules/' && die "node_modules in diff — aborting commit."
 
 # Stage explicit root files (skip missing without error).
-for f in infobroker.md README.md CHANGELOG.md AGENTS.md package.json package-lock.json tsconfig.json config.json server.json; do
+for f in infobroker.md README.md CHANGELOG.md AGENTS.md CONTRIBUTING.md CODE_OF_CONDUCT.md package.json package-lock.json tsconfig.json config.json server.json; do
   [[ -f "$f" ]] && git -C "$PROJECT_DIR" add "$f"
 done
 # Stage everything under these directories — INCLUDING new untracked files,
 # so a sync that adds a source file actually ships it.
-git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/ .opencode/
+git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/ .opencode/ .github/
 
 # Secret scan over staged content.
 SECRETS=$(scan_staged_for_secrets)

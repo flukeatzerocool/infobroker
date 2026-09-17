@@ -2,6 +2,38 @@
 
 ## Active Decisions
 
+### D-055: Glama Maintenance-Grade Remediation — GitHub Releases and Community Profile (2026.09.16)
+
+Glama's maintenance grade is a repository-health signal, not a code score: its
+definition is commit activity, issue responsiveness, release frequency, and
+community profile (the score table lists maintainers, response time, release
+cycle, and releases over 12 months). The project scored C despite high commit
+activity because the GitHub repository emitted none of the release signals:
+zero GitHub Releases (CalVer git tags and npm versions do not count — every
+A-rated peer has releases; every C-rated peer has none), zero issues and pull
+requests ever, a single maintainer, and a 42% community profile. Glama also
+returned no maintenance breakdown for the repository at all.
+
+The remediation is distribution and governance, not server behavior: a
+tag-triggered `release.yml` creates a GitHub Release for every `v*` tag pushed
+to the mirror (idempotent, so a force-moved tag re-runs safely); the repository
+gains `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, an issue-template chooser and bug
+template, and a pull-request template; and the push pipeline now stages
+`.github/`, which it previously omitted — it staged a fixed root-file list plus
+four directories, so new workflow and template files would have been silently
+dropped. Contributor-facing links point at the canonical git.gay repository,
+since GitHub is a read-only mirror. No REQ is added: REQ-091 covers npm and
+MCP-registry publication, and none of these files change the server contract.
+
+Alternatives rejected: folding release creation into `publish.yml` (it runs
+path-filtered on `main`, before the tag is pushed, so it cannot see the tag);
+creating releases locally from `push-pipeline.sh` (adds a `gh` auth dependency
+the pipeline deliberately avoids by delegating publication to CI); a
+third-party release action (an extra action to pin and vet when `gh` is
+preinstalled on runners); naming a personal Code of Conduct contact (the
+maintainer declined to publish one, so the enforcement channel is the canonical
+repository's private reporting route).
+
 ### D-054: Security Audit Remediation (REQ-021a, REQ-084, REQ-097, REQ-098, REQ-100, REQ-101, REQ-102; 2026.09.14)
 
 A full-stack security audit (spec traceability, implementation controls,
