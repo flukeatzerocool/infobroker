@@ -19,6 +19,17 @@
   (`scripts/push-pipeline.sh`)
 - Version references bumped to 2026.09.16; the 2026.09.15 pipeline-fast entry
   ships in this release. (D-055)
+- The publish workflow no longer races npm's read-side propagation: it waits
+  for npm to serve the new version before publishing to the MCP Registry, and
+  retries the registry publish with backoff. The MCP Registry gate is now
+  independent of the npm gate, so a partial failure (npm published, registry
+  failed) is recoverable by re-running instead of being skipped once npm
+  caught up. Added a `workflow_dispatch` trigger for that manual heal.
+  (`.github/workflows/publish.yml`)
+- Added a weekly reconciliation workflow as a safety net: it compares the npm
+  latest version against the MCP Registry and re-dispatches `publish.yml` when
+  the registry is behind, so a missed or partial publish heals without a human
+  reading a failure notification. (`.github/workflows/publish-reconcile.yml`)
 
 ## 2026.09.15 — Hide the pipeline-fast agent from the agent picker
 

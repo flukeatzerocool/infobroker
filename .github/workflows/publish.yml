@@ -9,6 +9,10 @@ on:
       - "bin/**"
       - "tsconfig*.json"
       - "server.json"
+  # Manual dispatch lets a maintainer heal a partial publish (e.g. npm
+  # succeeded but the MCP Registry step raced and failed) without pushing a
+  # no-op commit. The version gates below make a manual run idempotent.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,29 +35,78 @@ jobs:
       # path, not only in the local (bypassable) pre-push hook.
       - name: Gate (typecheck, spec, readme, tests, dependency audit)
         run: npm run check
-      - name: Determine if version is already published
+      - name: Determine if version is already published to npm
         id: check
         run: |
           LOCAL_VERSION=$(node -e "console.log(require('./package.json').version.split('.').map(Number).join('.'))")
           PUBLISHED_VERSION=$(npm view infobroker version 2>/dev/null || echo "")
           echo "local=$LOCAL_VERSION"
           echo "published=$PUBLISHED_VERSION"
+          echo "local_version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
           if [ "$LOCAL_VERSION" = "$PUBLISHED_VERSION" ]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "Already published — skipping."
+            echo "Already published to npm — skipping npm publish."
           else
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      # The npm gate above answers "is npm behind?"; the MCP Registry needs its
+      # own gate — "is the registry behind?". Sharing one gate made a partial
+      # failure (npm ok / registry failed) unrecoverable on re-run, because the
+      # registry step was skipped once npm caught up.
+      - name: Determine if version is already in the MCP Registry
+        id: mcpcheck
+        env:
+          SERVER_NAME: io.github.flukeatzerocool/infobroker
+        run: |
+          ENCODED_NAME=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$SERVER_NAME")
+          VERSION="${{ steps.check.outputs.local_version }}"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/${ENCODED_NAME}/versions/${VERSION}")
+          echo "mcp_registry_status=$STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "mcp_should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Already in the MCP Registry — skipping."
+          else
+            echo "mcp_should_publish=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Build
         run: npm run build
       - name: Publish to npm
         if: steps.check.outputs.should_publish == 'true'
         run: npm publish --provenance --access public
-      - name: Publish to MCP Registry
+      # npm's write side returns before its read side serves the new version
+      # (observed ~2 min). The MCP Registry validates server.json against npm,
+      # so publishing too early 400s. Wait until npm actually serves it.
+      - name: Wait for npm to serve the new version
         if: steps.check.outputs.should_publish == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.local_version }}
+        run: |
+          for i in $(seq 1 30); do
+            if npm view "infobroker@${VERSION}" version >/dev/null 2>&1; then
+              echo "npm is serving infobroker@${VERSION}."
+              exit 0
+            fi
+            echo "attempt ${i}: npm not serving infobroker@${VERSION} yet; sleeping 10s."
+            sleep 10
+          done
+          echo "Timed out waiting for npm to serve infobroker@${VERSION}." >&2
+          exit 1
+      - name: Publish to MCP Registry
+        if: steps.mcpcheck.outputs.mcp_should_publish == 'true'
         run: |
           # mcp-publisher is a pre-built binary; install then publish.
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
           chmod +x mcp-publisher
           ./mcp-publisher login github-oidc
-          ./mcp-publisher publish server.json
+          # Belt-and-braces: even after the wait step, registry-side npm
+          # propagation can lag. Retry the publish with backoff.
+          for i in $(seq 1 5); do
+            if ./mcp-publisher publish server.json; then
+              exit 0
+            fi
+            echo "MCP Registry publish attempt ${i} failed; retrying in 15s." >&2
+            sleep 15
+          done
+          echo "MCP Registry publish failed after 5 attempts." >&2
+          exit 1

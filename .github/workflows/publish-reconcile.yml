@@ -1,0 +1,55 @@
+# publish-reconcile.yml — CI safety net (GitHub mirror): detect drift between
+# the npm registry and the MCP Registry and re-dispatch publish.yml to heal it.
+#
+# publish.yml is gated and idempotent, but a publish can still be missed (a
+# transient registry outage, a skipped step, a partial failure nobody noticed).
+# This job compares the npm latest version against the MCP Registry's record
+# and, when npm has a version the registry lacks, re-runs publish.yml — whose
+# independent gates then publish only what is missing.
+#
+# Exit contract: exits 0 when in sync, when npm is unreachable, or when the
+# re-dispatch succeeds; non-zero only if `gh workflow run` itself fails.
+name: Publish Reconcile
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect npm → MCP Registry drift
+        id: drift
+        env:
+          SERVER_NAME: io.github.flukeatzerocool/infobroker
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(npm view infobroker version 2>/dev/null || echo "")
+          if [ -z "$NPM_VERSION" ]; then
+            echo "npm version unavailable — skipping drift check."
+            echo "in_sync=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ENCODED_NAME=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$SERVER_NAME")
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/${ENCODED_NAME}/versions/${NPM_VERSION}")
+          echo "npm=$NPM_VERSION mcp_registry_status=$STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "in_sync=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "in_sync=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Re-dispatch publish workflow on drift
+        if: steps.drift.outputs.in_sync == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "MCP Registry is missing the npm version — re-dispatching publish.yml."
+          gh workflow run publish.yml --repo "$GITHUB_REPOSITORY"
