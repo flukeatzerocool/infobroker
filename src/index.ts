@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
@@ -1274,7 +1274,7 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.09.16",
+  version: "2026.10.02",
 });
 
 // --- search_web ---
@@ -1330,7 +1330,7 @@ server.registerTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange renderers). Use when you have a URL and need readable text, want to ask the page a question, or need its last-updated date. Do NOT use for a general topic search (use infobroker_search_web) or for claim verification across sources (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` fetches same-origin pages up to config caps; `max_length` caps characters; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` picks the backend — jina needs no API key, native_fetch is the fallback when Jina is throttled or a page returns an anti-bot challenge. Makes external HTTP calls, truncates very long pages, and needs no API key. Fetched pages are auto-indexed into the local knowledge base unless the content policy flags them (see infobroker_manage_kb), in which case flag mode returns them without storage and block mode refuses them. An unreachable URL returns an [ERROR] envelope with remediation. Returns a JSON envelope prefixed [OK] or [ERROR] with status, provider, results, and meta.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange alternatives). Use when you have a URL and need readable text, passages ranked against a question, or the page's last-updated date. Do NOT use for topic search (use infobroker_search_web) or cross-source claim verification (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` bounds the same-origin crawl to config caps; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` selects the backend, and native_fetch is the keyless fallback when Jina is throttled or anti-bot challenged. `max_length` truncates the returned text only; a truncated page is written in full to a temp file. Makes external HTTP calls and needs no API key. Fetched pages auto-index into the knowledge base unless the content policy flags them (see infobroker_manage_kb): flag mode returns without storage, block mode refuses. Unreachable URLs return an [ERROR] envelope with remediation; success returns an [OK] envelope with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
@@ -1370,7 +1370,7 @@ server.registerTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
-    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it reports state and never modifies configuration, providers, or stored data. Action semantics: `list` snapshots provider state locally; `health` runs a live outbound probe against the provider named in `provider` (external calls subject to that provider's rate limits and availability, so it can be slow); `spec` reports build and spec identity locally. `status` only filters `list`; `provider` is required for the `health` action. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, and results.",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state locally and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity locally. Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),
@@ -1406,7 +1406,7 @@ server.registerTool(
   "infobroker_verify_claims",
   {
     title: "Verify Claims",
-    description: "Verify a contested claim against independent sources and return confidence-scored findings. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use infobroker_search_web) or for citation formatting (use infobroker_get_citations). The loop recalls prior findings from the local knowledge base, then searches providers and writes its findings back into it; `max_iterations` bounds the search-refinement passes and per-provider rate limits apply. `query` states the claim plainly; `priority` routes the corroboration pool by intent (speed, quality, privacy, free_only); `providers` restricts the pool to the given slugs and omitting it uses the full dispatch chain; `confidence_threshold` sets the bar for a finding to be confirmed — findings below it are reported unverified. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` listing confirmed, contested, and unverified findings with per-source claims and confidence scores.",
+    description: "Verify a contested claim against independent sources and return confidence-scored findings. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use infobroker_search_web) or citation formatting (use infobroker_get_citations). The loop recalls prior findings from the knowledge base, then searches providers and writes findings back; `max_iterations` bounds the refinement passes and per-provider rate limits apply. `query` states the claim plainly; `priority` routes the pool by intent (speed, quality, privacy, free_only); `providers` restricts the pool and omitting it uses the full dispatch chain; `confidence_threshold` sets the bar for confirmation, and findings below it are reported unverified. Returns an [OK] or [ERROR] envelope listing confirmed, contested, and unverified findings with per-source claims and confidence scores.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_iterations: z.number().min(1).max(10).optional().default(5).describe("Maximum search-refinement passes (1-10, default 5)"),
@@ -1458,7 +1458,7 @@ server.registerTool(
   "infobroker_manage_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search cached content, ingest text or URLs, list/get/delete entries, view stats, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content, or manage encryption keys. Do NOT use for fresh external search (use infobroker_search_web) or to fetch a new page (use infobroker_fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Parameter semantics: `action` selects the operation; `query` for search, `text` or `url` for ingest, `source_url` for get/delete, `operation` with `key_file` for the encryption sub-actions; `save_to` defaults to 'kb', `format` to 'markdown', `max_results` to 8; `last_updated` is auto-detected from fetched URLs when omitted. Responses carry an [OK] or [ERROR] JSON envelope: search/list/get return matching entries, stats returns counts, and delete reports the chunks removed.",
+    description: "Manage the local knowledge base: search cached content, ingest text or URLs, list/get/delete entries, view stats, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content, or manage encryption keys. Do NOT use for fresh external search (use infobroker_search_web) or to fetch a new page (use infobroker_fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Parameter semantics: `action` selects the operation; `query` for search, `text`/`url` plus `title` and `collection` for ingest, `source_url` for get/delete, and `operation` with `key_file` for the encryption sub-actions; `source_type` and `freshness_tier` tag an ingest and filter search/list; `save_to` defaults to 'kb', `format` to 'markdown', `max_results` to 8; `last_updated` is auto-detected from fetched URLs when omitted. Responses carry an [OK] or [ERROR] envelope: search/list/get return entries, stats returns counts, delete reports the chunks removed.",
     inputSchema: {
       action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
@@ -1679,8 +1679,12 @@ server.registerTool(
   {
     title: "Reload Configuration",
     description:
-      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json and want the changes applied immediately. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). By default the call re-reads the configuration source fixed at startup (INFOBROKER_CONFIG, merged with config.local.json) and reports any user-layer schema drift; pass `migrate` true to back up and apply registered user-layer migrations before reloading. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
+      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json, or when passing `patch` to change configuration programmatically. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). `patch` deep-merges a partial config into the user layer (config.local.json), rejecting unknown top-level keys, backing up the previous layer, and validating the merged result before writing; `migrate` true backs up and applies registered user-layer migrations before reloading. The call re-reads the startup configuration source and reports any user-layer schema drift. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns an [OK] or [ERROR] JSON envelope.",
     inputSchema: {
+      patch: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Partial configuration deep-merged into the user layer (config.local.json) before reloading; unknown top-level keys are rejected and the previous layer is backed up"),
       migrate: z
         .boolean()
         .optional()
@@ -1689,13 +1693,19 @@ server.registerTool(
     },
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: true,
     },
   },
   async (params) => {
     try {
+      let patchResult: { path: string; backup: string | null; changed: string[] } | null = null;
+      if (params.patch && Object.keys(params.patch as Record<string, unknown>).length > 0) {
+        patchResult = patchUserConfigLayer(params.patch as Record<string, unknown>);
+        // REQ-098: configuration writes are recorded in the audit trail.
+        audit("config_patch", `success (${patchResult.changed.join(", ")})`);
+      }
       let migration: { changes: string[]; backup: string | null } | null = null;
       if (params.migrate) {
         const result = migrateUserConfigLayer();
@@ -1739,8 +1749,11 @@ server.registerTool(
       const migrationSummary = migration
         ? ` Migrated user config layer: ${migration.changes.join("; ")}${migration.backup ? ` (backup: ${migration.backup})` : ""}.`
         : "";
+      const patchSummary = patchResult
+        ? ` Patched user config layer: ${patchResult.changed.join("; ")}${patchResult.backup ? ` (backup: ${patchResult.backup})` : ""}.`
+        : "";
       const message =
-        `Configuration reloaded. Knowledge base encryption: ${state}.${guidance}${driftSummary}${migrationSummary}` +
+        `Configuration reloaded. Knowledge base encryption: ${state}.${guidance}${driftSummary}${patchSummary}${migrationSummary}` +
         (lock ? ` Knowledge base LOCKED: ${lock.message}` : "");
       return {
         content: [
@@ -1754,6 +1767,7 @@ server.registerTool(
                   message,
                   provider_count: Object.keys(newConfig.providers).length,
                   config_drift: drift && drift.hasDrift ? drift : null,
+                  patch: patchResult,
                   migration,
                 },
               ],
@@ -1780,7 +1794,7 @@ server.registerTool(
   "infobroker_get_citations",
   {
     title: "Get Citations",
-    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use infobroker_search_web) or for verifying a contested claim (use infobroker_verify_claims). Operates without an API key when at least one scholarly source is reachable; when every scholarly source is unreachable it returns an [ERROR] envelope with remediation, and queries respect each provider's rate limits. `query` names the topic in natural language; larger `max_results` values take longer and span more sources. Returns a JSON envelope prefixed `[OK]` or `[ERROR]`.",
+    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use infobroker_search_web) or contested-claim verification (use infobroker_verify_claims). `query` is a natural-language topic; `max_results` sets the reference count, and larger values take longer and span more sources. Needs no API key when at least one scholarly source is reachable; if every source fails it returns an [ERROR] envelope with remediation, and queries respect per-provider rate limits. Returns an [OK] or [ERROR] JSON envelope.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_results: z.number().min(1).max(30).optional().default(8).describe("Maximum references to return (1-30, default 8)"),

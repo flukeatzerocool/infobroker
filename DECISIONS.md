@@ -2,6 +2,46 @@
 
 ## Active Decisions
 
+### D-056: TDQS 1.2 Conformance Gate and Score-Improvement Pass (REQ-040, REQ-106; 2026.10.02)
+
+The Glama TDQS audit (2026-09-30) scored the server A 4.8/5.0: `search_web` at
+5.0 and the other six tools at 4.8, each losing only Conciseness (4/5) and
+Parameter Semantics (4/5), plus a server-level Completeness of 4/5 ("config is
+reloaded but never edited programmatically"). TDQS 1.2 is an LLM rubric, so
+scores are not mechanically guaranteed (D-048); the prior remediation passes
+were one-off editorial edits with no regression guard beyond REQ-092's static
+check.
+
+This pass does two things. First, it codifies the standard: REQ-106 requires
+the deterministic layer of TDQS 1.2 (stages 1, 2, and 4 — context signals, hard
+gates, and the shadow prefilter) and binds it to a new live-surface gate,
+`scripts/check-tdqs.ts`, alongside the opt-in LLM rubric runner
+`scripts/tdqs-rubric.ts`. `src/tdqs.ts` implements the spec's normative
+required-subtree traversal, invocation cost, exact-integer `round1` arithmetic,
+tier map, and server rollups. The gate fails on the objective preconditions
+(missing or tautological description, undocumented parameter, missing
+annotation) and reports shadow candidates, annotation-contradiction candidates,
+and per-tool signals; the six dimension scores remain LLM-judged and are
+deliberately out of the deterministic gate.
+
+Second, it acts on the feedback: the six 4.8 tools' descriptions were rewritten
+to cut redundancy (Conciseness) and add parameter semantics, and `manage_kb`'s
+orphaned `title`, `collection`, `source_type`, and `freshness_tier` parameters
+were tied to their actions. `reload_config` gained a `patch` capability
+(REQ-040) that deep-merges a partial configuration into the user layer with
+unknown-key rejection, a recoverable backup, and validate-before-write — closing
+the server Completeness gap while keeping the seven-tool surface (REQ-090/092).
+
+Alternatives rejected: an in-repo LLM grader wired into `npm run check` (breaks
+the offline/deterministic gate contract); a density byte-cap as a hard failure
+(TDQS conciseness is relative to tool complexity, so a single cap would
+false-positive on `manage_kb`'s 15 parameters — the signal is reported, not
+gated); extracting all tool definitions into a shared module so the gate could
+avoid spawning the server (a larger refactor of `index.ts` with no benefit over
+the already-proven stdio surface); adding an eighth config-editing tool (breaks
+the seven-tool surface). Score movement is LLM-judged: the deterministic gate
+guarantees the preconditions, and Glama re-scores on its next sweep.
+
 ### D-055: Glama Maintenance-Grade Remediation — GitHub Releases and Community Profile (2026.09.16)
 
 Glama's maintenance grade is a repository-health signal, not a code score: its

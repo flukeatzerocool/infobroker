@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026.10.02 — TDQS conformance: deterministic gate, REQ-106, and score-improvement pass
+
+- Adopted TDQS 1.2 as a normative standard. New REQ-106 requires the advertised
+  tool surface to satisfy the standard's deterministic layer — non-empty
+  descriptions distinct from name/title, a description per parameter, all four
+  annotations, and no description/annotation contradiction — and to report
+  per-tool context signals and shadow-candidate pairs. (`infobroker.md`)
+- Added `scripts/check-tdqs.ts`, a gate over the live `tools/list` surface that
+  computes TDQS context signals (invocation cost, schema description coverage,
+  definition size, input hash), applies the hard gates, reports shadow
+  candidates and annotation-contradiction candidates, and fails on structural
+  violations. Wired into `npm run check` as `npm run check-tdqs`.
+- Added `src/tdqs.ts` (deterministic engine) and `src/tdqs.test.ts`; the engine
+  implements the spec's required-subtree traversal, invocation cost, `round1`
+  score arithmetic, tiers, shadow prefilter, and server rollups.
+- Added `scripts/tdqs-rubric.ts`, an opt-in informational runner for the
+  Appendix A/B LLM rubric (network and model endpoint; not part of `npm run
+  check`).
+- `reload_config` gained a `patch` parameter (REQ-040): a partial configuration
+  deep-merged into the user layer, with unknown-key rejection, a recoverable
+  backup, and validate-before-write. Its `destructiveHint` is now true, since
+  it writes config. (`src/config.ts`, `src/index.ts`)
+- Applied the Glama TDQS evaluation feedback (server scored A 4.8, 2026-09-30):
+  tightened the six sub-5.0 tool descriptions for Conciseness, added parameter
+  semantics, and tied `manage_kb`'s `title`, `collection`, `source_type`, and
+  `freshness_tier` parameters to their actions. (D-056)
+
 ## 2026.09.16 — Glama maintenance grade: GitHub Releases and community profile
 
 - Every `v*` tag pushed to the GitHub mirror now creates a GitHub Release

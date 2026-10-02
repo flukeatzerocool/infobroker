@@ -318,7 +318,8 @@ Infobroker produces finished work.
 Quota counters persist to disk and survive restarts. Rate limits are
 enforced per-provider, not globally. Configuration is hot-reloadable
 via `reload_config` — change providers, adjust chains, or tweak
-thresholds without dropping connections. `search_web` doubles as
+thresholds without dropping connections, or pass a `patch` to merge a
+change into your user layer with a backup. `search_web` doubles as
 DuckDuckGo query autocomplete. `inspect_providers` reports the server's build
 health and request stats. You always know what your search server is
 doing and how much capacity remains.
@@ -431,8 +432,9 @@ provider.
 `config.json` ships with the repository and holds the defaults: which
 providers are enabled, their priority in fallback chains, rate limits,
 corroboration parameters, and the task-to-provider dispatch table.
-Hot-reloadable via `reload_config` — edit the file, call the tool, and
-changes take effect without a restart.
+Hot-reloadable via `reload_config` — edit the file and call the tool, or
+pass a `patch` to merge configuration programmatically; changes take
+effect without a restart.
 
 Your own overrides live in a separate user layer — `config.local.json`
 in the project directory (or a path you set via `INFOBROKER_CONFIG_LOCAL`).

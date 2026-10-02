@@ -171,7 +171,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -314,6 +314,9 @@ Tool names SHALL follow a verb-noun pattern: a verb naming the operation followe
 **REQ-092 — Tool-definition quality bar**
 The advertised tool surface SHALL satisfy every dimension of the tool-definition quality bar: each tool SHALL state its purpose, when to use it, when not to use it, the alternative tools a caller could choose instead, and the behavioral consequences of calling it. Each tool SHALL state its response contract and any non-obvious parameter couplings. Each tool SHALL declare annotations for read-only, destructive, idempotent, and open-world behavior. Tool names SHALL follow the verb-noun pattern. The bar SHALL be enforced by a conformance gate over the live tool schema. _Check:_ G1, G3.
 
+**REQ-106 — Tool-definition quality score conformance**
+The advertised tool surface SHALL conform to the deterministic layer of TDQS 1.2, the tool-definition quality standard published at tdqs.dev/spec. For every tool definition that layer SHALL be satisfied: a non-empty description distinct from the tool name and title; a description for every input parameter; all four behavioral annotations declared; and a description that does not contradict those annotations. The server SHALL report each tool's parameter counts, schema description coverage, invocation cost, and definition size. A conformance gate SHALL fail when any tool definition violates the standard and SHALL report any shadow-candidate pairs. _Check:_ G1, G3.
+
 ### 4.4 Rate Limiting and Resilience
 
 Rate limiting (REQ-030) and quota tracking (REQ-033, REQ-034) use separate
@@ -363,7 +366,7 @@ WHEN a provider returns a rate-limit response or an anti-bot challenge, the serv
 ### 4.5 State and Configuration
 
 **REQ-040 — Configuration Reload**
-The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned. _Check:_ G1.
+The `reload_config` tool SHALL re-read the config file without restarting. Active connections are preserved. If the new config is invalid, the previous config remains active and an error is returned. WHEN the tool receives a configuration patch, it SHALL merge the patch into the user configuration layer, reject unknown top-level keys, preserve a recoverable backup of the previous layer before writing, validate the merged configuration before committing, and leave the previous configuration active if validation fails. _Check:_ G1.
 
 ### 4.6 Provider Architecture
 
@@ -1024,6 +1027,7 @@ verdict is preserved (REQ-026f).
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-092 | Tool-definition quality bar | 4.3 | G1, G3 |
+| REQ-106 | Tool-definition quality score conformance | 4.3 | G1, G3 |
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-031a | Cross-task fallback | 4.4 | G1 |
@@ -1515,7 +1519,7 @@ secondary concerns rather than duplicating the REQ.
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105 | G0, G1 |
-| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092 | G0 |
+| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |

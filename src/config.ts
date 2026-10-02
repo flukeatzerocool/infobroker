@@ -136,6 +136,38 @@ export function migrateUserConfigLayer(): {
   return { changes, backup, path: userPath };
 }
 
+/**
+ * REQ-040: apply a caller-supplied configuration patch to the user layer.
+ * The patch is deep-merged, the merged configuration is validated before any
+ * write, the previous layer is backed up, and the write is atomic. An unknown
+ * top-level key or an invalid merged configuration throws before disk is
+ * touched, so the caller keeps the previous configuration active.
+ */
+export function patchUserConfigLayer(patch: Record<string, unknown>): {
+  path: string;
+  backup: string | null;
+  changed: string[];
+} {
+  const userPath = getUserConfigPath();
+  if (!userPath) throw new Error("No user configuration layer path is configured");
+  const base = readJson(getConfigPath()) as Config;
+  const knownKeys = new Set(Object.keys(base as unknown as Record<string, unknown>));
+  for (const key of Object.keys(patch)) {
+    if (key !== "config_version" && !knownKeys.has(key)) {
+      throw new Error(`Unknown configuration key "${key}" — the patch may only set keys the shipped schema declares`);
+    }
+  }
+  const existing = userConfigLayer ?? {};
+  const nextLayer = mergeLayer(existing, patch);
+  // Validate the merged result before touching disk (REQ-040).
+  const merged = applyDefaults(mergeLayer(base, nextLayer));
+  validateConfig(merged);
+  const backup = backupFile(userPath);
+  atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(nextLayer, null, 2)}\n`, "utf-8"));
+  userConfigLayer = nextLayer;
+  return { path: userPath, backup, changed: Object.keys(patch) };
+}
+
 function applyDefaults(config: Config): Config {
   const defaults = config.defaults;
   if (!defaults) return config;
