@@ -1,0 +1,42 @@
+[
+  {
+    "id": "scholar",
+    "label": "Academic researcher",
+    "audience": "literature review",
+    "feature_groups": [1, 3, 4],
+    "tools": ["infobroker_get_citations", "infobroker_search_web", "infobroker_manage_kb"],
+    "success_criteria": ["academic sources returned", "citations formatted", "gaps stated"]
+  },
+  {
+    "id": "fact-checker",
+    "label": "Journalist / analyst",
+    "audience": "fact-check",
+    "feature_groups": [1, 3],
+    "tools": ["infobroker_verify_claims", "infobroker_fetch_page"],
+    "success_criteria": ["verdict per claim", "confidence stated", "both sides reported"]
+  },
+  {
+    "id": "developer",
+    "label": "Software engineer",
+    "audience": "implementation lookup",
+    "feature_groups": [1, 2],
+    "tools": ["infobroker_search_web", "infobroker_inspect_providers"],
+    "success_criteria": ["code sources returned", "provider chain selected"]
+  },
+  {
+    "id": "ops",
+    "label": "Operations / maintainer",
+    "audience": "provider operations",
+    "feature_groups": [2, 5],
+    "tools": ["infobroker_inspect_providers", "infobroker_reload_config"],
+    "success_criteria": ["health accurate", "reload non-destructive"]
+  },
+  {
+    "id": "archivist",
+    "label": "Knowledge-base user",
+    "audience": "personal KB",
+    "feature_groups": [4],
+    "tools": ["infobroker_manage_kb"],
+    "success_criteria": ["ingest then recall", "dedup", "delete scoped"]
+  }
+]

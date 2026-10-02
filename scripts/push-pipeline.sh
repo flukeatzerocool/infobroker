@@ -552,7 +552,7 @@ for f in infobroker.md README.md CHANGELOG.md AGENTS.md CONTRIBUTING.md CODE_OF_
 done
 # Stage everything under these directories — INCLUDING new untracked files,
 # so a sync that adds a source file actually ships it.
-git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/ .opencode/ .github/
+git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/ debate-club/ .opencode/ .github/
 
 # Secret scan over staged content.
 SECRETS=$(scan_staged_for_secrets)

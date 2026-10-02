@@ -6,6 +6,14 @@
   with the corroboration fields (`findings`, `agreement_map`, `synthesis`, …)
   preserved alongside it, instead of a bare result object — matching the other
   six tools. (`src/index.ts`)
+- Added `debate-club/`, an evaluation harness that drives the real MCP server
+  over stdio with every outbound request served from committed fixtures: a
+  deterministic Arena contract suite across all seven tools (negative paths
+  included), a live record/replay lane, telemetry → report → rule-based
+  recommendations, and an agentic persona Lab (advisory). The Arena is wired
+  into `npm run check` as `npm run test-debate-club`, and the push pipeline
+  now stages `debate-club/`. (`debate-club/`, `package.json`,
+  `scripts/push-pipeline.sh`, `AGENTS.md`)
 - Adopted TDQS 1.2 as a normative standard. New REQ-106 requires the advertised
   tool surface to satisfy the standard's deterministic layer — non-empty
   descriptions distinct from name/title, a description per parameter, all four

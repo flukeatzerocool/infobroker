@@ -25,6 +25,7 @@
     "test": "vitest run",
     "test-skills": "bash scripts/test-skills.sh",
     "test-research": "bash scripts/test-research.sh",
+    "test-debate-club": "npx tsc -p debate-club/tsconfig.json && bash debate-club/run.sh arena",
     "validate-spec": "npx tsx scripts/validate-spec.ts",
     "validate-readme": "npx tsx scripts/validate-readme.ts",
     "check-script-discipline": "npx tsx scripts/check-script-discipline.ts",
@@ -35,7 +36,7 @@
     "version-sync": "npx tsx scripts/version.ts check",
     "audit": "npm audit --audit-level=high",
     "push": "bash scripts/push-pipeline.sh",
-    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run check-script-discipline && npm run check-tdqs && npm run test && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts"
+    "check": "npm run typecheck && npm run validate-spec && npm run validate-readme && npm run check-script-discipline && npm run check-tdqs && npm run test && npm run test-debate-club && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts"
   },
   "keywords": [
     "search",

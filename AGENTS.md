@@ -234,6 +234,7 @@ This runs:
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch |
 | `npm run test`       | Vitest unit and integration tests                  |
+| `npm run test-debate-club` | debate-club Arena: deterministic, offline tool-contract suite (typecheck + fixture replay) |
 | `npm run audit`      | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |
 | `scripts/check-shipped-kb-empty.ts` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
 
@@ -248,6 +249,17 @@ Shell scripts (`scripts/*.sh`, `scripts/pipeline/*.sh`, `.githooks/*`) are
 gate-checked with `bash -n`. Running `shellcheck` on them before committing
 is recommended but not required — it is not installed as a devDependency and
 is not part of `npm run check`.
+
+## Debate Club (evaluation harness)
+
+`debate-club/` evaluates whether the MCP does what the spec says. It drives
+the real server over stdio with every outbound request served from committed
+fixtures, in two planes: a deterministic **Arena** (offline contract checks
+across all seven tools, including negative paths) and an agentic **Lab**
+(persona runs through headless `opencode`, advisory only). The Arena runs in
+`npm run check` via `npm run test-debate-club`; the Lab and the live `record`
+lane do not (they require network/`opencode`). Run artifacts land in the
+git-ignored `debate-club/.runs/`. See `debate-club/README.md`.
 
 ## Review-Loop Governance
 

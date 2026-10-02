@@ -1,0 +1,72 @@
+[
+  {
+    "id": "L1",
+    "persona": "fact-checker",
+    "shape": "fact-check",
+    "mode": "positive",
+    "utterance": "Fact-check this claim for my article: retrieval-augmented generation eliminates hallucination in large language models. Give a verdict and a confidence score.",
+    "followups": [],
+    "tokens": ["fact-check complete."],
+    "absent": [],
+    "sections": ["verdict", "confidence"],
+    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
+    "rubric": [
+      "A verdict is given for the claim",
+      "A 0.0-1.0 confidence score is stated",
+      "Contradicting evidence is reported, not smoothed over",
+      "Sources are cited with URLs"
+    ]
+  },
+  {
+    "id": "L2",
+    "persona": "scholar",
+    "shape": "literature-review",
+    "mode": "positive",
+    "utterance": "Give me a state-of-the-art literature review on retrieval-augmented generation, with explicit inclusion criteria, a thematic synthesis, and a gap analysis.",
+    "followups": ["Proceed with reasonable defaults."],
+    "tokens": ["lit-review complete."],
+    "absent": [],
+    "sections": ["inclusion", "gap"],
+    "tool_audit": { "kb_before_search": true, "verify_claims": false, "uses_infobroker": true },
+    "rubric": [
+      "Inclusion/exclusion criteria are stated explicitly",
+      "Findings are synthesized into themes",
+      "A gap analysis names what is absent",
+      "Academic citations are provided"
+    ]
+  },
+  {
+    "id": "L3",
+    "persona": "ops",
+    "shape": "provider-ops",
+    "mode": "positive",
+    "utterance": "List the search providers Infobroker can use, tell me which are active, and report the build and spec identity.",
+    "followups": [],
+    "tokens": [],
+    "absent": [],
+    "sections": ["provider"],
+    "tool_audit": { "kb_before_search": false, "verify_claims": false, "uses_infobroker": true },
+    "rubric": [
+      "Provider list includes tier/status",
+      "Build/spec identity is reported",
+      "No fabricated provider names"
+    ]
+  },
+  {
+    "id": "L4",
+    "persona": "archivist",
+    "shape": "kb-roundtrip",
+    "mode": "positive",
+    "utterance": "Save this note to my knowledge base: \"Project Phoenix uses a retrieval-augmented pipeline.\" Then search the knowledge base and confirm it can be recalled.",
+    "followups": [],
+    "tokens": [],
+    "absent": [],
+    "sections": ["phoenix"],
+    "tool_audit": { "kb_before_search": false, "verify_claims": false, "uses_infobroker": true },
+    "rubric": [
+      "The note is ingested",
+      "A search recalls the note",
+      "The agent reports the recall honestly"
+    ]
+  }
+]
