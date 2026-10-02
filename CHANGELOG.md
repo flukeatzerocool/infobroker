@@ -2,6 +2,10 @@
 
 ## 2026.10.02 — TDQS conformance: deterministic gate, REQ-106, and score-improvement pass
 
+- `verify_claims` now emits the REQ-001 `{status, provider, results}` envelope,
+  with the corroboration fields (`findings`, `agreement_map`, `synthesis`, …)
+  preserved alongside it, instead of a bare result object — matching the other
+  six tools. (`src/index.ts`)
 - Adopted TDQS 1.2 as a normative standard. New REQ-106 requires the advertised
   tool surface to satisfy the standard's deterministic layer — non-empty
   descriptions distinct from name/title, a description per parameter, all four

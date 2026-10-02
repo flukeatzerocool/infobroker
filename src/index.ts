@@ -1439,7 +1439,17 @@ server.registerTool(
       if (compactMode()) {
         delete result.provenance;
       }
-      return { content: [{ type: "text" as const, text: `[OK] ${json(result)}` }] };
+      // REQ-001: every tool body carries status/provider/results. The
+      // corroboration fields (findings, agreement_map, synthesis, ...) are
+      // preserved alongside the envelope for back-compatibility.
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `[OK] ${json({ status: "ok", provider: "corroborate", results: result.findings, ...result })}`,
+          },
+        ],
+      };
     } catch (e) {
       return {
         content: [
