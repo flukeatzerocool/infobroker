@@ -85,3 +85,29 @@ export function extractToolOrder(raw) {
   }
   return tools;
 }
+
+// Extract a bounded digest of the tools a run called — name, truncated input,
+// truncated output — for feeding an evidence-aware critic/rubric without the
+// full transcript. Caps keep the prompt small and deterministic in shape.
+export function extractToolEvidence(raw, { perField = 400, maxTools = 20 } = {}) {
+  const lines = [];
+  let n = 0;
+  for (const line of raw.split("\n")) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (ev?.type !== "tool_use" && ev?.part?.type !== "tool") continue;
+    const part = ev?.part ?? ev;
+    const tool = part?.tool ?? ev?.tool;
+    if (typeof tool !== "string") continue;
+    if (n >= maxTools) break;
+    n++;
+    const state = part?.state ?? {};
+    const input = state.input ? JSON.stringify(state.input) : "";
+    const output = typeof state.output === "string" ? state.output : state.output ? JSON.stringify(state.output) : "";
+    const bits = [`${n}. ${tool}`];
+    if (input) bits.push(`input=${input.slice(0, perField)}`);
+    if (output) bits.push(`output=${output.slice(0, perField)}`);
+    lines.push(bits.join("  "));
+  }
+  return lines.join("\n");
+}

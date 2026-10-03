@@ -29,17 +29,23 @@ const EXPECTED_TOOLS = [
 if (!existsSync(telemetryPath) && existsSync(resultsPath)) {
   const results = JSON.parse(readFileSync(resultsPath, "utf8"));
   const scenarios = {};
+  const coveredSet = new Set();
   for (const [id, s] of Object.entries(results.scenarios ?? {})) {
     const failed = s.status === "fail";
+    const tools = s.tools ?? [];
+    for (const t of tools) coveredSet.add(t);
     scenarios[id] = {
       status: s.status,
       calls: s.toolsCalled ?? 0,
       error: failed ? 1 : 0,
       unexpected: failed ? 1 : 0,
       audit_fails: s.auditFails ?? [],
-      tools: [],
+      tools,
+      critic_status: s.critic_status ?? "not-run",
+      critic_verdict: s.critic_verdict?.verdict ?? null,
     };
   }
+  const covered = [...coveredSet].sort();
   const summary = results.summary ?? { total: 0, pass: 0, fail: 0 };
   const labReport = {
     schema: "debate-club/lab-report@1",
@@ -49,7 +55,7 @@ if (!existsSync(telemetryPath) && existsSync(resultsPath)) {
     error_codes: {},
     tools: {},
     scenarios,
-    coverage: { expected_tools: EXPECTED_TOOLS, covered_tools: [], missing_tools: [] },
+    coverage: { expected_tools: EXPECTED_TOOLS, covered_tools: covered, missing_tools: EXPECTED_TOOLS.filter((t) => !covered.includes(t)) },
     unmatched: [],
   };
   writeFileSync(join(runDir, "report.json"), JSON.stringify(labReport, null, 2) + "\n");

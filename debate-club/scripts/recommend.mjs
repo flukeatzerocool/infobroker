@@ -48,10 +48,16 @@ for (const [scenario, s] of Object.entries(report.scenarios)) {
   }
 }
 
-// P2: coverage and performance.
+// P2: coverage and performance. Tool coverage is a hard gap for the Arena
+// (which intends full tool coverage) but informational for the Lab, whose
+// scenario set is deliberately partial.
 if (report.coverage.missing_tools.length) {
-  add("P2", "coverage/tools", `No Arena scenario covers: ${report.coverage.missing_tools.join(", ")}.`,
-    report.coverage.missing_tools, "Add a scenario for each uncovered tool.", "open");
+  const lab = report.schema === "debate-club/lab-report@1";
+  add(lab ? "P3" : "P2", "coverage/tools",
+    `${lab ? "Lab" : "Arena"} scenarios do not cover: ${report.coverage.missing_tools.join(", ")}.`,
+    report.coverage.missing_tools,
+    "Add a scenario for each uncovered tool if that surface is in scope.",
+    lab ? "closed" : "open");
 }
 for (const [tool, s] of Object.entries(report.tools)) {
   if (s.p95_ms > 2000) {

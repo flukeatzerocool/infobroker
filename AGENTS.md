@@ -257,9 +257,13 @@ is not part of `npm run check`.
 the real server over stdio with every outbound request served from committed
 fixtures, in two planes: a deterministic **Arena** (offline contract checks
 across all seven tools, including negative paths) and an agentic **Lab**
-(persona runs through headless `opencode`, advisory only). The Arena runs in
+(persona runs through headless `opencode` against a repo-scoped MCP, advisory
+only). The Arena runs in
 `npm run check` via `npm run test-debate-club`; the Lab and the live `record`
-lane do not (they require network/`opencode`). Run artifacts land in the
+lane do not (they require network/`opencode`). A Lab run's critic pass is
+evidence-aware and its result carries an explicit `critic_status` plus parsed
+verdict and tool coverage; the run is copied to a durable directory outside the
+repo and exits non-zero when feedback is incomplete. Run artifacts land in the
 git-ignored `debate-club/.runs/`. See `debate-club/README.md`.
 
 ## Review-Loop Governance

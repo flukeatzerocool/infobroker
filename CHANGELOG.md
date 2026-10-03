@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.10.02 — debate-club Lab feedback integrity: evidence-aware critic, explicit status, durable runs
+
+- The Lab critic is now evidence-aware: it receives the scenario rubric and a
+  bounded tool-call digest alongside the final answer, so `UNSOURCED` means
+  "uncited" rather than "the critic could not see the evidence". (`debate-club/scripts/lab.sh`,
+  `debate-club/scripts/critic.md`, `scripts/lib/event-stream.mjs`)
+- Each Lab scenario result carries an explicit `critic_status`
+  (`ok`/`empty`/`malformed`/`not-run`), the parsed `critic_verdict`, and the
+  normalized Infobroker `tools` it called; `report.mjs` rolls those into
+  coverage and a run whose scenarios lack a verdict or coverage exits non-zero
+  as incomplete. The `critic.txt` verdict block (which sits at the tail) is no
+  longer truncated away. (`debate-club/scripts/evaluate-lab.mjs`,
+  `debate-club/scripts/report.mjs`, `debate-club/scripts/recommend.mjs`)
+- Lab runs are copied to a durable user-scoped directory (`DEBATE_RUNS_DIR`,
+  keep last `DEBATE_KEEP_RUNS`) with a `run-meta.json` provenance record (repo
+  version/HEAD and the MCP target path exercised), so an ephemeral `.runs/` or
+  a `git clean -fdx` cannot lose a run. (`debate-club/scripts/lab.sh`)
+- Added `debate-club/src/evaluate-lab.test.ts`, an offline contract test for
+  critic status/verdict parsing and tool-coverage normalization, run by
+  `npm run test-debate-club`.
+
 ## 2026.10.02 — Roadmap burn-down: dependency audit fixed, harness-expectation gate added
 
 - Cleared the two high-severity dependency advisories (`brace-expansion`,
