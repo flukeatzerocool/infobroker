@@ -3,10 +3,18 @@
 # Sourced by push-pipeline.sh; not run directly.
 
 # ── Colors ───────────────────────────────────────────────────────────────────
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# Emit color only to a TTY (and honor NO_COLOR) so redirected logs stay clean.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  GREEN='\033[0;32m'
+  YELLOW='\033[1;33m'
+  RED='\033[0;31m'
+  NC='\033[0m'
+else
+  GREEN=''
+  YELLOW=''
+  RED=''
+  NC=''
+fi
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 info()  { echo -e "${GREEN}$*${NC}"; }
@@ -49,11 +57,17 @@ require_git_identity() {
 # driven through a single continued session, so spec/code context is loaded
 # once and reused across steps (instead of cold-starting each step).
 
+# find_free_port — ask the OS for an unused TCP port (node is a pre-flight
+# requirement). Falls back to PIPELINE_PORT or 4096 if node cannot be queried.
+find_free_port() {
+  node -e 'const net=require("net");const s=net.createServer();s.listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close()})' 2>/dev/null \
+    || echo "${PIPELINE_PORT:-4096}"
+}
+
 # Start the persistent backend. Sets PIPELINE_SERVER_URL.
 ensure_server() {
   if [[ -n "${PIPELINE_SERVER_URL:-}" ]]; then return 0; fi
-  local port="${PIPELINE_PORT:-4096}"
-  # Find a free port, then start `opencode serve` headless.
+  local port="${PIPELINE_PORT:-$(find_free_port)}"
   info "Starting opencode serve on port ${port}..."
   opencode serve --port "$port" > "$PIPELINE_LOG_DIR/opencode-serve.log" 2>&1 &
   OPC_SERVE_PID=$!
@@ -109,11 +123,20 @@ ensure_session() {
 }
 
 # ── Timing ───────────────────────────────────────────────────────────────────
-# record_timing <file> <key> <seconds> — merge a duration into a JSON map.
+# record_timing <dir> <key> <seconds> — write one step's duration as its own
+# file. Per-key files keep concurrent steps (the two AI scans) from clobbering
+# each other's read-modify-write of a shared map.
 record_timing() {
-  local file="$1" key="$2" secs="$3"
-  node -e 'const fs=require("fs");const p=process.argv[1];let j={};try{j=JSON.parse(fs.readFileSync(p,"utf8"))}catch{};j[process.argv[2]]=Number(process.argv[3]);fs.writeFileSync(p,JSON.stringify(j,null,2))' \
-    "$file" "$key" "$secs" 2>/dev/null || true
+  local dir="$1" key="$2" secs="$3"
+  mkdir -p "$dir" 2>/dev/null || true
+  printf '%s\n' "$secs" > "$dir/$key" 2>/dev/null || true
+}
+# print_timings <dir> — emit "<label>: <secs>" (sorted) and a total.
+print_timings() {
+  local dir="$1"
+  [[ -d "$dir" ]] || return 0
+  node -e 'const fs=require("fs"),p=process.argv[1];let t=0;for(const f of fs.readdirSync(p).sort()){const v=Number(fs.readFileSync(p+"/"+f,"utf8").trim());if(!Number.isFinite(v))continue;t+=v;console.log("    "+f+": "+v)}console.log("    total: "+t)' \
+    "$dir" 2>/dev/null || true
 }
 # time_it <label> <command...> — run a command, record its wall time, return its
 # exit code unchanged (so callers keep `set -e` semantics).
@@ -126,7 +149,23 @@ time_it() {
   rc=$?
   set -e
   end=$(date +%s)
-  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings.json" "$label" "$((end - start))"
+  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings" "$label" "$((end - start))"
+  return $rc
+}
+
+# run_gate <label> <log> <command...> — run a gate, capture its output to <log>,
+# print a short tail on failure, and return the command's exit code unchanged.
+run_gate() {
+  local label="$1" log="$2"; shift 2
+  local rc
+  set +e
+  "$@" > "$log" 2>&1
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    warn "${label} FAILED (exit ${rc}) — last lines of ${log}:"
+    tail -30 "$log" 2>/dev/null || true
+  fi
   return $rc
 }
 
@@ -179,7 +218,7 @@ run_pipeline_step() {
 
   end=$(date +%s)
   local label="${prompt_file##*/}"; label="${label%.prompt.md}"; label="${label%.md}"
-  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings.json" "$label" "$((end - start))"
+  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings" "$label" "$((end - start))"
 }
 
 # stop_server — tear down the persistent backend.

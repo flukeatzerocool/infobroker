@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.10.02 — Push-pipeline hardening: true dry-run, race-free timings, shell syntax gate
+
+- `scripts/push-pipeline.sh --dry-run` is now genuinely non-mutating: it runs the
+  spec audit plus the deterministic scans and leaves the working tree clean. The
+  previous apply-everything-but-don't-commit behavior moved to a new
+  `--no-commit` flag, which prints the dirty files and a reset hint.
+- `--from=<step>` / `--to=<step>` are validated against the step list; an unknown
+  or reversed step range is rejected before any work runs, instead of silently
+  running the whole pipeline (including commit/push).
+- Per-step wall times are written as one file each under `timings/` rather than
+  merged into a shared `timings.json`, so the two concurrent `--scan-ai`
+  subshells can no longer clobber each other's read-modify-write.
+  (`scripts/pipeline/lib.sh`)
+- Deterministic scan failures and unparseable summaries are now surfaced as
+  warnings instead of silently yielding `?` findings; the fixture-refresh cadence
+  report is parsed and shown in the final summary.
+- `generate-auth` is no longer run twice under `--parallel` (the read-through
+  prefetch is reused by the auth step); gate output is captured to the run
+  directory and tailed on failure instead of discarded; `curl` is a pre-flight
+  requirement; the opencode backend now binds an OS-assigned free port instead of
+  a fixed 4096; ANSI color is emitted only to a TTY (honoring `NO_COLOR`).
+- `scripts/check-script-discipline.ts` now syntax-checks the repo's shell entry
+  points (`scripts/**/*.sh`, `.githooks/*`) with `bash -n`, making the AGENTS.md
+  Shell-discipline claim a real gate. (`AGENTS.md`)
+
 ## 2026.10.02 — Enforcement: claim-to-gate parity for README, spec, skills, and G1 coverage
 
 - Added `scripts/check-gate-coverage.ts` (wired into `npm run check`): every REQ

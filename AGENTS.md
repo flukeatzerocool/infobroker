@@ -67,8 +67,14 @@ changelog, scan, README) under the non-thinking `pipeline-fast` agent
 `build` agent. Step 6 is deterministic (`scripts/scan-refs.ts`,
 `scripts/scan-git-refs.ts`); pass `--scan-ai` for the deep AI scan, which runs
 its two prompts concurrently in isolated sessions. Per-step wall times are
-recorded under the run directory (`timings.json`) and printed at the end;
-`--from=<step>` / `--to=<step>` run a bounded range for testing.
+recorded under the run directory (`timings/`, one file per step, so concurrent
+scans cannot clobber each other) and printed at the end; the fixture-refresh
+cadence report is surfaced in the final summary. `--from=<step>` /
+`--to=<step>` run a bounded range for testing and are validated against the
+step list (an unknown step is rejected before any work runs). `--dry-run` is
+non-mutating (spec audit + deterministic scans only, working tree left clean);
+`--no-commit` runs all steps including AI edits but stops before staging,
+leaving the tree dirty for inspection.
 
 ## Script Discipline
 
@@ -232,7 +238,7 @@ This runs:
 | `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
-| `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch |
+| `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax over shell entry points |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
 | `npm run check-harness-expectations` | Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators |
 | `npm run check-gate-coverage` | Every G1 REQ is backed by a test citation or a recorded exemption (REQ-055) |

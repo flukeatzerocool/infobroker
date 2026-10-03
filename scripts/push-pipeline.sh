@@ -3,17 +3,24 @@
 # server sync, provider auth sync, dead-code scan (project folder + git repo +
 # MCP server source), README/refs update, commit, push.
 #
+# Role: entry point — orchestrates the release pipeline. Exit 0 on success,
+# 1 on a gate failure (`die`), 2 reserved for fatal/unexpected errors (unused).
+#
 # This is the deep-clean — full from-scratch server rebuild against the
 # current spec, dead-code audit, and documentation refresh.
 #
 # Usage:
-#   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--resume] [--from=<step>]
-#                              [--to=<step>] [--parallel] [--scan-ai]
-#                              [--force-tag] [--force-push]
-#                              [--allow-secrets] [--help]
-#   --dry-run        Assemble, check, typecheck — skip commit, push, tag.
+#   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
+#                              [--resume] [--from=<step>] [--to=<step>]
+#                              [--parallel] [--scan-ai] [--force-tag]
+#                              [--force-push] [--allow-secrets] [--help]
+#   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
+#                    steps, no commit. Leaves the working tree clean.
 #   --yes (-y)       Skip confirmation prompt before commit/push.
 #   --no-push        Commit but skip push, tag, and mirror sync.
+#   --no-commit      Run all steps (including AI edits) but stop before staging;
+#                    leaves the working tree dirty for inspection. This is the
+#                    behavior --dry-run had before 2026-10-02.
 #   --resume         Skip steps already recorded complete in the state journal.
 #   --from=<step>    Start at a named step (readthrough|sync|auth|changelog|scan|readme).
 #   --to=<step>      Stop after a named step (inclusive).
@@ -39,7 +46,8 @@ set -euo pipefail
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
-NO_PUSH=false; SCAN_AI=false
+NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false
+AUTH_PREFETCHED=false
 START_STEP=""; END_STEP=""
 
 for arg in "$@"; do
@@ -53,15 +61,18 @@ for arg in "$@"; do
     --force-push) FORCE_PUSH=true ;;
     --allow-secrets) ALLOW_SECRETS=true ;;
     --no-push) NO_PUSH=true ;;
+    --no-commit) NO_COMMIT=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --to=*) END_STEP="${arg#--to=}" ;;
     --help|-h)
-      printf '%s\n' "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--resume] [--from=<step>] [--to=<step>]"
+      printf '%s\n' "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]"
+      printf '%s\n' "                              [--resume] [--from=<step>] [--to=<step>]"
       printf '%s\n' "                              [--parallel] [--scan-ai] [--force-tag] [--force-push] [--allow-secrets]"
       printf '%s\n' ""
-      printf '%s\n' "  --dry-run   Spec audit, read-through, sync, checks, scans — skip commit, push, tag."
+      printf '%s\n' "  --dry-run   Non-mutating: spec audit + deterministic scans only; no AI steps, no commit."
       printf '%s\n' "  --yes (-y)  Skip confirmation prompt before commit/push."
       printf '%s\n' "  --no-push   Commit but skip push, tag, and mirror sync."
+      printf '%s\n' "  --no-commit Run all steps (including AI edits) but stop before staging."
       printf '%s\n' "  --resume    Skip steps already recorded complete."
       printf '%s\n' "  --from=S    Start at step (readthrough|sync|auth|changelog|scan|readme)."
       printf '%s\n' "  --to=S      Stop after step (inclusive)."
@@ -120,7 +131,7 @@ PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
 
 : > "$PIPELINE_LOG_FILE"
-printf '{}' > "$PIPELINE_RUN_DIR/timings.json"
+mkdir -p "$PIPELINE_RUN_DIR/timings"
 
 # ── State journal ────────────────────────────────────────────────────────────
 state_done() { [[ "$(json_from_file "$STATE_FILE" "$1")" == "true" ]]; }
@@ -131,6 +142,19 @@ state_mark() {
 }
 # step_skip <key> — true if the step should be skipped (resume journal OR --from).
 STEP_ORDER="readthrough sync auth changelog scan readme"
+# Reject unknown --from/--to steps up front (before pre-flight, so a typo has
+# no side effects) — an unrecognized step would otherwise silently skip nothing
+# and run the whole pipeline, including commit/push.
+validate_step() {
+  [[ -z "$1" ]] && return 0
+  [[ " $STEP_ORDER " == *" $1 "* ]] || die "Unknown step '$1' (valid: $STEP_ORDER)."
+}
+validate_step "$START_STEP"
+validate_step "$END_STEP"
+if [[ -n "$START_STEP" && -n "$END_STEP" ]]; then
+  BEFORE_START="${STEP_ORDER%%$START_STEP*}"
+  [[ " $BEFORE_START " == *" $END_STEP "* ]] && die "--from=$START_STEP is after --to=$END_STEP."
+fi
 step_skip() {
   [[ "$RESUME" == "true" ]] && state_done "$1" && return 0
   if [[ -n "$START_STEP" ]]; then
@@ -164,7 +188,7 @@ scan_findings() {
 
 # ── pre-flight checks ────────────────────────────────────────────────────────
 FAILED_PRECHECKS=""
-for tool in opencode node npx; do
+for tool in opencode node npx curl; do
   command -v "$tool" >/dev/null 2>&1 || FAILED_PRECHECKS="$FAILED_PRECHECKS $tool"
 done
 if [[ -n "$FAILED_PRECHECKS" ]]; then
@@ -207,21 +231,24 @@ set -e
 echo ""
 
 warn "Running spec checks (typecheck + validate-spec + validate-readme + test)..."
-if ! npm run check 2>/dev/null; then
-  echo ""
-  error "Spec audit FAILED. Run 'npm run check' locally to see errors."
-  exit 1
-fi
+run_gate "Spec audit" "$PIPELINE_RUN_DIR/check.txt" npm run check \
+  || die "Spec audit FAILED (full output: $PIPELINE_RUN_DIR/check.txt)."
 echo ""
 info "Spec audit: PASSED"
 echo ""
 
 # ── start persistent backend ────────────────────────────────────────────────
 # All AI steps run against one `opencode serve` instance in a shared session.
-ensure_server
-ensure_session
-info "Driving AI steps through shared session '${PIPELINE_SESSION_ID}'"
-echo ""
+# A dry run performs no AI steps, so it starts no backend.
+if $DRY_RUN; then
+  info "Dry run: skipping the opencode backend and all AI steps."
+  echo ""
+else
+  ensure_server
+  ensure_session
+  info "Driving AI steps through shared session '${PIPELINE_SESSION_ID}'"
+  echo ""
+fi
 
 # ── step 2: full spec read-through ──────────────────────────────────────────
 info "═══════════════════════════════════════════════"
@@ -229,8 +256,8 @@ info "Step 2: Full spec read-through — style conformance"
 info "═══════════════════════════════════════════════"
 echo ""
 
-if step_skip readthrough; then
-  info "Read-through: SKIPPED (state journal)"
+if $DRY_RUN || step_skip readthrough; then
+  info "Read-through: SKIPPED (dry run / state journal)"
 else
   # Substitute the summary-json path into the prompt.
   sed "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
@@ -262,13 +289,18 @@ else
 
   if git -C "$PROJECT_DIR" diff --name-only | grep -q 'infobroker.md'; then
     warn "infobroker.md modified by read-through — re-verifying spec checks..."
-    npm run check >/dev/null 2>&1 || die "Spec checks FAILED after read-through auto-fix."
+    run_gate "Post-read-through spec checks" "$PIPELINE_RUN_DIR/check-post-readthrough.txt" npm run check \
+      || die "Spec checks FAILED after read-through auto-fix."
     info "Post-read-through spec checks: PASSED"
   fi
   state_mark readthrough
 
   if [[ -n "${GEN_AUTH_PID:-}" ]]; then
-    wait "$GEN_AUTH_PID" || true
+    if wait "$GEN_AUTH_PID"; then
+      AUTH_PREFETCHED=true
+    else
+      warn "Parallel generate-auth failed — will retry in the auth step."
+    fi
     unset GEN_AUTH_PID
   fi
 fi
@@ -280,8 +312,8 @@ info "Step 3: Server sync against spec"
 info "═══════════════════════════════════════════════"
 echo ""
 
-if step_skip sync; then
-  info "Server sync: SKIPPED (state journal)"
+if $DRY_RUN || step_skip sync; then
+  info "Server sync: SKIPPED (dry run / state journal)"
 else
   warn "Launching server sync session..."
   sed "s|<READTHROUGH_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/sync.md" > "$PIPELINE_RUN_DIR/sync.prompt.md"
@@ -291,9 +323,12 @@ else
 
   # Post-sync gates: tests + version consistency + typecheck, on what we're about to ship.
   warn "Post-sync gates (test + version-sync + typecheck)..."
-  npm test >/dev/null 2>&1 || die "Post-sync tests FAILED."
-  npm run version-sync >/dev/null 2>&1 || die "Version sync FAILED after version-bump."
-  npm run typecheck >/dev/null 2>&1 || die "Typecheck FAILED after sync."
+  run_gate "Post-sync tests" "$PIPELINE_RUN_DIR/post-sync-test.txt" npm test \
+    || die "Post-sync tests FAILED (see $PIPELINE_RUN_DIR/post-sync-test.txt)."
+  run_gate "Version sync" "$PIPELINE_RUN_DIR/post-sync-version.txt" npm run version-sync \
+    || die "Version sync FAILED after version-bump."
+  run_gate "Typecheck" "$PIPELINE_RUN_DIR/post-sync-typecheck.txt" npm run typecheck \
+    || die "Typecheck FAILED after sync."
   info "Post-sync gates: PASSED"
 
   echo ""
@@ -308,10 +343,16 @@ info "Step 4: Provider auth sync"
 info "═══════════════════════════════════════════════"
 echo ""
 
-if ! step_skip auth; then
-  warn "Generating provider-auth.md from config.json..."
-  npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
-  info "generate-auth: OK"
+if $DRY_RUN || step_skip auth; then
+  info "Provider auth sync: SKIPPED (dry run / state journal)"
+else
+  if [[ "$AUTH_PREFETCHED" == "true" ]]; then
+    info "generate-auth: already run in parallel with read-through"
+  else
+    warn "Generating provider-auth.md from config.json..."
+    npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
+    info "generate-auth: OK"
+  fi
 
   if git -C "$PROJECT_DIR" diff --quiet skills/infobroker/references/provider-auth.md 2>/dev/null; then
     info "Provider-auth.md: no drift from config.json"
@@ -319,8 +360,6 @@ if ! step_skip auth; then
     warn "Provider-auth.md regenerated — will be included in commit."
   fi
   state_mark auth
-else
-  info "Provider auth sync: SKIPPED (state journal)"
 fi
 echo ""
 
@@ -427,8 +466,8 @@ if [[ -z "$CHANGELOG_DIRTY" ]] && [[ -n "$(git -C "$PROJECT_DIR" ls-files --othe
   CHANGELOG_DIRTY=1
 fi
 
-if step_skip changelog; then
-  info "Changelog update: SKIPPED (state journal)"
+if $DRY_RUN || step_skip changelog; then
+  info "Changelog update: SKIPPED (dry run / state journal)"
 else
   warn "Launching changelog update session..."
   run_pipeline_step "$PROMPT_DIR/changelog.md" "$OUT_CHANGELOG" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
@@ -450,10 +489,13 @@ echo ""
 # ── scan helpers ─────────────────────────────────────────────────────────────
 # run_scan_deterministic — reference + git-ref hygiene scripts (fast, no model).
 run_scan_deterministic() {
-  time_it "scan-refs" npx tsx scripts/scan-refs.ts --out "$PIPELINE_RUN_DIR/scan-refs.json"
-  time_it "scan-git-refs" npx tsx scripts/scan-git-refs.ts --out "$PIPELINE_RUN_DIR/scan-git-refs.json"
+  time_it "scan-refs" npx tsx scripts/scan-refs.ts --out "$PIPELINE_RUN_DIR/scan-refs.json" \
+    || warn "scan-refs failed (exit $?) — findings may be incomplete."
+  time_it "scan-git-refs" npx tsx scripts/scan-git-refs.ts --out "$PIPELINE_RUN_DIR/scan-git-refs.json" \
+    || warn "scan-git-refs failed (exit $?) — findings may be incomplete."
   # Informational: surface fixtures past the documented refresh cadence (§9.2).
-  npx tsx scripts/check-fixture-freshness.ts > "$PIPELINE_RUN_DIR/fixture-freshness.txt" 2>&1 || true
+  npm run check-fixtures > "$PIPELINE_RUN_DIR/fixture-freshness.txt" 2>&1 \
+    || warn "fixture-freshness check failed — see $PIPELINE_RUN_DIR/fixture-freshness.txt."
 }
 # run_scan_ai_one <prompt.md> <out.txt> <title-suffix> — one AI scan in its own
 # forked session, so it neither collides with the main transcript nor inherits
@@ -478,8 +520,13 @@ if step_skip scan; then
 else
   warn "Running deterministic scan (scan-refs + scan-git-refs)..."
   run_scan_deterministic
-  info "Deterministic scan: $(scan_findings) finding(s)"
-  if $SCAN_AI; then
+  DET_FINDINGS=$(scan_findings)
+  info "Deterministic scan: ${DET_FINDINGS} finding(s)"
+  [[ "$DET_FINDINGS" == "?" ]] && warn "Deterministic scan produced no parseable summary — a scan script may have failed."
+  if $SCAN_AI && $DRY_RUN; then
+    warn "Ignoring --scan-ai under --dry-run (deterministic scan only)."
+  fi
+  if $SCAN_AI && ! $DRY_RUN; then
     warn "AI scan enabled (--scan-ai) — running scan and scan-git concurrently in forked sessions..."
     sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
       "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
@@ -502,8 +549,8 @@ info "════════════════════════�
 info "Step 7: Update README.md and skill references"
 info "═══════════════════════════════════════════════"
 echo ""
-if step_skip readme; then
-  info "README update: SKIPPED (state journal / --from / --to)"
+if $DRY_RUN || step_skip readme; then
+  info "README update: SKIPPED (dry run / state journal / --from / --to)"
 else
   warn "Launching README update session..."
   run_pipeline_step "$PROMPT_DIR/readme.md" "$OUT_README" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
@@ -513,6 +560,8 @@ else
 fi
 
 SCAN_FINDINGS=$(scan_findings)
+FIXTURE_STALE=$(grep -oE '[0-9]+ stale fixture' "$PIPELINE_RUN_DIR/fixture-freshness.txt" 2>/dev/null | grep -oE '^[0-9]+' | head -1 || true)
+[[ -z "$FIXTURE_STALE" ]] && FIXTURE_STALE="?"
 
 # README-sync guard: a REQ-body change this run alters what the server does,
 # so the README must reflect it (AGENTS.md README governance). A REQ change
@@ -525,17 +574,26 @@ fi
 
 # validate-readme as a post-session shell gate
 warn "Validating README..."
-npm run validate-readme >/dev/null 2>&1 || die "README validation FAILED."
+run_gate "README validation" "$PIPELINE_RUN_DIR/validate-readme.txt" npm run validate-readme \
+  || die "README validation FAILED (see $PIPELINE_RUN_DIR/validate-readme.txt)."
 info "README validation: PASSED"
 echo ""
 
 info "README + references update: DONE"
 echo ""
 
-# ── Dry-run exit ─────────────────────────────────────────────────────────────
+# ── Dry-run / no-commit exits ────────────────────────────────────────────────
 if $DRY_RUN; then
   echo ""
-  warn "[DRY RUN] All checks passed. Would commit and push."
+  warn "[DRY RUN] Non-mutating checks passed. Working tree left clean."
+  exit 0
+fi
+if $NO_COMMIT; then
+  echo ""
+  warn "[NO COMMIT] All steps passed. Working tree left dirty for inspection:"
+  git -C "$PROJECT_DIR" status --short || true
+  echo ""
+  warn "Reset with: git -C \"$PROJECT_DIR\" checkout -- . && git -C \"$PROJECT_DIR\" clean -fd"
   exit 0
 fi
 
@@ -716,16 +774,17 @@ grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && echo "  Server synced to spec
 echo "  Provider auth docs regenerated."
 grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && echo "  Changelog updated."
 echo "  Dead-code scan: ${SCAN_FINDINGS} finding(s)."
+echo "  Fixture freshness: ${FIXTURE_STALE} stale."
+[[ "$FIXTURE_STALE" != "0" && "$FIXTURE_STALE" != "?" ]] && warn "  ${FIXTURE_STALE} fixture(s) past the refresh cadence (see $PIPELINE_RUN_DIR/fixture-freshness.txt)."
 echo "  README and skill references refreshed."
 if $NO_PUSH; then
   echo "  Committed locally — push skipped (--no-push)."
 else
   echo "  Pushed to origin — v${VERSION}"
 fi
-if [[ -f "$PIPELINE_RUN_DIR/timings.json" ]]; then
+if [[ -d "$PIPELINE_RUN_DIR/timings" ]]; then
   echo "  Step timings (seconds):"
-  node -e 'const j=require(process.argv[1]);let t=0;for(const [k,v] of Object.entries(j)){t+=v;console.log(`    ${k}: ${v}`)}console.log(`    total: ${t}`)' \
-    "$PIPELINE_RUN_DIR/timings.json" 2>/dev/null || true
+  print_timings "$PIPELINE_RUN_DIR/timings"
 fi
 echo "  Logs: $PIPELINE_RUN_DIR"
 echo ""

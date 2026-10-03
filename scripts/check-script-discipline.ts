@@ -1,14 +1,17 @@
 #!/usr/bin/env npx tsx
 // check-script-discipline.ts — gate: enforce script-discipline conventions across
 // `scripts/` (shebang + header, exit-code contract, `import.meta.dirname`, no
-// empty catch). Wired into `npm run check`.
+// empty catch) and shell-syntax-check the repo's shell entry points with
+// `bash -n` (`scripts/**/*.sh`, `.githooks/*`). Wired into `npm run check`.
 //
 // Exit codes: 0 = all scripts conform; 1 = violations found.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const SCRIPTS_DIR = import.meta.dirname;
+const ROOT = join(SCRIPTS_DIR, "..");
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".opencode"]);
 
 // Forbidden path-resolution patterns, assembled from fragments so this gate
@@ -84,6 +87,39 @@ for (const file of files) {
   }
 }
 
+// Shell entry points are syntax-checked with `bash -n` (AGENTS.md Shell
+// discipline). They are exempt from the TS shebang/header rules above.
+function collectShell(dir: string, out: string[]): void {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (SKIP_DIRS.has(entry)) continue;
+    const st = statSync(full);
+    if (st.isDirectory()) collectShell(full, out);
+    else if (entry.endsWith(".sh")) out.push(full);
+  }
+}
+
+const shellFiles: string[] = [];
+collectShell(SCRIPTS_DIR, shellFiles);
+const githooksDir = join(ROOT, ".githooks");
+if (existsSync(githooksDir)) {
+  for (const entry of readdirSync(githooksDir)) {
+    const full = join(githooksDir, entry);
+    if (statSync(full).isFile()) shellFiles.push(full);
+  }
+}
+
+for (const file of shellFiles) {
+  const rel = file.startsWith(ROOT) ? file.slice(ROOT.length + 1) : file;
+  try {
+    execFileSync("bash", ["-n", file], { stdio: "pipe" });
+  } catch (err) {
+    const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? "";
+    const lastLine = stderr.trim().split("\n").pop() ?? "syntax error";
+    violations.push({ file: rel, line: 1, message: `bash -n failed: ${lastLine}` });
+  }
+}
+
 if (violations.length > 0) {
   console.log(`\ncheck-script-discipline — ${violations.length} violation(s):\n`);
   for (const v of violations) {
@@ -93,4 +129,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`\ncheck-script-discipline — ${files.length} script(s) conform.\n`);
+console.log(`\ncheck-script-discipline — ${files.length} TS + ${shellFiles.length} shell script(s) conform.\n`);
