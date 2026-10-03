@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026.10.02 — Enforcement: claim-to-gate parity for README, spec, skills, and G1 coverage
+
+- Added `scripts/check-gate-coverage.ts` (wired into `npm run check`): every REQ
+  whose §9.5 manifest gate includes G1 must carry a test-file `@implements`
+  citation or a recorded exemption. The initial pass found 31 uncited G1 REQs;
+  they are now tagged, tested, or exempted with a rationale and a `ROADMAP.md`
+  follow-up.
+- `validate-readme` now enforces the README design limits that were previously
+  advertised but unchecked: numeric claims (tools/providers/zero-config/skills),
+  Hero ≤200 and North Star ≤100 words, §3 feature h3 ≤350 words, the tagline
+  refrain count, the exactly-two-tables rule, per-feature blockquote prompt
+  counts, and the `Last updated` date. Fixed the `Citations` demo (one prompt → two).
+- Spec version parity: `infobroker.md` carries a `**Spec version:**` stamp equal
+  to the package version; `validate-spec` and `validate-readme` reconcile the
+  spec and the README's cited version against it. (`infobroker.md`, `README.md`,
+  `scripts/validate-spec.ts`, `scripts/validate-readme.ts`)
+- `validate-spec` now checks the AGENTS.md Gates table against the actual
+  `npm run check` pipeline (it had omitted `check-tdqs`), verifies the REQ-053
+  skill reference files and the pipeline Mermaid diagram, and requires the
+  orchestrator's completion token to be an imperative emit instruction (REQ-051/052).
+- Fixture refresh cadence is now mechanical: `test-fixtures/fixtures-meta.json`
+  records each fixture's last-verified date, and `scripts/check-fixture-freshness.ts`
+  reports fixtures past the 90-day cadence from the push pipeline (informational;
+  not in the deterministic gate suite).
+- Fixed a latent waiver-parser bug in `validate-spec`: a backticked `## Spec Waivers`
+  cross-reference earlier in `DECISIONS.md` was matched before the real heading,
+  sweeping decision-body REQ IDs into the waiver set and silencing uncited-REQ errors.
+- Added focused tests: `src/normalizer.test.ts`, `src/http.test.ts`,
+  `src/providers/index.test.ts`; extended `src/kb.test.ts` (search/ingest/delete/
+  dedup/freshness) and tagged existing coverage in `chain`, `corroborate`,
+  `deep-search`, `key-pool`, `config`, and `kb-encryption` tests, plus the
+  debate-club Arena contract suite (inspect list/spec/health, token footprint).
+- Burned down the G1 coverage exemptions: extracted the index-internal
+  orchestration helpers into importable modules — `src/task-type.ts` (REQ-020a),
+  `src/latency.ts` (REQ-036), `src/verbosity.ts` (REQ-079), and
+  `src/research.ts` (REQ-020f) — each with a focused test, and removed the four
+  exemptions from `scripts/check-gate-coverage.ts` (only the REQ-091 release-step
+  exemption remains). `ROADMAP.md` returns to empty.
+
 ## 2026.10.02 — debate-club Lab feedback integrity: evidence-aware critic, explicit status, durable runs
 
 - The Lab critic is now evidence-aware: it receives the scenario rubric and a

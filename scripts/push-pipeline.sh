@@ -452,6 +452,8 @@ echo ""
 run_scan_deterministic() {
   time_it "scan-refs" npx tsx scripts/scan-refs.ts --out "$PIPELINE_RUN_DIR/scan-refs.json"
   time_it "scan-git-refs" npx tsx scripts/scan-git-refs.ts --out "$PIPELINE_RUN_DIR/scan-git-refs.json"
+  # Informational: surface fixtures past the documented refresh cadence (§9.2).
+  npx tsx scripts/check-fixture-freshness.ts > "$PIPELINE_RUN_DIR/fixture-freshness.txt" 2>&1 || true
 }
 # run_scan_ai_one <prompt.md> <out.txt> <title-suffix> — one AI scan in its own
 # forked session, so it neither collides with the main transcript nor inherits

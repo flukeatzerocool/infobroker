@@ -7,9 +7,9 @@ README DESIGN:
     Readme-driven development: changes that affect the README's claims
     SHALL update the README before or alongside the code change. A README
     that promises something the server does not deliver is a defect.
-    Every numeric claim (tool count, provider count, zero-config count)
-    reconciles against src/index.ts and config.json — the validator
-    enforces this (Surface reconciliation).
+    Every numeric claim (tool count, provider count, zero-config count,
+    skill count) reconciles against src/index.ts, config.json, and skills/
+    — the validator enforces this (Numeric claims check).
 
   Voice: Professional, confident, benefit-first. Direct address ("you").
     No first-person ("we", "I", "our"). Short declarative fragments in the
@@ -80,7 +80,9 @@ README DESIGN:
     renderer) — one row per provider, matching config.json.
 
   Word budget. Hero ≤ 200 words. North Star ≤ 100 words. Each §3 feature
-    h3 ≤ 350 words. The validator's section-length check enforces these.
+    h3 ≤ 350 words. The validator's Design-limits check enforces these,
+    plus the tagline-refrain count, the two-table rule, the per-feature
+    blockquote prompt count, and the `Last updated` date.
 
   Non-goals. The README is not an API reference, a tool catalog, a spec
     document, or a changelog. The complete tool inventory lives in the
@@ -236,6 +238,7 @@ source is.
 ### Citations
 
 > "Give me BibTeX references for papers on hyperdrive field dynamics."
+> "Cite the paper that first described the hyperdrive field equations."
 
 `get_citations` searches scholarly sources and returns each reference as a formatted
 BibTeX entry with its fields — title, authors, year, venue, and URL — ready
@@ -637,7 +640,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-09-16.
+Last updated: 2026-10-02.
 
 ## Contribute
 
@@ -667,7 +670,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.09.16), which defines every requirement and the gates that verify it.
+(v2026.10.02), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers.

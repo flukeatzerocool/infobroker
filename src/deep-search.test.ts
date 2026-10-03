@@ -1,4 +1,4 @@
-// @implements REQ-028
+// @implements REQ-028 REQ-064
 import { describe, it, expect } from "vitest";
 import { deepRead, type DeepEnrichedResult } from "../src/deep-search.js";
 import type { SearchResult } from "../src/types.js";

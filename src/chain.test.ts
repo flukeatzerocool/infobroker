@@ -1,4 +1,4 @@
-// @implements REQ-020c REQ-020d
+// @implements REQ-020c REQ-020d REQ-031a REQ-034
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./config.js", () => ({

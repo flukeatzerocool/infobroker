@@ -1,9 +1,9 @@
-// @implements REQ-075 REQ-082 REQ-060e REQ-060f REQ-087 REQ-076 REQ-083
+// @implements REQ-075 REQ-082 REQ-060a REQ-060b REQ-060d REQ-060e REQ-060f REQ-065 REQ-072 REQ-074 REQ-087 REQ-076 REQ-083
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, kbDelete, resolveReportIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
@@ -256,5 +256,75 @@ describe("save-destination selection (REQ-083)", () => {
     expect(ingestDestinations("kb")).toEqual({ kb: true, disk: false });
     expect(ingestDestinations("both")).toEqual({ kb: true, disk: true });
     expect(ingestDestinations("disk")).toEqual({ kb: false, disk: true });
+  });
+});
+
+describe("kb search action returns ranked chunks (REQ-060a)", () => {
+  it("returns source URL, score, collection, source_type, and a snippet", () => {
+    kbIngest(
+      "the meridian altitude of a star fixes latitude at sea",
+      "sextant note",
+      "https://example.com/sextant",
+      "test",
+      "navigation",
+      "web_search"
+    );
+    const results = kbSearch("meridian altitude latitude", 10, "navigation");
+    expect(results.length).toBeGreaterThan(0);
+    const top = results[0];
+    expect(top.source_url).toBe("https://example.com/sextant");
+    expect(top.collection).toBe("navigation");
+    expect(top.source_type).toBe("web_search");
+    expect(typeof top.score).toBe("number");
+    expect(typeof top.snippet).toBe("string");
+  });
+});
+
+describe("kb ingest action chunks content (REQ-060b)", () => {
+  it("reports a positive chunk count and stores the source identifier", () => {
+    const chunks = kbIngest(
+      "Ingest action content about hydrostatic equilibrium in stellar physics.",
+      "ingest-note",
+      "https://example.com/ingest-note",
+      "test"
+    );
+    expect(chunks).toBeGreaterThan(0);
+    expect(kbGet("https://example.com/ingest-note")?.title).toBe("ingest-note");
+  });
+});
+
+describe("kb delete action (REQ-060d)", () => {
+  it("removes chunks by source URL and reports the count removed", () => {
+    kbIngest("deletable content about obelisk engineering", "obelisk", "https://example.com/obelisk", "test");
+    const removed = kbDelete(undefined, "https://example.com/obelisk");
+    expect(removed).toBeGreaterThan(0);
+    expect(kbGet("https://example.com/obelisk")).toBeNull();
+  });
+
+  it("removes chunks by collection", () => {
+    kbIngest("collection scoped content", "scoped", "https://example.com/scoped", "test", "throwaway");
+    const removed = kbDelete("throwaway");
+    expect(removed).toBeGreaterThan(0);
+    expect(kbSearch("collection scoped content", 10, "throwaway").length).toBe(0);
+  });
+});
+
+describe("kb deduplication (REQ-072)", () => {
+  it("does not increase the chunk count when re-ingesting the same URL", () => {
+    kbIngest("dedup baseline content about basalt columns", "dedup", "https://example.com/dedup", "test");
+    const before = kbStats().chunk_count;
+    kbIngest("dedup baseline content about basalt columns, updated", "dedup", "https://example.com/dedup", "test");
+    const after = kbStats().chunk_count;
+    expect(after).toBeLessThanOrEqual(before);
+  });
+});
+
+describe("freshness classification (REQ-074)", () => {
+  it("assigns the explicit tier when supplied and the default tier otherwise", () => {
+    kbIngest("ephemeral tier content", "eph", "https://example.com/eph", "test", undefined, "web_search", "ephemeral");
+    kbIngest("default tier content", "def", "https://example.com/def", "test");
+    const list = kbList();
+    expect(list.find((e) => e.source_url === "https://example.com/eph")?.freshness_tier).toBe("ephemeral");
+    expect(list.find((e) => e.source_url === "https://example.com/def")?.freshness_tier).toBe("stable");
   });
 });

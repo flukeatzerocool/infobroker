@@ -1,0 +1,14 @@
+{
+  "cadence_days": 90,
+  "note": "Recorded fixture refresh ledger. `recorded_at` is the date the fixture's responses were last verified against the live source. The push pipeline runs scripts/check-fixture-freshness.ts; refresh a fixture and bump its date when the check reports it stale (infobroker.md §9.2).",
+  "fixtures": {
+    "debate-club/fixtures/index.json": "2026-10-02",
+    "test-fixtures/research/manifest.json": "2026-10-02",
+    "test-fixtures/skills/infobroker.json": "2026-08-24",
+    "test-fixtures/skills/analysis-loop.json": "2026-08-24",
+    "test-fixtures/skills/proofreading.json": "2026-08-24",
+    "test-fixtures/skills/summarization.json": "2026-08-24",
+    "test-fixtures/skills/technical-writing.json": "2026-08-24",
+    "test-fixtures/skills/translation.json": "2026-08-24"
+  }
+}

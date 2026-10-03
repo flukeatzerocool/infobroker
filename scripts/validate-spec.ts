@@ -109,10 +109,13 @@ const waivedReqs = new Set<string>();
   const decisionsPath = join(ROOT, "DECISIONS.md");
   if (existsSync(decisionsPath)) {
     const decisions = readFileSync(decisionsPath, "utf-8");
-    const start = decisions.indexOf("## Spec Waivers");
-    if (start !== -1) {
-      const rest = decisions.slice(start + "## Spec Waivers".length);
-      const nextSection = rest.indexOf("\n## ");
+    // Anchor on the actual heading at line start; a bare indexOf matches a
+    // backticked cross-reference in earlier narrative text and would sweep
+    // unrelated REQ IDs from decision bodies into the waiver set.
+    const heading = /^## Spec Waivers\s*$/m.exec(decisions);
+    if (heading !== null) {
+      const rest = decisions.slice(heading.index + heading[0].length);
+      const nextSection = rest.search(/^##\s/m);
       const section = nextSection === -1 ? rest : rest.slice(0, nextSection);
       for (const m of section.matchAll(/REQ-\d{3}[a-z]?/g)) waivedReqs.add(m[0]);
     }
@@ -542,6 +545,32 @@ function checkArtifactContent(): void {
     if (!/(?:RECALL|knowledge base search)/i.test(content)) {
       warn("skills/infobroker/SKILL.md: missing knowledge base search phase in pipelines");
     }
+    // REQ-051: the completion token must be an imperative emit instruction, not
+    // a declarative note — otherwise the agent never writes it.
+    if (!/End your reply with[\s\S]{0,160}token/i.test(content)) {
+      error("skills/infobroker/SKILL.md: completion token is not stated as an imperative emit instruction (REQ-051)");
+    }
+    // REQ-052: the orchestrator references the four pipeline skills by name.
+    for (const s of ["summarization", "technical-writing", "proofreading", "translation"]) {
+      if (!content.includes(s)) {
+        error(`skills/infobroker/SKILL.md: missing pipeline skill reference '${s}' (REQ-052)`);
+      }
+    }
+    if (!/references\/workflows\.md/.test(content)) {
+      error("skills/infobroker/SKILL.md: missing references/workflows.md reference (REQ-052)");
+    }
+  }
+
+  // REQ-053: required reference files present; pipeline-map carries a Mermaid diagram.
+  const refDir = join(ROOT, "skills", "infobroker", "references");
+  for (const f of ["pipeline-map.md", "provider-map.md", "workflows.md", "journeys.md"]) {
+    if (!existsSync(join(refDir, f))) {
+      error(`skills/infobroker/references/${f}: missing (REQ-053)`);
+    }
+  }
+  const pipelineMapPath = join(refDir, "pipeline-map.md");
+  if (existsSync(pipelineMapPath) && !/```mermaid/.test(readFileSync(pipelineMapPath, "utf-8"))) {
+    error("skills/infobroker/references/pipeline-map.md: missing Mermaid diagram (REQ-053)");
   }
 
   // REQ-088 — gated-analysis skill technique-selection mechanism + catalog.
@@ -765,6 +794,77 @@ function checkDependencyGate(): void {
   }
 }
 checkDependencyGate();
+
+// --- Spec version parity (README ↔ spec ↔ package) ---
+//
+// The README cites a spec version. Without a stamp in the spec there is nothing
+// to reconcile against, so the claim drifts silently. The spec carries a
+// `**Spec version:**` line; it must equal the package version, which the README
+// check then reconciles against.
+function checkSpecVersion(): void {
+  const stamp = /^\*\*Spec version:\*\*\s*([0-9.]+)/m.exec(specText)?.[1];
+  let pkgVersion: string;
+  try {
+    pkgVersion = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).version;
+  } catch {
+    error("package.json missing or unparseable — spec version parity check unable to run");
+    return;
+  }
+  if (stamp === undefined) {
+    error("infobroker.md is missing a `**Spec version:** <CalVer>` stamp — REQ-054/README parity");
+    return;
+  }
+  if (stamp !== pkgVersion) {
+    error(`infobroker.md spec version ${stamp} diverges from package.json version ${pkgVersion}`);
+  }
+}
+
+checkSpecVersion();
+
+// --- AGENTS.md gate-table parity ---
+//
+// The AGENTS.md Gates table documents the `npm run check` pipeline. It drifted
+// (check-tdqs shipped but was never listed). Reconcile the table's command rows
+// against the actual package.json `check` script so a new gate cannot go
+// undocumented.
+function checkAgentsGateTable(): void {
+  const agentsPath = join(ROOT, "AGENTS.md");
+  if (!existsSync(agentsPath)) return; // checkAgentsDoc reports the missing file
+  const lines = readFileSync(agentsPath, "utf-8").split("\n");
+  const start = lines.findIndex((l) => /^\|\s*Command\s*\|/.test(l));
+  if (start === -1) {
+    error("AGENTS.md Gates table (`| Command |`) not found");
+    return;
+  }
+  const documented = new Set<string>();
+  for (let i = start + 1; i < lines.length && lines[i].trim().startsWith("|"); i++) {
+    const cell = lines[i].split("|")[1] ?? "";
+    const npm = cell.match(/npm run ([a-z0-9-]+)/);
+    if (npm) documented.add(npm[1]);
+    const script = cell.match(/scripts\/([\w.-]+\.ts)/);
+    if (script) documented.add(script[1]);
+  }
+
+  let check: string;
+  try {
+    check = String(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).scripts?.check ?? "");
+  } catch {
+    error("package.json missing or unparseable — AGENTS gate-table parity check unable to run");
+    return;
+  }
+  const actual = new Set<string>();
+  for (const m of check.matchAll(/npm run ([a-z0-9-]+)/g)) actual.add(m[1]);
+  for (const m of check.matchAll(/scripts\/([\w.-]+\.ts)/g)) actual.add(m[1]);
+
+  for (const cmd of actual) {
+    if (!documented.has(cmd)) error(`AGENTS.md Gates table omits \`${cmd}\` from the \`npm run check\` pipeline — document it`);
+  }
+  for (const cmd of documented) {
+    if (!actual.has(cmd)) error(`AGENTS.md Gates table lists \`${cmd}\`, which is not in the \`npm run check\` pipeline — stale row`);
+  }
+}
+
+checkAgentsGateTable();
 
 // --- Report ---
 

@@ -1,4 +1,4 @@
-// @implements REQ-026
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SearchResult } from "../src/types.js";
 

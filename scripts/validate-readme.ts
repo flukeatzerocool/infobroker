@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 import {
   readReadme, extractHeadings, extractLinks, extractBlockquotes,
   extractBulletLists, proseOnly, proseLines, slugify,
-  deriveToolNames, deriveProviderSlugs,
+  deriveToolNames, deriveProviderSlugs, deriveSurfaceCounts,
 } from "./lib/parse-readme.js";
 import { deriveFeatureAreas, reconcileReadmeFeatures } from "../src/lib/feature-taxonomy.js";
 
@@ -494,6 +494,195 @@ function checkFeatureAreaReconciliation(text: string): Issue[] {
   return issues;
 }
 
+const ONES = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+const TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const TENS = ["", "", "twenty", "thirty"];
+
+function numberWord(n: number): string {
+  let word: string;
+  if (n < 10) word = ONES[n];
+  else if (n < 20) word = TEENS[n - 10];
+  else {
+    const t = Math.floor(n / 10);
+    const o = n % 10;
+    word = TENS[t] + (o ? `-${ONES[o]}` : "");
+  }
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function phraseRe(phrase: string): RegExp {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/-/g, "[- ]");
+  return new RegExp(`\\b${escaped}\\b`, "i");
+}
+
+function checkSpecVersion(text: string): Issue[] {
+  const issues: Issue[] = [];
+  let pkgVersion: string;
+  try {
+    pkgVersion = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf-8")).version;
+  } catch {
+    issues.push({ error: true, msg: "package.json missing or unparseable — spec version parity check unable to run" });
+    return issues;
+  }
+  const claimed = text.match(/\(v([0-9]+\.[0-9]+\.[0-9]+)\)/)?.[1];
+  if (claimed === undefined) {
+    issues.push({ error: true, msg: "README does not cite a spec version `(vYYYY.MM.DD)` in §Spec" });
+    return issues;
+  }
+  if (claimed !== pkgVersion) {
+    issues.push({ error: true, msg: `README cites spec version v${claimed} but package.json is v${pkgVersion} — reconcile the spec version` });
+  }
+  return issues;
+}
+
+function checkNumericClaims(text: string): Issue[] {
+  const issues: Issue[] = [];
+  const counts = deriveSurfaceCounts();
+  const claims: { label: string; expected: number; phrase: (w: string) => string }[] = [
+    { label: "zero-config providers", expected: counts.zeroConfig, phrase: (w) => `${w} zero-config providers` },
+    { label: "providers", expected: counts.providers, phrase: (w) => `${w} providers` },
+    { label: "tools", expected: counts.tools, phrase: (w) => `${w} tools` },
+    { label: "client skills", expected: counts.skills, phrase: (w) => `${w} client skills` },
+    { label: "writing sub-skills", expected: counts.writingSkills, phrase: (w) => `${w} writing sub-skills` },
+    { label: "keyed/self-hosted providers", expected: counts.keyedOrSelfHosted, phrase: (w) => `${w} more providers` },
+  ];
+
+  for (const claim of claims) {
+    const expectedWord = numberWord(claim.expected);
+    if (!phraseRe(claim.phrase(expectedWord)).test(text)) {
+      issues.push({
+        error: true,
+        msg: `README does not state the derived ${claim.label} count (${claim.expected}); expected phrase "${claim.phrase(expectedWord)}" — reconcile the numeric claim`,
+      });
+    }
+  }
+  return issues;
+}
+
+function wordCountInRange(lines: string[], startLine: number, endLine: number): number {
+  let count = 0;
+  let inCode = false;
+  for (let j = startLine; j < endLine && j < lines.length; j++) {
+    if (lines[j].trim().startsWith("```")) {
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) continue;
+    const s = lines[j].trim();
+    if (s.startsWith(">") || s.startsWith("|") || s.startsWith("<!--") || /^-\s*\[[^\]]+\]\(#/.test(s)) continue;
+    count += s.split(/\s+/).filter(Boolean).length;
+  }
+  return count;
+}
+
+function checkDesignLimits(text: string): Issue[] {
+  const issues: Issue[] = [];
+  const headings = extractHeadings(text);
+  const lines = text.split("\n");
+  const h1 = headings.find((h) => h.level === 1);
+  const northStar = headings.find((h) => h.title === "North Star");
+  const mcp = headings.find((h) => h.title === "MCP Server");
+  const skills = headings.find((h) => h.title === "Skills");
+
+  const nextHeadingAfter = (h: { line: number }): number =>
+    headings.filter((x) => x.line > h.line).reduce((min, x) => Math.min(min, x.line), lines.length);
+
+  if (h1) {
+    const heroWords = wordCountInRange(lines, h1.line, nextHeadingAfter(h1));
+    if (heroWords > 200) issues.push({ error: true, msg: `Hero is ${heroWords} words (>200) — README design limit` });
+  }
+  if (northStar) {
+    const nsWords = wordCountInRange(lines, northStar.line, nextHeadingAfter(northStar));
+    if (nsWords > 100) issues.push({ error: true, msg: `North Star is ${nsWords} words (>100) — README design limit` });
+  }
+
+  // §3 feature h3 caps: only the MCP Server tour, not Configuration subsections.
+  if (mcp && skills) {
+    for (let i = 0; i < headings.length; i++) {
+      const h = headings[i];
+      if (h.level !== 3 || h.line <= mcp.line || h.line >= skills.line) continue;
+      const next = headings[i + 1];
+      const end = next ? next.line - 1 : skills.line;
+      const words = wordCountInRange(lines, h.line, end);
+      if (words > 350) {
+        issues.push({ line: h.line, error: true, msg: `Feature section '${h.title}' is ${words} words (>350) — README design limit` });
+      }
+    }
+  }
+
+  // Tagline refrain appears exactly twice (Hero + comparison closing). Strip
+  // the HTML design comment first — it quotes the refrain as a rule.
+  const withoutComment = text.replace(/<!--[\s\S]*?-->/g, "");
+  const normalized = withoutComment.replace(/\s+/g, " ");
+  const tagline = "One server. Every source. Research that delivers.";
+  const taglineCount = normalized.split(tagline).length - 1;
+  if (taglineCount !== 2) {
+    issues.push({ error: true, msg: `Tagline refrain appears ${taglineCount} time(s) — expected exactly 2 (Hero + comparison closing)` });
+  }
+
+  // Exactly two tables (Providers + Comparison).
+  let inCode = false;
+  let tableCount = 0;
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      inCode = !inCode;
+      continue;
+    }
+    if (!inCode && /^\s*\|[\s:|-]+\|\s*$/.test(line)) tableCount++;
+  }
+  if (tableCount !== 2) {
+    issues.push({ error: true, msg: `README has ${tableCount} table(s) — expected exactly 2 (Providers + Comparison)` });
+  }
+
+  // Blockquote rules inside the MCP Server tour: 2–5 prompts per h3, no tool names.
+  if (mcp && skills) {
+    let currentTitle = "";
+    let quoteCount = 0;
+    const flush = (): void => {
+      if (currentTitle && (quoteCount < 2 || quoteCount > 5)) {
+        issues.push({ error: true, msg: `Feature section '${currentTitle}' has ${quoteCount} demo prompt(s) — expected 2–5` });
+      }
+    };
+    for (let j = mcp.line; j < skills.line - 1; j++) {
+      const h = lines[j].match(/^###\s+(.+)/);
+      if (h) {
+        flush();
+        currentTitle = h[1].trim();
+        quoteCount = 0;
+        continue;
+      }
+      if (currentTitle && lines[j].trim().startsWith(">")) {
+        quoteCount++;
+        for (const tool of toolNames) {
+          if (lines[j].includes(tool) || lines[j].includes(tool.replace(/^infobroker_/, ""))) {
+            issues.push({ line: j + 1, error: true, msg: `Demo prompt in '${currentTitle}' names tool '${tool}' — use natural-language prompts` });
+          }
+        }
+      }
+    }
+    flush();
+  }
+
+  // Last updated matches the package version date.
+  let pkgVersion: string | undefined;
+  try {
+    pkgVersion = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf-8")).version;
+  } catch {
+    // package.json unreadable — reported by checkSpecVersion.
+  }
+  const lastUpdated = text.match(/^Last updated:\s*(\d{4}-\d{2}-\d{2})\.\s*$/m)?.[1];
+  if (pkgVersion !== undefined) {
+    const expectedDate = pkgVersion.replace(/\./g, "-").replace(/-(\d)$/, "-0$1");
+    if (lastUpdated === undefined) {
+      issues.push({ error: true, msg: "README missing `Last updated: YYYY-MM-DD.` line" });
+    } else if (lastUpdated !== expectedDate) {
+      issues.push({ error: true, msg: `README 'Last updated: ${lastUpdated}' does not match package version date ${expectedDate}` });
+    }
+  }
+
+  return issues;
+}
+
 function main(): void {
   const text = readReadme();
   let errors = 0;
@@ -515,6 +704,9 @@ function main(): void {
     { name: "Taxonomy link", run: checkTaxonomyLink, severity: "hard" },
     { name: "Surface reconciliation", run: checkSurfaceReconciliation, severity: "hard" },
     { name: "Feature-area reconciliation", run: checkFeatureAreaReconciliation, severity: "hard" },
+    { name: "Spec version parity", run: checkSpecVersion, severity: "hard" },
+    { name: "Numeric claims", run: checkNumericClaims, severity: "hard" },
+    { name: "Design limits", run: checkDesignLimits, severity: "hard" },
   ];
 
   for (const { name, run, severity } of checks) {

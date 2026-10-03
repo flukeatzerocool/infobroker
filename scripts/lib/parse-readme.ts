@@ -2,7 +2,7 @@
 // bullet lists, prose lines, and slugification. Single source of truth for
 // tool and provider names derived from src/index.ts and config.json.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const PROSE_REPO_ROOT = process.cwd();
@@ -38,6 +38,60 @@ export function deriveProviderSlugs(): string[] {
     const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
     const providers = config.providers || {};
     return Object.keys(providers).filter((slug) => !PROVIDER_EXCLUSIONS.has(slug));
+  } catch {
+    return [];
+  }
+}
+
+export interface SurfaceCounts {
+  tools: number;
+  providers: number;
+  zeroConfig: number;
+  keyedOrSelfHosted: number;
+  skills: number;
+  writingSkills: number;
+}
+
+const ZERO_CONFIG_TIERS = new Set(["builtin", "free_http"]);
+const PAID_TIERS = new Set(["keyed_http", "self_hosted_http"]);
+
+// Derive every numeric surface the README asserts, so a count claim can be
+// reconciled against the real registry rather than trusted.
+export function deriveSurfaceCounts(): SurfaceCounts {
+  const tools = deriveToolNames().length;
+  const slugs = deriveProviderSlugs();
+
+  let zeroConfig = 0;
+  let keyedOrSelfHosted = 0;
+  if (existsSync(CONFIG_PATH)) {
+    try {
+      const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+      for (const slug of slugs) {
+        const p = config.providers?.[slug];
+        if (!p) continue;
+        if (ZERO_CONFIG_TIERS.has(p.tier) && p.enabled) zeroConfig++;
+        if (PAID_TIERS.has(p.tier)) keyedOrSelfHosted++;
+      }
+    } catch {
+      // Malformed config — the validator's surface reconciliation reports it elsewhere.
+    }
+  }
+
+  const skills = bundledSkillNames();
+  // The orchestrator and the gated-analysis escalation are not writing
+  // sub-skills; the remainder execute the writing phases.
+  const writingSkills = skills.filter((s) => s !== "infobroker" && s !== "analysis-loop").length;
+
+  return { tools, providers: slugs.length, zeroConfig, keyedOrSelfHosted, skills: skills.length, writingSkills };
+}
+
+export function bundledSkillNames(): string[] {
+  const skillsDir = resolve(PROSE_REPO_ROOT, "skills");
+  if (!existsSync(skillsDir)) return [];
+  try {
+    return readdirSync(skillsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(resolve(skillsDir, e.name, "SKILL.md")))
+      .map((e) => e.name);
   } catch {
     return [];
   }

@@ -26,6 +26,10 @@ import { maybeTruncate } from "./truncate.js";
 import { capInputs, mergeItems } from "./batch.js";
 import { reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
+import { classifyTaskType } from "./task-type.js";
+import { createLatencyTracker } from "./latency.js";
+import { compactMode, compactResults } from "./verbosity.js";
+import { deriveResearchVariants, compileResearchGroups } from "./research.js";
 import { keyPoolStatus } from "./key-pool.js";
 import { rankPassages } from "./rerank.js";
 import { deepRead } from "./deep-search.js";
@@ -41,7 +45,6 @@ import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 const START_TIME = Date.now();
 const SPEC_REVIEW_TIME = Date.now();
 const BUILD_VERSION = readPackageVersion();
-let totalRequests = 0;
 
 function readPackageVersion(): string {
   try {
@@ -52,7 +55,7 @@ function readPackageVersion(): string {
     return "unknown";
   }
 }
-const requestLatencies: Record<string, { latencies: number[]; timestamps: number[] }> = {};
+const latency = createLatencyTracker(() => getConfig().output.latency_window_size);
 const providerLastSuccess: Record<string, number> = {};
 const providerLastError: Record<string, { message: string; timestamp: number }> = {};
 const responseBytes: number[] = [];
@@ -64,43 +67,14 @@ loadQuotaState();
 
 startupHealthCheck();
 
-function trackRequest(provider: string, latencyMs: number): void {
-  totalRequests++;
-  const config = getConfig();
-  const windowSize = config.output.latency_window_size;
-
-  if (!requestLatencies[provider]) {
-    requestLatencies[provider] = { latencies: [], timestamps: [] };
-  }
-  const entry = requestLatencies[provider];
-  entry.latencies.push(latencyMs);
-  entry.timestamps.push(Date.now());
-
-  while (entry.latencies.length > windowSize) {
-    entry.latencies.shift();
-    entry.timestamps.shift();
-  }
-}
-
-function avgLatency(provider: string): number {
-  const entry = requestLatencies[provider];
-  if (!entry || entry.latencies.length === 0) return 0;
-  return entry.latencies.reduce((a, b) => a + b, 0) / entry.latencies.length;
-}
-
-function compactMode(): boolean {
-  return getConfig().output.verbose === false;
-}
-
 function ok(provider: string, results: SearchResult[], meta: Record<string, unknown> = {}): ToolOkResponse {
+  const compact = compactMode(getConfig());
   const base: ToolOkResponse = {
     status: "ok",
     provider,
-    results: compactMode()
-      ? results.map(({ title, url, snippet }) => ({ title, url, snippet }))
-      : results,
+    results: compact ? compactResults(results) : results,
   };
-  if (!compactMode()) {
+  if (!compact) {
     base.meta = {
       query_time_ms: 0,
       fallback_used: false,
@@ -198,42 +172,6 @@ async function startupHealthCheck(): Promise<void> {
   }
 
   await Promise.allSettled(checks);
-}
-
-const TASK_TYPE_KEYWORDS: Record<string, string[]> = {
-  "general_web": ["search", "find", "look up", "research", "information about"],
-  "small_web": ["blog", "personal", "non-commercial", "indie", "small web"],
-  "encyclopedia": ["encyclopedia", "wiki"],
-  "definition": ["definition", "define", "meaning", "etymology", "dictionary", "word"],
-  "structured_fact": ["date", "statistic", "identifier", "population", "birth", "death"],
-  "financial": ["sec filing", "financial filing", "10-k", "10-q", "8-k", "edgar", "economic indicator", "gdp", "inflation"],
-  "location": ["where is", "location", "map", "address", "city", "place", "geocode"],
-  "academic": ["paper", "study", "research paper", "academic", "scholar", "journal", "thesis"],
-  "code": ["code", "programming", "error", "debug", "function", "api", "docs", "stack overflow"],
-  "news": ["news", "recent", "latest", "today", "current"],
-  "archive": ["archive", "historical", "old", "past version"],
-  "semantic": ["like", "similar to", "semantic", "neural", "conceptual"],
-  "synthesis": ["synthesize", "comprehensive", "summarize sources", "rag"],
-  "privacy_critical": ["private", "anonymous", "no tracking", "self-host"],
-};
-
-function classifyTaskType(task: string): string {
-  const lower = task.toLowerCase();
-  for (const [type, keywords] of Object.entries(TASK_TYPE_KEYWORDS)) {
-    if (keywords.some((kw) => lower.includes(kw))) return type;
-  }
-  // No keyword matched: fall back to semantic similarity against each task
-  // type's prototype vocabulary (REQ-020a). A high bar keeps ambiguous queries
-  // on the general_web chain.
-  try {
-    const types = Object.keys(TASK_TYPE_KEYWORDS);
-    const prototypes = types.map((t) => TASK_TYPE_KEYWORDS[t].join(" "));
-    const ranked = rankDocs(task, prototypes, "lsa");
-    if (ranked.length > 0 && ranked[0].score >= 0.5) return types[ranked[0].index];
-  } catch {
-    // Model unavailable — keep the general_web default.
-  }
-  return "general_web";
 }
 
 // Server-side content-type classification by URL pattern. Providers cannot all
@@ -342,28 +280,14 @@ async function doWebSearch(
   if (research) {
     const maxVariants = config.research?.max_variants ?? 3;
     const perVariantPages = config.research?.max_pages_per_variant ?? 2;
-    const variants = deriveExpansions(query, [], maxVariants);
-    const groups: Array<Record<string, unknown>> = [];
-    for (const variant of variants) {
+    const variants = deriveResearchVariants(query, maxVariants);
+    const groups = await compileResearchGroups(variants, (variant) => {
       const budget = { remaining: perVariantPages };
-      const env = await doWebSearch(
+      return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
         priority, false, contentType, region, false, true, false, budget
       );
-      let parsed: { status?: string; provider?: string; results?: SearchResult[]; meta?: { pages_read?: number } };
-      try {
-        parsed = JSON.parse(env.startsWith("[OK] ") ? env.slice(4) : env.startsWith("[ERROR] ") ? env.slice(8) : env);
-      } catch {
-        parsed = { status: "error", provider: "", results: [] };
-      }
-      groups.push({
-        variant,
-        status: parsed.status ?? "error",
-        provider: parsed.provider,
-        results: parsed.results ?? [],
-        ...(parsed.meta?.pages_read !== undefined ? { pages_read: parsed.meta.pages_read } : {}),
-      });
-    }
+    });
     return `[OK] ${json({
       status: "ok",
       provider: "research",
@@ -418,7 +342,7 @@ async function doWebSearch(
     chain = getDispatchChain("general_web");
   }
 
-  chain = selectChain(chain, priority, avgLatency);
+  chain = selectChain(chain, priority, latency.avg);
 
   // REQ-020a: demote providers at quota warning below non-warning providers.
   chain = demoteQuotaWarnings(chain, (slug) =>
@@ -496,7 +420,7 @@ async function doWebSearch(
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
-      trackRequest(slug, elapsed);
+      latency.track(slug, elapsed);
       providerLastSuccess[slug] = Date.now();
 
       // REQ-031: an empty result set is a failure for chain advancement, not a
@@ -562,7 +486,7 @@ async function doWebSearch(
     // and order survivors by semantic relevance to the query.
     filtered = reconcileResults(filtered, query);
 
-    if (deep && !compactMode()) {
+    if (deep && !compactMode(config)) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
       const maxPages = Math.min(deepConf.max_pages ?? 3, deepBudget ? deepBudget.remaining : (deepConf.max_pages ?? 3));
       const allowPrivateDeep = config.fetch?.allow_private_urls === true;
@@ -625,7 +549,7 @@ async function doWebSearch(
     // REQ-031 (hedged dispatch): run the primary alone for its hedge window;
     // if it has not answered by then (or fails), race the remaining providers
     // and take the first non-empty success, bounding worst-case latency.
-    const hedgeDelay = computeHedgeDelay(avgLatency(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
+    const hedgeDelay = computeHedgeDelay(latency.avg(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
     const primaryPromise = attempt(primarySlug);
     const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), hedgeDelay));
     const primaryResult = await Promise.race([primaryPromise, deadline]);
@@ -658,7 +582,7 @@ async function doWebSearch(
     // REQ-031a: before failing a non-general_web task, retry the general_web
     // chain (minus providers already attempted) so a narrow specialized chain
     // does not fail while a broader web chain could still answer.
-    const crossTaskChain = crossTaskFallbackChain(taskType, chain, selectChain(getDispatchChain("general_web"), undefined, avgLatency));
+    const crossTaskChain = crossTaskFallbackChain(taskType, chain, selectChain(getDispatchChain("general_web"), undefined, latency.avg));
     let crossTaskAttempted: string[] = [];
     for (const slug of crossTaskChain) {
       crossTaskAttempted.push(slug);
@@ -770,7 +694,7 @@ async function fetchPageContent(
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
-      trackRequest(slug, elapsed);
+      latency.track(slug, elapsed);
       providerLastSuccess[slug] = Date.now();
       return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
     } catch (e) {
@@ -797,7 +721,7 @@ async function fetchPageContent(
     const hedgeMinMs = hedgeConf.hedge_min_delay_ms ?? 200;
     const hedgeMaxMs = hedgeConf.hedge_max_delay_ms ?? 1500;
     const hedgeGraceMs = hedgeConf.hedge_grace_ms ?? 300;
-    const hedgeDelay = computeHedgeDelay(avgLatency(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
+    const hedgeDelay = computeHedgeDelay(latency.avg(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
 
     const primaryPromise = attempt(primarySlug);
     const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), hedgeDelay));
@@ -1101,7 +1025,7 @@ function assessProviderStatus(slug: string, p: ProviderConfig): HealthStatus {
     baseStatus: providerOperational(p) ? "active" : "inactive",
     quotaExhausted: quota.exhausted,
     quotaWarning: quota.warning,
-    avgLatencyMs: avgLatency(slug) || undefined,
+    avgLatencyMs: latency.avg(slug) || undefined,
     degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
   });
 }
@@ -1183,7 +1107,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
       // REQ-036: report the server's bounded time-window latency when a local
       // history exists, falling back to the provider's own live measurement
       // (e.g. first call, no recorded requests yet).
-      avgLatencyMs = avgLatency(providerSlug) || h.avgLatencyMs;
+      avgLatencyMs = latency.avg(providerSlug) || h.avgLatencyMs;
       // REQ-024b: the live probe must not overwrite the recorded last-success
       // timestamp — last_success reflects operational history, not this probe.
     } catch (e) {
@@ -1193,7 +1117,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
       }
     }
   } else {
-    avgLatencyMs = avgLatency(providerSlug) || 0;
+    avgLatencyMs = latency.avg(providerSlug) || 0;
   }
 
   status = resolveHealthStatus({
@@ -1276,7 +1200,7 @@ function doSpecHealth(): string {
         last_ingestion: kbStatsData.last_ingestion,
       } : undefined,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
-      total_requests_served: totalRequests,
+      total_requests_served: latency.total(),
       last_spec_review: new Date(SPEC_REVIEW_TIME).toISOString(),
       quota_state_path: getQuotaStatePath(),
       config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
@@ -1446,7 +1370,7 @@ server.registerTool(
         confidence_threshold: Number(params.confidence_threshold),
         providers: params.providers as string[] | undefined,
         priority: params.priority as "speed" | "quality" | "privacy" | "free_only" | undefined,
-        latency: avgLatency,
+        latency: latency.avg,
       });
       autoIndex(
         result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
@@ -1454,7 +1378,7 @@ server.registerTool(
         undefined,
         "corroborate"
       );
-      if (compactMode()) {
+      if (compactMode(getConfig())) {
         delete result.provenance;
       }
       // REQ-001: every tool body carries status/provider/results. The

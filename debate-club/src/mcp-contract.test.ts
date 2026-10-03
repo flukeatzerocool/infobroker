@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-021a REQ-027 REQ-060 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -195,6 +195,24 @@ test("inspect_providers list and spec report operational state", async () => {
   expect(enabledCount).toBeLessThanOrEqual(providerCount);
   expect(activeCount).toBeLessThanOrEqual(enabledCount);
   expect(listRows.filter((r) => r.slug !== "native_fetch").length).toBe(providerCount);
+  // REQ-081: the token-footprint record is present, numeric, and derived.
+  const footprint = specRow.token_footprint as Record<string, unknown>;
+  expect(typeof footprint.tool_schema_bytes).toBe("number");
+  expect(Number(footprint.tool_schema_bytes)).toBeGreaterThan(0);
+  expect(typeof footprint.median_response_bytes).toBe("number");
+  expect(Number(footprint.median_response_bytes)).toBeGreaterThanOrEqual(0);
+});
+
+test("inspect_providers health runs a live probe against the pinned provider", async () => {
+  scenario = "inspect-health";
+  const health = expectOk(
+    (await call("infobroker_inspect_providers", { action: "health", provider: "wikipedia" })).text
+  );
+  const row = (health.results as Array<Record<string, unknown>>)[0];
+  // REQ-024b: a live probe returns a status and a latency measurement.
+  expect(["active", "degraded", "inactive"]).toContain(row.status);
+  expect(typeof row.avg_latency_ms).toBe("number");
+  expect(row.slug).toBe("wikipedia");
 });
 
 test("manage_kb ingests, searches, and reports stats", async () => {
