@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.10.02 — Roadmap burn-down: dependency audit fixed, harness-expectation gate added
+
+- Cleared the two high-severity dependency advisories (`brace-expansion`,
+  `undici`) and three moderates via a non-breaking `npm audit fix`, so `npm run
+  check`'s `audit` step is green again. The remaining moderate (`js-yaml` via
+  `markdownlint-cli`) requires a breaking downgrade and is left in place.
+  (`package-lock.json`)
+- Added `check-harness-expectations`, a gate that verifies every harness
+  `tool_audit` key is registered with the behavior it encodes and recognized by
+  its evaluator, so a stale or silently-ignored expectation fails a gate instead
+  of a live run. Wired into `npm run check`. (`scripts/check-harness-expectations.ts`,
+  `package.json`, `AGENTS.md`)
+
 ## 2026.10.02 — inspect_providers counts clarified; Lab feedback loop completed
 
 - `inspect_providers` now reports `enabled_provider_count` and a spec-correct

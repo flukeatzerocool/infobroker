@@ -233,6 +233,7 @@ This runs:
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch |
+| `npm run check-harness-expectations` | Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators |
 | `npm run test`       | Vitest unit and integration tests                  |
 | `npm run test-debate-club` | debate-club Arena: deterministic, offline tool-contract suite (typecheck + fixture replay) |
 | `npm run audit`      | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |
