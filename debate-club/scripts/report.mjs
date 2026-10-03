@@ -6,7 +6,7 @@
 // Exit codes: 0 = report written; 2 = usage/fatal (no telemetry).
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const runDir = process.argv[2];
 if (!runDir) {
@@ -14,17 +14,7 @@ if (!runDir) {
   process.exit(2);
 }
 const telemetryPath = join(runDir, "telemetry.ndjson");
-if (!existsSync(telemetryPath)) {
-  console.error(`report: no telemetry at ${telemetryPath}`);
-  process.exit(2);
-}
-const unmatchedPath = join(runDir, "unmatched.log");
-
-const records = readFileSync(telemetryPath, "utf8")
-  .split("\n")
-  .filter(Boolean)
-  .map((l) => JSON.parse(l));
-
+const resultsPath = join(runDir, "results.json");
 const EXPECTED_TOOLS = [
   "infobroker_search_web",
   "infobroker_fetch_page",
@@ -34,6 +24,53 @@ const EXPECTED_TOOLS = [
   "infobroker_manage_kb",
   "infobroker_reload_config",
 ];
+// Lab runs emit results.json (not telemetry.ndjson); roll those up too so the
+// report/recommend feedback loop covers both planes.
+if (!existsSync(telemetryPath) && existsSync(resultsPath)) {
+  const results = JSON.parse(readFileSync(resultsPath, "utf8"));
+  const scenarios = {};
+  for (const [id, s] of Object.entries(results.scenarios ?? {})) {
+    const failed = s.status === "fail";
+    scenarios[id] = {
+      status: s.status,
+      calls: s.toolsCalled ?? 0,
+      error: failed ? 1 : 0,
+      unexpected: failed ? 1 : 0,
+      audit_fails: s.auditFails ?? [],
+      tools: [],
+    };
+  }
+  const summary = results.summary ?? { total: 0, pass: 0, fail: 0 };
+  const labReport = {
+    schema: "debate-club/lab-report@1",
+    run_id: `lab:${basename(runDir)}`,
+    fingerprint: {},
+    totals: { scenarios: summary.total, pass: summary.pass, fail: summary.fail, unexpected_error: summary.fail },
+    error_codes: {},
+    tools: {},
+    scenarios,
+    coverage: { expected_tools: EXPECTED_TOOLS, covered_tools: [], missing_tools: [] },
+    unmatched: [],
+  };
+  writeFileSync(join(runDir, "report.json"), JSON.stringify(labReport, null, 2) + "\n");
+  console.log(`debate-club report — run ${labReport.run_id}`);
+  console.log(`  scenarios: ${labReport.totals.scenarios}  pass: ${labReport.totals.pass}  fail: ${labReport.totals.fail}`);
+  for (const [id, s] of Object.entries(scenarios)) {
+    console.log(`  ${id.padEnd(6)} ${s.status}${s.audit_fails.length ? " audit_fail=" + s.audit_fails.join(",") : ""}`);
+  }
+  console.log(`  report: ${join(runDir, "report.json")}`);
+  process.exit(0);
+}
+if (!existsSync(telemetryPath)) {
+  console.error(`report: no telemetry at ${telemetryPath} and no results at ${resultsPath}`);
+  process.exit(2);
+}
+const unmatchedPath = join(runDir, "unmatched.log");
+
+const records = readFileSync(telemetryPath, "utf8")
+  .split("\n")
+  .filter(Boolean)
+  .map((l) => JSON.parse(l));
 
 function pct(values, p) {
   if (!values.length) return 0;

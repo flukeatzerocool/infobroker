@@ -64,6 +64,11 @@ ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
 cleanup() { cleanup_serve; }
 trap cleanup EXIT SIGINT SIGTERM
 
+# Record which MCP target the ambient opencode config exposes, so a run's
+# feedback is interpretable — the Lab exercises the configured deployment.
+opencode mcp list > "$RUN_DIR/mcp-target.txt" 2>&1 || true
+info "Lab MCP target(s) recorded in $RUN_DIR/mcp-target.txt"
+
 : > "$RUN_DIR/results.ndjson"
 for id in $IDS; do
   sc="$RUN_DIR/scenarios/$id.json"
@@ -73,6 +78,12 @@ for id in $IDS; do
   node -e 'console.log(require(process.argv[1]).utterance)' "$sc" > "$work/prompt.md"
   opencode run --attach "$SERVER_URL" --agent build --auto --format json \
     "$(cat "$work/prompt.md")" > "$work/turn0.txt" 2>> "$RUN_DIR/openruns.log" || true
+  # Advisory critic pass (critic.md) over the agent's final answer.
+  node -e 'import(process.argv[1]).then(m=>{const fs=require("fs");const t=m.extractAssistantText(fs.readFileSync(process.argv[2],"utf8"));fs.writeFileSync(process.argv[3],t.trim().slice(-4000))})' \
+    "$REPO/scripts/lib/event-stream.mjs" "$work/turn0.txt" "$work/final.txt" 2>> "$RUN_DIR/openruns.log" || true
+  opencode run --attach "$SERVER_URL" --agent plan --auto \
+    "$(cat "$SCRIPT_DIR/critic.md")"$'\n\n--- FINAL ANSWER ---\n\n'"$(cat "$work/final.txt")" \
+    > "$work/critic.txt" 2>> "$RUN_DIR/openruns.log" || true
   node "$EVALUATOR" "$sc" "$work/turn0.txt" "$work" >> "$RUN_DIR/results.ndjson"
 done
 

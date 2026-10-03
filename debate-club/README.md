@@ -7,7 +7,10 @@ planes, never mixed:
   preload, serves every request from committed fixtures, and asserts the tool
   response contracts. Offline, deterministic, no model.
 - **Lab (agentic):** personas exercise the live MCP through headless
-  `opencode`; evaluated mechanically, with a rubric/critic as advisory only.
+  `opencode`; evaluated mechanically, with a critic pass (`critic.md`) run
+  over each final answer and recorded as advisory only. The Lab exercises
+  whichever MCP the ambient `opencode` config exposes, and records that
+  target in the run's `mcp-target.txt`.
 
 ## Layout
 
@@ -38,7 +41,10 @@ is part of `npm run check`.
 
 Every Arena run writes `.runs/latest/telemetry.ndjson` (one record per tool
 call, with a reproducibility fingerprint), `report.json`, and
-`recommendations.json`. `.runs/` is git-ignored.
+`recommendations.json`. A Lab run writes `.runs/lab-<ts>/results.json`, the
+same `report.json`/`recommendations.json` rollups (built from `results.json`),
+and `mcp-target.txt` recording the MCP command the run exercised. `.runs/` is
+git-ignored.
 
 ## Status
 

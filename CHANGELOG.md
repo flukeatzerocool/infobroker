@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.10.02 — inspect_providers counts clarified; Lab feedback loop completed
+
+- `inspect_providers` now reports `enabled_provider_count` and a spec-correct
+  `active_provider_count` (assessed status per REQ-013) alongside
+  `provider_count`, all excluding inline renderer fallbacks; the list action
+  marks `native_fetch` as an inline fallback so the two views reconcile.
+  (`src/index.ts`, `infobroker.md`)
+- The debate-club Lab now runs the advisory critic pass over each final answer,
+  records the MCP target it exercises (`mcp-target.txt`), and rolls its results
+  into `report.json`/`recommendations.json`, so the feedback loop covers the
+  Lab as well as the Arena. (`debate-club/`)
+
 ## 2026.10.02 — Harness gate cleanup: stale kb_before_search check removed
 
 - Removed the obsolete `kb_before_search` hard gate from the live research

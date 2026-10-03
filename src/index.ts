@@ -1091,6 +1091,21 @@ function providerInactiveReason(p: ProviderConfig): "disabled" | "no_api_key" | 
   return null;
 }
 
+// REQ-013/REQ-024a: one assessment shared by the list and spec actions, so a
+// quota-warning or over-threshold-latency provider is reported degraded and
+// "active" means the same thing everywhere.
+function assessProviderStatus(slug: string, p: ProviderConfig): HealthStatus {
+  const config = getConfig();
+  const quota = checkQuota(slug, p.rate_limit);
+  return resolveHealthStatus({
+    baseStatus: providerOperational(p) ? "active" : "inactive",
+    quotaExhausted: quota.exhausted,
+    quotaWarning: quota.warning,
+    avgLatencyMs: avgLatency(slug) || undefined,
+    degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
+  });
+}
+
 function doListProviders(filter?: string): string {
   const config = getConfig();
   const entries = Object.entries(config.providers);
@@ -1114,13 +1129,10 @@ function doListProviders(filter?: string): string {
     const pool = keyPoolStatus(slug);
     // REQ-013/REQ-024a: the list status uses the same assessment as health, so
     // a quota-warning or over-threshold-latency provider is reported degraded.
-    const status = resolveHealthStatus({
-      baseStatus: operational ? "active" : "inactive",
-      quotaExhausted: quota.exhausted,
-      quotaWarning: quota.warning,
-      avgLatencyMs: avgLatency(slug) || undefined,
-      degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
-    });
+    const status = assessProviderStatus(slug, p);
+    // REQ-024a: native_fetch is an inline tool-handler fallback, not a
+    // standalone provider module — marked so it is excluded from provider counts.
+    const inlineFallback = slug === "native_fetch";
     return {
       slug,
       tier: p.tier,
@@ -1129,6 +1141,7 @@ function doListProviders(filter?: string): string {
       rate_limit: p.rate_limit,
       enabled: p.enabled,
       status,
+      ...(inlineFallback ? { inline_fallback: true } : {}),
       ...(reason ? { inactive_reason: reason } : {}),
       ...(cooldownRemaining !== undefined ? { cooldown_remaining_ms: cooldownRemaining } : {}),
       ...(pool.length > 1 ? { key_pool: pool } : {}),
@@ -1223,7 +1236,11 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
 
 function doSpecHealth(): string {
   const config = getConfig();
-  const activeCount = Object.entries(config.providers).filter(([, p]) => p.enabled).length;
+  // REQ-024c: provider counts exclude inline renderer fallbacks (REQ-024a), and
+  // distinguish enabled providers from those whose assessed status is active.
+  const providers = Object.entries(config.providers).filter(([slug]) => slug !== "native_fetch");
+  const enabledCount = providers.filter(([, p]) => p.enabled).length;
+  const activeCount = providers.filter(([slug, p]) => assessProviderStatus(slug, p) === "active").length;
   const kbStatsData = isKbConfigured() ? kbStats() : null;
 
   const toolCount = Object.keys((server as any)._registeredTools).length;
@@ -1242,7 +1259,8 @@ function doSpecHealth(): string {
     provider: "system",
     results: [{
       build_version: BUILD_VERSION,
-      provider_count: Object.keys(config.providers).filter(k => k !== "native_fetch").length,
+      provider_count: providers.length,
+      enabled_provider_count: enabledCount,
       active_provider_count: activeCount,
       tool_count: toolCount,
       token_footprint: {

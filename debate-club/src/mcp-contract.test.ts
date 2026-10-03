@@ -178,10 +178,23 @@ test("verify_claims conforms to the REQ-001 envelope", async () => {
 test("inspect_providers list and spec report operational state", async () => {
   scenario = "inspect-list";
   const list = expectOk((await call("infobroker_inspect_providers", { action: "list" })).text);
-  expect((list.results as unknown[]).length).toBeGreaterThan(0);
+  const listRows = list.results as Array<Record<string, unknown>>;
+  expect(listRows.length).toBeGreaterThan(0);
+  // REQ-024a: the inline renderer fallback is reported and marked.
+  const inline = listRows.find((r) => r.slug === "native_fetch");
+  expect(inline?.inline_fallback).toBe(true);
   scenario = "inspect-spec";
   const spec = expectOk((await call("infobroker_inspect_providers", { action: "spec" })).text);
   expect(JSON.stringify(spec)).toContain("tool_count");
+  // REQ-024c: counts reconcile and exclude the inline fallback.
+  const specRow = (spec.results as Array<Record<string, unknown>>)[0];
+  const providerCount = Number(specRow.provider_count);
+  const enabledCount = Number(specRow.enabled_provider_count);
+  const activeCount = Number(specRow.active_provider_count);
+  expect(providerCount).toBeGreaterThan(0);
+  expect(enabledCount).toBeLessThanOrEqual(providerCount);
+  expect(activeCount).toBeLessThanOrEqual(enabledCount);
+  expect(listRows.filter((r) => r.slug !== "native_fetch").length).toBe(providerCount);
 });
 
 test("manage_kb ingests, searches, and reports stats", async () => {
