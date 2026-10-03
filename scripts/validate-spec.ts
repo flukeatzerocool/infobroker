@@ -274,6 +274,19 @@ for (let i = 0; i < reqBodies.length; i++) {
     error(`${reqTag}: REQ body has ${shallCount} SHALL clauses (>8) — violates Appendix B mechanical limit`);
   }
 
+  // Modal drift (Appendix B proofreading dimension): lowercase "shall",
+  // "must", and "should" are plain English, not normative — REQ obligations
+  // use SHALL. Reported as a warning, not an error: Appendix B classifies
+  // modal drift as advisory ("warnings, not gate failures"). Lowercase "may"
+  // is excluded — it is a context-dependent permissive modal with legitimate
+  // uses (e.g. "a file may satisfy multiple REQs").
+  const modalDrift = [...prose.matchAll(/\b(shall|must|should)\b/g)].map((m) => m[1]);
+  if (modalDrift.length > 0) {
+    warn(
+      `${reqTag}: REQ body uses lowercase modal(s) ${[...new Set(modalDrift)].join(", ")} — REQ obligations use SHALL (Appendix B modal drift)`
+    );
+  }
+
   // More than one paragraph = blank line within the prose
   if (/\n\s*\n/.test(prose)) {
     error(`${reqTag}: REQ body spans more than one paragraph — violates Appendix B mechanical limit`);

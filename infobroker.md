@@ -417,7 +417,7 @@ Every source file in `src/` SHALL cite in a header comment each REQ it
 implements, using the format `@implements REQ-NNN`. A file may satisfy multiple
 REQs; every implemented REQ SHALL appear in at least one source file's citation.
 The `validate-spec` script (§9.4) verifies bidirectional coverage: every REQ
-with an implementation must be cited, and every source file must cite at least
+with an implementation SHALL be cited, and every source file SHALL cite at least
 one REQ. Generated artifacts (build output, `node_modules/`) and client-artifact
 REQs (§4.7, verified by file presence) are exempt. _Check:_ G3.
 
@@ -1116,9 +1116,17 @@ infobroker/
 │   ├── infobroker/
 │   │   ├── SKILL.md                       # Orchestrator: routes intent → workflow, chains search → skills
 │   │   └── references/
-│   │       ├── provider-map.md            # Task → provider dispatch reference
-│   │       ├── pipeline-map.md            # Skill pipeline diagram (Mermaid)
+│   │       ├── config-tune.md             # Configuration tuning reference
+│   │       ├── corroboration.md           # Corroboration-loop reference
+│   │       ├── decision-tree.md           # Ordered disambiguation questions
+│   │       ├── glossary.md                # Terminology and acronyms
 │   │       ├── journeys.md                # User-journey routing and recovery
+│   │       ├── pipeline-map.md            # Skill pipeline diagram (Mermaid)
+│   │       ├── provider-auth.md           # Generated provider auth mapping (from config.json)
+│   │       ├── provider-map.md            # Task → provider dispatch reference
+│   │       ├── report-template.md         # Report skeletons
+│   │       ├── skill-authoring.md         # How to add a workflow shape
+│   │       ├── troubleshooting.md         # Symptom → cause → fix entries
 │   │       └── workflows.md               # Workflow-shape definitions
 │   ├── analysis-loop/
 │   │   ├── SKILL.md                       # Gated analytic-rigor research workflow

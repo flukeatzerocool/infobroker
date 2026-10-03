@@ -18,6 +18,14 @@ references that name a removed REQ, tool, or provider as if it were still
 current, or that describe a file, flag, or behavior no longer present in the
 tree. Report these under the same severity tiers.
 
+Do not re-implement the mechanical gates. `npm run validate-spec`,
+`npm run validate-readme`, `npm run test`, and `npm run check-gate-coverage`
+already verify REQ structure and mechanical limits, manifest completeness,
+bidirectional citation, clause coverage, tool and provider names, and README
+claims. Run a gate once if you need its output; do not rebuild its checks with
+ad-hoc `npx tsx -e` or grep probes. Spend the step's effort on what the gates
+cannot see: semantic staleness and prose quality.
+
 Auto-fix findings where safe: typo corrections, missing punctuation,
 whitespace normalization. Do NOT auto-fix: REQ body rewrites, structural
 changes, test ID assignments, or anything that changes semantic meaning.

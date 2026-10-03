@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.10.02 — Session-log audit: REQ-055 modal normalization, spec tree, pipeline logging
+
+- REQ-055 now uses SHALL for its two obligations (was lowercase "must"), per
+  Appendix B ("REQ bodies use SHALL for all obligations"). `validate-spec` gains
+  a warning for lowercase `shall`/`must`/`should` in REQ bodies, so modal drift
+  is surfaced mechanically instead of only by the AI read-through step.
+  (`infobroker.md`, `scripts/validate-spec.ts`)
+- §10.1 project tree now lists all twelve `skills/infobroker/references/` files,
+  including the spec-mandated `provider-auth.md`, instead of four.
+  (`infobroker.md`)
+- `push-pipeline.sh` now writes a run log to `pipeline.log` even when no AI step
+  runs: a startup header, a marker per step, and a fatal-failure line from
+  `die()`. Previously a `--dry-run` or early failure left the log empty.
+  (`scripts/pipeline/lib.sh`, `scripts/push-pipeline.sh`)
+- The read-through prompt now directs the step to trust the mechanical gates
+  (`validate-spec`, `validate-readme`, `npm test`, `check-gate-coverage`) and
+  spend its effort on semantic staleness and prose the gates cannot see, instead
+  of re-implementing gate checks with ad-hoc scripts.
+  (`scripts/pipeline/prompts/readthrough.md`)
+
 ## 2026.10.02 — Push-pipeline hardening: true dry-run, race-free timings, shell syntax gate
 
 - `scripts/push-pipeline.sh --dry-run` is now genuinely non-mutating: it runs the

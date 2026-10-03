@@ -131,6 +131,9 @@ PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
 
 : > "$PIPELINE_LOG_FILE"
+log_line "===== Infobroker push pipeline — $(date +%Y-%m-%dT%H:%M:%S%z) ====="
+log_line "run dir: $PIPELINE_RUN_DIR"
+log_line "args: ${*:-<none>}"
 mkdir -p "$PIPELINE_RUN_DIR/timings"
 
 # ── State journal ────────────────────────────────────────────────────────────

@@ -17,12 +17,22 @@ else
 fi
 
 # ── Logging ──────────────────────────────────────────────────────────────────
-info()  { echo -e "${GREEN}$*${NC}"; }
-warn()  { echo -e "${YELLOW}$*${NC}"; }
-error() { echo -e "${RED}$*${NC}"; }
+# log_line <text...> — append a line to the run log when the pipeline has
+# created one. Every info/warn/error line is mirrored here so pipeline.log is
+# a complete run log even for deterministic-only runs (a --dry-run or an early
+# failure previously left the file empty, because only AI steps wrote to it).
+log_line() {
+  [[ -n "${PIPELINE_LOG_FILE:-}" ]] && printf '%s\n' "$*" >> "$PIPELINE_LOG_FILE"
+  return 0
+}
+
+info()  { echo -e "${GREEN}$*${NC}"; log_line "$*"; }
+warn()  { echo -e "${YELLOW}$*${NC}"; log_line "WARN: $*"; }
+error() { echo -e "${RED}$*${NC}"; log_line "ERROR: $*"; }
 
 die() {
   error "$*"
+  log_line "FATAL: $*"
   exit 1
 }
 
