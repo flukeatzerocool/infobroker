@@ -9,7 +9,7 @@
     "tokens": ["fact-check complete."],
     "absent": [],
     "sections": ["verdict", "confidence"],
-    "tool_audit": { "kb_before_search": true, "verify_claims": true, "uses_infobroker": true },
+    "tool_audit": { "verify_claims": true, "uses_infobroker": true },
     "rubric": [
       "A verdict is given for the claim",
       "A 0.0-1.0 confidence score is stated",
@@ -27,7 +27,7 @@
     "tokens": ["lit-review complete."],
     "absent": [],
     "sections": ["inclusion", "gap"],
-    "tool_audit": { "kb_before_search": true, "verify_claims": false, "uses_infobroker": true },
+    "tool_audit": { "verify_claims": false, "uses_infobroker": true },
     "rubric": [
       "Inclusion/exclusion criteria are stated explicitly",
       "Findings are synthesized into themes",
@@ -45,7 +45,7 @@
     "tokens": [],
     "absent": [],
     "sections": ["provider"],
-    "tool_audit": { "kb_before_search": false, "verify_claims": false, "uses_infobroker": true },
+    "tool_audit": { "verify_claims": false, "uses_infobroker": true },
     "rubric": [
       "Provider list includes tier/status",
       "Build/spec identity is reported",
@@ -62,7 +62,7 @@
     "tokens": [],
     "absent": [],
     "sections": ["phoenix"],
-    "tool_audit": { "kb_before_search": false, "verify_claims": false, "uses_infobroker": true },
+    "tool_audit": { "verify_claims": false, "uses_infobroker": true },
     "rubric": [
       "The note is ingested",
       "A search recalls the note",

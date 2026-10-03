@@ -31,8 +31,6 @@ entry declares:
 - `tokens` appear in order in the assistant's text.
 - `absent` tokens do not appear.
 - `sections` are present (case-insensitive OR-match).
-- `tool_audit.kb_before_search`: a `manage_kb` tool call precedes the first
-  `search_web`. (Only asserted when the scenario sets it `true`.)
 - `tool_audit.uses_infobroker`: at least one `infobroker_infobroker_*` tool
   is called. Built-in `websearch`/`webfetch` do **not** fail this — they are
   legitimate fallback when an Infobroker tool errors.
@@ -57,7 +55,7 @@ wall-clock, plus ~15s per sampled citation. The full 18-entry matrix is
 
 ```
   PASS  S2   fact-check
-  FAIL  S9   gated-analysis — missing token: analysis-loop complete.; audit fail: kb_before_search
+  FAIL  S9   gated-analysis — missing token: analysis-loop complete.; audit fail: uses_infobroker
 ```
 
 The failure detail lists exactly which hard gate tripped. Full transcripts

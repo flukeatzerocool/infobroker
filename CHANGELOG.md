@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.10.02 — Harness gate cleanup: stale kb_before_search check removed
+
+- Removed the obsolete `kb_before_search` hard gate from the live research
+  and Lab evaluation harnesses. It demanded an explicit `manage_kb` search
+  before `search_web`, which contradicts the documented automatic KB-first
+  recall, so correct runs were scored as failures. (`scripts/test-research/`,
+  `test-fixtures/research/`, `debate-club/`)
+- Roadmap: a gate to catch harness expectations drifting from the behavior
+  they encode, and dependency-audit remediation. (`ROADMAP.md`)
+
 ## 2026.10.02 — TDQS conformance: deterministic gate, REQ-106, and score-improvement pass
 
 - `verify_claims` now emits the REQ-001 `{status, provider, results}` envelope,

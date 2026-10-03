@@ -56,11 +56,6 @@ for (const needle of scenario.sections ?? []) {
 // --- tool audit ---
 const ta = scenario.tool_audit ?? {};
 const audit = {};
-if (ta.kb_before_search) {
-  const kb = toolOrder.findIndex((t) => t.includes("_kb"));
-  const ws = toolOrder.findIndex((t) => t.includes("search_web"));
-  audit.kb_before_search = kb !== -1 && (ws === -1 || kb < ws);
-}
 if (ta.verify_claims) {
   audit.verify_claims = toolOrder.some((t) => t.includes("verify_claims"));
 }
@@ -70,9 +65,9 @@ if (ta.uses_infobroker) {
   // not a routing failure.
   audit.uses_infobroker = toolOrder.some((t) => t.startsWith("infobroker_infobroker_"));
 }
-// Hard audit gates are structural (kb-before-search, Infobroker engagement).
+// Hard audit gates are structural (Infobroker engagement).
 // verify_claims is a "when contested" guidance, not a shape requirement — advisory.
-const hardAuditKeys = ["kb_before_search", "uses_infobroker"];
+const hardAuditKeys = ["uses_infobroker"];
 const auditFails = Object.entries(audit).filter(([k, v]) => v === false && hardAuditKeys.includes(k)).map(([k]) => k);
 
 // --- hard-gate verdict ---
