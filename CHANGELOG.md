@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.10.02 — Client instruction file trimmed to routing
+
+- `instructions/search-preferences.md` is cut from 68 to 22 lines: it now
+  carries only the always-on routing rules (skill selection, Infobroker over
+  built-in tools, knowledge-base-first recall, report archival, citation).
+  The report-refresh procedure and the per-tool cheat sheet are removed —
+  both are duplicated in `skills/infobroker/SKILL.md` and
+  `skills/infobroker/references/` and only load when needed.
+- The incorrect claim that ingest `save_to` defaults to `manage_kb` is gone;
+  it defaults to `kb` and accepts `kb`, `disk`, or `both`.
+  (`instructions/search-preferences.md`)
+
 ## 2026.10.02 — Session-log audit: REQ-055 modal normalization, spec tree, pipeline logging
 
 - REQ-055 now uses SHALL for its two obligations (was lowercase "must"), per
