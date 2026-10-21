@@ -30,10 +30,13 @@ rather than restating them.
 - **VERIFY** — cross-reference across sources, score confidence, flag
   contradictions explicitly. Use `verify_claims` for contested claims and
   read its result per `corroboration.md`.
-- **WRITE** — `technical-writing` for the deliverable.
+- **WRITE** — `technical-writing`, filling the shared skeleton and the routed
+  shape's block in `report-template.md`; the orchestrator passes the shape,
+  audience, and target length.
 - **POLISH** — `proofreading` for language quality.
 - **TRANSLATE** — `translation` when the target language is not English.
-- **CITE** — source URLs with every factual claim.
+- **CITE** — every factual claim carries an inline `[S#]` marker resolving to
+  the Source Register, whose row carries the URL.
 
 Each shape ends with a grepable one-line status token in the form
 `<shape> complete. <key counts> | <remaining gaps>`.
@@ -76,6 +79,10 @@ structured report (theme-grouped, high-confidence findings first).
 
 **Technique:** Decomposition (topic tree) to split subtopics; Analysis of
 Competing Hypotheses on any contested finding.
+
+**Output:** the Deep-Dive block in `report-template.md` — a subtopic coverage
+matrix, theme-grouped synthesis, cross-subtopic contradictions, and open
+questions — plus the shared skeleton.
 
 **Token:** `deep-dive complete. <N> subtopics | <K> themes | <C> contradictions`.
 

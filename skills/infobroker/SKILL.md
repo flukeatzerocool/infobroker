@@ -73,15 +73,17 @@ EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
            the ranked passages that address it instead of the whole page
 VERIFY     cross-reference, score confidence, flag contradictions
 SUMMARIZE  `summarization` skill — condense findings before writing
-WRITE      `technical-writing` skill — reports, docs, tutorials, specs; use
-           the skeleton in `references/report-template.md` so every report
-           carries Executive Summary → Key Findings → Sources → Contradictions
-           → Gaps → Source Register
+WRITE      `technical-writing` skill — hand it the routed shape, audience, and
+           target length; use the shared skeleton plus the shape's block in
+           `references/report-template.md` so every report carries
+           Methodology & Scope → Executive Summary → Key Findings → Evidence &
+           Sources → Contradictions → Gaps → Source Register → Recommendations
 POLISH     `proofreading` skill — grammar, spelling, style, clarity, tone
 TRANSLATE  load and apply the `translation` skill — when the user asked for a
            non-English output; end that step with its `translation complete.`
            token
-CITE       source URLs with every claim (see `instructions/search-preferences.md`)
+CITE       an inline `[S#]` marker on every factual claim, resolving to the
+           Source Register entry that carries the URL
 ```
 
 Run every pipeline step that applies to the request, in order, and complete

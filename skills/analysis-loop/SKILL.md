@@ -208,6 +208,12 @@ the intelligence cycle.
 ## Executive Summary
 [3-5 sentence synthesis of highest-confidence findings]
 
+## Methodology & Scope
+**Scope:** [EEIs addressed and boundaries]
+**Collection:** [query angles per EEI, collection date, source count]
+**Technique:** [name] — [fit rationale]
+**Limits:** [what the research does not cover]
+
 ## Structured Analytic Technique
 **Technique:** [name] — [fit rationale]
 **Result:** [the technique's output, reported from its own discrete pass]
@@ -241,6 +247,8 @@ Self-check before presenting:
 - Did I name the structured analytic technique and justify the choice against
   its fit criterion — and did I apply it in its own separate step with a
   reported result?
+- Does the Methodology & Scope section state the collection basis, technique
+  choice, and limits?
 - Are source reliability grades included in the source register?
 - Do I distinguish what I *know* from what I *infer*?
 

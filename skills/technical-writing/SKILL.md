@@ -23,7 +23,13 @@ metadata:
 
 1. **Identify document type and audience.** Determine whether the output is
    an API reference, tutorial, user guide, changelog, or architecture doc.
-   Adjust depth and vocabulary for the reader.
+   Adjust depth and vocabulary for the reader. When the Infobroker
+   orchestrator invokes this skill as the WRITE step of a workflow shape, the
+   document type is a research report and its structure is the shared
+   skeleton plus the routed shape's block in
+   `skills/infobroker/references/report-template.md`. Report conventions take
+   precedence over the API-reference, tutorial, and user-guide templates
+   below.
 
 2. **Gather source material.** Collect code, schemas, existing docs, design
    documents, and commit history. Identify authoritative sources.
@@ -46,6 +52,30 @@ metadata:
 6. **Review.** Verify code examples run, endpoints match the implementation,
    and no placeholder text remains.
 
+## Research Reports (Infobroker workflow shapes)
+
+When this skill runs as the Infobroker WRITE step, write a research report,
+not generic documentation:
+
+1. **Use the routed shape.** The orchestrator supplies the workflow shape,
+   audience, and target length. The structure is the shared skeleton in
+   `skills/infobroker/references/report-template.md` plus that shape's block.
+2. **Fill every section.** Executive Summary, Methodology & Scope, Key
+   Findings, Evidence & Sources, Contradictions, Gaps, Source Register, and
+   Recommendations. Do not drop a section because it is empty — state "none
+   found" or why it does not apply.
+3. **Preserve evidence binding.** Keep the `[S#]` marker assigned during
+   verification on every factual claim. Do not introduce a claim while
+   drafting that the collected evidence does not support.
+4. **Calibrate to the reader.** Executive audiences lead with the summary and
+   recommendations; technical audiences lead with method and findings. Honor
+   the requested length rather than padding to a fixed size.
+5. **Do not substitute a documentation genre.** An API reference or tutorial
+   is the wrong deliverable for a routed research shape.
+
+For standalone documentation requests (no routed shape), use the generic
+workflow above and the matching document-type template.
+
 ## Best Practices
 
 - Lead each section with the action the reader must take.
@@ -62,8 +92,8 @@ Always end with a searchable one-line status:
 technical-writing complete. <doc type> | <N> sections | no placeholders
 ```
 
-`<doc type>` is the document type identified in step 1 (API reference,
-tutorial, user guide, changelog, or architecture doc). Replace
+`<doc type>` is the document type identified in step 1 (research report,
+API reference, tutorial, user guide, changelog, or architecture doc). Replace
 `no placeholders` with a list of any placeholder text the review could
 not resolve.
 

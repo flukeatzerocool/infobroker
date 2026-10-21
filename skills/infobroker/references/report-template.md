@@ -7,7 +7,11 @@ output block. Cite a source URL with every factual claim (see
 `analysis-loop` skill's source assessment when grading reliability and
 credibility.
 
-## Shared skeleton (Research & Write, Deep-Dive, and Analysis Loop)
+Every factual claim carries an inline citation marker `[S#]`, where `#` is
+the row number of the claim's entry in the Source Register. The register row
+carries the URL; a claim with no marker is a defect.
+
+## Shared skeleton (Research & Write, Deep-Dive, Gated Analysis, and the other shapes)
 
 ```
 # <Title>
@@ -15,6 +19,11 @@ credibility.
 ## Executive Summary
 [3–5 sentence synthesis of the highest-confidence findings. Lead with the
 answer the user asked for.]
+
+## Methodology & Scope
+[What was asked and how it was answered: scope boundaries; the searches run
+and when; inclusion/exclusion rules; the structured analytic technique and
+why it fit; what this report does not cover.]
 
 ## Key Findings
 ### <Finding 1>
@@ -95,6 +104,30 @@ primary sources where they exist.
 ## Assumptions & Attack Surface
 ## Robustness Verdict
 ```
+
+### Deep-Dive
+
+```
+## Subtopic Coverage
+| # | Subtopic (EEI) | Sources | Confidence | Status |
+|---|----------------|---------|------------|--------|
+| 1 | [sub-question] | [S1, S3] | High / Medium / Low | answered / partial / gap |
+
+## Thematic Synthesis
+### <Theme>
+[Synthesis across subtopics, grouped by theme rather than by source;
+highest-confidence findings first.]
+
+## Cross-Subtopic Contradictions
+[Where subtopics disagree: factual vs. interpretive, with grades.]
+
+## Open Questions
+[Subtopic-level gaps and the query that would close each.]
+```
+
+Deep-Dive uses the shared skeleton for Executive Summary, Methodology &
+Scope, Evidence & Sources, Source Register, and Recommendations, and this
+block for its analysis sections.
 
 ### Vetting / Due-Diligence
 

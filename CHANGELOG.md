@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.10.02 — Shape-aware report writing: methodology, inline citations, Deep-Dive block
+
+- `skills/technical-writing/SKILL.md`: a request routed through an Infobroker
+  workflow shape is now written as a research report against the shared
+  skeleton plus that shape's block, not as generic API-reference or tutorial
+  documentation. Standalone documentation requests keep the existing workflow.
+- `skills/infobroker/references/report-template.md`: the shared skeleton gains
+  `Methodology & Scope` (scope, searches and date, inclusion/exclusion,
+  technique and fit rationale, limits); every factual claim now carries an
+  inline `[S#]` marker resolving to the Source Register row that carries the
+  URL; Deep-Dive gains a subtopic coverage matrix, theme synthesis,
+  cross-subtopic contradictions, and open questions.
+- `skills/infobroker/references/workflows.md` and `skills/infobroker/SKILL.md`:
+  WRITE passes the routed shape, audience, and target length; CITE adopts the
+  `[S#]` convention; Deep-Dive documents its output block.
+- `skills/analysis-loop/SKILL.md`: the synthesis now states Methodology &
+  Scope, and the Phase 2 reflexion gate checks it.
+
 ## 2026.10.02 — Skill audit wedge: advisory task-quality checks, memory-safe runs
 
 - `test-skills.sh` gains `--audit` (run `test-fixtures/skills/audit/*.json`)
