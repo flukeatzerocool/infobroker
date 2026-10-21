@@ -907,7 +907,7 @@ verdict is preserved (REQ-026f).
 
 ### 9.2 G1 — Integration Tests
 
-- Each provider backend tested with mock HTTP responses (real responses recorded once, replayed in CI). Recorded fixtures SHALL be refreshed on a documented cadence so selector and format drift is caught before it reaches production. The cadence is 90 days, recorded per fixture in `test-fixtures/fixtures-meta.json`, and reported by `scripts/check-fixture-freshness.ts` (run by the push pipeline, not the deterministic gate suite).
+- Each provider backend tested with mock HTTP responses (real responses recorded once, replayed in CI). Recorded fixtures are refreshed on a documented cadence so selector and format drift is caught before it reaches production. The cadence is 90 days, recorded per fixture in `test-fixtures/fixtures-meta.json`, and reported by `scripts/check-fixture-freshness.ts` (run by the push pipeline, not the deterministic gate suite).
 - Fallback chain: mock provider A fails → provider B called → results from B returned
 - Hedged dispatch: mock a fast primary → verify only the primary is called; mock a slow primary plus a fast fallback → verify the fallback serves and only after the hedge window
 - Fallback depth: configure `output.fallback_depth` → verify the chain dispatches at most that many providers before reporting `all_providers_exhausted`

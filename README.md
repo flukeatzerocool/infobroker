@@ -120,10 +120,10 @@ Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
 behind a single tool surface. Twenty-one zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Five more providers unlock with API keys or self-hosting. A built-in corroboration engine cross-references independent
-sources to separate established facts from contested claims. Bundled
-client skills transform raw research into polished writing. Free first.
-Privacy always.
+configure. Five more providers unlock with API keys or self-hosting.
+A built-in corroboration engine cross-references independent sources to
+separate established facts from contested claims. Bundled client skills
+transform raw research into polished writing. Free first. Privacy always.
 
 [![infobroker MCP server](https://glama.ai/mcp/servers/flukeatzerocool/infobroker/badges/card.svg)](https://glama.ai/mcp/servers/flukeatzerocool/infobroker)
 [![M8ven Live Monitored](https://m8ven.ai/badge/mcp/flukeatzerocool-infobroker-1q5c6g)](https://m8ven.ai/mcp/flukeatzerocool-infobroker-1q5c6g)
