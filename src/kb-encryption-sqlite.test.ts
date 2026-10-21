@@ -11,7 +11,9 @@ import {
   kbStoreFormat,
   verifyStoreKey,
   getKbLockError,
+  rekeyStoreTo,
 } from "./kb.js";
+import { resolveKeySource } from "./kb-crypto.js";
 import type { KbConfig } from "./types.js";
 
 function config(dir: string, keyFile: string, enabled: boolean): KbConfig {
@@ -60,6 +62,23 @@ describe("SQLite at-rest encryption (REQ-084)", () => {
       initKb(config(dir, good, false));
       expect(kbStoreFormat()).toBe("plaintext");
       expect(kbSearch("alpha content", 5).length).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rekeys without loss of content", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-rekey-"));
+    try {
+      const good = keyFile(dir, "good.key");
+      initKb(config(dir, good, true));
+      kbIngest("rekey content", "rekey", "https://example.com/rekey", "test");
+      const oldKey = resolveKeySource(good)!;
+      const next = { kind: "raw" as const, dek: randomBytes(32) };
+      expect(rekeyStoreTo(null, next)).toBe("knowledge base re-keyed");
+      expect(verifyStoreKey(next)).toBe(true);
+      expect(verifyStoreKey(oldKey)).toBe(false);
+      expect(kbSearch("rekey content", 5).length).toBeGreaterThan(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
