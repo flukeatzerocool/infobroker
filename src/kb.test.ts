@@ -11,6 +11,7 @@ const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
 function makeConfig(overrides: Record<string, unknown> = {}): KbConfig {
   return {
     storage_path: dir,
+    store_backend: "json",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,

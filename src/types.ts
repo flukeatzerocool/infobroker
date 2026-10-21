@@ -185,6 +185,7 @@ export interface DeepConfig {
 
 export interface KbConfig {
   storage_path: string;
+  store_backend?: "sqlite" | "json";
   embedding_model: string;
   chunk_size: number;
   chunk_overlap: number;

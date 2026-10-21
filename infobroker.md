@@ -174,7 +174,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -512,6 +512,9 @@ The knowledge base SHALL support enable and disable of at-rest encryption (REQ-0
 
 **REQ-087 — KB Source Date Preservation**
 WHEN knowledge-base ingest knows a source's last-updated date, whether supplied by the caller or determined from a fetched URL per REQ-021c, the tool SHALL store that date with the ingested content. The list, get, and search actions SHALL report the stored source date alongside their other fields. WHEN no date is known, the actions SHALL omit the date field rather than guess. Re-ingesting a source SHALL preserve a previously stored date when the new ingest supplies none. _Check:_ G1.
+
+**REQ-108 — Knowledge Base Capacity**
+The knowledge base SHALL remain operable when the persisted chunk data exceeds the process heap: retrieval and inspection operations SHALL return complete results under a heap smaller than the stored chunk data. Model state proportional to the vocabulary MAY remain resident. A store upgrade SHALL preserve the prior store as a recoverable artifact at upgrade time and SHALL report the upgrade as a status event. WHEN the store is corrupt, the server SHALL preserve a backup and continue with an empty store, reporting the event. _Check:_ G1.
 
 **REQ-103 — Local Embedding Execution**
 Knowledge-base and passage retrieval SHALL be performed with an embedding model that executes within the server instance, and content submitted for embedding SHALL NOT be transmitted to a third party. The model reference SHALL be configurable so an alternative model can be selected without a specification change. WHEN no model is available, retrieval SHALL degrade with a remediation message and SHALL NOT prevent non-knowledge-base operation. Changing the configured model SHALL reconcile stored content per REQ-082. The active model name and availability SHALL be reported per REQ-060c. _Check:_ G1.
@@ -927,6 +930,7 @@ verdict is preserved (REQ-026f).
 - Rate-limit error code: mock an explicitly requested provider returning HTTP 429 → verify the error code is `rate_limited`, not `provider_unavailable` (REQ-002)
 - Key-pool rotation: supply two credentials; mock the first returning 401 then a success → verify the rejected credential is not reused and the second serves; mock 429 → verify that credential cools down while the other remains usable (REQ-104)
 - Embedding model unavailable: configure an unknown `embedding_model` → verify KB tools report degraded availability with a remediation and non-knowledge-base tools still work (REQ-103, F9)
+- KB capacity: open a store larger than the heap → verify search, list, get, and stats complete under a bounded heap and the migration event is reported (REQ-108)
 - Semantic passage ranking: rank a page's passages where an intent-matching passage shares no literal query words → verify it is returned above a disjoint passage (REQ-021b)
 - Config reload: change config → verify new provider active, old inactive
 - Token footprint: call `inspect_providers` spec action → verify `tool_schema_bytes` and `median_response_bytes` are present, numeric, and consistent with live registration
@@ -1092,6 +1096,7 @@ verdict is preserved (REQ-026f).
 | REQ-086 | KB Encryption Transitions and Recovery | 4.9 | G1 |
 | REQ-087 | KB Source Date Preservation | 4.9 | G1 |
 | REQ-103 | Local Embedding Execution | 4.9 | G1 |
+| REQ-108 | Knowledge Base Capacity | 4.9 | G1 |
 | REQ-104 | Key-Pool Rotation | 4.2 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
@@ -1541,7 +1546,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
-| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103 | G0, G1 |
+| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107 | G3 |

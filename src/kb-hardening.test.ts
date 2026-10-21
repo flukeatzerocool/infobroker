@@ -11,6 +11,7 @@ const base = mkdtempSync(join(tmpdir(), "infobroker-kb-hardening-"));
 function makeConfig(storagePath: string, overrides: Partial<KbConfig> = {}): KbConfig {
   return {
     storage_path: storagePath,
+    store_backend: "json",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,

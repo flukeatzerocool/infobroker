@@ -38,6 +38,7 @@ import {
   DEFAULT_MODEL,
   type EmbeddingModel,
 } from "./embed.js";
+import { SqliteStore } from "./kb-sqlite.js";
 
 interface VectorStore {
   chunks: KbChunk[];
@@ -49,6 +50,7 @@ interface VectorStore {
 }
 
 let store: VectorStore | null = null;
+let sqliteStore: SqliteStore | null = null;
 let kbConfig: KbConfig | null = null;
 let storagePath: string | null = null;
 let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
@@ -113,6 +115,15 @@ function configureModel(name: string | undefined): void {
 
 // Mirror the persisted model state into the active model before embedding.
 function syncModelState(): void {
+  if (sqliteStore) {
+    const meta = sqliteStore.meta();
+    if (activeModel.name === "signed-hash-tfidf") {
+      activeModel.load({ idf: meta.idf, docCount: meta.docCount });
+    } else if (meta.embed_state) {
+      activeModel.load(meta.embed_state);
+    }
+    return;
+  }
   if (!store) return;
   if (activeModel.name === "signed-hash-tfidf") {
     activeModel.load({ idf: store.idf, docCount: store.docCount });
@@ -124,6 +135,25 @@ function syncModelState(): void {
 // Re-fit a fitted model (LSA) over all stored text and re-embed every chunk so
 // stored and query vectors share one basis. Stateless models no-op.
 function refitFittedModel(): void {
+  if (sqliteStore) {
+    if (!activeModel.requiresFit) return;
+    const chunks = [...sqliteStore.iterateChunks()];
+    if (chunks.length === 0) {
+      const meta = sqliteStore.meta();
+      meta.embed_state = undefined;
+      sqliteStore.setMeta(meta);
+      return;
+    }
+    activeModel.fit(chunks.map((c) => c.text));
+    sqliteStore.replaceAllChunks(
+      chunks.map((chunk) => ({ ...chunk, embedding: activeModel.embed(chunk.text) }))
+    );
+    const meta = sqliteStore.meta();
+    meta.embed_state = activeModel.serialize();
+    meta.model = activeModel.name;
+    sqliteStore.setMeta(meta);
+    return;
+  }
   if (!store || !activeModel.requiresFit) return;
   const texts = store.chunks.map((c) => c.text);
   if (texts.length === 0) {
@@ -445,6 +475,49 @@ function computeFreshnessScore(tier: string, ingestedAt: number, now: number): n
 
 export function initKb(config: KbConfig): void {
   const raw = resolvePath(config.storage_path);
+
+  if ((config.store_backend ?? "json") === "sqlite") {
+    if (storagePath !== null) flushWrite();
+    if (store) store = null;
+    sqliteStore?.close();
+    sqliteStore = null;
+    kbConfig = config;
+    storagePath = raw;
+    resolvedKey = null;
+    lockError = null;
+    if (!existsSync(raw)) mkdirSync(raw, { recursive: true, mode: 0o700 });
+    if (config.encryption?.enabled) {
+      lockError = {
+        code: "config_error",
+        message: "Knowledge base encryption is not available for the SQLite backend in this build",
+        remediation: "Set kb.store_backend to \"json\" or disable kb.encryption until the SQLite encryption migration is complete.",
+      };
+    } else {
+      try {
+        sqliteStore = new SqliteStore(raw);
+        sqliteStore.init();
+      } catch (e) {
+        lockError = {
+          code: "config_error",
+          message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
+          remediation: "Inspect the knowledge-base directory and its permissions, or set kb.store_backend to \"json\".",
+        };
+        sqliteStore = null;
+      }
+    }
+    configureModel(config.embedding_model);
+    runTruncSweep();
+    if (sqliteStore) syncModelState();
+    runMaintenance();
+    if (maintenanceTimer) clearInterval(maintenanceTimer);
+    if (config.maintenance_interval_minutes > 0) {
+      maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+    }
+    return;
+  }
+
+  sqliteStore?.close();
+  sqliteStore = null;
   const wasEncrypted = storagePath !== null && (kbConfig?.encryption?.enabled ?? false);
 
   // If the storage path changes (e.g. an update alters the shipped default, or
@@ -553,6 +626,27 @@ export function initKb(config: KbConfig): void {
 }
 
 function ensureStableEmbeddings(): void {
+  if (sqliteStore) {
+    const meta = sqliteStore.meta();
+    const fitted = activeModel.requiresFit;
+    const stateMissing = fitted && !meta.embed_state;
+    if (meta.model === activeModel.name && !stateMissing) {
+      syncModelState();
+      return;
+    }
+    const chunks = [...sqliteStore.iterateChunks()];
+    if (fitted) activeModel.fit(chunks.map((c) => c.text));
+    else syncModelState();
+    const updated = chunks.map((chunk) => ({ ...chunk, embedding: activeModel.embed(chunk.text) }));
+    if (fitted) meta.embed_state = activeModel.serialize();
+    meta.model = activeModel.name;
+    sqliteStore.setMeta(meta);
+    sqliteStore.replaceAllChunks(updated);
+    sqliteStore.appendEvent(
+      `Embedding model reconciled at ${new Date().toISOString()}: "${activeModel.name}", ${updated.length} chunk(s) re-embedded`
+    );
+    return;
+  }
   if (!store) return;
   const fitted = activeModel.requiresFit;
   const stateMissing = fitted && !store.embed_state;
@@ -580,6 +674,7 @@ function ensureStableEmbeddings(): void {
 
 export function flushKbWrites(): void {
   flushWrite();
+  sqliteStore?.flush();
 }
 
 export function isKbConfigured(): boolean {
@@ -593,6 +688,7 @@ export function getKbLockError(): { code: string; message: string; remediation: 
 
 export function getKbEncryptionState(): "enabled" | "disabled" | "locked" {
   if (lockError) return "locked";
+  if (sqliteStore) return sqliteStore.format() === "encrypted" ? "enabled" : "disabled";
   return kbConfig?.encryption?.enabled ? "enabled" : "disabled";
 }
 
@@ -637,6 +733,233 @@ export function resolveCollection(explicit?: string): string {
   return "default";
 }
 
+function sqliteSearch(
+  query: string,
+  maxResults: number,
+  collection?: string,
+  sourceType?: string
+): KbSearchResult[] {
+  if (!sqliteStore) return [];
+  syncModelState();
+  const queryTokens = tokenize(query);
+  const queryVec = activeModel.embed(query);
+  const kwRegexes = queryTokens.map((t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
+  const actualMax = Math.min(maxResults, kbConfig?.max_results ?? maxResults);
+  const results: KbSearchResult[] = [];
+  const now = Date.now();
+  for (const chunk of sqliteStore.iterateChunks()) {
+    if (collection && chunk.collection !== collection) continue;
+    if (sourceType && chunk.source_type !== sourceType) continue;
+    const vecSimilarity = cosineSimilarity(queryVec, chunk.embedding);
+    const kwScore = keywordScore(kwRegexes, chunk.text);
+    const combinedScore = vecSimilarity * 0.7 + kwScore * 0.3;
+    if (combinedScore <= 0) continue;
+    results.push({
+      score: combinedScore,
+      freshness_score: computeFreshnessScore(chunk.freshness_tier, chunk.ingested_at, now),
+      freshness_tier: chunk.freshness_tier,
+      source_url: chunk.source_url,
+      title: chunk.title,
+      snippet: chunk.text.slice(0, 200),
+      collection: chunk.collection,
+      provider: chunk.provider,
+      source_type: chunk.source_type,
+      ingested_at: chunk.ingested_at,
+      ...(chunk.source_updated_at ? { source_updated_at: chunk.source_updated_at } : {}),
+    });
+  }
+  results.sort((a, b) => b.score * b.freshness_score - a.score * a.freshness_score);
+  return results.slice(0, actualMax);
+}
+
+function sqliteIngest(
+  text: string,
+  title: string,
+  sourceUrl: string,
+  provider: string,
+  collection?: string,
+  sourceType?: string,
+  freshnessTier?: string,
+  sourceUpdatedAt?: string
+): number {
+  if (!sqliteStore) return 0;
+  const resolvedCollection = resolveCollection(collection);
+  const resolvedSourceType = sourceType || "web_search";
+  const resolvedTier = freshnessTier || kbConfig?.freshness?.default_tier || "stable";
+  const chunks = chunkText(text, title);
+  if (chunks.length === 0) {
+    sqliteStore.appendEvent(`Ingest skipped at ${new Date().toISOString()}: empty or unsplittable text (${text.slice(0, 80)})`);
+    return 0;
+  }
+  const now = Date.now();
+
+  if (sourceUrl && sourceUrl.startsWith("report://")) {
+    const existingIds = new Set<string>();
+    for (const chunk of sqliteStore.iterateChunks()) {
+      if (chunk.source_url.startsWith("report://")) existingIds.add(chunk.source_url);
+    }
+    const incoming = `${title} ${text.slice(0, 500)}`;
+    for (const id of existingIds) {
+      if (id === sourceUrl) continue;
+      let existingText = "";
+      for (const chunk of sqliteStore.iterateChunks()) {
+        if (chunk.source_url === id) {
+          existingText = chunk.text;
+          break;
+        }
+      }
+      if (!existingText) continue;
+      const sim = pairwiseSimilarity([incoming, `${title} ${existingText.slice(0, 500)}`], "lsa")[0]?.[1] ?? 0;
+      if (sim >= 0.92) {
+        sourceUrl = id;
+        break;
+      }
+    }
+  }
+
+  if (sourceUrl) {
+    if (!sourceUpdatedAt) {
+      for (const chunk of sqliteStore.iterateChunks()) {
+        if (chunk.source_url === sourceUrl && chunk.source_updated_at) {
+          sourceUpdatedAt = chunk.source_updated_at;
+          break;
+        }
+      }
+    }
+  }
+
+  const useFitted = activeModel.requiresFit;
+  if (!useFitted) syncModelState();
+  const newChunks: KbChunk[] = chunks.map((chunkBody, index) => ({
+    id: randomUUID(),
+    text: chunkBody,
+    embedding: useFitted ? [] : activeModel.embed(chunkBody),
+    source_url: sourceUrl,
+    chunk_index: index,
+    title,
+    provider,
+    collection: resolvedCollection,
+    source_type: resolvedSourceType,
+    freshness_tier: resolvedTier,
+    ingested_at: now,
+    ...(sourceUpdatedAt ? { source_updated_at: sourceUpdatedAt } : {}),
+  }));
+
+  if (sourceUrl) sqliteStore.replaceChunks(sourceUrl, newChunks);
+  else sqliteStore.insertChunks(newChunks);
+
+  const meta = sqliteStore.meta();
+  for (const chunkBody of chunks) {
+    const seen = new Set<string>();
+    for (const term of tokenize(chunkBody)) {
+      if (seen.has(term)) continue;
+      seen.add(term);
+      meta.idf[term] = (meta.idf[term] || 0) + 1;
+    }
+    meta.docCount++;
+  }
+  sqliteStore.setMeta(meta);
+  if (useFitted) refitFittedModel();
+  return chunks.length;
+}
+
+function sqliteStats(): KbStats {
+  const collections: Record<string, number> = {};
+  const tiers: Record<string, number> = {};
+  let count = 0;
+  let lastIngestion = 0;
+  if (sqliteStore) {
+    for (const chunk of sqliteStore.iterateChunks()) {
+      count++;
+      collections[chunk.collection] = (collections[chunk.collection] || 0) + 1;
+      tiers[chunk.freshness_tier] = (tiers[chunk.freshness_tier] || 0) + 1;
+      if (chunk.ingested_at > lastIngestion) lastIngestion = chunk.ingested_at;
+    }
+  }
+  let sizeBytes = 0;
+  for (const name of [sqliteStore?.path ?? "", `${sqliteStore?.path ?? ""}-wal`, `${sqliteStore?.path ?? ""}-shm`]) {
+    if (name && existsSync(name)) {
+      try {
+        sizeBytes += statSync(name).size;
+      } catch {
+        // sidecar disappeared between stat and open
+      }
+    }
+  }
+  return {
+    chunk_count: count,
+    collections,
+    freshness_tiers: Object.keys(tiers).length > 0 ? tiers : undefined,
+    storage_size_bytes: sizeBytes,
+    last_ingestion: lastIngestion ? new Date(lastIngestion).toISOString() : null,
+    model_available: modelAvailable,
+    model_name: modelAvailable ? activeModel.name : modelConfiguredName,
+    events: sqliteStore?.events() ?? [],
+    encryption: getKbEncryptionState(),
+  };
+}
+
+function sqliteList(collection?: string, sourceType?: string): KbListEntry[] {
+  if (!sqliteStore) return [];
+  const bySource = new Map<string, KbListEntry>();
+  for (const chunk of sqliteStore.iterateChunks()) {
+    if (collection && chunk.collection !== collection) continue;
+    if (sourceType && chunk.source_type !== sourceType) continue;
+    const key = chunk.source_url || `chunk:${chunk.id}`;
+    const existing = bySource.get(key);
+    if (existing) {
+      existing.chunk_count++;
+      if (chunk.ingested_at > existing.ingested_at) existing.ingested_at = chunk.ingested_at;
+    } else {
+      bySource.set(key, {
+        source_url: chunk.source_url,
+        title: chunk.title,
+        collection: chunk.collection,
+        source_type: chunk.source_type,
+        freshness_tier: chunk.freshness_tier,
+        chunk_count: 1,
+        ingested_at: chunk.ingested_at,
+        ...(chunk.source_updated_at ? { source_updated_at: chunk.source_updated_at } : {}),
+      });
+    }
+  }
+  return [...bySource.values()].sort((a, b) => b.ingested_at - a.ingested_at);
+}
+
+function sqliteGet(sourceUrl: string): ReturnType<typeof kbGet> {
+  if (!sqliteStore) return null;
+  const matches: KbChunk[] = [];
+  for (const chunk of sqliteStore.iterateChunks()) {
+    if (chunk.source_url === sourceUrl) matches.push(chunk);
+  }
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => (a.chunk_index ?? 0) - (b.chunk_index ?? 0));
+  const first = matches[0];
+  return {
+    title: first.title,
+    source_url: first.source_url,
+    collection: first.collection,
+    source_type: first.source_type,
+    freshness_tier: first.freshness_tier,
+    ingested_at: matches.reduce((m, c) => Math.max(m, c.ingested_at), 0),
+    text: matches.map((c) => c.text).join("\n"),
+    ...(first.source_updated_at ? { source_updated_at: first.source_updated_at } : {}),
+  };
+}
+
+function sqliteDelete(collection?: string, sourceUrl?: string): number {
+  if (!sqliteStore) return 0;
+  if (!collection && !sourceUrl) throw new Error("invalid_input");
+  const removed = sqliteStore.deleteWhere(
+    (c) => (!!collection && c.collection === collection) || (!!sourceUrl && c.source_url === sourceUrl)
+  );
+  if (removed > 0) {
+    rebuildIdf();
+    refitFittedModel();
+  }
+  return removed;
+}
+
 export function kbSearch(
   query: string,
   maxResults: number = 10,
@@ -644,6 +967,7 @@ export function kbSearch(
   sourceType?: string
 ): KbSearchResult[] {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (sqliteStore) return sqliteSearch(query, maxResults, collection, sourceType);
   if (!store) return [];
 
   syncModelState();
@@ -695,6 +1019,9 @@ export function kbIngest(
   sourceUpdatedAt?: string
 ): number {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (sqliteStore) {
+    return sqliteIngest(text, title, sourceUrl, provider, collection, sourceType, freshnessTier, sourceUpdatedAt);
+  }
   if (!store) return 0;
   const s = store;
 
@@ -784,6 +1111,8 @@ export function kbStats(): KbStats {
     };
   }
 
+  if (sqliteStore) return sqliteStats();
+
   const collections: Record<string, number> = {};
   const tiers: Record<string, number> = {};
   let lastIngestion = 0;
@@ -817,6 +1146,7 @@ export function kbStats(): KbStats {
 
 export function kbList(collection?: string, sourceType?: string): KbListEntry[] {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (sqliteStore) return sqliteList(collection, sourceType);
   if (!store) return [];
 
   const bySource = new Map<string, KbListEntry>();
@@ -847,6 +1177,7 @@ export function kbList(collection?: string, sourceType?: string): KbListEntry[] 
 
 export function kbGet(sourceUrl: string): { title: string; source_url: string; collection: string; source_type: string; freshness_tier: string; ingested_at: number; text: string; source_updated_at?: string } | null {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (sqliteStore) return sqliteGet(sourceUrl);
   if (!store) return null;
 
   const matches = store.chunks
@@ -883,6 +1214,7 @@ export function resolveReportIdentity(title: string, providedUrl?: string): stri
 
 export function kbDelete(collection?: string, sourceUrl?: string): number {
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (sqliteStore) return sqliteDelete(collection, sourceUrl);
   if (!store) return 0;
   if (!collection && !sourceUrl) throw new Error("invalid_input");
 
@@ -903,6 +1235,22 @@ export function kbDelete(collection?: string, sourceUrl?: string): number {
 }
 
 function rebuildIdf(): void {
+  if (sqliteStore) {
+    const meta = sqliteStore.meta();
+    meta.idf = {};
+    meta.docCount = 0;
+    for (const chunk of sqliteStore.iterateChunks()) {
+      const seen = new Set<string>();
+      for (const t of tokenize(chunk.text)) {
+        if (seen.has(t)) continue;
+        seen.add(t);
+        meta.idf[t] = (meta.idf[t] || 0) + 1;
+      }
+      meta.docCount++;
+    }
+    sqliteStore.setMeta(meta);
+    return;
+  }
   if (!store) return;
   store.idf = {};
   store.docCount = 0;
@@ -984,6 +1332,23 @@ export function resolveKeyFile(path: string): string {
 }
 
 export function runMaintenance(): void {
+  if (sqliteStore) {
+    const tiers = kbConfig?.freshness?.tiers;
+    if (!tiers) return;
+    const now = Date.now();
+    const removed = sqliteStore.deleteWhere((chunk) => {
+      const def = tiers[chunk.freshness_tier];
+      if (!def || !def.expiry_hours || def.expiry_hours <= 0) return false;
+      const cutoff = now - def.expiry_hours * 60 * 60 * 1000;
+      return chunk.ingested_at <= cutoff;
+    });
+    if (removed > 0) {
+      rebuildIdf();
+      refitFittedModel();
+      sqliteStore.appendEvent(`Maintenance at ${new Date().toISOString()}: removed ${removed} expired chunks`);
+    }
+    return;
+  }
   if (!kbConfig || !store) return;
   const tiers = kbConfig.freshness?.tiers;
   if (!tiers) return;
@@ -1037,6 +1402,7 @@ export function sealReportBytes(clear: Buffer): Buffer {
  * in-tool re-key where the source secret is already loaded.
  */
 export function rekeyStoreTo(from: ResolvedKey | null, to: ResolvedKey): string | null {
+  if (sqliteStore) return null;
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return null;
   const bytes = readStoreBytes()!;
@@ -1114,6 +1480,7 @@ export function generateKeyFile(path: string): string {
  * store, wrong key, or tampered store).
  */
 export function verifyStoreKey(key?: ResolvedKey): boolean {
+  if (sqliteStore) return false;
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return false;
   const bytes = readStoreBytes()!;
@@ -1152,6 +1519,7 @@ export function backupKeyFile(backupPath: string): string | null {
 
 /** On-disk format of the store at rest: "encrypted", "plaintext", or "none". */
 export function kbStoreFormat(): "encrypted" | "plaintext" | "none" {
+  if (sqliteStore) return sqliteStore.format();
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return "none";
   const bytes = readStoreBytes()!;

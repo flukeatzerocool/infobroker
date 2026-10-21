@@ -408,6 +408,9 @@ function validateConfig(config: Config): void {
     if (typeof kb.auto_index !== "boolean") {
       errors.push("kb.auto_index must be a boolean");
     }
+    if (kb.store_backend !== undefined && !["sqlite", "json"].includes(kb.store_backend)) {
+      errors.push("kb.store_backend must be one of: sqlite, json");
+    }
     if (kb.reports_dir !== undefined && typeof kb.reports_dir !== "string") {
       errors.push("kb.reports_dir must be a string");
     }

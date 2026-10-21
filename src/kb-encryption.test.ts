@@ -13,6 +13,7 @@ const KEY_B64 = Buffer.from(KEY, "utf-8").toString("base64");
 function makeConfig(dir: string, encryption: { enabled: boolean; key_file?: string } | undefined): KbConfig {
   return {
     storage_path: dir,
+    store_backend: "json",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.20 — KB: disk-backed SQLite backend (REQ-108)
+
+- Added `src/kb-store.ts` (storage seam, canonical artifact predicates) and
+  `src/kb-sqlite.ts` (row-per-chunk SQLite backend that streams search, list,
+  get, and stats). The legacy JSON backend remains the default in this commit.
+- Added optional `kb.store_backend` (`sqlite` | `json`) with config validation;
+  existing KB tests are pinned to `json` so the later default flip is explicit.
+- Registered REQ-108 (Knowledge Base Capacity) and its G1 test/coverage entry.
+
 ## 2026.10.20 — Routing gate covers every tool; strict audit; intermediate tokens
 
 - `check-intent-citations` now fails when a registered tool has no citation, not
