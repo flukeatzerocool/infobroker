@@ -65,7 +65,7 @@ function evaluateChecks(manifest, text, workdirPath) {
     record(name, bad.length === 0, bad.join(", "));
   }
 
-  const lower = text.replace(/[*_`~]/g, "").toLowerCase();
+  const lower = text.replace(/[*`~]/g, "").toLowerCase();
   const includesAny = (pattern) =>
     pattern.toLowerCase().split("|").some((alt) => alt.length > 0 && lower.includes(alt));
 
@@ -132,7 +132,11 @@ const result = { skill, status: "pass", missing: [] };
 
 if (grade && manifest.rubric?.length) {
   const rubric = manifest.rubric.join("\n- ");
-  const prompt = `You are grading a skill test. The skill "${skill}" was run with this task output:\n\n---OUTPUT---\n${text.slice(0, 6000)}\n---END OUTPUT---\n\nGrade each of the following rubric criteria as yes or no, then output a single line in the exact form: GRADE <n>/<total> pass|fail.\n\nRubric:\n- ${rubric}`;
+  const gradeText =
+    text.length <= 16000
+      ? text
+      : `${text.slice(0, 12000)}\n\n[... middle omitted ...]\n\n${text.slice(-4000)}`;
+  const prompt = `You are grading a skill test. The skill "${skill}" was run with this task output:\n\n---OUTPUT---\n${gradeText}\n---END OUTPUT---\n\nGrade each of the following rubric criteria as yes or no, then output a single line in the exact form: GRADE <n>/<total> pass|fail.\n\nRubric:\n- ${rubric}`;
   const modelFlag = gradeModel ? ` --model ${JSON.stringify(gradeModel)}` : "";
   try {
     const out = execSync(

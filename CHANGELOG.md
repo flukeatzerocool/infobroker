@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.10.20 — Skill audit expanded to the remaining four skills
+
+- Added `test-fixtures/skills/audit/{technical-writing,translation,infobroker,analysis-loop}.json`
+  and `test-fixtures/skills/inputs/translation-audit.txt`, using the advisory
+  `checks` schema for structure, placeholders, facts, and source URLs.
+- `evaluate.mjs` grades up to 16,000 characters as head + tail instead of
+  truncating at 6,000, and its Markdown normalization no longer strips
+  underscores inside `{{placeholders}}`.
+- Results: technical-writing, translation, and infobroker pass deterministic
+  checks 3/3; analysis-loop passes content checks 3/3, with one run emitting
+  phase tokens across intermediate messages (a final-text evaluator
+  limitation, not a skill defect). No skill files were edited in this change.
+
 ## 2026.10.20 — Routing citation integrity gate (REQ-107)
 
 - Added `src/intent-citations.ts` and `scripts/check-intent-citations.ts`: the

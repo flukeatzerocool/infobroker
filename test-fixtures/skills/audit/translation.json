@@ -1,0 +1,41 @@
+{
+  "skill": "translation",
+  "prompt": "Load the translation skill and apply it to translate the source text at the input path below from English to German. Write the translation directly in your reply, preserving meaning, tone, and structure. Keep the source language professional/semi-formal (Sie form).\n\nInput file: ./input.txt\n\nYou MUST end your final reply with the completion line exactly as specified in the skill's Output Contract.",
+  "inputs": [
+    "translation-audit.txt"
+  ],
+  "expected_tokens": [
+    "translation complete."
+  ],
+  "checks": {
+    "required_facts": [
+      "{{user_name}}",
+      "{{request_id}}",
+      "{{timestamp}}",
+      "400",
+      "rund um die Uhr|24 stunden|24 hours"
+    ],
+    "required_any": [
+      "wird",
+      "ist",
+      "und",
+      "der",
+      "die",
+      "das"
+    ],
+    "forbidden_patterns": [
+      "TODO",
+      "lorem ipsum"
+    ]
+  },
+  "rubric": [
+    "Output is in German",
+    "Meaning of all sentences is preserved",
+    "No sentences omitted or duplicated",
+    "Placeholders {{user_name}}, {{request_id}}, and {{timestamp}} are intact",
+    "Technical terms handled consistently (400 error, digest, log)",
+    "Formality register respected (Sie form)",
+    "Completion line present"
+  ],
+  "time_limit": "none"
+}

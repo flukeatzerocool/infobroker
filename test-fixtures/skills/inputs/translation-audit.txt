@@ -1,0 +1,11 @@
+Welcome, {{user_name}}. Your request (ID: {{request_id}}) was received at
+{{timestamp}}.
+
+Do not share your password. Passwords are hashed before they are stored, and
+the digest is never written to the log.
+
+When the list of items is empty, the server returns a 400 error with a message
+describing the problem.
+
+The service is available 24 hours a day and restarts automatically after an
+unexpected failure.

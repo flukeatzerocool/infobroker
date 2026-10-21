@@ -1,0 +1,42 @@
+{
+  "skill": "technical-writing",
+  "prompt": "Load the technical-writing skill and apply it to produce a short API reference for a fictional endpoint. Write it directly in your reply.\n\nTask: Document an HTTP endpoint `POST /v1/search` that accepts a `query` string (required), an optional `limit` integer (default 10, max 100), and returns a JSON object with a `results` array and a `total` integer. Include a table of contents, one worked request/response example with a copy-pasteable curl command, and a Next steps section.\n\nYou MUST end your final reply with the completion line exactly as specified in the skill's Output Contract.",
+  "inputs": [],
+  "expected_tokens": [
+    "technical-writing complete."
+  ],
+  "checks": {
+    "required_facts": [
+      "POST /v1/search",
+      "query",
+      "limit",
+      "default of 10|default 10|default: 10|defaults to 10|default is 10|default value of 10",
+      "100",
+      "results",
+      "total",
+      "table of contents|contents|toc",
+      "next steps|next step"
+    ],
+    "required_any": [
+      "curl",
+      "```bash",
+      "```sh",
+      "```http"
+    ],
+    "forbidden_patterns": [
+      "TODO",
+      "lorem ipsum",
+      "<insert",
+      "changeme"
+    ]
+  },
+  "rubric": [
+    "Document type identified (API reference)",
+    "Structure includes a table of contents and headings",
+    "A complete, copy-pasteable example is provided",
+    "Parameters documented with types, required/optional status, and limits",
+    "No placeholder text remains (e.g. TODO, lorem)",
+    "Completion line present"
+  ],
+  "time_limit": "none"
+}
