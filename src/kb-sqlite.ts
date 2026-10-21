@@ -4,11 +4,13 @@
 // When encryption is enabled the whole row payload, the model state, and event
 // messages are sealed; the salt and encryption marker live in `meta`.
 import { DatabaseSync } from "node:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { KbChunk } from "./types.js";
 import {
+  LEGACY_JSON_STORE,
   LIVE_SQLITE_STORE,
+  isKbArchiveArtifact,
   type KbMeta,
   type KbStore,
 } from "./kb-store.js";
@@ -309,6 +311,27 @@ export class SqliteStore implements KbStore {
     const key = deriveRowKey(secret, this.salt);
     this.resealAll({ key, encrypted: true });
     this.checkpoint();
+    this.removePlaintextArchives();
+  }
+
+  /**
+   * REQ-084: once encryption is enabled, a plaintext migration/corruption/
+   * rollback archive (or a leftover legacy JSON store) must not survive.
+   * Failure is fatal to the transition; the caller must not report success.
+   */
+  private removePlaintextArchives(): void {
+    const dir = dirname(this.path);
+    for (const name of readdirSync(dir)) {
+      if (name === LIVE_SQLITE_STORE || name.startsWith(`${LIVE_SQLITE_STORE}-`)) continue;
+      if (!isKbArchiveArtifact(name) && name !== LEGACY_JSON_STORE) continue;
+      try {
+        unlinkSync(join(dir, name));
+      } catch (e) {
+        throw new Error(
+          `plaintext archive "${name}" could not be removed after enabling encryption: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+    }
   }
 
   disableEncryption(secret: ResolvedKey): void {

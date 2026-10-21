@@ -49,7 +49,7 @@ describe("gate isolation (REQ-055)", () => {
       expect(statSync(canary).mtimeMs).toBe(before);
       rmSync(canaryDir, { recursive: true, force: true });
     } finally {
-      rmSync(iso.root, { recursive: true, force: true });
+      rmSync(iso.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   }, 180_000);
 });

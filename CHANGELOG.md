@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.10.20 — KB: legacy retention, docs, and memory verification
+
+- Retained the JSON backend as the one-release `kb.store_backend: "json"`
+  escape hatch and recorded its removal, streaming LSA, and an
+  encrypted-compatible prefilter on `ROADMAP.md`. D-058 records the engine,
+  encryption, migration, and rollback decisions.
+- Updated the AGENTS layer map, the shipped-KB gate (shared artifact
+  predicates), `.gitignore`, and the README/spec store descriptions.
+- Verification: a 470 MB synthetic store (6,000 chunks x 4,096 dims) served
+  `search`, `list`, `get`, and `stats` under `--max-old-space-size=128`
+  (20 MB heap used, 119 MB RSS, 3.5 s). A copy of the 513 MB legacy store
+  migrated 50,806 chunks in 6.2 s with the original preserved. Search latency
+  missed the 1 s target, so the encrypted-compatible prefilter is scheduled.
+
 ## 2026.10.20 — KB: SQLite default, automatic migration, row encryption
 
 - `kb.store_backend` now defaults to `sqlite` (config.json). A legacy

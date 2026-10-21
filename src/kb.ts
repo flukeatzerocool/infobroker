@@ -542,6 +542,7 @@ export function initKb(config: KbConfig): void {
             message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
             remediation: "Inspect the knowledge-base directory and its permissions, or provide the correct key.",
           };
+          sqliteStore?.close();
           sqliteStore = null;
         }
       }

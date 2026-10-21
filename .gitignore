@@ -9,3 +9,8 @@ knowledge-base/
 vector-store*.json
 .infobroker/
 .playwright-cli/
+vector-store.sqlite*
+.vector-store.migrate-*
+vector-store.json.migrated-*
+vector-store.corrupt-*
+vector-store.pre-rollback-*

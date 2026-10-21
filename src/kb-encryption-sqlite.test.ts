@@ -1,6 +1,6 @@
 // @implements REQ-084 REQ-108 REQ-085
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -47,7 +47,11 @@ describe("SQLite at-rest encryption (REQ-084)", () => {
     const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-enc-sqlite-"));
     try {
       const good = keyFile(dir, "good.key");
+      writeFileSync(join(dir, "vector-store.json.migrated-123"), "plaintext archive");
+      writeFileSync(join(dir, "vector-store.corrupt-123.json"), "plaintext backup");
       initKb(config(dir, good, true));
+      expect(existsSync(join(dir, "vector-store.json.migrated-123"))).toBe(false);
+      expect(existsSync(join(dir, "vector-store.corrupt-123.json"))).toBe(false);
       kbIngest("encrypted alpha content", "alpha", "https://example.com/alpha", "test");
       expect(kbStoreFormat()).toBe("encrypted");
       expect(verifyStoreKey()).toBe(true);
@@ -65,7 +69,11 @@ describe("SQLite at-rest encryption (REQ-084)", () => {
     const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-enc-wrong-"));
     try {
       const good = keyFile(dir, "good.key");
+      writeFileSync(join(dir, "vector-store.json.migrated-123"), "plaintext archive");
+      writeFileSync(join(dir, "vector-store.corrupt-123.json"), "plaintext backup");
       initKb(config(dir, good, true));
+      expect(existsSync(join(dir, "vector-store.json.migrated-123"))).toBe(false);
+      expect(existsSync(join(dir, "vector-store.corrupt-123.json"))).toBe(false);
       kbIngest("secret content", "secret", "https://example.com/secret", "test");
 
       const wrong = keyFile(dir, "wrong.key");

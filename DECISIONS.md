@@ -2,6 +2,31 @@
 
 ## Active Decisions
 
+### D-058: Disk-Backed SQLite Knowledge Base (REQ-108; 2026.10.20)
+
+The knowledge base parsed the entire `vector-store.json` (513 MB in the live
+instance) into memory at startup, so heap use grew with stored chunk count and
+repeated gate runs could exhaust a host. This moves the default store to
+`node:sqlite` — built into Node 24, no dependency or native build — and streams
+chunks for search/list/get/stats. Each row stores the chunk payload; when
+encryption is enabled the payload, IDF/model state, and event messages are
+sealed per row with AES-256-GCM, and a passphrase is stretched once at open
+with a store salt. A legacy JSON store is migrated non-destructively on first
+open and preserved as `vector-store.json.migrated-<timestamp>`; the JSON
+backend remains as a one-release `store_backend` escape hatch. Migration is
+non-destructive but `JSON.parse` of a 513 MB legacy store is a one-time ~1.5 GB
+peak; OOM aborts before any write. Enabling encryption removes plaintext
+archives, so rollback is available only if encryption has never been enabled.
+
+Alternatives rejected: sharded JSON (search still loads all chunks);
+`better-sqlite3`/SQLCipher (native dependency); memory-mapped binary (no built-in
+mmap, high custom-format risk); keeping the single JSON store (does not fix the
+finding). LSA remains an explicit exception: its SVD allocates O(n·v)/O(n·k),
+so the bounded-heap contract covers the default signed-hash model; the roadmap
+records a streaming LSA redesign.
+
+---
+
 ### D-057: Routing Citation Integrity Gate (REQ-107; 2026.10.20)
 
 The client routing surface had four hand-maintained intent/tool tables and no
