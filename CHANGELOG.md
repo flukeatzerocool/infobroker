@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.10.20 — Routing citation integrity gate (REQ-107)
+
+- Added `src/intent-citations.ts` and `scripts/check-intent-citations.ts`: the
+  client routing surface (`SKILL.md`, `journeys.md`, `workflows.md`,
+  `decision-tree.md`, `instructions/search-preferences.md`) is validated against
+  the live tool schema. Every tool, operation, and parameter citation must
+  resolve; every declared operation must be cited at least once; a seeded stale
+  citation fails the gate.
+- Migrated the routing docs to canonical citations and documented the three
+  previously uncited operations: `fetch_page (crawl)`,
+  `fetch_page (detect_date)`, and `reload_config (migrate)`.
+- Rewrote the instruction file's double-prefixed tool names to the
+  server-registered single prefix. Accepted risk: the deployed client currently
+  exposes `infobroker_infobroker_*`; the gate validates the server schema, not
+  client namespace resolution.
+- Added REQ-107 and wired `npm run check-intent-citations` into `npm run check`.
+  No tool or runtime behavior changed.
+
 ## 2026.10.02 — Shape-aware report writing: methodology, inline citations, Deep-Dive block
 
 - `skills/technical-writing/SKILL.md`: a request routed through an Infobroker

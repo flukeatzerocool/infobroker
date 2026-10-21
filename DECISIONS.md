@@ -2,6 +2,29 @@
 
 ## Active Decisions
 
+### D-057: Routing Citation Integrity Gate (REQ-107; 2026.10.20)
+
+The client routing surface had four hand-maintained intent/tool tables and no
+gate tying them to the live schema; `validate-spec` checked only file presence.
+This adds a citation gate that derives operations from the live `tools/list`
+(action enums, boolean modes, and the `fetch_page (question)` string allowlist),
+requires every operation to be cited at least once, and resolves every tool,
+operation, and parameter citation. The four skill files use bare tool names;
+`instructions/search-preferences.md` uses the `infobroker_*` prefix.
+
+Alternatives rejected: an intent registry plus generated docs (too much surface
+for seven tools and no demonstrated drift); a tool-name-only check (misses the
+hidden operation surface); adding a grouping dimension to TDQS (the external
+score stays untouched). The gate reports 114 citations with zero findings after
+migration; the seeded-stale fixture proves it can fail.
+
+Accepted risk: the deployed client exposes `infobroker_infobroker_*` and the
+headless probe returned NO_SUCH_TOOL for `infobroker_search_web`. The user
+explicitly authorized the single-prefix rewrite after seeing that evidence. The
+gate validates the server's `tools/list`, not client namespace resolution.
+Verification: `npm run check-intent-citations`, `npm run validate-spec`, and
+`npm run check`.
+
 ### D-056: TDQS 1.2 Conformance Gate and Score-Improvement Pass (REQ-040, REQ-106; 2026.10.02)
 
 The Glama TDQS audit (2026-09-30) scored the server A 4.8/5.0: `search_web` at

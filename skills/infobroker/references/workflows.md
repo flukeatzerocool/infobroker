@@ -14,18 +14,18 @@ Every shape composes from these steps; a shape names the steps it uses
 rather than restating them.
 
 - **RECALL** — `search_web` performs KB-first recall automatically before
-  external providers; use a direct `manage_kb` (action search) only when stored
+  external providers; use a direct `manage_kb (action: search)` only when stored
   content alone can answer the task or to inspect the store.
 - **SEARCH** — `search_web` (multi-provider, auto-selection, fallback
-  chain). Use `verify_claims` when a claim is contested; use `deep: true`
+  chain). Use `verify_claims` when a claim is contested; use `search_web (deep)`
   when you want passages read from the top results, not just snippets.
-  Use `research: true` (multi-variant fan-out with deep reads) only for the
+  Use `search_web (research)` (multi-variant fan-out with deep reads) only for the
   Deep-Dive, Competitive Evaluation, and Gated Analysis shapes — it is
   token-expensive, and simple lookups never escalate to it.
-- **EXTRACT** — `fetch_page` on promising URLs for full content; pass
-  `question` to a page you are reading to answer a specific question, so only
+- **EXTRACT** — `fetch_page` on promising URLs for full content; use
+  `fetch_page (question)` on a page you are reading to answer a specific question, so only
   the ranked passages that address it are returned. For a one-call
-  search-and-read, `search_web` with `deep: true` returns ranked passages per
+  search-and-read, `search_web (deep)` returns ranked passages per
   source.
 - **VERIFY** — cross-reference across sources, score confidence, flag
   contradictions explicitly. Use `verify_claims` for contested claims and
@@ -137,8 +137,8 @@ naming what is absent, and a source register.
 **Trigger:** track a topic across time ("what changed", "monitor X",
 "watch this", "weekly briefing").
 
-**Pipeline:** establish baseline → `manage_kb` freshness check → re-SEARCH →
-compare to baseline → report only the deltas → ingest the new results.
+**Pipeline:** establish baseline → `manage_kb (action: stats)` freshness check → re-SEARCH →
+compare to baseline → report only the deltas → `manage_kb (action: ingest)` the new results.
 
 **Technique:** Indicators — define signposts for the topic before comparing,
 so the delta is reported against what would confirm or weaken change.

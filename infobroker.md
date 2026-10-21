@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.10.02
+**Spec version:** 2026.10.20
 
 ## Contents
 
@@ -163,6 +163,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Agreement map** | The corroboration summary grouping findings as `green` (agreed), `yellow` (contested), or `red` (gaps) (§8.2). |
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
+| **Client routing surface** | The instruction file and skill reference files that map user intent to Infobroker tools: `instructions/search-preferences.md`, `SKILL.md`, and the skill reference tables (REQ-050, REQ-053, REQ-107). |
 | **Provider priority** | A configuration value ordering providers within a dispatch chain (REQ-010). |
 | **Routing priority** | The `search_web` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
 | **Provenance** | The recorded origin of a result or response — the serving provider, the source URL, and, for corroboration, the analytic settings and per-source contributions (REQ-020, REQ-026d). |
@@ -173,7 +174,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -406,6 +407,9 @@ The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Me
 
 **REQ-054 — User Documentation**
 The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers. _Check:_ G3 (file presence).
+
+**REQ-107 — Routing citation integrity**
+Every tool reference in the client routing surface SHALL resolve to a registered tool, and every operation reference SHALL resolve to an operation declared by the live tool schema. Every declared operation SHALL be cited at least once across the routing surface. A gate SHALL fail when a citation is unresolved, when an operation is uncovered, or when a seeded stale citation is not detected. *Acceptance criterion:* a renamed tool or operation fails the gate, and the seeded-stale fixture fails as expected. _Check:_ G3.
 
 **REQ-088 — Gated-Analysis Technique Selection**
 The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
@@ -988,6 +992,7 @@ verdict is preserved (REQ-026f).
   carries a Mermaid diagram; the orchestrator references the four pipeline skills
   and states its completion token imperatively (REQ-051, REQ-052)
 - The AGENTS.md Gates table reconciles against the `npm run check` pipeline
+- The routing citation gate resolves every tool, operation, and parameter cited in the client routing surface against the live tool schema, and fails when an operation is uncovered (REQ-107)
 - A companion `check-gate-coverage` gate requires every REQ whose manifest gate
   includes G1 to carry a test-file citation or a recorded exemption (REQ-055)
 
@@ -1057,6 +1062,7 @@ verdict is preserved (REQ-026f).
 | REQ-052 | Bundled Skills | 4.7 | G3 |
 | REQ-053 | Pipeline Reference | 4.7 | G3 |
 | REQ-054 | User Documentation | 4.7 | G3 |
+| REQ-107 | Routing Citation Integrity | 4.7 | G3 |
 | REQ-088 | Gated-Analysis Technique Selection | 4.7 | G3 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
@@ -1538,7 +1544,7 @@ secondary concerns rather than duplicating the REQ.
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088 | G3 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 

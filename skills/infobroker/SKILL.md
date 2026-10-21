@@ -66,7 +66,7 @@ structured analytic techniques — score it with the rubric in
 Default shape for reports, articles, documentation, and analysis.
 
 ```
-RECALL     Infobroker `search_web` KB-first (automatic); `manage_kb` search only for stored-only answers
+RECALL     Infobroker `search_web` KB-first (automatic); `manage_kb (action: search)` only for stored-only answers
 SEARCH     Infobroker `search_web`; `verify_claims` for contested claims
 EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
            reading a page to answer a specific question, pass `question` to get
@@ -101,7 +101,7 @@ research complete. <N> sources | <K> findings | <gap> gaps noted
 Use when the user wants to verify specific claims.
 
 ```
-RECALL       Infobroker `search_web` KB-first (automatic); `manage_kb` search only for stored-only answers
+RECALL       Infobroker `search_web` KB-first (automatic); `manage_kb (action: search)` only for stored-only answers
 EXTRACT      claims from the user's input
 SEARCH       each claim with Infobroker `search_web` (per-claim queries)
 CROSS-CHECK  Infobroker `verify_claims` for multi-source verification
@@ -139,17 +139,17 @@ early.
 | Intent | Tool | Provider hint |
 |--------|------|--------------|
 | Search web broadly | `search_web` | Auto-selected (default: DuckDuckGo) |
-| Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown); pass `question` to extract ranked passages |
-| Autocomplete a query | `search_web` (`suggest: true`) | DuckDuckGo |
+| Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown); use `fetch_page (question)` to extract ranked passages |
+| Autocomplete a query | `search_web (suggest)` | DuckDuckGo |
 | "Which tool should I use?" | `search_web` | Auto-selection returns serving provider |
 | Multi-source truth-finding | `verify_claims` | Uses all active providers |
 | Academic citations | `get_citations` | BibTeX references from scholarly sources |
-| Check provider status | `inspect_providers` (action list/health) | N/A |
+| Check provider status | `inspect_providers (action: list)` / `inspect_providers (action: health)` | N/A |
 | Reload config at runtime | `reload_config` | N/A |
-| Search local knowledge base | `manage_kb` (action search) | Semantic + keyword hybrid |
-| Ingest into knowledge base | `manage_kb` (action ingest) | Text or URL |
-| Knowledge base stats | `manage_kb` (action stats) | Operational metrics |
-| Delete from knowledge base | `manage_kb` (action delete) | By collection or source URL |
+| Search local knowledge base | `manage_kb (action: search)` | Semantic + keyword hybrid |
+| Ingest into knowledge base | `manage_kb (action: ingest)` | Text or URL |
+| Knowledge base stats | `manage_kb (action: stats)` | Operational metrics |
+| Delete from knowledge base | `manage_kb (action: delete)` | By collection or source URL |
 | Translate findings | `translation` skill | Multilingual output |
 
 ## When to Escalate
@@ -168,5 +168,5 @@ path; `analysis-loop` runs the disciplined, gated path.
 - When writing output, route through the full pipeline (search → verify → summarize → write → polish)
 - Cite sources with URLs for every factual claim
 - Fall back to built-in `websearch`/`webfetch` only when Infobroker tools error
-- Check `inspect_providers` (action health) if searches return empty or slow — a provider may be exhausted
+- Check `inspect_providers (action: health)` if searches return empty or slow — a provider may be exhausted
 - When a tool errors or the server will not start, follow the symptom → cause → fix entries in `references/troubleshooting.md`

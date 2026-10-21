@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.10.02)
+# AGENTS.md — Infobroker MCP Server (v2026.10.20)
 
 ## Layer Map
 
@@ -240,6 +240,7 @@ This runs:
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax over shell entry points |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
+| `npm run check-intent-citations` | Routing citations resolve against the live tool schema; every declared operation is cited (REQ-107) |
 | `npm run check-harness-expectations` | Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators |
 | `npm run check-gate-coverage` | Every G1 REQ is backed by a test citation or a recorded exemption (REQ-055) |
 | `npm run test`       | Vitest unit and integration tests                  |
