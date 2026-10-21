@@ -409,7 +409,7 @@ The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Me
 The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers. _Check:_ G3 (file presence).
 
 **REQ-107 — Routing citation integrity**
-Every tool reference in the client routing surface SHALL resolve to a registered tool, and every operation reference SHALL resolve to an operation declared by the live tool schema. Every declared operation SHALL be cited at least once across the routing surface. A gate SHALL fail when a citation is unresolved, when an operation is uncovered, or when a seeded stale citation is not detected. *Acceptance criterion:* a renamed tool or operation fails the gate, and the seeded-stale fixture fails as expected. _Check:_ G3.
+Every tool reference in the client routing surface SHALL resolve to a registered tool, and every operation reference SHALL resolve to an operation declared by the live tool schema. Every registered tool SHALL be cited at least once across the routing surface. Every declared operation SHALL be cited at least once across the routing surface. A gate SHALL fail when a citation is unresolved, when a tool or operation is uncovered, or when a seeded stale citation is not detected. *Acceptance criterion:* a renamed tool or operation fails the gate, and the seeded-stale fixture fails as expected. _Check:_ G3.
 
 **REQ-088 — Gated-Analysis Technique Selection**
 The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
@@ -992,7 +992,7 @@ verdict is preserved (REQ-026f).
   carries a Mermaid diagram; the orchestrator references the four pipeline skills
   and states its completion token imperatively (REQ-051, REQ-052)
 - The AGENTS.md Gates table reconciles against the `npm run check` pipeline
-- The routing citation gate resolves every tool, operation, and parameter cited in the client routing surface against the live tool schema, and fails when an operation is uncovered (REQ-107)
+- The routing citation gate resolves every tool, operation, and parameter cited in the client routing surface against the live tool schema, and fails when a tool or operation is uncovered (REQ-107)
 - A companion `check-gate-coverage` gate requires every REQ whose manifest gate
   includes G1 to carry a test-file citation or a recorded exemption (REQ-055)
 

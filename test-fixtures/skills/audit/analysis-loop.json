@@ -8,6 +8,7 @@
     "research-analysis complete.",
     "analysis-loop complete."
   ],
+  "scan": "all-assistant",
   "checks": {
     "required_facts": [
       "HTTP/3",

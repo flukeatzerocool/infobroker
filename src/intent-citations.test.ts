@@ -83,6 +83,21 @@ describe("splitToolName", () => {
   });
 });
 
+describe("prefix policy", () => {
+  it("flags a bare citation in the single-prefixed instruction file", () => {
+    const { findings } = extract(INSTRUCTION, "Use `search_web`.");
+    expect(findings.map((f) => f.code)).toContain("wrong_prefix");
+  });
+
+  it("flags a client-qualified citation in a bare skill file", () => {
+    const { findings } = extract(
+      JOURNEYS,
+      "Use `infobroker_infobroker_search_web`."
+    );
+    expect(findings.map((f) => f.code)).toContain("wrong_prefix");
+  });
+});
+
 describe("extractCitations — canonical forms", () => {
   it("accepts a tool-only citation", () => {
     const { citations, findings } = extract(INSTRUCTION, "Use `infobroker_search_web`.");
@@ -224,10 +239,32 @@ describe("coverage", () => {
 \`manage_kb (operation: backup)\`
 \`manage_kb (operation: rekey)\`
 \`reload_config (migrate)\`
+\`verify_claims\`
+\`get_citations\`
+\`search_web\`
+\`fetch_page\`
+\`inspect_providers\`
+\`manage_kb\`
+\`reload_config\`
 `;
     const extracted = extract(JOURNEYS, markdown);
     expect(extracted.findings.filter((f) => f.code !== "missing_operation_key")).toEqual([]);
     expect(checkCoverage(schemas, extracted.citations)).toEqual([]);
+  });
+
+  it("requires every registered tool, including one with no derived operations", () => {
+    const scalar = new Map<string, ToolSchema>([
+      [
+        "get_citations",
+        {
+          slug: "get_citations",
+          properties: { query: { type: "string" }, max_results: { type: "number" } },
+        },
+      ],
+    ]);
+    const findings = checkCoverage(scalar, []);
+    expect(findings.map((f) => f.code)).toEqual(["uncovered_tool"]);
+    expect(findings[0].message).toContain("get_citations");
   });
 
   it("covers the string-mode allowlist without treating other strings as operations", () => {

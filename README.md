@@ -673,4 +673,6 @@ The server is built from a single source specification, `infobroker.md`
 (v2026.10.20), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
-the server actually delivers.
+the server actually delivers. The routing gate resolves every cited tool and
+operation against the live schema, and requires each registered tool to be
+cited at least once.

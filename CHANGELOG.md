@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.10.20 — Routing gate covers every tool; strict audit; intermediate tokens
+
+- `check-intent-citations` now fails when a registered tool has no citation, not
+  only when an operation is uncovered; REQ-107 and the §9.4 gate description
+  were updated. The instruction file now states the single-prefix registration
+  and how a client namespace variant resolves.
+- Skill audits gained `--checks-gating`: non-advisory content checks now fail
+  an `--audit` run, and `checks.advisory` records an unreliable check with a
+  reason without making the gate red. The new `check-skill-harness` gate runs
+  the pure check evaluator and event-stream tests.
+- The skill evaluator can scan all assistant messages
+  (`scan: "all-assistant"`), so phase tokens emitted in intermediate messages
+  are visible; both analysis-loop manifests use it. User/system/tool echo text
+  can never satisfy a token.
+
 ## 2026.10.20 — Skill audit expanded to the remaining four skills
 
 - Added `test-fixtures/skills/audit/{technical-writing,translation,infobroker,analysis-loop}.json`

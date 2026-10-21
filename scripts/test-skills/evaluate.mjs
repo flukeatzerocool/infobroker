@@ -4,18 +4,22 @@
 // assistant's final text, checks the expected tokens appear in order, and
 // (with --grade) invokes a rubric pass via `opencode run`.
 //
-// Optional manifest `checks` add advisory task-quality evidence. They do not
-// change `status` or this process's exit code: token ordering alone decides
-// pass/fail. File checks read the workdir's input.txt and input.pre.txt;
-// text checks read the final assistant text.
+// Optional manifest `checks` add task-quality evidence. By default they are
+// advisory and do not change `status`; with --checks-gating a failed
+// non-advisory check fails the run. File checks read the workdir's input.txt
+// and input.pre.txt; text checks read the assistant text. Manifest
+// `scan: "all-assistant"` (or --scan=all-assistant) includes intermediate
+// assistant messages instead of only the final one.
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { extractFinalAssistantText } from "../lib/event-stream.mjs";
+import { extractFinalAssistantText, extractAllAssistantText } from "../lib/event-stream.mjs";
+import { evaluateChecks } from "./checks.mjs";
 
 const [manifestPath, runPath, skill, ...rest] = process.argv.slice(2);
 const grade = rest.includes("--grade");
+const checksGating = rest.includes("--checks-gating");
 const gradeModel = flagValue("--grade-model=");
 const workdir = flagValue("--workdir=");
 
@@ -34,71 +38,13 @@ function readIfExists(path) {
   }
 }
 
-function evaluateChecks(manifest, text, workdirPath) {
-  const checks = manifest.checks;
-  if (!checks) return null;
-
-  const after = workdirPath ? readIfExists(join(workdirPath, "input.txt")) : null;
-  const before = workdirPath ? readIfExists(join(workdirPath, "input.pre.txt")) : null;
-  const results = {};
-  const failed = [];
-
-  const record = (name, ok, detail) => {
-    results[name] = ok;
-    if (!ok) failed.push(detail ? `${name}: ${detail}` : name);
-  };
-
-  if (checks.require_file_change) {
-    record(
-      "require_file_change",
-      before !== null && after !== null && before !== after,
-      before === null || after === null ? "workdir input missing" : "file unchanged"
-    );
-  }
-
-  for (const name of ["must_be_absent", "must_be_preserved"]) {
-    const items = checks[name];
-    if (!Array.isArray(items) || items.length === 0) continue;
-    const bad = items.filter((item) =>
-      after === null ? true : name === "must_be_absent" ? after.includes(item) : !after.includes(item)
-    );
-    record(name, bad.length === 0, bad.join(", "));
-  }
-
-  const lower = text.replace(/[*`~]/g, "").toLowerCase();
-  const includesAny = (pattern) =>
-    pattern.toLowerCase().split("|").some((alt) => alt.length > 0 && lower.includes(alt));
-
-  if (Array.isArray(checks.required_facts) && checks.required_facts.length > 0) {
-    const missing = checks.required_facts.filter((fact) => !includesAny(fact));
-    record("required_facts", missing.length === 0, missing.join(", "));
-  }
-
-  if (Array.isArray(checks.required_any) && checks.required_any.length > 0) {
-    record(
-      "required_any",
-      checks.required_any.some((pattern) => includesAny(pattern)),
-      `none of: ${checks.required_any.join(", ")}`
-    );
-  }
-
-  if (Array.isArray(checks.forbidden_patterns) && checks.forbidden_patterns.length > 0) {
-    const found = checks.forbidden_patterns.filter((pattern) => lower.includes(pattern.toLowerCase()));
-    record("forbidden_patterns", found.length === 0, found.join(", "));
-  }
-
-  return {
-    passed: failed.length === 0,
-    failed,
-    file_changed: before !== null && after !== null && before !== after,
-    results,
-  };
-}
-
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const raw = readFileSync(runPath, "utf8");
-const text = extractFinalAssistantText(raw);
-const checks = evaluateChecks(manifest, text, workdir);
+const scanAll = rest.includes("--scan=all-assistant") || manifest.scan === "all-assistant";
+const text = scanAll ? extractAllAssistantText(raw) : extractFinalAssistantText(raw);
+const after = workdir ? readIfExists(join(workdir, "input.txt")) : null;
+const before = workdir ? readIfExists(join(workdir, "input.pre.txt")) : null;
+const checks = evaluateChecks(manifest, text, { before, after });
 
 const tokens = manifest.expected_tokens ?? [];
 const missing = [];
@@ -126,6 +72,10 @@ function emit(result) {
 
 if (!orderOk) {
   emit({ skill, status: "fail", missing, outOfOrder, orderOk });
+}
+
+if (checksGating && checks && !checks.passed) {
+  emit({ skill, status: "fail", missing, orderOk, checks_failed: checks.failed });
 }
 
 const result = { skill, status: "pass", missing: [] };

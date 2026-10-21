@@ -20,7 +20,7 @@
 #   --model <m>     Model to use for the agentic runs (default: config default).
 #   --grade-model=<m>  Model for the rubric pass (default: config default).
 #   --retry         Re-run a skill once in a forked session on failure.
-#   --audit         Use test-fixtures/skills/audit manifests (advisory checks).
+#   --audit         Use test-fixtures/skills/audit manifests (checks are gating).
 #   --help (-h)     Show this message.
 #
 # The Infobroker MCP and skills must already be wired into opencode (they are
@@ -176,6 +176,7 @@ for manifest in "${MANIFESTS[@]}"; do
   # Evaluate tokens, advisory checks, and optional rubric.
   eval_args=()
   $GRADE && eval_args+=("--grade")
+  $AUDIT && eval_args+=("--checks-gating")
   [[ -n "$GRADE_MODEL" ]] && eval_args+=("--grade-model=$GRADE_MODEL")
   [[ -n "$workdir" ]] && eval_args+=("--workdir=$workdir")
   node "$EVALUATOR" "$manifest" "$out_file" "$skill" "${eval_args[@]}" >> "$RESULTS_FILE.tmp"

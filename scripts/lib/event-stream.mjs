@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // event-stream.mjs — shared helpers for reading the opencode JSON event stream
 // from agentic test runs. Exports extractAssistantText, extractFinalAssistantText,
-// and extractToolOrder.
+// extractAllAssistantText, and extractToolOrder.
 
 // Extract assistant text from the JSON event stream (opencode --format json).
 // The stream is newline-delimited JSON; assistant text parts carry type "text"
@@ -18,17 +18,13 @@ export function extractAssistantText(raw) {
   return parts.join("\n");
 }
 
-// Extract the ASSISTANT's FINAL message text only. Unlike extractAssistantText
-// (which concatenates every text part in the stream, including skill content a
-// harness echoes into the session), this returns only the text of the last
-// assistant message — the agent's own final reply. A completion token that
-// appears in loaded skill content earlier in the stream cannot satisfy it.
-//
-// Message boundaries are detected by the part's `messageID` when present,
-// falling back to `role` transitions: a non-assistant text part (role "system",
-// "tool", or "user") closes any open assistant block. Returns "" when no
-// assistant text is found — an honest failure, never a false pass.
-export function extractFinalAssistantText(raw) {
+// Split the stream into assistant text blocks. A block is assistant text only:
+// an explicit role "assistant" or a missing role (top-level `.text`) counts;
+// an explicit "user"/"system"/"tool" role never does, so loaded skill content
+// echoed into the session cannot satisfy a completion token. Message
+// boundaries are the part's `messageID` when present, else non-text events and
+// role transitions.
+function assistantTextBlocks(raw) {
   const blocks = [];
   let current = [];
   let lastKey = "";
@@ -64,11 +60,28 @@ export function extractFinalAssistantText(raw) {
     }
   }
   if (current.length) blocks.push(current.join("\n"));
+  return blocks;
+}
 
+// Extract the ASSISTANT's FINAL message text only. A completion token that
+// appears in loaded skill content earlier in the stream cannot satisfy it.
+// Returns "" when no assistant text is found — an honest failure, never a
+// false pass.
+export function extractFinalAssistantText(raw) {
+  const blocks = assistantTextBlocks(raw);
   for (let i = blocks.length - 1; i >= 0; i--) {
     if (blocks[i].trim()) return blocks[i];
   }
   return "";
+}
+
+// Extract every assistant text block in order. Used when a skill emits a
+// completion token in an intermediate message (for example a phase gate)
+// rather than only in its final reply. User/system/tool text is excluded.
+export function extractAllAssistantText(raw) {
+  return assistantTextBlocks(raw)
+    .filter((block) => block.trim())
+    .join("\n");
 }
 
 // Extract the ordered list of tool names a run called. Tool names sit on

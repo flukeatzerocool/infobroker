@@ -11,8 +11,10 @@
 //   `tool (operation, key: value)`           mode plus parameters
 //
 // Prefix policy is per file: the client-facing instruction file uses the
-// client-qualified `infobroker_infobroker_*` names; skill files use bare
-// names. Either form normalizes to the registered slug for schema checks.
+// server-registered single `infobroker_*` names; skill files use bare names.
+// Clients may add their own server namespace (for example opencode exposes
+// `infobroker_infobroker_search_web`); the parser normalizes every form to
+// the registered slug for schema checks.
 
 export type PrefixPolicy = "bare" | "single" | "client";
 export type CitationPrefix = "bare" | "single" | "client";
@@ -333,12 +335,20 @@ export function checkCoverage(
   citations: readonly Citation[]
 ): Finding[] {
   const covered = new Set<string>();
+  const citedTools = new Set<string>();
   for (const citation of citations) {
+    citedTools.add(citation.tool);
     for (const key of citation.coverage) covered.add(`${citation.tool}:${key}`);
   }
 
   const findings: Finding[] = [];
   for (const schema of schemas.values()) {
+    if (!citedTools.has(schema.slug)) {
+      findings.push({
+        code: "uncovered_tool",
+        message: `\`${schema.slug}\` is registered by the tool surface but never cited in the routing surface`,
+      });
+    }
     for (const op of deriveOperations(schema)) {
       if (!covered.has(`${schema.slug}:${op.key}`)) {
         findings.push({

@@ -21,4 +21,6 @@ direct `infobroker_manage_kb (action: search)` for stored-content-only
 answers, knowledge base inspection, or maintenance. If knowledge base
 results suffice, use them; otherwise external providers are the fallback.
 
+Registered tool names use the infobroker_ prefix. If your client displays a server-qualified variant, use the name shown in its tool list.
+
 Archive finished reports with `infobroker_manage_kb (action: ingest, source_type: report)`; cite source URLs with every claim.

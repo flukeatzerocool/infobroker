@@ -7,6 +7,7 @@
     "research-analysis complete.",
     "analysis-loop complete."
   ],
+  "scan": "all-assistant",
   "rubric": [
     "Phase 0 gate emitted before any search",
     "Each finding carries a confidence score (High/Medium/Low)",
