@@ -29,6 +29,9 @@ Run the full gate. It must pass before a pull request is considered:
 npm run check
 ```
 
+The GitHub mirror runs the same gate on every push to `main` (`.github/workflows/check.yml`).
+The canonical repository's push pipeline remains the pull-request-time gate.
+
 This runs typecheck, spec validation, README validation, script-discipline
 checks, the test suite, the dependency-vulnerability audit, and the
 empty-shipped-KB check. See `AGENTS.md` for what each gate enforces.
