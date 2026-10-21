@@ -11,6 +11,7 @@ import { createInterface } from "node:readline";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
+import { isolatedConfigEnv } from "../src/lib/test-isolation.js";
 import {
   FILE_PREFIX_POLICY,
   validateRoutingFiles,
@@ -54,7 +55,7 @@ async function listTools(): Promise<ToolDef[]> {
   const child = spawn(
     join(ROOT, "node_modules", ".bin", "tsx"),
     [join(ROOT, "src", "index.ts")],
-    { cwd: ROOT, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env } }
+    { cwd: ROOT, stdio: ["pipe", "pipe", "pipe"], env: isolatedConfigEnv() }
   );
 
   const pending = new Map<number, (msg: RpcMessage) => void>();

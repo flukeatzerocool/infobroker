@@ -318,6 +318,7 @@
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",
+    "store_backend": "sqlite",
     "embedding_model": "signed-hash-tfidf",
     "chunk_size": 1024,
     "chunk_overlap": 64,

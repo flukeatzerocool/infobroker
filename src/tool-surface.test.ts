@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isolatedConfigEnv } from "./lib/test-isolation.js";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -41,7 +42,7 @@ async function listTools(): Promise<ListToolsResult> {
   const child = spawn(
     join(REPO_ROOT, "node_modules", ".bin", "tsx"),
     [join(REPO_ROOT, "src", "index.ts")],
-    { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env } }
+    { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"], env: isolatedConfigEnv() }
   );
 
   const pending = new Map<number, (msg: RpcMessage) => void>();

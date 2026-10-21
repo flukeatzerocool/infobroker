@@ -192,7 +192,7 @@ export INFOBROKER_BRAVE_API_KEY="your-key"
 export INFOBROKER_EXA_API_KEY="your-key"
 ```
 
-Requirements: Node.js 20+.
+Requirements: Node.js 24+.
 
 ## MCP Server
 
@@ -458,12 +458,17 @@ embedding model selected by `kb.embedding_model`. By default the store
 writes to a user-scoped path (`~/.local/share/infobroker/knowledge-base`)
 outside the repository, so the content you research and cache stays on your
 machine and is never committed. Each deployed instance accumulates its own
-store.
+store. `kb.store_backend` selects `sqlite` (default) or the one-release
+`json` legacy backend; opening a legacy `vector-store.json` store migrates it
+automatically and preserves the original as `vector-store.json.migrated-<timestamp>`.
+Rollback to the JSON backend is available only if encryption has never been
+enabled (enabling encryption removes the plaintext migration archive).
 
 ### Knowledge base encryption
 
 Research reports and cached pages can be sensitive, and the knowledge
-base stores them in a single file in your home directory. Enable optional
+base stores them in a SQLite database (plus `-wal`/`-shm` sidecars) in your
+home directory. Enable optional
 at-rest encryption by adding a `kb.encryption` block and supplying a key:
 
 ```json
@@ -644,7 +649,7 @@ Last updated: 2026-10-20.
 
 ## Contribute
 
-- **Node.js 20+.** `node --version`. Get it at
+- **Node.js 24+.** `node --version`. Get it at
   [nodejs.org](https://nodejs.org).
 - `npm install && npm run typecheck`
 - Bundle your own skill in `skills/` to extend the research pipeline.

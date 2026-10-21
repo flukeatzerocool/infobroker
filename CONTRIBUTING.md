@@ -14,7 +14,7 @@ read the code.
 
 ## Development setup
 
-Requirements: Node.js 20 or newer.
+Requirements: Node.js 24 or newer.
 
 ```sh
 npm install       # install dependencies

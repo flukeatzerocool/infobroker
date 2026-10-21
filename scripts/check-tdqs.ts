@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
+import { isolatedConfigEnv } from "../src/lib/test-isolation.js";
 import {
   structuralViolations,
   annotationContradictionCandidates,
@@ -51,7 +52,7 @@ async function listTools(): Promise<ToolDefinition[]> {
   const child = spawn(join(ROOT, "node_modules", ".bin", "tsx"), [join(ROOT, "src", "index.ts")], {
     cwd: ROOT,
     stdio: ["pipe", "pipe", "ignore"],
-    env: { ...process.env },
+    env: isolatedConfigEnv(),
   });
 
   const pending = new Map<number, (msg: RpcMessage) => void>();

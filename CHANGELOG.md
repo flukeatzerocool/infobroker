@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.10.20 — KB: SQLite default, automatic migration, row encryption
+
+- `kb.store_backend` now defaults to `sqlite` (config.json). A legacy
+  `vector-store.json` is migrated automatically and non-destructively; the
+  original becomes `vector-store.json.migrated-<timestamp>`. Corruption uses
+  the canonical `vector-store.corrupt-<timestamp>.json` backup and starts a
+  fresh store (F10).
+- Added per-row AES-256-GCM encryption for the SQLite store (one scrypt per
+  open), with enable, disable, verify, and rekey. Enabling removes plaintext
+  archives; rollback to the JSON backend is available only if encryption has
+  never been enabled.
+- Server-spawning gates and tests now run against an isolated temp config, so
+  `npm run check` cannot open or migrate the user's real knowledge base.
+- The runtime requirement is Node.js 24+ (`node:sqlite`).
+
 ## 2026.10.20 — KB: disk-backed SQLite backend (REQ-108)
 
 - Added `src/kb-store.ts` (storage seam, canonical artifact predicates) and

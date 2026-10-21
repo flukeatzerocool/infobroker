@@ -53,7 +53,7 @@ describe("KB corruption recovery event (REQ-060c)", () => {
     initKb(makeConfig(dir));
     const events = kbStats().events ?? [];
     expect(events.some((e) => e.includes("Storage corruption detected"))).toBe(true);
-    expect(readdirSync(dir).some((f) => f.startsWith("vector-store.corrupt."))).toBe(true);
+    expect(readdirSync(dir).some((f) => f.startsWith("vector-store.corrupt-"))).toBe(true);
   });
 });
 

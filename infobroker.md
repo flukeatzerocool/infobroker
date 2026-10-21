@@ -481,7 +481,7 @@ A collection exists and is addressable the first time content is assigned to it.
 Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its `source_type`. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
 
 **REQ-067 — Knowledge Base Configuration**
-The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including per-tier confidence decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination for reports. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, storage backend selection, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
 Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. Content whose meaning substantially matches an already-indexed document SHALL be recognized as the same document even when its title or source URL differs. The chunk count reported by the `manage_kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
@@ -569,7 +569,7 @@ Tool error responses SHALL NOT expose stack traces, internal file paths, or envi
 
 ### 5.1 Language and Runtime
 
-- Language: TypeScript (Node.js 20+)
+- Language: TypeScript (Node.js 24+)
 - MCP SDK: `@modelcontextprotocol/sdk` (stdlib transport)
 - Validation: `zod` (peer dependency of MCP SDK)
 - HTTP: `undici` (built into Node.js 20+)
@@ -1162,7 +1162,8 @@ User-owned (NOT in the repository; preserved across updates per REQ-043):
 
 ```
 config.local.json                          # User configuration layer (REQ-010)
-~/.local/share/infobroker/knowledge-base/  # Vector store (created at runtime)
+~/.local/share/infobroker/knowledge-base/  # Vector store: vector-store.sqlite (+ -wal/-shm),
+                                           #   legacy vector-store.json, .migrated-* backups
 $TMPDIR/infobroker/quota.json              # Persistent quota counters (REQ-033)
 $TMPDIR/infobroker/trunc-*.txt             # Full content of truncated responses
 ```

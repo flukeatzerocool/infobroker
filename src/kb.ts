@@ -38,7 +38,8 @@ import {
   DEFAULT_MODEL,
   type EmbeddingModel,
 } from "./embed.js";
-import { SqliteStore } from "./kb-sqlite.js";
+import { SqliteStore, sqliteStoreFormat } from "./kb-sqlite.js";
+import { migrateLegacyJson } from "./kb-migrate.js";
 
 interface VectorStore {
   chunks: KbChunk[];
@@ -393,7 +394,7 @@ function backupCorruptStore(): string | null {
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return null;
   try {
-    const backup = join(storagePath!, `vector-store.corrupt.${Date.now()}.json`);
+    const backup = join(storagePath!, `vector-store.corrupt-${Date.now()}.json`);
     renameSync(fpath, backup);
     chmodSync(backup, 0o600);
     return `Storage corruption detected at ${new Date().toISOString()}. Backup: ${backup}`;
@@ -486,23 +487,63 @@ export function initKb(config: KbConfig): void {
     resolvedKey = null;
     lockError = null;
     if (!existsSync(raw)) mkdirSync(raw, { recursive: true, mode: 0o700 });
-    if (config.encryption?.enabled) {
+    const keyResult = config.encryption?.key_file
+      ? safeResolveKeySource(config.encryption.key_file)
+      : { key: null, error: null };
+    let secret = keyResult.key;
+    if (!secret && config.encryption?.enabled) {
+      try {
+        secret = resolveKeySource(config.encryption.key_file);
+      } catch {
+        secret = null;
+      }
+    }
+    if (config.encryption?.enabled && !secret) {
       lockError = {
         code: "config_error",
-        message: "Knowledge base encryption is not available for the SQLite backend in this build",
-        remediation: "Set kb.store_backend to \"json\" or disable kb.encryption until the SQLite encryption migration is complete.",
+        message: "Knowledge base encryption is enabled but no key is available",
+        remediation: "Set INFOBROKER_KB_KEY / INFOBROKER_KB_PASSPHRASE or kb.encryption.key_file, then reload.",
       };
     } else {
-      try {
-        sqliteStore = new SqliteStore(raw);
-        sqliteStore.init();
-      } catch (e) {
+      const migration = migrateLegacyJson({
+        storagePath: raw,
+        encryptionEnabled: config.encryption?.enabled ?? false,
+        ...(config.encryption?.key_file ? { keyFile: config.encryption.key_file } : {}),
+      });
+      if (migration.status === "locked" || migration.status === "error") {
         lockError = {
           code: "config_error",
-          message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
-          remediation: "Inspect the knowledge-base directory and its permissions, or set kb.store_backend to \"json\".",
+          message: migration.message ?? "Knowledge base migration failed",
+          remediation: migration.remediation ?? "Fix the reported error and restart.",
         };
-        sqliteStore = null;
+      } else {
+        try {
+          sqliteStore = new SqliteStore(raw, {
+            secret,
+            encryptionEnabled: config.encryption?.enabled ?? false,
+          });
+          sqliteStore.init();
+          if (migration.event) sqliteStore.appendEvent(migration.event);
+          if (!config.encryption?.enabled && sqliteStore.format() === "encrypted") {
+            if (!secret) {
+              lockError = {
+                code: "config_error",
+                message: "Knowledge base is encrypted but no key is available to disable encryption",
+                remediation: "Provide the key, then reload. The store is untouched.",
+              };
+            } else {
+              sqliteStore.disableEncryption(secret);
+            }
+          }
+          resolvedKey = secret;
+        } catch (e) {
+          lockError = {
+            code: "config_error",
+            message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
+            remediation: "Inspect the knowledge-base directory and its permissions, or provide the correct key.",
+          };
+          sqliteStore = null;
+        }
       }
     }
     configureModel(config.embedding_model);
@@ -1402,7 +1443,16 @@ export function sealReportBytes(clear: Buffer): Buffer {
  * in-tool re-key where the source secret is already loaded.
  */
 export function rekeyStoreTo(from: ResolvedKey | null, to: ResolvedKey): string | null {
-  if (sqliteStore) return null;
+  if (sqliteStore) {
+    const src = from ?? resolvedKey;
+    if (!src) return null;
+    const result = sqliteStore.rekey(src, to);
+    if (result) {
+      resolvedKey = to;
+      audit("key_rekeyed", sqliteStore.path);
+    }
+    return result;
+  }
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return null;
   const bytes = readStoreBytes()!;
@@ -1480,7 +1530,10 @@ export function generateKeyFile(path: string): string {
  * store, wrong key, or tampered store).
  */
 export function verifyStoreKey(key?: ResolvedKey): boolean {
-  if (sqliteStore) return false;
+  if (sqliteStore) {
+    const candidate = key ?? resolvedKey;
+    return candidate ? sqliteStore.verifyKey(candidate) : false;
+  }
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return false;
   const bytes = readStoreBytes()!;
@@ -1520,6 +1573,9 @@ export function backupKeyFile(backupPath: string): string | null {
 /** On-disk format of the store at rest: "encrypted", "plaintext", or "none". */
 export function kbStoreFormat(): "encrypted" | "plaintext" | "none" {
   if (sqliteStore) return sqliteStore.format();
+  if ((kbConfig?.store_backend ?? "json") === "sqlite" && storagePath) {
+    return sqliteStoreFormat(storagePath);
+  }
   const fpath = storeFilePath();
   if (!fpath || !existsSync(fpath)) return "none";
   const bytes = readStoreBytes()!;

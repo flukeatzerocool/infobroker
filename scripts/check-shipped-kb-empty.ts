@@ -8,6 +8,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join, resolve, isAbsolute, relative } from "node:path";
 import { homedir } from "node:os";
+import { isKbStoreArtifact } from "../src/kb-store.js";
 
 const __dirname = import.meta.dirname;
 const ROOT = join(__dirname, "..");
@@ -16,8 +17,8 @@ const violations: string[] = [];
 
 // A KB artifact name that must never exist inside the shipped repository.
 // `config.local.json` is a user layer (git-ignored) and must never ship.
-const KB_NAME_RE =
-  /^(config\.local\.json|vector-store.*\.json|.*\.vector-store\.json)$/;
+// Live stores, sidecars, and archives are owned by src/kb-store.ts so the
+// gate and encryption-enable deletion share one definition (REQ-108).
 const KB_DIR_NAMES = new Set(["knowledge-base", ".infobroker"]);
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".opencode"]);
@@ -44,7 +45,7 @@ function walk(dir: string): void {
         continue;
       }
       walk(full);
-    } else if (KB_NAME_RE.test(entry)) {
+    } else if (isKbStoreArtifact(entry)) {
       violations.push(`${relative(ROOT, full)} — KB artifact must not ship`);
     }
   }
