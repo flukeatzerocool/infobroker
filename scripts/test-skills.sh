@@ -11,13 +11,16 @@
 #
 # Usage:
 #   ./scripts/test-skills.sh [--only=<skill>] [--from=<skill>] [--resume] [--grade]
-#                            [--model <m>] [--retry] [--help]
+#                            [--model <m>] [--grade-model=<m>] [--retry] [--audit]
+#                            [--help]
 #   --only=<skill>  Run only the named skill (skip everything else).
 #   --from=<skill>  Start at a named skill.
 #   --resume        Skip skills already recorded PASS in the state journal.
 #   --grade         Run a second LLM rubric pass per skill (soft, non-gating).
 #   --model <m>     Model to use for the agentic runs (default: config default).
+#   --grade-model=<m>  Model for the rubric pass (default: config default).
 #   --retry         Re-run a skill once in a forked session on failure.
+#   --audit         Use test-fixtures/skills/audit manifests (advisory checks).
 #   --help (-h)     Show this message.
 #
 # The Infobroker MCP and skills must already be wired into opencode (they are
@@ -27,30 +30,40 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-MANIFEST_DIR="$PROJECT_DIR/test-fixtures/skills"
-INPUTS_DIR="$MANIFEST_DIR/inputs"
+SKILLS_DIR="$PROJECT_DIR/test-fixtures/skills"
+MANIFEST_DIR="$SKILLS_DIR"
+INPUTS_DIR="$SKILLS_DIR/inputs"
 EVALUATOR="$SCRIPT_DIR/test-skills/evaluate.mjs"
 
 # shellcheck source=scripts/lib/opencode-utils.sh
 source "$SCRIPT_DIR/lib/opencode-utils.sh"
 
 # ── Flag parsing ──
-FROM_SKILL=""; ONLY_SKILL=""; RESUME=false; GRADE=false; MODEL="${SKILL_TEST_MODEL:-}"; RETRY=false
+FROM_SKILL=""; ONLY_SKILL=""; RESUME=false; GRADE=false; AUDIT=false
+MODEL="${SKILL_TEST_MODEL:-}"; GRADE_MODEL="${SKILL_TEST_GRADE_MODEL:-}"; RETRY=false
 for arg in "$@"; do
   case "$arg" in
     --only=*) ONLY_SKILL="${arg#--only=}" ;;
     --from=*) FROM_SKILL="${arg#--from=}" ;;
     --resume) RESUME=true ;;
     --grade) GRADE=true ;;
+    --audit) AUDIT=true ;;
     --retry) RETRY=true ;;
     --model=*) MODEL="${arg#--model=}" ;;
     --model) error "--model requires a value: --model=<m>"; exit 1 ;;
+    --grade-model=*) GRADE_MODEL="${arg#--grade-model=}" ;;
+    --grade-model) error "--grade-model requires a value: --grade-model=<m>"; exit 1 ;;
     --help|-h)
-      printf '%s\n' "Usage: ./scripts/test-skills.sh [--only=<skill>] [--from=<skill>] [--resume] [--grade] [--model <m>] [--retry]"
+      printf '%s\n' "Usage: ./scripts/test-skills.sh [--only=<skill>] [--from=<skill>] [--resume] [--grade] [--model <m>] [--grade-model=<m>] [--retry] [--audit]"
       exit 0 ;;
     *) echo "Unknown flag: $arg"; exit 1 ;;
   esac
 done
+
+if $AUDIT; then
+  MANIFEST_DIR="$SKILLS_DIR/audit"
+  [[ -d "$MANIFEST_DIR" ]] || die "Audit manifest directory missing: $MANIFEST_DIR"
+fi
 
 # ── Pre-flight ──
 require_tools opencode node npx
@@ -84,6 +97,7 @@ IFS=$'\n' MANIFESTS=($(printf '%s\n' "${MANIFESTS[@]}" | sort)); unset IFS
 
 # ── Start backend ──
 ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
+export SKILL_TEST_SERVER_URL="$SERVER_URL"
 
 cleanup() { cleanup_serve; }
 trap cleanup EXIT SIGINT SIGTERM
@@ -133,6 +147,9 @@ for manifest in "${MANIFESTS[@]}"; do
     if [[ -e "$src" ]]; then cp "$src" "$workdir/input.txt"; fi
   done < <(node -e 'const j=require(process.argv[1]);(j.inputs||[]).forEach(i=>console.log(i))' "$manifest")
 
+  # Snapshot the input so the evaluator can detect in-place edits.
+  if [[ -f "$workdir/input.txt" ]]; then cp "$workdir/input.txt" "$workdir/input.pre.txt"; fi
+
   # opencode resolves its working directory to the repo root regardless of the
   # subshell cwd, so substitute the absolute input path into the prompt.
   prompt_file="$workdir/prompt.md"
@@ -156,10 +173,12 @@ for manifest in "${MANIFESTS[@]}"; do
     continue
   fi
 
-  # Evaluate tokens + optional rubric.
-  grade_flag=""
-  $GRADE && grade_flag="--grade"
-  node "$EVALUATOR" "$manifest" "$out_file" "$skill" $grade_flag >> "$RESULTS_FILE.tmp"
+  # Evaluate tokens, advisory checks, and optional rubric.
+  eval_args=()
+  $GRADE && eval_args+=("--grade")
+  [[ -n "$GRADE_MODEL" ]] && eval_args+=("--grade-model=$GRADE_MODEL")
+  [[ -n "$workdir" ]] && eval_args+=("--workdir=$workdir")
+  node "$EVALUATOR" "$manifest" "$out_file" "$skill" "${eval_args[@]}" >> "$RESULTS_FILE.tmp"
 done
 
 # --only guard: no manifest matched the requested skill.
@@ -197,6 +216,7 @@ node -e '
     const bits=[];
     if(o.missing?.length) bits.push("missing: "+o.missing.join(", "));
     if(o.outOfOrder?.length) bits.push("out of order: "+o.outOfOrder.join(", "));
+    if(o.checks) bits.push(o.checks.passed?"checks: pass":"checks: fail ("+o.checks.failed.join("; ")+")");
     console.log(`  ${mark.padEnd(5)} ${s}${bits.length?" — "+bits.join("; "):""}`)
   }
   const sm=r.summary;

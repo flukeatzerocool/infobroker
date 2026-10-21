@@ -21,25 +21,32 @@ metadata:
 
 ## Workflow
 
-1. **Grammar check.** Fix subject-verb agreement, tense errors, dangling
+1. **Establish the baseline.** Before changing anything, identify the
+   document's regional spelling (American or British), register, and any
+   deliberate stylistic fragments. A consistent convention is authoritative:
+   do not normalize it to another variant, and do not expand deliberate
+   fragments. If the document is genuinely inconsistent, use the dominant
+   convention and note the choice.
+
+2. **Grammar check.** Fix subject-verb agreement, tense errors, dangling
    modifiers, fragments, and run-on sentences.
 
-2. **Spelling and word choice.** Catch misspellings, homophones, and words
+3. **Spelling and word choice.** Catch misspellings, homophones, and words
    used in the wrong context. Verify domain terms.
 
-3. **Punctuation.** Review commas, semicolons, colons, dashes, hyphens,
+4. **Punctuation.** Review commas, semicolons, colons, dashes, hyphens,
    apostrophes, and quotation marks according to the style guide.
 
-4. **Style and consistency.** Enforce heading capitalization, number
+5. **Style and consistency.** Enforce heading capitalization, number
    formatting, abbreviations, passive voice, and consistent terminology.
    Verify the document conforms to any design philosophy or principles it
    declares (e.g., simplicity, no jargon, beginner-friendly). Flag deviations
    from that philosophy.
 
-5. **Clarity and readability.** Flag long sentences, dense paragraphs, and
+6. **Clarity and readability.** Flag long sentences, dense paragraphs, and
    jargon. Provide a readability score if useful.
 
-6. **Tone check.** Ensure the tone matches the user's intent. Flag tonal shifts.
+7. **Tone check.** Ensure the tone matches the user's intent. Flag tonal shifts.
 
 ## Output Format
 
@@ -79,7 +86,10 @@ change list rather than silently dropping it.
 ## Best Practices
 
 - Use a multi-pass approach rather than one read.
+- Establish the document's regional convention and deliberate fragments
+  before editing; never Americanize a British document or the reverse.
 - Preserve the author's voice.
+- Do not treat a deliberate fragment as an error; ask before expanding it.
 - Show your work with a change list.
 - Apply the chosen style guide consistently.
 - Separate objective errors from subjective suggestions.

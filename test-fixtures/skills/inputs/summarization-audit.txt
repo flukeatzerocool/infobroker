@@ -1,0 +1,9 @@
+The MCP server normalizes provider responses into a common result shape. It
+enforces a 1-second per-provider interval and writes quota counters to disk
+every 30 seconds. A knowledge base of previously indexed results is queried
+before external search; a fresh hit can answer a query without leaving the
+local store. The server treats an HTTP 202 response as a parse error and
+advances the fallback chain, which is capped at three providers deep. However,
+the design note states the chain is capped at five providers, contradicting
+the implementation. Results are cached for 24 hours, and the cache is cleared
+on restart.

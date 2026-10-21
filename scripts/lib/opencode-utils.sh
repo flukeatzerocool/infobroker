@@ -25,16 +25,16 @@ require_tools() {
 # (only when this script started it). Echoes the URL.
 ensure_opencode_serve() {
   local run_dir="$1" log_name="${2:-opencode-serve.log}" port="${3:-${PIPELINE_PORT:-4096}}"
-  SERVER_URL="http://localhost:${port}"
+  SERVER_URL="http://127.0.0.1:${port}"
   started=false
-  if curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; then
+  if curl -s --max-time 2 -o /dev/null "$SERVER_URL" 2>/dev/null; then
     info "Reusing existing opencode serve at $SERVER_URL"
   else
     info "Starting opencode serve on port $port..."
     opencode serve --port "$port" > "$run_dir/$log_name" 2>&1 &
     OPC_SERVE_PID=$!
     local i=0
-    until curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; do
+    until curl -s --max-time 2 -o /dev/null "$SERVER_URL" 2>/dev/null; do
       i=$((i+1))
       [[ $i -gt 60 ]] && die "opencode serve did not come up (see $run_dir/$log_name)"
       sleep 1

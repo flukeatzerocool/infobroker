@@ -1,0 +1,8 @@
+The team have finished there analysis of the HTTP 202 response. Each of the
+researchers were asked to submit they're findings before Friday. The report,
+which covers behaviour across platforms, are being reviewed by management.
+Its clear that the conclusion need to be revised, and the data should of been
+checked more carefully. The principle investigator will recieve the final
+draft. PostgreSQL was used for storage. Not a bug. The software's behaviour are
+not consistent across platforms, so we will recommend testing on all
+environments before deployment.

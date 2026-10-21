@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.10.02 — Skill audit wedge: advisory task-quality checks, memory-safe runs
+
+- `test-skills.sh` gains `--audit` (run `test-fixtures/skills/audit/*.json`)
+  and `--grade-model=<m>` (independent rubric grader), and snapshots each
+  input to `input.pre.txt` before the run.
+- `evaluate.mjs` now evaluates optional manifest `checks` — file change,
+  required/forbidden substrings, preserved trap spans, required facts, and
+  required markers — and reports them as advisory evidence. Token ordering
+  still alone decides `status` and the script's exit code. Fact matching
+  strips Markdown emphasis so “**three** providers” matches “three providers”.
+- Added `test-fixtures/skills/audit/{proofreading,summarization}.json` and
+  audit inputs covering seeded errors, trap spans, a contradiction, and
+  numeric/entity preservation.
+- `opencode-utils.sh` now uses `http://127.0.0.1:<port>` and bounds each
+  readiness probe with `curl --max-time 2`; `localhost` resolving to `::1`
+  while the server binds IPv4 could hang the harness.
+- `npm audit fix` cleared the critical/high advisories that were failing
+  `npm run check` (12 → 6 low/moderate dev-only findings).
+  (`package-lock.json`)
+- Operational note: each MCP server start loads the entire
+  `vector-store.json` (currently 512 MB) into memory. Repeated audit runs
+  must use an isolated empty KB (`kb.storage_path` override) and reuse one
+  `opencode serve`, or the server RSS reaches ~2 GB per instance.
+- `skills/proofreading/SKILL.md`: the workflow now starts with a baseline scan
+  (regional spelling, register, deliberate fragments) and states that a
+  consistent regional convention is authoritative. Addresses the audit
+  finding where one of three runs Americanized a British document and
+  expanded the deliberate fragment “Not a bug.”
+
 ## 2026.10.02 — Client instruction file trimmed to routing
 
 - `instructions/search-preferences.md` is cut from 68 to 22 lines: it now

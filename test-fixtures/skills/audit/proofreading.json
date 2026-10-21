@@ -1,0 +1,47 @@
+{
+  "skill": "proofreading",
+  "prompt": "Load the proofreading skill and apply it to the file at the input path below. Follow the skill's workflow (grammar, spelling, punctuation, style, clarity, tone), edit the file in place, and produce an annotated change list numbered PR-<n>. Do NOT treat it as a specification or run any structural checks — this is a plain prose document.\n\nInput file: ./input.txt\n\nYou MUST end your final reply with the completion line exactly as specified in the skill's Output Contract (the prose form).",
+  "inputs": [
+    "proofreading-audit.txt"
+  ],
+  "expected_tokens": [
+    "PR-1",
+    "proofread passed."
+  ],
+  "checks": {
+    "require_file_change": true,
+    "must_be_absent": [
+      "there analysis",
+      "they're findings",
+      "Each of the researchers were",
+      "are being reviewed",
+      "Its clear",
+      "conclusion need to be",
+      "should of been",
+      "principle investigator",
+      "recieve",
+      "behaviour are"
+    ],
+    "must_be_preserved": [
+      "HTTP 202",
+      "behaviour",
+      "PostgreSQL",
+      "Not a bug."
+    ],
+    "forbidden_patterns": [
+      "TODO",
+      "lorem ipsum"
+    ]
+  },
+  "rubric": [
+    "Every unambiguous grammar, homophone, and spelling error is corrected",
+    "The code span HTTP 202 is unchanged",
+    "The British spelling 'behaviour' is not Americanized",
+    "The product name PostgreSQL is unchanged",
+    "The intentional short sentence 'Not a bug.' is left intact",
+    "Edits are applied in place to the file",
+    "Change list uses PR-<n> numbering",
+    "Completion line present in prose form"
+  ],
+  "time_limit": "none"
+}

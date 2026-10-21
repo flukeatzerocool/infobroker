@@ -1,0 +1,41 @@
+{
+  "skill": "summarization",
+  "prompt": "Load the summarization skill and apply it to the source text at the input path below. Produce a concise summary preserving the source's numbers, proper nouns, and causal claims, at a detail level appropriate for an executive briefing.\n\nInput file: ./input.txt\n\nYou MUST end your final reply with the completion line exactly as specified in the skill's Output Contract.",
+  "inputs": [
+    "summarization-audit.txt"
+  ],
+  "expected_tokens": [
+    "summarization complete."
+  ],
+  "checks": {
+    "required_facts": [
+      "1-second|one second|one-second",
+      "30 seconds",
+      "three providers|3 providers",
+      "24 hours",
+      "knowledge base"
+    ],
+    "required_any": [
+      "contradict",
+      "conflict",
+      "inconsisten",
+      "discrepan"
+    ],
+    "forbidden_patterns": [
+      "TODO",
+      "lorem ipsum"
+    ]
+  },
+  "rubric": [
+    "Summary is materially shorter than the source",
+    "The 1-second per-provider interval is preserved",
+    "The 30-second quota write interval is preserved",
+    "The three-provider fallback cap is preserved",
+    "The 24-hour cache lifetime is preserved",
+    "The knowledge-base-first behavior is preserved",
+    "The contradiction between the three-provider implementation and five-provider design note is surfaced",
+    "No information introduced that is absent from the source",
+    "Completion line present"
+  ],
+  "time_limit": "none"
+}
