@@ -40,6 +40,11 @@
   (`debate-club/fixtures/index.json`, `debate-club/src/mcp-contract.test.ts`)
 - Spec: REQ-020 gains `fresh`, new REQ-021g covers the fetch cache, and §8.1
   documents claim-seeded corroboration. (`infobroker.md`)
+- Push pipeline: the read-through gate now requires a parseable
+  `readthrough.json` whose counts agree with the closing `READTHROUGH` token;
+  a missing, malformed, or contradictory summary fails the step instead of
+  degrading to `?` and silently passing. (`scripts/push-pipeline.sh`,
+  `scripts/pipeline/lib.sh`, `scripts/pipeline/prompts/readthrough.md`)
 
 ## 2026.10.20 — KB: legacy retention, docs, and memory verification
 

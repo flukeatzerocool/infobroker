@@ -276,18 +276,41 @@ else
   READTHROUGH_RC=$OPC_RC
   [[ $READTHROUGH_RC -ne 0 ]] && die "Read-through FAILED. Check $OUT_READTHROUGH."
 
-  critical=$(json_from_file "$PIPELINE_RUN_DIR/readthrough.json" critical)
-  high=$(json_from_file "$PIPELINE_RUN_DIR/readthrough.json" high)
-  infoc=$(json_from_file "$PIPELINE_RUN_DIR/readthrough.json" info)
+  # The summary JSON is this gate's source of truth. A step can exit 0 without
+  # writing it (observed 2026-10-22: the light agent reported the file in its
+  # closing prose but issued no Write call). A missing summary must fail, not
+  # degrade to "?" — "?" is indistinguishable from a clean run and would
+  # silently skip the critical-finding block below.
+  SUMMARY_JSON="$PIPELINE_RUN_DIR/readthrough.json"
+  if ! SUMMARY_COUNTS=$(summary_counts "$SUMMARY_JSON"); then
+    error "Read-through wrote no parseable summary to ${SUMMARY_JSON}."
+    error "The critical-finding gate cannot run without it — failing the step."
+    exit 1
+  fi
+  read -r critical high infoc <<<"$SUMMARY_COUNTS"
+  if [[ "$(json_from_file "$SUMMARY_JSON" status)" != "complete" ]]; then
+    error "Read-through summary status is not 'complete' (${SUMMARY_JSON})."
+    exit 1
+  fi
 
-  if [[ "$critical" != "0" && "$critical" != "?" ]]; then
+  # Cross-check the closing token against the JSON so the step cannot report
+  # one count in prose and record another in the artifact.
+  TOKEN_LINE=$(grep -oE 'READTHROUGH [0-9]+ critical; [0-9]+ high; [0-9]+ info' "$OUT_READTHROUGH" 2>/dev/null | tail -1 || true)
+  if [[ -n "$TOKEN_LINE" ]]; then
+    read -r tok_critical tok_high tok_infoc <<<"$(sed -E 's/READTHROUGH ([0-9]+) critical; ([0-9]+) high; ([0-9]+) info/\1 \2 \3/' <<<"$TOKEN_LINE")"
+    if [[ "$tok_critical $tok_high $tok_infoc" != "$critical $high $infoc" ]]; then
+      die "Read-through summary disagrees with its closing token (json ${critical}/${high}/${infoc}, token ${tok_critical}/${tok_high}/${tok_infoc})."
+    fi
+  fi
+
+  if (( critical > 0 )); then
     error "Read-through BLOCKED: ${critical} critical finding(s)."
     exit 1
   fi
 
   echo ""
   info "Read-through: DONE — ${critical}c / ${high}h / ${infoc}i"
-  [[ "$high" != "0" && "$high" != "?" ]] && warn "Warning: ${high} high-severity finding(s)."
+  (( high > 0 )) && warn "Warning: ${high} high-severity finding(s)."
   echo ""
 
   if git -C "$PROJECT_DIR" diff --name-only | grep -q 'infobroker.md'; then

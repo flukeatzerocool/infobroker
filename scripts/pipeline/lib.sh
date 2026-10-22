@@ -45,6 +45,22 @@ json_from_file() {
     "$path" "$key" 2>/dev/null || echo "?"
 }
 
+# summary_counts <path> → prints "<critical> <high> <info>" when the file
+# parses and all three are integers; exits 1 otherwise. Unlike json_from_file,
+# a missing or malformed artifact is a hard failure: the read-through gate
+# cannot tell "?" from a clean run, so it must not accept it.
+summary_counts() {
+  node -e '
+    const fs = require("fs");
+    let j;
+    try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); }
+    catch { process.exit(1); }
+    const counts = ["critical", "high", "info"].map((k) => j[k]);
+    if (!counts.every((v) => Number.isInteger(v))) process.exit(1);
+    console.log(counts.join(" "));
+  ' "$1" 2>/dev/null
+}
+
 # ── Secret scan ──────────────────────────────────────────────────────────────
 # scan_staged_for_secrets → lists matched staged lines; returns 0 if any.
 # Portable grep -E pattern; no -P dependency.

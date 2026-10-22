@@ -30,8 +30,17 @@ Auto-fix findings where safe: typo corrections, missing punctuation,
 whitespace normalization. Do NOT auto-fix: REQ body rewrites, structural
 changes, test ID assignments, or anything that changes semantic meaning.
 
-Write a machine-parseable summary to <SUMMARY_JSON> with the JSON shape
-{"status":"complete","critical":N,"high":N,"info":N} and end your reply
-with the line: READTHROUGH <crit> critical; <high> high; <info> info.
+Use the Write tool to create <SUMMARY_JSON> (an absolute path) with exactly
+the JSON shape {"status":"complete","critical":N,"high":N,"info":N}. Writing
+this file is part of the step, not a formality: the pipeline gate fails the
+run when the file is missing, unparseable, or its counts disagree with your
+closing token. Do not state that you wrote it unless a Write tool call
+succeeded. Likewise, claim an auto-fix only when an Edit or Write call for
+it succeeded — a correction you describe but never apply leaves the spec
+unfixed.
+
+End your reply with this line, verbatim, as the final line:
+
+READTHROUGH <crit> critical; <high> high; <info> info
 
 Gate: halt on critical > 0. Warn on high > 0. Info is advisory.
