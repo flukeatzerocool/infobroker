@@ -66,11 +66,11 @@ route to Infobroker first, falling back to built-ins only on error.
 | F1 | Provider API down | Timeout, HTTP 5xx | Fallback chain advances to next provider |
 | F2 | DuckDuckGo HTML scraping breaks | Zero results, parse errors | Scraped providers extract results via CSS selectors targeting known HTML layouts. Upstream layout changes cause selector mismatch (zero results extracted), which advances the fallback chain per REQ-031. Provider restoration requires a build update with corrected selectors. |
 | F3 | API key misconfiguration | HTTP 401/403 from keyed provider | `inspect_providers` reports auth status; server skips unauthenticated providers |
-| F4 | Result format inconsistency | Null fields, unexpected types | normalizer coerces all providers to a single JSON shape; unknown fields dropped |
+| F4 | Result format inconsistency | Null fields, unexpected types | The normalizer coerces all providers to a single JSON shape; unknown fields are dropped |
 | F5 | MCP protocol errors | tools/list returns wrong schema | G0 conformance gate catches schema drift |
 | F6 | Client instruction drift | AI uses built-in tools instead of Infobroker | `search-preferences.md` is a spec-required deliverable; README documents the `opencode.json` snippet |
 | F7 | Quota exhaustion without fallback | Provider returns rate-limit error | `inspect_providers` tracks quota; exhausted providers are skipped by fallback chain; 80% warning threshold |
-| F8 | Corroboration loop stalls | `verify_claims` produces no new claims after iteration N | Hard cap on max_iterations; loop exits when no new sources found |
+| F8 | Corroboration loop stalls | `verify_claims` produces no new claims after iteration N | Hard cap on `max_iterations`; the loop exits when no new sources are found |
 | F9 | Embedding model unavailable | KB tools return errors, auto-indexing silently fails | KB tools report degraded status with a remediation naming the configured model reference and the built-in fallback; retrieval continues on the fallback model where possible, and non-knowledge-base operation is unaffected (REQ-103). |
 | F10 | Knowledge base storage corruption | KB queries return unexpected results or fail | On detection, the server backs up the corrupt storage and creates a fresh store. The `manage_kb` stats action reports the event. |
 | F11 | Update overwrites user state | User config layer, KB content, or quota state lost after applying an update | User-owned state lives outside the distributed tree; shipped defaults and the user config layer are separate (REQ-010, REQ-042, REQ-043). G1 update-preservation tests guard the guarantee. |
