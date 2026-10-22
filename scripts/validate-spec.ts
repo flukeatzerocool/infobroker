@@ -29,7 +29,7 @@ function deriveToolSlugs(): string[] {
   if (!existsSync(indexPath)) return [];
   const text = readFileSync(indexPath, "utf-8");
   const slugs = new Set<string>();
-  const re = /registerTool\(\s*"infobroker_([a-z0-9_]+)"/g;
+  const re = /(?:server\.registerTool|instrumentTool)\(\s*"infobroker_([a-z0-9_]+)"/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     slugs.add(m[1]);
@@ -631,7 +631,7 @@ for (const f of toolLayerFiles) {
 // default for search_web and kb (REQ-020, REQ-060a).
 const indexText = readFileSync(join(SRC, "index.ts"), "utf-8");
 function schemaDefault(slug: string, param: string, max: number): string | undefined {
-  const toolRe = new RegExp(`registerTool\\(\\s*"infobroker_${slug}"[\\s\\S]*?${param}:\\s*z\\.number\\(\\)\\.min\\(1\\)\\.max\\(${max}\\)\\.optional\\(\\)\\.default\\((\\d+)\\)`);
+  const toolRe = new RegExp(`(?:server\\.registerTool|instrumentTool)\\(\\s*"infobroker_${slug}"[\\s\\S]*?${param}:\\s*z\\.number\\(\\)\\.min\\(1\\)\\.max\\(${max}\\)\\.optional\\(\\)\\.default\\((\\d+)\\)`);
   return toolRe.exec(indexText)?.[1];
 }
 function requireDefault(re: RegExp, label: string, schema: string | undefined): void {
@@ -658,7 +658,7 @@ requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a manage
 // behavioral annotation) fails spec validation, not only the live stdio test.
 function checkToolDefinitionBar(): void {
   const text = readFileSync(join(SRC, "index.ts"), "utf-8");
-  const blocks = text.split(/registerTool\(\s*"infobroker_/).slice(1);
+  const blocks = text.split(/(?:server\.registerTool|instrumentTool)\(\s*"infobroker_/).slice(1);
   if (blocks.length === 0) {
     error("REQ-092: no infobroker_ registerTool calls found in src/index.ts");
     return;

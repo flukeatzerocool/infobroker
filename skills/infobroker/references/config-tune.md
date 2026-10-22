@@ -39,9 +39,11 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 | Key | Default | Effect |
 |-----|---------|--------|
 | `passage_size` | 100 | Words per ranked passage (question mode). Smaller = fewer tokens per read. |
-| `max_passages` | 1 | Passages returned per page in question mode. |
+| `max_passages` | 5 | Passages returned per page in question mode. |
 | `crawl_max_pages` / `crawl_max_depth` | 10 / 2 | Bounds for same-origin `crawl`. Lower to cap crawl cost. |
 | `detect_date` | true | Extra date lookup per fetch. Disable for the cheapest path. |
+| `cache.kb_read` | true | Read a fresh knowledge-base copy before an outbound fetch. |
+| `cache.kb_max_age_hours` | 24 | Maximum KB age for a cache hit; older entries fall through to the network. |
 
 ## Expansion (`expand`)
 

@@ -24,6 +24,7 @@ row below.
 | Intent | Tools | Steps |
 |--------|-------|-------|
 | Search broadly | `search_web` | KB-first recall → classify task → dispatch chain → fallback on failure; batch several queries by passing an array |
+| Force a fresh search | `search_web (fresh)` | skip the KB-first shortcut and query external providers, then fall back per the chain |
 | Autocomplete a query | `search_web (suggest)` | suggestion provider → next suggestion-capable provider → error if none |
 | Expand a query | `search_web (expand)` | derive query variants from a suggestion-capable provider and the query, deduplicated and ranked |
 | Deep-read the top results | `search_web (deep)` | fetch the top-ranked pages and return each page's passages ranked against the query |

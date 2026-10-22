@@ -1,6 +1,6 @@
 // @implements REQ-020 REQ-021
 import { describe, it, expect } from "vitest";
-import { capInputs, mergeItems, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
+import { capInputs, coerceStringArray, mergeItems, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
 
 describe("capInputs", () => {
   it("caps input arrays at the batch limit", () => {
@@ -11,6 +11,36 @@ describe("capInputs", () => {
 
   it("leaves short arrays unchanged", () => {
     expect(capInputs(["a", "b"])).toEqual(["a", "b"]);
+  });
+});
+
+describe("coerceStringArray (union input transport)", () => {
+  it("passes a single string through", () => {
+    expect(coerceStringArray("one query").values).toEqual(["one query"]);
+  });
+
+  it("passes a real array through and caps it", () => {
+    expect(coerceStringArray(["a", "b", "c", "d", "e", "f"]).values).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("expands a JSON-encoded array string", () => {
+    expect(coerceStringArray('["one", "two"]').values).toEqual(["one", "two"]);
+  });
+
+  it("keeps a bracketed free-text query as one string when it is not JSON", () => {
+    expect(coerceStringArray("[RFC 9114] status").values).toEqual(["[RFC 9114] status"]);
+  });
+
+  it("rejects a malformed URL batch in strict mode", () => {
+    const out = coerceStringArray('["https://a.example",]', { strictArraySyntax: true });
+    expect(out.error?.message).toBeTruthy();
+    expect(out.values).toBeUndefined();
+  });
+
+  it("rejects empty arrays, non-strings, and empty strings", () => {
+    expect(coerceStringArray([]).error).toBeTruthy();
+    expect(coerceStringArray(["a", 2]).error).toBeTruthy();
+    expect(coerceStringArray("   ").error).toBeTruthy();
   });
 });
 

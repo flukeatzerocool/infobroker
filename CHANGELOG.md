@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026.10.22 — Session-log audit: input, URL, fetch, deep, and corroboration fixes
+
+- Batch inputs that arrive as a JSON-encoded array string are coerced instead
+  of being searched/fetched literally; malformed URL batches return
+  `invalid_input` rather than a false `network_target_refused`.
+  (`src/batch.ts`, `src/index.ts`)
+- Search-result URLs are made absolute at the normalizer boundary, which
+  repairs deep reading (it filtered on `^https?://`), citations, and KB URL
+  keys. Wikipedia results no longer lose their `snippet` to the field override.
+  (`src/normalizer.ts`, `src/providers/duckduckgo.ts`)
+- `native_fetch` content is converted from HTML to text before ranking,
+  auto-indexing, or truncation; known hosts route to their structured renderer
+  first. `fetch_page` reads a fresh KB copy before an outbound call
+  (REQ-021g) and `max_passages` defaults to 5.
+  (`src/lib/html.ts`, `src/index.ts`, `src/fetch-cache.ts`, `config.json`)
+- `deep`/`research` no longer silently skip enrichment when the KB-first
+  shortcut fires; empty searches carry `meta.no_results`.
+- `verify_claims` seeds one finding per caller claim and attributes sources to
+  it; page titles no longer become findings. Concurrency is preserved and
+  unreferenced claims are omitted. (`src/corroborate.ts`, §8.1)
+- Throttling serializes a concurrent burst per provider instead of letting all
+  callers read the same `lastCall`; rate-limit errors report `retry_after_ms`.
+  (`src/rate-limiter.ts`, `src/index.ts`)
+- Report ingest reports `created|replaced`; quota state comparison is
+  key-order-insensitive; `inspect_providers spec` reports per-tool call counts.
+  (`src/index.ts`, `src/quota.ts`)
+- Added `scripts/audit-session-logs.ts` (informational) and wired the existing
+  `version-sync` check into `npm run check`.
+- Tool registrations pass through an instrumented seam (`instrumentTool`) so
+  `inspect_providers spec` reports per-tool p50/p95 latencies; the spec and
+  README surface parsers accept the instrumented registration form.
+- GitHub uses its keyless repository search when no token is configured
+  (`/search/code` requires auth); GitHub and Stack Exchange are marked
+  `auth_optional`, so `inspect_providers` no longer reports them inactive.
+  (`src/providers/github.ts`, `config.json`, `provider-auth.md`)
+- Debate-club Arena now covers the stringified-array batch, Wikipedia
+  snippets, native-HTML-to-text, and claim-seeded verification.
+  (`debate-club/fixtures/index.json`, `debate-club/src/mcp-contract.test.ts`)
+- Spec: REQ-020 gains `fresh`, new REQ-021g covers the fetch cache, and §8.1
+  documents claim-seeded corroboration. (`infobroker.md`)
+
 ## 2026.10.20 — KB: legacy retention, docs, and memory verification
 
 - Retained the JSON backend as the one-release `kb.store_backend: "json"`

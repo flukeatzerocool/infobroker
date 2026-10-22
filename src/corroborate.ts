@@ -74,6 +74,20 @@ const STOPWORDS = new Set([
   "really", "still", "back", "even", "way", "say", "said", "thing", "work",
 ]);
 
+// REQ-026: a verification is about the caller's proposition, not about the
+// titles of whatever pages a search returns. Split the query into up to five
+// atomic claims so each finding is seeded from a claim.
+export function extractClaims(query: string): string[] {
+  const cleaned = query.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const parts = cleaned
+    .split(/(?<=[.!?;])\s+|\s+(?:and|but|while|whereas)\s+/i)
+    .map((p) => p.trim().replace(/[.!?;]+$/, ""))
+    .filter((p) => p.length > 0);
+  const claims = parts.length > 0 ? parts : [cleaned];
+  return claims.slice(0, 5);
+}
+
 export function extractTopic(title: string): string {
   const cleaned = title.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/);
   const keywords = cleaned.filter((w) => w.length > 2 && !STOPWORDS.has(w));
@@ -155,9 +169,31 @@ export function reconcileClaims(
   results: SearchResult[],
   similarityThreshold = 0.3,
   authorityWeights?: Record<string, number>,
+  claimSeeded = false,
 ): void {
   for (const r of results) {
     if (!r.title) continue;
+
+    // Claim-seeded mode (REQ-026): attribute each source to the closest
+    // caller claim instead of turning the page title into a finding.
+    if (claimSeeded) {
+      const text = `${r.title} ${r.snippet}`;
+      let best: CorroborationFinding | undefined;
+      let bestScore = -1;
+      for (const finding of findings.values()) {
+        const score = jaccardSimilarity(text, finding.claim ?? finding.topic);
+        if (score > bestScore) {
+          bestScore = score;
+          best = finding;
+        }
+      }
+      if (!best || (bestScore <= 0 && findings.size > 1)) continue;
+      if (!best.sources.some((s) => s.url === r.url)) {
+        best.sources.push({ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type, original_source: r.original_source });
+      }
+      continue;
+    }
+
     const topicKey = extractTopic(r.title);
     if (!topicKey) continue;
 
@@ -474,6 +510,20 @@ export async function corroborate(
 
   const findings = new Map<string, CorroborationFinding>();
 
+  // REQ-026: seed one finding per caller claim. External sources are attributed
+  // to these claims; page titles never become findings.
+  const claims = extractClaims(query);
+  for (const claim of claims) {
+    if (findings.has(claim)) continue;
+    findings.set(claim, {
+      topic: claim.length > 90 ? `${claim.slice(0, 87)}...` : claim,
+      claim,
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [],
+    });
+  }
+
   // REQ-026e: prior KB findings participate as corroborating sources before
   // external search. KB recall is derivative (SR-001) and never blocks the
   // external pass when absent, below threshold, or on error.
@@ -485,7 +535,7 @@ export async function corroborate(
         snippet: r.snippet,
         source_type: r.source_type,
       }));
-      reconcileClaims(findings, recalled, similarityThreshold, authorityWeights);
+      reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true);
     } catch {
       // KB unavailable — proceed to external providers.
     }
@@ -496,7 +546,7 @@ export async function corroborate(
   const searchedQueries = new Set<string>();
 
   while (iteration < maxIterations && totalCalls < maxCalls) {
-    const prevFindingsCount = findings.size;
+    const prevSourceCount = [...findings.values()].reduce((n, f) => n + f.sources.length, 0);
 
     if (iteration === 0) {
       // Phase 1 broad pass, capped to first_pass_max_providers (highest
@@ -536,7 +586,7 @@ export async function corroborate(
             totalCalls++;
             providersUsed.add(result.value.slug);
             increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-            reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights);
+            reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true);
           }
         }
 
@@ -584,7 +634,7 @@ export async function corroborate(
           totalCalls++;
           providersUsed.add(slug);
           increment(slug, config.providers[slug]?.rate_limit);
-          reconcileClaims(findings, results, similarityThreshold, authorityWeights);
+          reconcileClaims(findings, results, similarityThreshold, authorityWeights, true);
         }
       }
     }
@@ -595,12 +645,15 @@ export async function corroborate(
 
     if (allConfirmed) break;
 
-    if (iteration > 0 && findings.size === prevFindingsCount) break;
+    const sourceCount = [...findings.values()].reduce((n, f) => n + f.sources.length, 0);
+    if (iteration > 0 && sourceCount === prevSourceCount) break;
 
     iteration++;
   }
 
-  const findingsArray = [...findings.values()];
+  // A finding without a source is not evidence. Keep the seeded claims out of
+  // the response when no provider or KB result could be attributed to them.
+  const findingsArray = [...findings.values()].filter((f) => f.sources.length > 0);
   const agreementMap = buildAgreementMap(findingsArray, confidenceThreshold);
 
   const condensed = findingsArray.map((f) => {

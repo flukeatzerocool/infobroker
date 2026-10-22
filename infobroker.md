@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.10.20
+**Spec version:** 2026.10.22
 
 ## Contents
 
@@ -174,7 +174,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021f`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108 and sub-REQs `060a`–`060g` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -225,7 +225,7 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
-`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `expand` (default false), `content_type` (default all), `region`, `research` (default false), and `deep` (default false). When `suggest` is true, the tool SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response with per-input provenance. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `expand` (default false), `content_type` (default all), `region`, `research` (default false), `fresh` (default false), and `deep` (default false). When `suggest` is true, the tool SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
 **REQ-020a — `search_web` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -268,6 +268,9 @@ WHEN `fetch_page` receives an extract request, the tool SHALL parse the fetched 
 
 **REQ-021f — `fetch_page` anti-bot challenge fall-through**
 WHEN a `fetch_page` renderer returns content that indicates an anti-bot challenge — a verification, CAPTCHA, or challenge page rather than the target page — the tool SHALL treat that renderer as failed and SHALL continue to the next renderer in the chain. The response SHALL report the renderer that ultimately served content, or a failure per REQ-002 when every renderer is exhausted. _Check:_ G1.
+
+**REQ-021g — `fetch_page` knowledge-base cache**
+WHEN a fresh knowledge-base copy of the requested URL exists, the tool SHALL return that copy before making an outbound request, SHALL report the cache hit in the response metadata, and SHALL fall through to the network when the copy is stale. The maximum cache age SHALL be configurable. _Check:_ G1.
 
 **REQ-024 — `inspect_providers`**
 `inspect_providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health), and `status` (optional; list action filter selecting only active providers). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
@@ -796,6 +799,11 @@ An explicit `provider` parameter takes precedence over priority routing.
 ```
 function corroborate(query, max_iterations=5, confidence_threshold=0.8, providers=[...], priority=None):
   findings = {}
+  // REQ-026: seed one finding per caller claim. Sources are attributed to
+  // these claims; page titles never become findings.
+  for claim in extract_claims(query):
+    findings[claim] = { claim, topic: claim, confidence: 0.1,
+                        verdict: "unverified", sources: [] }
   iteration = 0
 
   // Phase 0: Knowledge-base recall (REQ-026e) — prior findings reconcile as
@@ -810,10 +818,11 @@ function corroborate(query, max_iterations=5, confidence_threshold=0.8, provider
     // early once the confidence bar is met; the full pool serves Phase 3.
     first_pass_providers = top_n_by_priority(providers, first_pass_max_providers)
     raw_results = parallel_search(query, first_pass_providers)
-    claims = extract_claims(raw_results)
+    // Attribute each result to its closest seeded claim (claim_seeded=true).
+    reconcile_claims(findings, raw_results, claim_seeded=true)
 
-    // Phase 2: Cross-reference — group claims by topic
-    grouped = group_by_topic(claims)
+    // Phase 2: Re-evaluate each claim's attributed sources for agreement.
+    grouped = group_by_topic(findings)
     for (topic, claims_set) in grouped:
       agree, disagree, gaps = reconcile(claims_set)
 
@@ -1030,6 +1039,7 @@ verdict is preserved (REQ-026f).
 | REQ-021d | `fetch_page` bounded crawl | 4.3 | G1 |
 | REQ-021e | `fetch_page` structured extraction | 4.3 | G1 |
 | REQ-021f | `fetch_page` anti-bot challenge fall-through | 4.3 | G1 |
+| REQ-021g | `fetch_page` knowledge-base cache | 4.3 | G1 |
 | REQ-024 | `inspect_providers` | 4.3 | G0, G1 |
 | REQ-024a | `inspect_providers` list action | 4.3 | G0, G1 |
 | REQ-024b | `inspect_providers` health action | 4.3 | G0, G1 |
@@ -1544,7 +1554,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108 | G0, G1 |

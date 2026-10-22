@@ -11,6 +11,7 @@ interface ProviderEntry {
   tier: string;
   capabilities: string[];
   auth_env?: string;
+  auth_optional?: boolean;
   url_env?: string;
   enabled: boolean;
 }
@@ -49,7 +50,7 @@ export function writeProviderAuth(config: Config): string {
     let envVar = "—";
 
     if (provider.auth_env) {
-      auth = "API key";
+      auth = provider.auth_optional ? "Optional API key" : "API key";
       envVar = `\`${provider.auth_env}\``;
     } else if (provider.url_env) {
       auth = "Instance URL";

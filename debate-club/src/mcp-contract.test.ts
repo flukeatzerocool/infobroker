@@ -114,6 +114,22 @@ test("search_web returns a shape-valid result set from the pinned provider", asy
   expect(providerOf(body)).toBe("wikipedia");
   expectSearchResultShape(body.results as Array<Record<string, unknown>>);
   expect((body.results as unknown[]).length).toBeGreaterThan(0);
+  // REQ-020: the Wikipedia provider's real snippet survives normalization.
+  expect(String((body.results as Array<Record<string, unknown>>)[0].snippet)).not.toBe("");
+});
+
+test("search_web coerces a JSON-encoded array string into a batch", async () => {
+  scenario = "search-stringified-batch";
+  const out = await call("infobroker_search_web", {
+    query: '["retrieval augmented generation", "information retrieval"]',
+    provider: "wikipedia",
+    max_results: 3,
+  });
+  const body = expectOk(out.text);
+  const perQuery = (body.meta as Record<string, unknown>).per_query as unknown[];
+  expect(Array.isArray(perQuery)).toBe(true);
+  expect(perQuery.length).toBe(2);
+  expect((body.results as unknown[]).length).toBeGreaterThan(0);
 });
 
 test("search_web rejects an unknown provider with invalid_input", async () => {
@@ -134,6 +150,21 @@ test("fetch_page renders through the pinned renderer", async () => {
   const body = expectOk(out.text);
   expect(providerOf(body)).toBe("jina");
   expect(JSON.stringify(body)).toContain("debate-club");
+});
+
+test("fetch_page converts native HTML to text", async () => {
+  scenario = "fetch-native-html";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://example.com/html",
+    renderer: "native_fetch",
+    detect_date: false,
+  });
+  const body = expectOk(out.text);
+  const snippet = String((body.results as Array<Record<string, unknown>>)[0].snippet);
+  expect(providerOf(body)).toBe("native_fetch");
+  expect(snippet).toContain("Fixture Article");
+  expect(snippet).not.toContain("<script");
+  expect(snippet).not.toContain("<style");
 });
 
 test("fetch_page refuses a private network target", async () => {
@@ -173,6 +204,11 @@ test("verify_claims conforms to the REQ-001 envelope", async () => {
   expect(Array.isArray(body.results)).toBe(true);
   expect(Array.isArray(body.findings)).toBe(true);
   expect(body.agreement_map).toBeTruthy();
+  // REQ-026: findings are seeded from the caller claim, not page titles.
+  const findings = body.findings as Array<Record<string, unknown>>;
+  expect(findings.length).toBe(1);
+  expect(findings[0].claim).toBe("Does retrieval augmented generation reduce hallucination");
+  expect((findings[0].sources as unknown[]).length).toBeGreaterThan(0);
 });
 
 test("inspect_providers list and spec report operational state", async () => {

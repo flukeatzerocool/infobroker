@@ -5,7 +5,8 @@ import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
 import { infobrokerFetch } from "../http.js";
 
-const GH_API = "https://api.github.com/search/code";
+const GH_CODE_API = "https://api.github.com/search/code";
+const GH_REPO_API = "https://api.github.com/search/repositories";
 
 let _ghToken: string | undefined;
 function ghToken(): string | undefined {
@@ -20,13 +21,29 @@ async function search(query: string): Promise<SearchResult[]> {
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
+  // Code search requires authentication. Without a token, fall back to the
+  // keyless repository search instead of advertising a capability that 401s.
+  const endpoint = token ? GH_CODE_API : GH_REPO_API;
   const params = new URLSearchParams({ q: query, per_page: "10" });
-  const resp = await infobrokerFetch(`${GH_API}?${params.toString()}`, {
+  const resp = await infobrokerFetch(`${endpoint}?${params.toString()}`, {
     providerSlug: "github",
     headers,
   });
 
   if (!resp.ok) throw new RetryableError(`GitHub returned HTTP ${resp.status}`, resp.status);
+
+  if (!token) {
+    const data = (await resp.json()) as {
+      items?: Array<{ full_name: string; html_url: string; description?: string | null }>;
+    };
+    const raw = (data.items || []).map((item) => ({
+      title: item.full_name,
+      url: item.html_url,
+      snippet: item.description || `Repository ${item.full_name}`,
+      source_type: "code",
+    }));
+    return normalize(raw, "github");
+  }
 
   const data = (await resp.json()) as {
     items?: Array<{
@@ -50,9 +67,13 @@ async function search(query: string): Promise<SearchResult[]> {
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
-    const resp = await infobrokerFetch(`${GH_API}?q=test&per_page=1`, {
+    const token = ghToken();
+    const endpoint = token ? GH_CODE_API : GH_REPO_API;
+    const headers: Record<string, string> = { "Accept": "application/vnd.github.v3+json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const resp = await infobrokerFetch(`${endpoint}?q=test&per_page=1`, {
       providerSlug: "github",
-      headers: { "Accept": "application/vnd.github.v3+json" },
+      headers,
     });
     const elapsed = Date.now() - start;
     if (resp.ok) return { status: "active", avgLatencyMs: elapsed };

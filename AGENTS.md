@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.10.20)
+# AGENTS.md — Infobroker MCP Server (v2026.10.22)
 
 ## Layer Map
 
@@ -238,6 +238,7 @@ This runs:
 | Command              | What it checks                                     |
 |----------------------|----------------------------------------------------|
 | `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
+| `npm run version-sync` | Every version reference matches `package.json`   |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax over shell entry points |

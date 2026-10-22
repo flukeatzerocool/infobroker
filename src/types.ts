@@ -13,6 +13,7 @@ export interface ProviderConfig {
   capabilities: string[];
   rate_limit: { per_second?: number; per_day?: number; per_month?: number };
   auth_env?: string;
+  auth_optional?: boolean;
   url_env?: string;
   enabled: boolean;
   priority: number;
@@ -72,6 +73,10 @@ export interface Config {
     detect_date?: boolean;
     crawl_max_pages?: number;
     crawl_max_depth?: number;
+    cache?: {
+      kb_read?: boolean;
+      kb_max_age_hours?: number;
+    };
   };
   expand?: {
     max_expansions?: number;

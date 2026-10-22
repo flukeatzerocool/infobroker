@@ -341,8 +341,8 @@ function validateConfig(config: Config): void {
     if (config.fetch.passage_size !== undefined && (typeof config.fetch.passage_size !== "number" || config.fetch.passage_size < 1)) {
       errors.push("fetch.passage_size must be a positive number");
     }
-    if (config.fetch.max_passages !== undefined && (typeof config.fetch.max_passages !== "number" || config.fetch.max_passages < 1)) {
-      errors.push("fetch.max_passages must be a positive number");
+    if (config.fetch.max_passages !== undefined && (typeof config.fetch.max_passages !== "number" || config.fetch.max_passages < 1 || config.fetch.max_passages > 20)) {
+      errors.push("fetch.max_passages must be a number between 1 and 20");
     }
     if (config.fetch.detect_date !== undefined && typeof config.fetch.detect_date !== "boolean") {
       errors.push("fetch.detect_date must be a boolean");

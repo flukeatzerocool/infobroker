@@ -81,14 +81,16 @@
       "capabilities": ["code"],
       "rate_limit": { "per_second": 0.003 },
       "auth_env": "INFOBROKER_STACK_EXCHANGE_API_KEY",
+      "auth_optional": true,
       "enabled": true,
       "priority": 15
     },
     "github": {
       "tier": "free_http",
       "capabilities": ["code"],
-      "rate_limit": { "per_second": 0.017 },
+      "rate_limit": { "per_second": 0.15 },
       "auth_env": "INFOBROKER_GITHUB_API_KEY",
+      "auth_optional": true,
       "enabled": true,
       "priority": 15
     },
@@ -249,10 +251,14 @@
   "fetch": {
     "allow_private_urls": false,
     "passage_size": 100,
-    "max_passages": 1,
+    "max_passages": 5,
     "detect_date": true,
     "crawl_max_pages": 10,
-    "crawl_max_depth": 2
+    "crawl_max_depth": 2,
+    "cache": {
+      "kb_read": true,
+      "kb_max_age_hours": 24
+    }
   },
   "expand": {
     "max_expansions": 5

@@ -33,4 +33,20 @@ describe("throttle (REQ-030)", () => {
     await third;
     expect(thirdSettled).toBe(true);
   });
+
+  it("serializes a concurrent burst instead of firing together", async () => {
+    vi.useFakeTimers({ now: Date.now() });
+    configureProviderRateLimit("burst", { per_second: 1 });
+
+    const settled: number[] = [];
+    const calls = [0, 1, 2].map((i) => throttle("burst").then(() => settled.push(i)));
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(settled).toEqual([0, 1]);
+    await vi.advanceTimersByTimeAsync(1000);
+    await Promise.all(calls);
+    expect(settled).toEqual([0, 1, 2]);
+  });
 });

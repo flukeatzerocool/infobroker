@@ -24,7 +24,7 @@ export function deriveToolNames(): string[] {
   if (!existsSync(SRC_INDEX_PATH)) return [];
   const src = readFileSync(SRC_INDEX_PATH, "utf-8");
   const names: string[] = [];
-  const re = /server\.registerTool\(\s*"([^"]+)"/g;
+  const re = /(?:server\.registerTool|instrumentTool)\(\s*"([^"]+)"/g;
   let match;
   while ((match = re.exec(src)) !== null) {
     names.push(match[1]);

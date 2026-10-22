@@ -23,7 +23,7 @@ import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
-import { capInputs, mergeItems } from "./batch.js";
+import { capInputs, coerceStringArray, mergeItems } from "./batch.js";
 import { reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
 import { classifyTaskType } from "./task-type.js";
@@ -38,11 +38,14 @@ import { searchCitations } from "./cite.js";
 import { deriveExpansions } from "./expand.js";
 import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
 import { infobrokerFetch } from "./http.js";
-import { stripHtml } from "./lib/html.js";
+import { htmlToText, stripHtml } from "./lib/html.js";
+import { shouldUseKbCache } from "./fetch-cache.js";
+import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 
 const START_TIME = Date.now();
+const toolMetrics = createToolMetrics();
 const SPEC_REVIEW_TIME = Date.now();
 const BUILD_VERSION = readPackageVersion();
 
@@ -143,11 +146,9 @@ async function startupHealthCheck(): Promise<void> {
   for (const [slug, provider] of Object.entries(config.providers)) {
     if (!provider.enabled) continue;
     const keyEnv = provider.auth_env;
-    if (keyEnv && !process.env[keyEnv]) {
-      if (provider.tier === "keyed_http") {
-        console.error(`[infobroker] ${slug}: inactive (no_api_key)`);
-        continue;
-      }
+    if (keyEnv && !process.env[keyEnv] && provider.tier === "keyed_http" && !provider.auth_optional) {
+      console.error(`[infobroker] ${slug}: inactive (no_api_key)`);
+      continue;
     }
     const urlEnv = provider.url_env;
     if (urlEnv && !process.env[urlEnv]) {
@@ -206,16 +207,29 @@ async function doWebSearch(
   expand = false,
   deep = false,
   research = false,
+  fresh = false,
   deepBudget?: { remaining: number }
 ): Promise<string> {
+  // REQ-020: a union-typed input can arrive as a JSON-encoded array string.
+  // Coerce before dispatch so a stringified batch is searched as a batch
+  // rather than as one literal query.
+  const coercedQuery = coerceStringArray(query);
+  if (coercedQuery.error) {
+    return `[ERROR] ${json(err("system", "invalid_input", coercedQuery.error.message, coercedQuery.error.remediation))}`;
+  }
+  if (coercedQuery.values!.length > 1) {
+    query = coercedQuery.values!;
+  } else {
+    query = coercedQuery.values![0];
+  }
   if (Array.isArray(query)) {
-    const queries = capInputs(query);
+    const queries = capInputs([...new Set(query)]);
     // A shared fetch budget bounds total page reads across the whole batch
     // (REQ-028): a 5-query deep search must not multiply the page budget.
     const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
     const envelopes = await Promise.all(
       queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand, deep, research, deepBudget)
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand, deep, research, fresh, deepBudget)
       )
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
@@ -285,7 +299,7 @@ async function doWebSearch(
       const budget = { remaining: perVariantPages };
       return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
-        priority, false, contentType, region, false, true, false, budget
+        priority, false, contentType, region, false, true, false, false, budget
       );
     });
     return `[OK] ${json({
@@ -306,7 +320,10 @@ async function doWebSearch(
         const sufficientResults = kbResults.filter(
           (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
         );
-        if (sufficientResults.length > 0) {
+        // REQ-028: a deep or research request must still read pages. The KB
+        // shortcut returns stored snippets and would otherwise silently skip
+        // enrichment, so it applies only to plain searches.
+        if (!fresh && !deep && !research && sufficientResults.length > 0) {
           const kbProvider = "knowledge_base";
           return `[OK] ${json(ok(kbProvider, sufficientResults.map((r) => ({
             title: r.title,
@@ -496,12 +513,12 @@ async function doWebSearch(
         filtered,
         deepConf,
         config.fetch?.passage_size ?? 100,
-        config.fetch?.max_passages ?? 1,
+        config.fetch?.max_passages ?? 5,
         maxPages,
         async (url) => {
           let fetched;
           try {
-            fetched = await fetchPageContent(url, renderers, config.output.max_chars, allowPrivateDeep);
+            fetched = await fetchPageContent(url, renderersForUrl(url, renderers), config.output.max_chars, allowPrivateDeep, true);
           } catch (e) {
             // REQ-021a: a refused page falls back to its snippet (REQ-028);
             // REQ-098: the refusal is recorded in the audit trail.
@@ -601,6 +618,9 @@ async function doWebSearch(
     const details: Record<string, unknown> = {
       exhausted_chain: [...chain, ...crossTaskAttempted],
       quota_exhausted: quotaExhaustedList,
+      ...(rateLimited
+        ? { retry_after_ms: Math.max(0, ...chain.map((slug) => cooldownRemainingMs(slug))) }
+        : {}),
     };
     // REQ-002: rate limiting takes precedence over the generic exhaustion code.
     const exhaustionCode = rateLimited ? "rate_limited" : "all_providers_exhausted";
@@ -609,7 +629,7 @@ async function doWebSearch(
       : "Retry later or check provider configuration";
     return `[ERROR] ${json(err("none", exhaustionCode, `Fallback chain exhausted: ${chain.join(", ")}`, exhaustionHint, details))}`;
   }
-  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [] }))}`;
+  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [], no_results: true }))}`;
 }
 
 // REQ-021c: best-effort last-updated detection. Reads the last-modified header
@@ -651,6 +671,7 @@ async function fetchPageContent(
   renderers: string[],
   maxChars: number,
   allowPrivate: boolean,
+  cleanHtml = false,
 ): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
   const config = getConfig();
   const attempt = async (slug: string) => {
@@ -683,14 +704,18 @@ async function fetchPageContent(
           ),
         ]);
       // REQ-032: retry backoff and count are configurable per provider.
-      const content = await retryWithBackoff(timedCall, config.providers[slug]);
+      const raw = await retryWithBackoff(timedCall, config.providers[slug]);
 
       // REQ-021f: a renderer that returns an anti-bot challenge rather than the
       // target page is treated as failed, so the chain falls through to the
       // next renderer instead of serving the verification page as content.
-      if (isBotChallenge(content)) {
+      if (isBotChallenge(raw)) {
         return null;
       }
+
+      // native_fetch returns the raw body. Convert HTML to text before it
+      // reaches the caller, the passage ranker, or the truncation file.
+      const content = cleanHtml && slug === "native_fetch" ? htmlToText(raw) : raw;
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -749,6 +774,30 @@ async function fetchPageContent(
   return null;
 }
 
+// REQ-021: route well-known hosts to their structured renderer before the
+// generic Jina/native chain, so Wikipedia/arXiv/Archive/Stack Exchange pages
+// do not depend on scraping the rendered HTML.
+export function renderersForUrl(url: string, fallback: string[]): string[] {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return fallback;
+  }
+  const special =
+    host === "wikipedia.org" || host.endsWith(".wikipedia.org")
+      ? "wikipedia"
+      : host === "arxiv.org" || host.endsWith(".arxiv.org")
+        ? "arxiv"
+        : host === "archive.org" || host.endsWith(".archive.org")
+          ? "internet_archive"
+          : host.endsWith("stackexchange.com") || host.endsWith("stackoverflow.com")
+            ? "stack_exchange"
+            : undefined;
+  if (!special) return fallback;
+  return [special, ...fallback.filter((r) => r !== special)];
+}
+
 async function doFetchPage(
   url: string | string[],
   renderer?: string,
@@ -760,6 +809,17 @@ async function doFetchPage(
   crawl = false,
   extract = false
 ): Promise<string> {
+  // REQ-021: accept a JSON-encoded array string as well as a real array. A
+  // malformed URL batch is an input error, not a network-target refusal.
+  const coercedUrl = coerceStringArray(url, { strictArraySyntax: true });
+  if (coercedUrl.error) {
+    return `[ERROR] ${json(err("system", "invalid_input", coercedUrl.error.message, coercedUrl.error.remediation))}`;
+  }
+  if (coercedUrl.values!.length > 1) {
+    url = coercedUrl.values!;
+  } else {
+    url = coercedUrl.values![0];
+  }
   if (Array.isArray(url)) {
     const urls = capInputs(url);
     const envelopes = await Promise.all(
@@ -787,6 +847,32 @@ async function doFetchPage(
     return `[ERROR] ${json(err("none", "network_target_refused", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), `Set fetch.allow_private_urls=true to permit private targets`))}`;
   }
 
+  // REQ-021: read a fresh knowledge-base copy before making an outbound call.
+  // This cuts duplicate fetches across a session; stale entries fall through.
+  if (!crawl && !extract && !question && config.fetch?.cache?.kb_read !== false && isKbConfigured()) {
+    const cached = kbGet(url);
+    const maxAgeMs = (config.fetch?.cache?.kb_max_age_hours ?? 24) * 3_600_000;
+    if (cached && shouldUseKbCache(cached, maxAgeMs)) {
+      const text = cached.text.slice(0, effectiveMax);
+      const dateMeta = cached.source_updated_at
+        ? { last_updated: cached.source_updated_at, date_source: "knowledge_base", date_confidence: "medium" }
+        : {};
+      return `[OK] ${json({
+        status: "ok",
+        provider: "knowledge_base",
+        results: [{ title: new URL(url).hostname, url, snippet: text, ...dateMeta }],
+        ...dateMeta,
+        meta: {
+          query_time_ms: 0,
+          fallback_used: false,
+          cache: "hit",
+          cache_age_ms: Date.now() - cached.ingested_at,
+        },
+        ...(cached.text.length > effectiveMax ? { truncated: true } : {}),
+      })}`;
+    }
+  }
+
   // REQ-021d: bounded same-origin crawl. Fetches the start page raw, discovers
   // same-origin links, and recurses within page-count and depth caps, applying
   // the SSRF guard (REQ-021a) on every hop via the native_fetch path.
@@ -803,7 +889,7 @@ async function doFetchPage(
       visited.add(cur.url);
       let fetched;
       try {
-        fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate);
+        fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate, true);
       } catch (e) {
         // REQ-021a/021d: a refused crawl hop is skipped, not listed;
         // REQ-098: the refusal is recorded in the audit trail.
@@ -898,7 +984,7 @@ async function doFetchPage(
 
   let fetched;
   try {
-    fetched = await fetchPageContent(url, renderers, effectiveMax, allowPrivate);
+    fetched = await fetchPageContent(url, renderersForUrl(url, renderers), effectiveMax, allowPrivate, true);
   } catch (e) {
     if (e instanceof SsrRefusalError) {
       audit("network_target_refused", url);
@@ -971,7 +1057,7 @@ async function doFetchPage(
         fallback_used: false,
         ...(policyNote ?? {}),
       },
-      ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
+      ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath, truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path." } : {}),
     })}`;
   }
 
@@ -990,7 +1076,7 @@ async function doFetchPage(
       fallback_used: false,
       ...(policyNote ?? {}),
     },
-    ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath } : {}),
+    ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath, truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path." } : {}),
   })}`;
 }
 
@@ -1003,14 +1089,14 @@ function authPresent(authEnv?: string): boolean {
 
 function providerOperational(p: ProviderConfig): boolean {
   if (!p.enabled) return false;
-  if (!authPresent(p.auth_env)) return false;
+  if (!p.auth_optional && !authPresent(p.auth_env)) return false;
   if (p.url_env && !process.env[p.url_env]) return false;
   return true;
 }
 
 function providerInactiveReason(p: ProviderConfig): "disabled" | "no_api_key" | "no_url" | null {
   if (!p.enabled) return "disabled";
-  if (!authPresent(p.auth_env)) return "no_api_key";
+  if (!p.auth_optional && !authPresent(p.auth_env)) return "no_api_key";
   if (p.url_env && !process.env[p.url_env]) return "no_url";
   return null;
 }
@@ -1094,7 +1180,7 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   const quota = checkQuota(providerSlug, p.rate_limit);
   const keyEnv = p.auth_env;
   // REQ-104/REQ-024b: auth presence is pool-aware (single key or key pool).
-  const authOk = authPresent(keyEnv);
+  const authOk = p.auth_optional ? true : authPresent(keyEnv);
   let status: HealthStatus = authOk ? "active" : "inactive";
 
   let avgLatencyMs: number | undefined;
@@ -1201,6 +1287,7 @@ function doSpecHealth(): string {
       } : undefined,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
       total_requests_served: latency.total(),
+      tool_metrics: toolMetrics.snapshot(),
       last_spec_review: new Date(SPEC_REVIEW_TIME).toISOString(),
       quota_state_path: getQuotaStatePath(),
       config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
@@ -1216,15 +1303,28 @@ function doSpecHealth(): string {
 
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.10.20",
+  version: "2026.10.22",
 });
 
 // --- search_web ---
-server.registerTool(
+const instrumentTool = (name: string, config: any, handler: any) =>
+  server.registerTool(name, config, async (...args: any[]) => {
+    const start = Date.now();
+    try {
+      const result = await handler(...args);
+      toolMetrics.record(name, Date.now() - start, true);
+      return result;
+    } catch (error) {
+      toolMetrics.record(name, Date.now() - start, false);
+      throw error;
+    }
+  });
+
+instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `fresh: true` skips KB recall and searches external providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -1237,6 +1337,7 @@ server.registerTool(
       expand: z.boolean().optional().default(false).describe("Return query-expansion strings instead of search results"),
       deep: z.boolean().optional().default(false).describe("Read the top results and return each page's ranked passages against the query"),
       research: z.boolean().optional().default(false).describe("Research compile: fan out to derived query variants and deep-read each, returning passages grouped by variant (default off)"),
+      fresh: z.boolean().optional().default(false).describe("Skip the knowledge-base recall shortcut and search external providers (default false)"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
     },
@@ -1247,7 +1348,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     const content = await doWebSearch(
       params.query,
       params.provider as string | undefined,
@@ -1261,18 +1362,19 @@ server.registerTool(
       params.region as string | undefined,
       Boolean(params.expand),
       Boolean(params.deep),
-      Boolean(params.research)
+      Boolean(params.research),
+      Boolean(params.fresh)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
 );
 
 // --- fetch_page ---
-server.registerTool(
+instrumentTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange alternatives). Use when you have a URL and need readable text, passages ranked against a question, or the page's last-updated date. Do NOT use for topic search (use infobroker_search_web) or cross-source claim verification (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` bounds the same-origin crawl to config caps; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` selects the backend, and native_fetch is the keyless fallback when Jina is throttled or anti-bot challenged. `max_length` truncates the returned text only; a truncated page is written in full to a temp file. Makes external HTTP calls and needs no API key. Fetched pages auto-index into the knowledge base unless the content policy flags them (see infobroker_manage_kb): flag mode returns without storage, block mode refuses. Unreachable URLs return an [ERROR] envelope with remediation; success returns an [OK] envelope with status, provider, results, and meta.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange alternatives). Use when you have a URL and need readable text, passages ranked against a question, or the page's last-updated date. Do NOT use for topic search (use infobroker_search_web) or cross-source claim verification (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` bounds the same-origin crawl to config caps; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` selects the backend, and native_fetch is the keyless fallback when Jina is throttled or anti-bot challenged. `max_length` truncates the returned text only; a truncated page is written in full to a temp file. Makes external HTTP calls and needs no API key. A fresh knowledge-base copy is returned before an outbound fetch when available. Fetched pages auto-index into the knowledge base unless the content policy flags them (see infobroker_manage_kb): flag mode returns without storage, block mode refuses. Unreachable URLs return an [ERROR] envelope with remediation; success returns an [OK] envelope with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),
@@ -1291,7 +1393,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     const content = await doFetchPage(
       params.url,
       params.renderer as string | undefined,
@@ -1308,7 +1410,7 @@ server.registerTool(
 );
 
 // --- providers ---
-server.registerTool(
+instrumentTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
@@ -1325,7 +1427,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     const action = params.action as "list" | "health" | "spec";
     let content: string;
     if (action === "list") {
@@ -1344,7 +1446,7 @@ server.registerTool(
 );
 
 // --- verify_claims ---
-server.registerTool(
+instrumentTool(
   "infobroker_verify_claims",
   {
     title: "Verify Claims",
@@ -1363,7 +1465,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     try {
       const result = await corroborate(String(params.query), {
         max_iterations: Number(params.max_iterations),
@@ -1406,7 +1508,7 @@ server.registerTool(
 );
 
 // --- kb ---
-server.registerTool(
+instrumentTool(
   "infobroker_manage_kb",
   {
     title: "Knowledge Base",
@@ -1435,7 +1537,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
@@ -1583,6 +1685,7 @@ server.registerTool(
 
         // REQ-083: a "disk" destination writes the report to a local file
         // *instead of* the knowledge base; "kb" and "both" index it.
+        const existed = dest.kb && finalUrl ? kbGet(finalUrl) !== null : false;
         let count = 0;
         if (dest.kb) {
           count = kbIngest(
@@ -1603,7 +1706,7 @@ server.registerTool(
           status: "ok",
           provider: "knowledge_base",
           results: [{ title: dest.kb ? "ingested" : "saved", url: finalUrl, snippet }],
-          meta: { chunks_ingested: count, source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}) },
+          meta: { chunks_ingested: count, ingest_result: existed ? "replaced" : "created", source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}) },
         });
         return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
       }
@@ -1626,7 +1729,7 @@ server.registerTool(
 );
 
 // --- reload_config ---
-server.registerTool(
+instrumentTool(
   "infobroker_reload_config",
   {
     title: "Reload Configuration",
@@ -1650,7 +1753,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     try {
       let patchResult: { path: string; backup: string | null; changed: string[] } | null = null;
       if (params.patch && Object.keys(params.patch as Record<string, unknown>).length > 0) {
@@ -1742,7 +1845,7 @@ server.registerTool(
 );
 
 // --- cite ---
-server.registerTool(
+instrumentTool(
   "infobroker_get_citations",
   {
     title: "Get Citations",
@@ -1758,7 +1861,7 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params: any) => {
     try {
       const citations = await searchCitations(String(params.query), Number(params.max_results));
       return {

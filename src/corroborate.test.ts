@@ -346,6 +346,29 @@ describe("corroborate", () => {
     expect(result.iteration_count).toBe(0);
   });
 
+  it("keys findings on the caller claim, not the page title (REQ-026)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    });
+    const snippet = "red teaming reduces model risk in production";
+    const result = await corroborate("red teaming reduces model risk", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Unrelated Page One", "https://a.example/x", snippet)],
+        wikipedia: async () => [makeResult("Unrelated Page Two", "https://b.example/y", snippet)],
+      },
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].claim).toBe("red teaming reduces model risk");
+    expect(result.findings[0].topic).toBe("red teaming reduces model risk");
+    expect(result.findings[0].sources).toHaveLength(2);
+    expect(result.findings[0].verdict).toBe("confirmed");
+  });
+
   it("reconciles a KB-recalled source alongside an external match (REQ-026e)", async () => {
     mockConfig({
       providers: {
@@ -684,7 +707,7 @@ describe("corroborate", () => {
       };
     };
 
-    const resultPromise = corroborate("topic", {
+    const resultPromise = corroborate("first distinct claim; second distinct claim; third distinct claim", {
       searchers: {
         duckduckgo: phaseAwareSearcher("duckduckgo", makeResult("First Distinct Topic", "https://a.com/1", "first distinct claim")),
         marginalia: phaseAwareSearcher("marginalia", makeResult("Second Distinct Topic", "https://b.com/1", "second distinct claim")),

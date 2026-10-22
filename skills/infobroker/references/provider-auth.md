@@ -17,8 +17,8 @@ Generated from `config.json`. Do not edit manually.
 | internet_archive | free_http | None | — |
 | arxiv | free_http | None | — |
 | semantic_scholar | free_http | API key | `INFOBROKER_SEMANTIC_SCHOLAR_API_KEY` |
-| stack_exchange | free_http | API key | `INFOBROKER_STACK_EXCHANGE_API_KEY` |
-| github | free_http | API key | `INFOBROKER_GITHUB_API_KEY` |
+| stack_exchange | free_http | Optional API key | `INFOBROKER_STACK_EXCHANGE_API_KEY` |
+| github | free_http | Optional API key | `INFOBROKER_GITHUB_API_KEY` |
 | core | free_http | API key | `INFOBROKER_CORE_API_KEY` |
 | openalex | free_http | None | — |
 | europe_pmc | free_http | None | — |

@@ -2,6 +2,33 @@
 
 ## Active Decisions
 
+### D-059: Session-Log Findings — Claim-Seeded Corroboration and Fetch Cache (REQ-020, REQ-021g, REQ-026; 2026.10.22)
+
+`verify_claims` previously keyed findings on the titles of whatever pages a
+search returned, so the caller's proposition was never the unit of
+verification and 48 of 50 findings across 13 logged calls were unverified at
+confidence 0.3. Findings are now seeded from `extractClaims(query)` and each
+source is attributed to its closest claim; result titles never become
+findings. This preserves the response shape and the independence/authority
+confidence rule while making "confirmed" mean the caller's claim was
+corroborated. Alternatives rejected: renaming the tool (breaking, and hides
+the defect) and ranking result titles against the query (still does not
+verify the claim).
+
+Search-result URLs are normalized to absolute http(s) at the normalizer
+boundary. DuckDuckGo returns a scheme-less display URL, and deep reading
+filtered on `^https?://`, so 27 logged deep calls read zero pages. The same
+normalization repairs citations and KB URL keys.
+
+`fetch_page` reads a fresh knowledge-base copy before an outbound call
+(REQ-021g) because 64 same-session duplicate fetches were observed and the
+tool only wrote to the KB. The cache is age-bounded and can be disabled;
+stale entries fall through. `max_passages` defaults to 5 (was 1) because
+question mode otherwise returned a single 100-word passage. Native-HTML
+content is converted to text before ranking, fixing markup-polluted passages.
+
+---
+
 ### D-058: Disk-Backed SQLite Knowledge Base (REQ-108; 2026.10.20)
 
 The knowledge base parsed the entire `vector-store.json` (513 MB in the live

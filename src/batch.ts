@@ -5,6 +5,59 @@ export function capInputs(items: string[]): string[] {
   return items.slice(0, MAX_BATCH_INPUTS);
 }
 
+export interface CoerceOptions {
+  // When true, a string that looks like a JSON array but does not parse is an
+  // error. URLs never start with "[" legitimately, so callers that take URLs
+  // pass true; free-text queries may start with "[" and pass false.
+  strictArraySyntax?: boolean;
+}
+
+export interface CoercedStringArray {
+  values?: string[];
+  error?: { message: string; remediation: string };
+}
+
+// Accepts a plain string, a real array, or the JSON-encoded array string that
+// clients sometimes send for a union-typed input (observed in session logs).
+export function coerceStringArray(value: unknown, options: CoerceOptions = {}): CoercedStringArray {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return { error: { message: "empty array input", remediation: "Pass at least one string value" } };
+    }
+    if (value.some((v) => typeof v !== "string" || v.trim() === "")) {
+      return { error: { message: "array input contains a non-string or empty value", remediation: "Pass an array of non-empty strings" } };
+    }
+    return { values: capInputs(value.map((v) => (v as string).trim())) };
+  }
+
+  if (typeof value !== "string") {
+    return { error: { message: "input must be a string or an array of strings", remediation: "Pass a string or an array of up to five strings" } };
+  }
+
+  const trimmed = value.trim();
+  const looksLikeArray = trimmed.startsWith("[") && trimmed.endsWith("]");
+  if (looksLikeArray) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return coerceStringArray(parsed, options);
+      }
+    } catch {
+      if (options.strictArraySyntax) {
+        return { error: { message: "malformed JSON array input", remediation: "Pass a valid JSON array of strings, or a single string" } };
+      }
+    }
+    if (options.strictArraySyntax) {
+      return { error: { message: "input is not a JSON array of strings", remediation: "Pass a valid JSON array of strings, or a single string" } };
+    }
+  }
+
+  if (trimmed === "") {
+    return { error: { message: "empty input", remediation: "Pass a non-empty string" } };
+  }
+  return { values: [trimmed] };
+}
+
 interface EnvelopeOk {
   status: "ok";
   provider: string;

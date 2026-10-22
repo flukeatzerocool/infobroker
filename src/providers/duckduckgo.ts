@@ -51,9 +51,18 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     const urlEl = $(el).find(".result__url");
 
     const title = titleEl.text().trim();
-    const rawUrl = urlEl.text().trim() || titleEl.attr("href") || "";
-
-    let resultUrl = rawUrl;
+    const href = titleEl.attr("href") || "";
+    // Prefer the visible URL (the normalizer makes it absolute). When it is
+    // empty, recover the target from DuckDuckGo's /l/?uddg= redirect.
+    let resultUrl = urlEl.text().trim();
+    if (!resultUrl && href) {
+      try {
+        const parsed = new URL(href, "https://duckduckgo.com");
+        resultUrl = parsed.searchParams.get("uddg") || href;
+      } catch {
+        resultUrl = href;
+      }
+    }
     if (resultUrl.startsWith("//")) resultUrl = "https:" + resultUrl;
 
     const snippet = snippetEl.text().trim();

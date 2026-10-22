@@ -34,6 +34,15 @@ function ensureDir(): void {
   }
 }
 
+// Key-order-insensitive comparison so a normalizing load does not look like a
+// reset. Extra fields still count as a change (sanitize drops them).
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
+}
+
 function sanitizeCounter(c: unknown): { count: number; resetAt: string } | null {
   if (!c || typeof c !== "object") return null;
   const cc = c as Record<string, unknown>;
@@ -106,7 +115,7 @@ export function loadQuotaState(): void {
       const raw = readFileSync(QUOTA_FILE, "utf-8");
       const parsed = JSON.parse(raw) as unknown;
       const cleaned = sanitizeQuotaState(parsed);
-      if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
+      if (stableStringify(cleaned) !== stableStringify(parsed)) {
         audit("quota_state_reset", "persisted quota state failed validation and was reset");
       }
       quotaState = cleaned;
