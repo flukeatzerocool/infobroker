@@ -211,7 +211,7 @@ spec.
 across DuckDuckGo, Wikipedia, academic databases, news, code repositories —
 or describe your task and the server picks the best source. Pass an array of
 queries to batch several searches in one call. Ask for a deep read and it
-fetches the top results and ranks each page's passages against your query,
+fetches the top results, then ranks each page's passages against your query,
 so you get the specific text that answers the question instead of links.
 Failed providers fall back silently through a configurable chain so you get
 results, not error messages. Other search tools lock you to one engine;
@@ -225,7 +225,7 @@ fails.
 > "Where, in that report, does it mention the reactor core?"
 
 `fetch_page` hands any URL to Jina Reader, which renders it as clean
-Markdown optimized for LLM consumption. Falls back to native HTTP when
+Markdown optimized for LLM consumption. It falls back to native HTTP when
 Jina is throttled. Wikipedia and Internet Archive have dedicated
 renderers for source-specific extraction. Ask a page a question — pass
 `question` to `fetch_page` and it returns the passages that answer it, each
@@ -283,8 +283,8 @@ tells you how sure it is.
 > "Ingest this article so it's cached for next time."
 
 Every search, fetch, and corroboration run is cached in a local knowledge
-base. `manage_kb` checks the cache before hitting external providers — only
-falling back to the network when the cached results aren't fresh enough
+base. `manage_kb` checks the cache before hitting external providers, falling
+back to the network only when the cached results aren't fresh enough
 or relevant enough. Its actions ingest new text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
 freshness schedule, and deduplicated by source. Retrieval runs on your
@@ -355,7 +355,7 @@ get the rigor without leaving the pipeline.
 A single instruction file, `search-preferences.md`, routes your client
 toward these tools: the knowledge base first, external providers only
 when the cache falls short. Wire it and the skills directory into your
-OpenCode config once — the Quick Start above shows the exact snippet —
+OpenCode config once — the Quick Start section shows the exact snippet —
 and every research request follows the pipeline automatically.
 
 Write your own skill into `skills/` to add a workflow shape of your own.
@@ -454,7 +454,7 @@ server first copies your layer to a timestamped `*.bak-*` file, then updates
 it atomically, leaving anything it does not recognize untouched.
 
 The knowledge base ships empty. Retrieval runs on a configurable in-process
-embedding model selected by `kb.embedding_model`. By default the store
+embedding model selected by `kb.embedding_model`. By default, the store
 writes to a user-scoped path (`~/.local/share/infobroker/knowledge-base`)
 outside the repository, so the content you research and cache stays on your
 machine and is never committed. Each deployed instance accumulates its own
