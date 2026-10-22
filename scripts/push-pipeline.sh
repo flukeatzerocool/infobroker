@@ -119,6 +119,7 @@ OUT_CHANGELOG="$PIPELINE_RUN_DIR/changelog.txt"
 OUT_SCAN="$PIPELINE_RUN_DIR/scan.txt"
 OUT_SCAN_GIT="$PIPELINE_RUN_DIR/scan-git.txt"
 OUT_README="$PIPELINE_RUN_DIR/readme.txt"
+OUT_FIX="$PIPELINE_RUN_DIR/fix.txt"
 
 # Default timeout per opencode subprocess (seconds, 0 = no timeout)
 OPC_TIMEOUT="${OPC_TIMEOUT:-1800}"
@@ -259,6 +260,43 @@ info "Step 2: Full spec read-through — style conformance"
 info "═══════════════════════════════════════════════"
 echo ""
 
+# run_readthrough_pass <prompt-file> — one read-through turn plus its summary
+# gate. Sets RT_CRITICAL/RT_HIGH/RT_INFO on success; dies on a failed turn, a
+# missing/malformed/incomplete summary, or a summary that contradicts the
+# closing token. A step can exit 0 without writing the artifact (observed
+# 2026-10-22), so "?" is not an acceptable substitute for the counts.
+run_readthrough_pass() {
+  local prompt_file="$1"
+  run_pipeline_step "$prompt_file" "$OUT_READTHROUGH" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
+  local rc=$OPC_RC
+  [[ $rc -ne 0 ]] && die "Read-through FAILED. Check $OUT_READTHROUGH."
+
+  local summary="$PIPELINE_RUN_DIR/readthrough.json" counts token_line tok
+  if ! counts=$(summary_counts "$summary"); then
+    error "Read-through wrote no parseable summary to ${summary}."
+    error "The critical-finding gate cannot run without it — failing the step."
+    exit 1
+  fi
+  read -r RT_CRITICAL RT_HIGH RT_INFO <<<"$counts"
+  if [[ "$(json_from_file "$summary" status)" != "complete" ]]; then
+    error "Read-through summary status is not 'complete' (${summary})."
+    exit 1
+  fi
+
+  token_line=$(grep -oE 'READTHROUGH [0-9]+ critical; [0-9]+ high; [0-9]+ info' "$OUT_READTHROUGH" 2>/dev/null | tail -1 || true)
+  if [[ -n "$token_line" ]]; then
+    read -r tok <<<"$(sed -E 's/READTHROUGH ([0-9]+) critical; ([0-9]+) high; ([0-9]+) info/\1 \2 \3/' <<<"$token_line")"
+    if [[ "$tok" != "$RT_CRITICAL $RT_HIGH $RT_INFO" ]]; then
+      die "Read-through summary disagrees with its closing token (json ${RT_CRITICAL}/${RT_HIGH}/${RT_INFO}, token ${tok})."
+    fi
+  fi
+
+  if (( RT_CRITICAL > 0 )); then
+    error "Read-through BLOCKED: ${RT_CRITICAL} critical finding(s)."
+    exit 1
+  fi
+}
+
 if $DRY_RUN || step_skip readthrough; then
   info "Read-through: SKIPPED (dry run / state journal)"
 else
@@ -272,45 +310,41 @@ else
   fi
 
   warn "Launching read-through session..."
-  run_pipeline_step "$PIPELINE_RUN_DIR/readthrough.prompt.md" "$OUT_READTHROUGH" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
-  READTHROUGH_RC=$OPC_RC
-  [[ $READTHROUGH_RC -ne 0 ]] && die "Read-through FAILED. Check $OUT_READTHROUGH."
-
-  # The summary JSON is this gate's source of truth. A step can exit 0 without
-  # writing it (observed 2026-10-22: the light agent reported the file in its
-  # closing prose but issued no Write call). A missing summary must fail, not
-  # degrade to "?" — "?" is indistinguishable from a clean run and would
-  # silently skip the critical-finding block below.
-  SUMMARY_JSON="$PIPELINE_RUN_DIR/readthrough.json"
-  if ! SUMMARY_COUNTS=$(summary_counts "$SUMMARY_JSON"); then
-    error "Read-through wrote no parseable summary to ${SUMMARY_JSON}."
-    error "The critical-finding gate cannot run without it — failing the step."
-    exit 1
-  fi
-  read -r critical high infoc <<<"$SUMMARY_COUNTS"
-  if [[ "$(json_from_file "$SUMMARY_JSON" status)" != "complete" ]]; then
-    error "Read-through summary status is not 'complete' (${SUMMARY_JSON})."
-    exit 1
-  fi
-
-  # Cross-check the closing token against the JSON so the step cannot report
-  # one count in prose and record another in the artifact.
-  TOKEN_LINE=$(grep -oE 'READTHROUGH [0-9]+ critical; [0-9]+ high; [0-9]+ info' "$OUT_READTHROUGH" 2>/dev/null | tail -1 || true)
-  if [[ -n "$TOKEN_LINE" ]]; then
-    read -r tok_critical tok_high tok_infoc <<<"$(sed -E 's/READTHROUGH ([0-9]+) critical; ([0-9]+) high; ([0-9]+) info/\1 \2 \3/' <<<"$TOKEN_LINE")"
-    if [[ "$tok_critical $tok_high $tok_infoc" != "$critical $high $infoc" ]]; then
-      die "Read-through summary disagrees with its closing token (json ${critical}/${high}/${infoc}, token ${tok_critical}/${tok_high}/${tok_infoc})."
-    fi
-  fi
-
-  if (( critical > 0 )); then
-    error "Read-through BLOCKED: ${critical} critical finding(s)."
-    exit 1
-  fi
-
+  run_readthrough_pass "$PIPELINE_RUN_DIR/readthrough.prompt.md"
   echo ""
-  info "Read-through: DONE — ${critical}c / ${high}h / ${infoc}i"
-  (( high > 0 )) && warn "Warning: ${high} high-severity finding(s)."
+  info "Read-through: DONE — ${RT_CRITICAL}c / ${RT_HIGH}h / ${RT_INFO}i"
+
+  # High findings are divergences the deterministic gates cannot see. Give
+  # them one bounded repair pass under the full model, then a fresh
+  # read-through; if high findings survive, refuse to push rather than warn
+  # and continue.
+  if (( RT_HIGH > 0 )); then
+    warn "Read-through: ${RT_HIGH} high-severity finding(s) — running one repair pass."
+    cp "$OUT_READTHROUGH" "$PIPELINE_RUN_DIR/readthrough.first.txt"
+    cp "$PIPELINE_RUN_DIR/readthrough.json" "$PIPELINE_RUN_DIR/readthrough.first.json"
+    sed -e "s|<READTHROUGH_TXT>|$PIPELINE_RUN_DIR/readthrough.first.txt|g" \
+        -e "s|<READTHROUGH_JSON>|$PIPELINE_RUN_DIR/readthrough.first.json|g" \
+        -e "s|<FIX_TXT>|$OUT_FIX|g" \
+        "$PROMPT_DIR/fix-high.md" > "$PIPELINE_RUN_DIR/fix-high.prompt.md"
+    run_pipeline_step "$PIPELINE_RUN_DIR/fix-high.prompt.md" "$OUT_FIX" --model "$PIPELINE_MODEL" --retry
+    FIX_RC=$OPC_RC
+    [[ $FIX_RC -ne 0 ]] && die "High-finding repair FAILED. Check $OUT_FIX."
+    run_gate "Post-repair spec checks" "$PIPELINE_RUN_DIR/check-post-fix.txt" npm run check \
+      || die "Spec checks FAILED after high-finding repair."
+
+    # Re-review with the repair dispositions in view: the reviewer must
+    # re-verify a rejected finding, not silently repeat it.
+    {
+      cat "$PIPELINE_RUN_DIR/readthrough.prompt.md"
+      printf '\n\nA prior repair pass recorded dispositions for the previous high findings at %s. Re-verify any high finding it rejected against the tree; do not repeat a rejected finding without new evidence.\n' "$OUT_FIX"
+    } > "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
+    warn "Re-reviewing after repair..."
+    run_readthrough_pass "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
+    if (( RT_HIGH > 0 )); then
+      die "Read-through still reports ${RT_HIGH} high-severity finding(s) after one repair pass — refusing to push. See $OUT_READTHROUGH and $OUT_FIX."
+    fi
+    info "Read-through: repair cleared the high findings."
+  fi
   echo ""
 
   if git -C "$PROJECT_DIR" diff --name-only | grep -q 'infobroker.md'; then

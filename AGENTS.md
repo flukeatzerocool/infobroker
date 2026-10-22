@@ -68,7 +68,10 @@ changelog, scan, README) under the non-thinking `pipeline-fast` agent
 (`.opencode/agents/pipeline-fast.md`); the server-sync step keeps the full
 `build` agent. Step 6 is deterministic (`scripts/scan-refs.ts`,
 `scripts/scan-git-refs.ts`); pass `--scan-ai` for the deep AI scan, which runs
-its two prompts concurrently in isolated sessions. Per-step wall times are
+its two prompts concurrently in isolated sessions. A read-through that reports
+high-severity findings triggers one bounded repair pass under the full model
+(`scripts/pipeline/prompts/fix-high.md`) followed by a fresh read-through; if
+high findings survive, the pipeline refuses to commit or push. Per-step wall times are
 recorded under the run directory (`timings/`, one file per step, so concurrent
 scans cannot clobber each other) and printed at the end; the fixture-refresh
 cadence report is surfaced in the final summary. `--from=<step>` /

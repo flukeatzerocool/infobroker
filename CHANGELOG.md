@@ -45,6 +45,13 @@
   a missing, malformed, or contradictory summary fails the step instead of
   degrading to `?` and silently passing. (`scripts/push-pipeline.sh`,
   `scripts/pipeline/lib.sh`, `scripts/pipeline/prompts/readthrough.md`)
+- Push pipeline: high-severity read-through findings now trigger one bounded
+  repair pass under the full model followed by a fresh read-through; surviving
+  high findings block the commit and push instead of warning and shipping.
+  (`scripts/push-pipeline.sh`, `scripts/pipeline/prompts/fix-high.md`, AGENTS.md)
+- Spec: define verbose output, state that hedging is configuration-gated
+  (REQ-031), that the orchestrator escalates to gated analysis (REQ-051), and
+  how a `renderer` value resolves (terminology). (`infobroker.md`)
 
 ## 2026.10.20 — KB: legacy retention, docs, and memory verification
 
