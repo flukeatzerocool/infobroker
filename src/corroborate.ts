@@ -1,5 +1,5 @@
 // @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e
-import type { SearchResult, CorroborationResult, CorroborationFinding } from "./types.js";
+import type { SearchResult, CorroborationResult, CorroborationFinding, CorroborationSource } from "./types.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { getConfig, getActiveProviders, getDispatchChain } from "./config.js";
 import { throttle } from "./rate-limiter.js";
@@ -155,13 +155,25 @@ export function claimsConflict(a: string, b: string): boolean {
   return false;
 }
 
-interface Source {
-  title: string;
-  url: string;
-  snippet: string;
-  claim?: string;
-  source_type?: string;
-  original_source?: string;
+type Source = CorroborationSource;
+
+/**
+ * REQ-109: stamp the retrieval time when a source is first attributed to a
+ * claim. Callers may override it (tests, replays); otherwise it is "now".
+ */
+function attributeSource(
+  r: SearchResult,
+  retrievedAt?: () => string,
+): Source {
+  return {
+    title: r.title,
+    url: r.url,
+    snippet: r.snippet,
+    claim: r.snippet || r.title,
+    source_type: r.source_type,
+    original_source: r.original_source,
+    retrieved_at: retrievedAt ? retrievedAt() : new Date().toISOString(),
+  };
 }
 
 export function reconcileClaims(
@@ -170,6 +182,7 @@ export function reconcileClaims(
   similarityThreshold = 0.3,
   authorityWeights?: Record<string, number>,
   claimSeeded = false,
+  retrievedAt?: () => string,
 ): void {
   for (const r of results) {
     if (!r.title) continue;
@@ -189,7 +202,7 @@ export function reconcileClaims(
       }
       if (!best || (bestScore <= 0 && findings.size > 1)) continue;
       if (!best.sources.some((s) => s.url === r.url)) {
-        best.sources.push({ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type, original_source: r.original_source });
+        best.sources.push(attributeSource(r, retrievedAt));
       }
       continue;
     }
@@ -204,12 +217,12 @@ export function reconcileClaims(
         claim: r.snippet,
         confidence: 0.3,
         verdict: "unverified",
-        sources: [{ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type, original_source: r.original_source }],
+        sources: [attributeSource(r, retrievedAt)],
       });
     } else {
       const alreadyHasSource = existing.sources.some((s) => s.url === r.url);
       if (!alreadyHasSource) {
-        existing.sources.push({ title: r.title, url: r.url, snippet: r.snippet, claim: r.snippet || r.title, source_type: r.source_type, original_source: r.original_source });
+        existing.sources.push(attributeSource(r, retrievedAt));
       }
     }
   }

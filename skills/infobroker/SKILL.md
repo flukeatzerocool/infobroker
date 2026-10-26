@@ -149,6 +149,7 @@ early.
 | Search local knowledge base | `manage_kb (action: search)` | Semantic + keyword hybrid |
 | Ingest into knowledge base | `manage_kb (action: ingest)` | Text or URL |
 | Knowledge base stats | `manage_kb (action: stats)` | Operational metrics |
+| Persisted claim ledger | `manage_kb (action: claims)` | Claims recorded by `verify_claims`, newest first; filter by `query` or `source_url` |
 | Delete from knowledge base | `manage_kb (action: delete)` | By collection or source URL |
 | Translate findings | `translation` skill | Multilingual output |
 

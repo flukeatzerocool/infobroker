@@ -16,7 +16,7 @@ import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
 import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
 import { audit } from "./audit-log.js";
@@ -1480,6 +1480,22 @@ instrumentTool(
         undefined,
         "corroborate"
       );
+      // REQ-109: persist the ledger best-effort. kbRecordClaims swallows every
+      // error, so a ledger failure cannot fail or alter this response.
+      kbRecordClaims(
+        result.findings.map((f) => ({
+          claim: f.claim || f.topic,
+          verdict: f.verdict,
+          confidence: f.confidence,
+          sources: f.sources
+            .filter((s) => Boolean(s.url))
+            .map((s) => ({
+              url: s.url,
+              title: s.title,
+              retrieved_at: s.retrieved_at ?? new Date().toISOString(),
+            })),
+        }))
+      );
       if (compactMode(getConfig())) {
         delete result.provenance;
       }
@@ -1512,9 +1528,9 @@ instrumentTool(
   "infobroker_manage_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search cached content, ingest text or URLs, list/get/delete entries, view stats, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content, or manage encryption keys. Do NOT use for fresh external search (use infobroker_search_web) or to fetch a new page (use infobroker_fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Parameter semantics: `action` selects the operation; `query` for search, `text`/`url` plus `title` and `collection` for ingest, `source_url` for get/delete, and `operation` with `key_file` for the encryption sub-actions; `source_type` and `freshness_tier` tag an ingest and filter search/list; `save_to` defaults to 'kb', `format` to 'markdown', `max_results` to 8; `last_updated` is auto-detected from fetched URLs when omitted. Responses carry an [OK] or [ERROR] envelope: search/list/get return entries, stats returns counts, delete reports the chunks removed.",
+    description: "Manage the local knowledge base: search cached content, ingest text or URLs, list/get/delete entries, view stats, read persisted claim records, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content, or manage encryption keys. Do NOT use for fresh external search (use infobroker_search_web) or to fetch a new page (use infobroker_fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Parameter semantics: `action` selects the operation; `query` for search, `text`/`url` plus `title` and `collection` for ingest, `source_url` for get/delete, and `operation` with `key_file` for the encryption sub-actions; `source_type` and `freshness_tier` tag an ingest and filter search/list; `save_to` defaults to 'kb', `format` to 'markdown', `max_results` to 8; `last_updated` is auto-detected from fetched URLs when omitted. Responses carry an [OK] or [ERROR] envelope: search/list/get return entries, stats returns counts, delete reports the chunks removed.",
     inputSchema: {
-      action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption"]).describe("Operation to perform"),
+      action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption", "claims"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
       key_file: z.string().optional().describe("Path to a key file (generate_key writes here; rekey reads the target key from here). Never pass the secret itself — only a file path."),
       query: z.string().optional().describe("Search query (for search action)"),
@@ -1541,7 +1557,7 @@ instrumentTool(
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
-    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete" | "encryption";
+    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete" | "encryption" | "claims";
     // The encryption action is the recovery surface: it must remain reachable
     // even when the store is locked so the user can verify a key, restore a
     // backup, or re-key. All other actions honor the lock.
@@ -1709,6 +1725,28 @@ instrumentTool(
           meta: { chunks_ingested: count, ingest_result: existed ? "replaced" : "created", source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}) },
         });
         return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
+      }
+      if (action === "claims") {
+        // REQ-060h: the ledger is read-only, SQLite-only, and newest-first.
+        const ledger = kbClaims({
+          ...(params.query ? { query: String(params.query) } : {}),
+          ...(params.source_url ? { source_url: String(params.source_url) } : {}),
+          max_results: Number(params.max_results ?? 8),
+        });
+        if (!ledger) {
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "unsupported_backend", "The claim ledger requires the SQLite store", "Set kb.store_backend to \"sqlite\" and reload; the legacy JSON store does not persist claims"))}` }] };
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text: `[OK] ${json({
+              status: "ok",
+              provider: "knowledge_base",
+              results: ledger.claims,
+              meta: { truncated: ledger.truncated, scanned: ledger.scanned },
+            })}`,
+          }],
+        };
       }
       if (action === "stats") {
         const stats = kbStats();

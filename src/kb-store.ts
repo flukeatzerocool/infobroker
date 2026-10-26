@@ -1,9 +1,9 @@
-// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-085
+// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-085 REQ-109
 // Storage seam for the knowledge base. A backend owns persistence and chunk
 // iteration; the chunking, freshness, policy, and tool-response logic stays in
 // kb.ts. The JSON backend keeps the legacy in-memory array; the SQLite backend
 // streams rows so the whole store is never resident.
-import type { KbChunk } from "./types.js";
+import type { ClaimLedgerQuery, ClaimLedgerResult, ClaimRecord, KbChunk } from "./types.js";
 
 export const LIVE_SQLITE_STORE = "vector-store.sqlite";
 export const LEGACY_JSON_STORE = "vector-store.json";
@@ -18,6 +18,11 @@ export interface KbMeta {
 export interface KbStore {
   readonly backend: "json" | "sqlite";
   readonly path: string;
+  /**
+   * REQ-109: true when the backend persists the claim ledger. The legacy JSON
+   * store reports false and the `claims` action returns unsupported_backend.
+   */
+  readonly supportsClaims?: boolean;
   init(): void;
   close(): void;
   flush(): void;
@@ -34,6 +39,15 @@ export interface KbStore {
   appendEvent(message: string): void;
   events(): string[];
   format(): "encrypted" | "plaintext" | "none";
+  /** REQ-109: persist one verification run's claims. */
+  upsertClaims?(claims: ReadonlyArray<{
+    claim: string;
+    verdict: ClaimRecord["verdict"];
+    confidence: number;
+    sources: ReadonlyArray<{ url: string; title: string; retrieved_at: string }>;
+  }>): number;
+  /** REQ-060h: read persisted claims, newest first. */
+  claims?(query?: ClaimLedgerQuery): ClaimLedgerResult;
 }
 
 // --- Canonical artifact names (D3a) -----------------------------------------

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.10.22 — Claim ledger for verified claims
+
+- `verify_claims` now persists each finding as a claim record linked to the
+  sources that supported it, with the time each source was retrieved, so a
+  re-verification updates the claim in place instead of repeating work.
+  `manage_kb` action `claims` reads the ledger newest-first, filtered by claim
+  text or source URL. (REQ-109, REQ-060h)
+- Claim rows are sealed at rest and re-sealed when encryption is enabled,
+  disabled, or rekeyed; the legacy JSON store reports the ledger as
+  unsupported.
+
 ## 2026.10.22 — Dependency gate: lockfile remediation
 
 - Development and test installs now resolve `zod 4.6.7` and `undici 7.30.1`,

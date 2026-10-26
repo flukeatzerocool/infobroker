@@ -299,6 +299,15 @@ live source and refresh only what has actually changed. Other search MCP
 servers re-fetch the same facts every session; Infobroker remembers and
 reuses what it already found.
 
+Corroboration results are also kept as claim records. Each `verify_claims` run
+stores one ledger entry per finding, linked to the sources that supported it
+with the time each source was retrieved, and re-verifying a claim updates that
+entry in place instead of adding a duplicate. Read them with
+`manage_kb` action=claims, optionally filtered by `query` (claim text) or
+`source_url`, newest first and capped by `max_results` (default 8, max 50).
+The ledger is sealed at rest when encryption is on, and it requires the SQLite
+backend: the legacy JSON store returns `unsupported_backend`.
+
 ### Research Pipeline
 
 > "Research the construction of the Death Star, then draft a summary."

@@ -131,14 +131,60 @@ export interface ToolErrorResponse {
   };
 }
 
+export interface CorroborationSource {
+  title: string;
+  url: string;
+  snippet: string;
+  claim?: string;
+  source_type?: string;
+  archived_url?: string;
+  original_source?: string;
+  /** ISO time the source was first attributed to this claim (REQ-109). */
+  retrieved_at?: string;
+}
+
 export interface CorroborationFinding {
   topic: string;
   claim: string;
   confidence: number;
   verdict: "confirmed" | "contested" | "unverified";
-  sources: Array<{ title: string; url: string; snippet: string; claim: string; source_type?: string; archived_url?: string; original_source?: string }>;
+  sources: CorroborationSource[];
   perspectives?: string[];
   source_types?: Record<string, number>;
+}
+
+/**
+ * One persisted claim record (REQ-109). The read API returns these; the
+ * store keeps the sealed payload and exposes it through `fromStored`.
+ */
+export interface ClaimRecord {
+  id: string;
+  claim_key: string;
+  claim: string;
+  verdict: "confirmed" | "contested" | "unverified";
+  confidence: number;
+  first_seen_at: string;
+  updated_at: string;
+  sources: ClaimSourceEdge[];
+}
+
+export interface ClaimSourceEdge {
+  source_key: string;
+  url: string;
+  title: string;
+  retrieved_at: string;
+}
+
+export interface ClaimLedgerQuery {
+  query?: string;
+  source_url?: string;
+  max_results?: number;
+}
+
+export interface ClaimLedgerResult {
+  claims: ClaimRecord[];
+  truncated: boolean;
+  scanned: number;
 }
 
 export interface CorroborationResult {

@@ -49,6 +49,7 @@ Given a single step in the pipeline, pick by condition:
 |-----------|------|
 | Broad search; KB may already hold the answer | `search_web` (KB-first is automatic) |
 | Answer entirely from stored content, or inspect/maintain the KB | `manage_kb (action: search)` / `manage_kb (action: list)` / `manage_kb (action: stats)` / `manage_kb (action: get)` |
+| Previously verified claims were persisted and you want them back without re-searching | `manage_kb (action: claims)` |
 | A claim's truth is contested and needs multi-source cross-reference | `verify_claims` |
 | You have a URL and need readable content | `fetch_page` |
 | You have a URL and a specific question about it | `fetch_page (question)` |

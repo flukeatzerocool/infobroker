@@ -1,4 +1,4 @@
-// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f REQ-109
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SearchResult } from "../src/types.js";
 
@@ -309,6 +309,57 @@ describe("reconcileClaims", () => {
     reconcileClaims(findings, [r]);
     const f = [...findings.values()][0];
     expect(f.sources[0].source_type).toBe("academic");
+  });
+
+  // REQ-109 clause: every attributed source carries a retrieval timestamp.
+  it("stamps retrieved_at on every attributed source", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, [
+      makeResult("Quantum Computing Error Correction Advances", "https://a.com/1", "quantum computing error correction is progressing"),
+      makeResult("Quantum Computing Error Correction Study", "https://b.com/2", "quantum computing error correction shows advances"),
+    ]);
+    const f = [...findings.values()][0];
+    expect(f.sources.length).toBe(2);
+    for (const s of f.sources) {
+      expect(typeof s.retrieved_at).toBe("string");
+      expect(Number.isNaN(Date.parse(s.retrieved_at!))).toBe(false);
+    }
+  });
+
+  // REQ-109 clause: the attribution clock is injectable and stamped once per
+  // source, so a re-run cannot silently rewrite an earlier retrieval time.
+  it("uses the injected clock and does not restamp an existing source", () => {
+    const findings = new Map<string, CF>();
+    const r = makeResult("AI Safety", "https://a.com/1", "red teaming reduces model risk");
+    const clock = () => "2026-01-02T03:04:05.000Z";
+    reconcileClaims(findings, [r], 0.3, undefined, false, clock);
+    const f = [...findings.values()][0];
+    expect(f.sources[0].retrieved_at).toBe("2026-01-02T03:04:05.000Z");
+    reconcileClaims(findings, [r], 0.3, undefined, false, () => "2027-09-09T09:09:09.000Z");
+    expect(f.sources.length).toBe(1);
+    expect(f.sources[0].retrieved_at).toBe("2026-01-02T03:04:05.000Z");
+  });
+
+  // REQ-109 clause: the claim-seeded (REQ-026) attribution path stamps too.
+  it("stamps retrieved_at on claim-seeded attribution", () => {
+    const findings = new Map<string, CF>();
+    findings.set("seed", {
+      topic: "seed",
+      claim: "red teaming reduces model risk",
+      confidence: 0.3,
+      verdict: "unverified",
+      sources: [],
+    });
+    reconcileClaims(
+      findings,
+      [makeResult("AI Safety", "https://a.com/1", "red teaming reduces model risk")],
+      0.3,
+      undefined,
+      true,
+    );
+    const f = [...findings.values()][0];
+    expect(f.sources.length).toBe(1);
+    expect(typeof f.sources[0].retrieved_at).toBe("string");
   });
 
   it("does not confirm when a corroborated cluster coexists with a conflicting claim (REQ-026f)", () => {

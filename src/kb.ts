@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087 REQ-097 REQ-098 REQ-099
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-060h REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087 REQ-097 REQ-098 REQ-099 REQ-109
 import { randomUUID, randomBytes } from "node:crypto";
 import {
   readFileSync,
@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { join, dirname, basename, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import type { KbConfig, KbChunk, KbSearchResult, KbListEntry, KbStats } from "./types.js";
+import type { KbConfig, KbChunk, KbSearchResult, KbListEntry, KbStats, ClaimLedgerQuery, ClaimLedgerResult, ClaimRecord } from "./types.js";
 import {
   sealEnvelope,
   openEnvelope,
@@ -1252,6 +1252,43 @@ function slugify(title: string): string {
 export function resolveReportIdentity(title: string, providedUrl?: string): string {
   if (providedUrl) return providedUrl;
   return `report://${slugify(title)}`;
+}
+
+/** True when the active backend persists the claim ledger (REQ-109). */
+export function kbSupportsClaims(): boolean {
+  return sqliteStore?.supportsClaims === true;
+}
+
+/**
+ * REQ-109: persist the claims from one verification run. Best-effort by
+ * contract: the caller (verify_claims) must never fail because of this, so
+ * every error is swallowed here and reported only as a false return.
+ */
+export function kbRecordClaims(
+  claims: ReadonlyArray<{
+    claim: string;
+    verdict: ClaimRecord["verdict"];
+    confidence: number;
+    sources: ReadonlyArray<{ url: string; title: string; retrieved_at: string }>;
+  }>
+): boolean {
+  try {
+    if (!sqliteStore || !sqliteStore.supportsClaims) return false;
+    sqliteStore.upsertClaims(claims);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * REQ-060h: read persisted claims newest-first. On the legacy JSON backend
+ * the ledger is unsupported; the caller maps that to unsupported_backend.
+ */
+export function kbClaims(query: ClaimLedgerQuery = {}): ClaimLedgerResult | null {
+  if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (!sqliteStore || !sqliteStore.supportsClaims) return null;
+  return sqliteStore.claims(query);
 }
 
 export function kbDelete(collection?: string, sourceUrl?: string): number {

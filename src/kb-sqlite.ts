@@ -1,12 +1,13 @@
-// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-084 REQ-085
+// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060h REQ-084 REQ-085 REQ-109
 // SQLite-backed knowledge base. Chunks stream from the database one row at a
 // time, so search/list/get/stats do not require the full store in memory.
 // When encryption is enabled the whole row payload, the model state, and event
 // messages are sealed; the salt and encryption marker live in `meta`.
 import { DatabaseSync } from "node:sqlite";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { KbChunk } from "./types.js";
+import type { ClaimLedgerQuery, ClaimLedgerResult, ClaimRecord, ClaimSourceEdge, KbChunk } from "./types.js";
 import {
   LEGACY_JSON_STORE,
   LIVE_SQLITE_STORE,
@@ -16,6 +17,9 @@ import {
 } from "./kb-store.js";
 import { deriveRowKey, newRowSalt, openRow, sealRow } from "./kb-row-crypto.js";
 import type { ResolvedKey } from "./kb-crypto.js";
+
+/** Row bound for one claim read (REQ-060h); hitting it reports truncated. */
+export const CLAIM_SCAN_LIMIT = 5000;
 
 export const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -32,6 +36,24 @@ CREATE TABLE IF NOT EXISTS events (
   encrypted INTEGER NOT NULL DEFAULT 0,
   message BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS claims (
+  id TEXT PRIMARY KEY,
+  claim_key TEXT NOT NULL UNIQUE,
+  first_seen_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  encrypted INTEGER NOT NULL DEFAULT 0,
+  payload BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS claims_updated ON claims(updated_at);
+CREATE TABLE IF NOT EXISTS claim_sources (
+  claim_id TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  retrieved_at TEXT NOT NULL,
+  encrypted INTEGER NOT NULL DEFAULT 0,
+  payload BLOB NOT NULL,
+  PRIMARY KEY (claim_id, source_key)
+);
+CREATE INDEX IF NOT EXISTS claim_sources_key ON claim_sources(source_key);
 `;
 
 export interface SqliteStoreOptions {
@@ -43,6 +65,7 @@ export interface SqliteStoreOptions {
 
 export class SqliteStore implements KbStore {
   readonly backend = "sqlite" as const;
+  readonly supportsClaims = true;
   readonly path: string;
   private db: DatabaseSync | null = null;
   private metaCache: KbMeta | null = null;
@@ -279,6 +302,198 @@ export class SqliteStore implements KbStore {
     return this.rawMeta("encryption") === "1" ? "encrypted" : "plaintext";
   }
 
+  // --- Claim ledger (REQ-109, REQ-060h) -------------------------------------
+  //
+  // Claim rows mirror the chunk store's at-rest rule: only the identifiers
+  // (claim_key, source_key) and timestamps stay in clear columns; the claim
+  // text, verdict, confidence, and URL live in the sealed payload. The
+  // identifiers are keyed with the row key when encryption is on, so the raw
+  // database cannot be dictionary-matched against candidate claims or URLs.
+
+  /** Normalize claim text before keying: trim, collapse, lowercase, strip terminal punctuation. */
+  static normalizeClaim(text: string): string {
+    return text
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase()
+      .replace(/[.!?;,]+$/g, "")
+      .trim();
+  }
+
+  private keyedHash(value: string): string {
+    if (this.encrypted && this.rowKey) {
+      return createHmac("sha256", this.rowKey).update(value, "utf-8").digest("hex");
+    }
+    return createHash("sha256").update(value, "utf-8").digest("hex");
+  }
+
+  claimKey(claimText: string): string {
+    return this.keyedHash(SqliteStore.normalizeClaim(claimText));
+  }
+
+  sourceKey(url: string): string {
+    return this.keyedHash(url.trim());
+  }
+
+  private encodeClaim(claim: {
+    claim: string;
+    verdict: ClaimRecord["verdict"];
+    confidence: number;
+  }): Buffer {
+    const clear = Buffer.from(
+      JSON.stringify({ claim: claim.claim, verdict: claim.verdict, confidence: claim.confidence }),
+      "utf-8"
+    );
+    return this.encrypted && this.rowKey ? sealRow(this.rowKey, clear) : clear;
+  }
+
+  private decodeClaim(payload: Uint8Array): { claim: string; verdict: ClaimRecord["verdict"]; confidence: number } | null {
+    try {
+      const clear = this.encrypted && this.rowKey ? openRow(this.rowKey, Buffer.from(payload)) : Buffer.from(payload);
+      return JSON.parse(clear.toString("utf-8")) as { claim: string; verdict: ClaimRecord["verdict"]; confidence: number };
+    } catch {
+      return null;
+    }
+  }
+
+  private encodeEdge(edge: Pick<ClaimSourceEdge, "url" | "title">): Buffer {
+    const clear = Buffer.from(JSON.stringify({ url: edge.url, title: edge.title }), "utf-8");
+    return this.encrypted && this.rowKey ? sealRow(this.rowKey, clear) : clear;
+  }
+
+  private decodeEdge(payload: Uint8Array): { url: string; title: string } | null {
+    try {
+      const clear = this.encrypted && this.rowKey ? openRow(this.rowKey, Buffer.from(payload)) : Buffer.from(payload);
+      return JSON.parse(clear.toString("utf-8")) as { url: string; title: string };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Persist the claims from one verification run. A claim upserts by key and
+   * keeps its random id and first_seen_at; its source set is replaced in the
+   * same transaction. Returns the number of claims written.
+   */
+  upsertClaims(
+    claims: ReadonlyArray<{
+      claim: string;
+      verdict: ClaimRecord["verdict"];
+      confidence: number;
+      sources: ReadonlyArray<{ url: string; title: string; retrieved_at: string }>;
+    }>
+  ): number {
+    if (!this.db || claims.length === 0) return 0;
+    const now = new Date().toISOString();
+    const findId = this.db.prepare("SELECT id FROM claims WHERE claim_key = ?");
+    const insertClaim = this.db.prepare(
+      "INSERT INTO claims (id, claim_key, first_seen_at, updated_at, encrypted, payload) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    const updateClaim = this.db.prepare(
+      "UPDATE claims SET updated_at = ?, encrypted = ?, payload = ? WHERE id = ?"
+    );
+    const deleteEdges = this.db.prepare("DELETE FROM claim_sources WHERE claim_id = ?");
+    const insertEdge = this.db.prepare(
+      "INSERT OR REPLACE INTO claim_sources (claim_id, source_key, retrieved_at, encrypted, payload) VALUES (?, ?, ?, ?, ?)"
+    );
+    let written = 0;
+    this.transaction(() => {
+      for (const claim of claims) {
+        const claimKey = this.claimKey(claim.claim);
+        const existing = findId.get(claimKey) as { id: string } | undefined;
+        const id = existing?.id ?? randomUUID();
+        const payload = this.encodeClaim(claim);
+        if (existing) {
+          updateClaim.run(now, this.encrypted ? 1 : 0, payload, id);
+        } else {
+          insertClaim.run(id, claimKey, now, now, this.encrypted ? 1 : 0, payload);
+        }
+        // Each verification replaces the claim's source set (history deferred).
+        deleteEdges.run(id);
+        const seen = new Set<string>();
+        for (const src of claim.sources) {
+          if (!src.url || seen.has(src.url)) continue;
+          seen.add(src.url);
+          insertEdge.run(
+            id,
+            this.sourceKey(src.url),
+            src.retrieved_at,
+            this.encrypted ? 1 : 0,
+            this.encodeEdge({ url: src.url, title: src.title })
+          );
+        }
+        written++;
+      }
+    });
+    this.hardenPermissions();
+    return written;
+  }
+
+  /** Number of claim rows, used by tests and stats without materializing payloads. */
+  claimCount(): number {
+    if (!this.db) return 0;
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM claims").get() as { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
+  /**
+   * Read claims newest-first. The scan is bounded by CLAIM_SCAN_LIMIT so a
+   * large ledger cannot turn one read into an unbounded decrypt; hitting the
+   * bound reports truncated. Filters run on decrypted payloads because the
+   * claim text and URL are sealed.
+   */
+  claims(query: ClaimLedgerQuery = {}): ClaimLedgerResult {
+    if (!this.db) return { claims: [], truncated: false, scanned: 0 };
+    const max = Math.max(1, Math.min(50, query.max_results ?? 8));
+    const needle = query.query ? SqliteStore.normalizeClaim(query.query) : null;
+    const wantedUrl = query.source_url?.trim() || null;
+    const rows = this.db
+      .prepare("SELECT id, claim_key, first_seen_at, updated_at, payload FROM claims ORDER BY updated_at DESC")
+      .all() as Array<{ id: string; claim_key: string; first_seen_at: string; updated_at: string; payload: Uint8Array }>;
+
+    const out: ClaimRecord[] = [];
+    let scanned = 0;
+    let truncated = false;
+    for (const row of rows) {
+      if (scanned >= CLAIM_SCAN_LIMIT) {
+        truncated = true;
+        break;
+      }
+      scanned++;
+      const body = this.decodeClaim(row.payload);
+      if (!body) continue;
+      if (needle && !body.claim.toLowerCase().includes(needle)) continue;
+      const sources = this.claimSources(row.id);
+      if (wantedUrl && !sources.some((s) => s.url === wantedUrl)) continue;
+      out.push({
+        id: row.id,
+        claim_key: row.claim_key,
+        claim: body.claim,
+        verdict: body.verdict,
+        confidence: body.confidence,
+        first_seen_at: row.first_seen_at,
+        updated_at: row.updated_at,
+        sources,
+      });
+      if (out.length >= max) break;
+    }
+    return { claims: out, truncated, scanned };
+  }
+
+  private claimSources(claimId: string): ClaimSourceEdge[] {
+    if (!this.db) return [];
+    const rows = this.db
+      .prepare("SELECT source_key, retrieved_at, payload FROM claim_sources WHERE claim_id = ?")
+      .all(claimId) as Array<{ source_key: string; retrieved_at: string; payload: Uint8Array }>;
+    const out: ClaimSourceEdge[] = [];
+    for (const row of rows) {
+      const edge = this.decodeEdge(row.payload);
+      if (!edge) continue;
+      out.push({ source_key: row.source_key, url: edge.url, title: edge.title, retrieved_at: row.retrieved_at });
+    }
+    return out;
+  }
+
   /**
    * Re-seal every row under a new key. Used by enable, disable, and rekey.
    * The caller supplies the new secret; the old key opens the current rows.
@@ -288,6 +503,16 @@ export class SqliteStore implements KbStore {
     const meta = this.metaCache ?? this.meta();
     const rows = this.db.prepare("SELECT id, payload FROM chunks").all() as Array<{ id: string; payload: Uint8Array }>;
     const decoded = rows.map((row) => ({ id: row.id, chunk: this.decodePayload(row.payload) }));
+    // REQ-109: claim and edge payloads are sealed too. Decode them under the
+    // current key before the switch, then re-encode under the next key.
+    const claimRows = this.db
+      .prepare("SELECT id, claim_key, payload FROM claims")
+      .all() as Array<{ id: string; claim_key: string; payload: Uint8Array }>;
+    const decodedClaims = claimRows.map((row) => ({ id: row.id, claim: this.decodeClaim(row.payload) }));
+    const edgeRows = this.db
+      .prepare("SELECT claim_id, source_key, retrieved_at, payload FROM claim_sources")
+      .all() as Array<{ claim_id: string; source_key: string; retrieved_at: string; payload: Uint8Array }>;
+    const decodedEdges = edgeRows.map((row) => ({ claim_id: row.claim_id, edge: this.decodeEdge(row.payload) }));
     this.rowKey = next.key;
     this.encrypted = next.encrypted;
     this.transaction(() => {
@@ -296,6 +521,36 @@ export class SqliteStore implements KbStore {
         if (!item.chunk) continue;
         update.run(next.encrypted ? 1 : 0, this.encodePayload(item.chunk), item.id);
       }
+      const updateClaim = this.db!.prepare(
+        "UPDATE claims SET claim_key = ?, encrypted = ?, payload = ? WHERE id = ?"
+      );
+      for (const item of decodedClaims) {
+        if (!item.claim) throw new Error("claim row could not be decoded during reseal");
+        updateClaim.run(
+          this.keyedHash(SqliteStore.normalizeClaim(item.claim.claim)),
+          next.encrypted ? 1 : 0,
+          this.encodeClaim(item.claim),
+          item.id
+        );
+      }
+      const clearEdges = this.db!.prepare("DELETE FROM claim_sources");
+      const insertEdge = this.db!.prepare(
+        "INSERT INTO claim_sources (claim_id, source_key, retrieved_at, encrypted, payload) VALUES (?, ?, ?, ?, ?)"
+      );
+      // Source keys change with the key, so re-key by position: the decoded
+      // edges are in the same order as the rows they came from.
+      clearEdges.run();
+      decodedEdges.forEach((item, i) => {
+        const row = edgeRows[i];
+        if (!item.edge) throw new Error("claim source row could not be decoded during reseal");
+        insertEdge.run(
+          row.claim_id,
+          this.sourceKey(item.edge.url),
+          row.retrieved_at,
+          next.encrypted ? 1 : 0,
+          this.encodeEdge(item.edge)
+        );
+      });
       this.metaCache = null;
       this.writeRawMeta("encryption", next.encrypted ? "1" : "0");
       if (this.salt) this.writeRawMeta("salt", this.salt.toString("base64"));
