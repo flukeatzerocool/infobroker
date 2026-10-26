@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.10.22)
+# AGENTS.md — Infobroker MCP Server (v2026.10.26)
 
 ## Layer Map
 
@@ -246,6 +246,7 @@ This runs:
 | `npm run version-sync` | Every version reference matches `package.json`   |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
+| `npm run check-report-fixtures` | Report contract fixtures: skeleton, manifest, citations, Source Register (REQ-116) |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax over shell entry points |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
 | `npm run check-intent-citations` | Routing citations resolve against the live tool schema; every registered tool and declared operation is cited (REQ-107) |

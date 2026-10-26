@@ -1348,6 +1348,7 @@ export function kbPutReportReceipt(
     reportId,
     contentSha256: sha256Hex(doc.text),
     claims: normalized.value.claims,
+    ...(normalized.value.report ? { report: normalized.value.report } : {}),
     cachedDocument,
   });
   const record = sqliteStore.putReportReceipt(reportId, manifest);
@@ -1384,7 +1385,22 @@ export function kbVerifyReport(
     reportText: doc === null ? null : doc.text,
     cachedDocument: (url) => cachedDocument(url)?.text ?? null,
   });
-  return { ok: true, result };
+  const createdAtMs = Date.parse(record.created_at);
+  const ageDays = Number.isFinite(createdAtMs) ? Math.floor((Date.now() - createdAtMs) / 86_400_000) : undefined;
+  const tier = doc?.freshness_tier;
+  const decayHours = tier ? kbConfig.freshness?.tiers?.[tier]?.decay_hours : undefined;
+  const ageHours = Number.isFinite(createdAtMs) ? (Date.now() - createdAtMs) / 3_600_000 : undefined;
+  const stale = decayHours !== undefined && decayHours > 0 && ageHours !== undefined ? ageHours > decayHours : undefined;
+  return {
+    ok: true,
+    result: {
+      ...result,
+      created_at: record.created_at,
+      ...(ageDays !== undefined ? { age_days: ageDays } : {}),
+      ...(tier ? { freshness_tier: tier } : {}),
+      ...(stale !== undefined ? { stale } : {}),
+    },
+  };
 }
 
 export function kbDelete(collection?: string, sourceUrl?: string): number {

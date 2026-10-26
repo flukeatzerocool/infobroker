@@ -1,6 +1,6 @@
 {
   "name": "infobroker",
-  "version": "2026.10.22",
+  "version": "2026.10.26",
   "description": "Infobroker MCP Server — multi-provider research & writing backend",
   "type": "module",
   "main": "dist/index.js",
@@ -28,6 +28,8 @@
     "test-debate-club": "npx tsc -p debate-club/tsconfig.json && bash debate-club/run.sh arena",
     "validate-spec": "npx tsx scripts/validate-spec.ts",
     "validate-readme": "npx tsx scripts/validate-readme.ts",
+    "validate-report": "npx tsx scripts/validate-report.ts",
+    "check-report-fixtures": "npx tsx scripts/check-report-fixtures.ts",
     "check-script-discipline": "npx tsx scripts/check-script-discipline.ts",
     "check-tdqs": "npx tsx scripts/check-tdqs.ts",
     "check-intent-citations": "npx tsx scripts/check-intent-citations.ts",
@@ -41,7 +43,9 @@
     "version-sync": "npx tsx scripts/version.ts check",
     "audit": "npm audit --audit-level=high",
     "push": "bash scripts/push-pipeline.sh",
-    "check": "npm run typecheck && npm run version-sync && npm run validate-spec && npm run validate-readme && npm run check-script-discipline && npm run check-tdqs && npm run check-intent-citations && npm run check-harness-expectations && npm run check-gate-coverage && npm run check-skill-harness && npm run test && npm run test-debate-club && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts"
+    "check": "npm run typecheck && npm run version-sync && npm run validate-spec && npm run validate-readme && npm run check-report-fixtures && npm run check-script-discipline && npm run check-tdqs && npm run check-intent-citations && npm run check-harness-expectations && npm run check-gate-coverage && npm run check-skill-harness && npm run test && npm run test-debate-club && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts",
+    "render-report": "npx tsx scripts/render-report.ts",
+    "monitor-delta": "npx tsx scripts/monitor-delta.ts"
   },
   "keywords": [
     "search",
@@ -61,6 +65,7 @@
     "@types/node": "^26.1.2",
     "js-yaml": "^5.2.3",
     "markdownlint-cli": "^0.49.1",
+    "marked": "^18.1.2",
     "tsx": "^4.23.5",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"

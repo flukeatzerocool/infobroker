@@ -1323,7 +1323,7 @@ if (startupNoticeList.length > 0) {
 }
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.10.22",
+  version: "2026.10.26",
   ...(startupNoticeList.length > 0
     ? { instructions: `Infobroker state needs attention: ${startupNoticeList.map((notice) => notice.message).join(" ")}` }
     : {}),
@@ -1575,6 +1575,9 @@ instrumentTool(
               z.object({
                 claim: z.string(),
                 grade: z.string().optional(),
+                verdict: z.string().optional().describe("Fact-check verdict for this claim (for example True, Mostly True, Half True, Mostly False, False, Misleading, Unverifiable)"),
+                confidence: z.enum(["High", "Medium", "Low"]).optional().describe("Report-level confidence for this claim"),
+                likelihood: z.string().optional().describe("Calibrated likelihood term (for example almost certain, likely, even chance, unlikely)"),
                 sources: z
                   .array(
                     z.object({
@@ -1588,10 +1591,23 @@ instrumentTool(
               })
             )
             .optional(),
+          report: z
+            .object({
+              shape: z.string().optional().describe("Workflow shape that produced the report"),
+              audience: z.string().optional().describe("Target audience profile"),
+              methodology: z.string().optional().describe("Methodology and scope summary"),
+              assumptions: z.array(z.string()).optional().describe("Key assumptions stated separately from evidence"),
+              alternatives: z.array(z.string()).optional().describe("Alternative hypotheses or options considered"),
+              gaps: z.array(z.string()).optional().describe("Questions left open"),
+              supersedes: z.string().optional().describe("Report identity this revision supersedes"),
+              revision: z.number().int().min(1).optional().describe("Report revision number"),
+            })
+            .optional()
+            .describe("Optional report-level manifest metadata (REQ-114), stored with the receipt"),
         })
         .optional()
         .describe(
-          "Optional verification receipt for a report ingest (REQ-110): claims with cited sources. The server computes the report hash, per-source hashes, and the digest; any caller hashes or digest are ignored. Requires source_type 'report' and KB storage."
+          "Optional verification receipt for a report ingest (REQ-110): claims with cited sources and optional report metadata (REQ-114). The server computes the report hash, per-source hashes, and the digest; any caller hashes or digest are ignored. Requires source_type 'report' and KB storage."
         ),
     },
     annotations: {

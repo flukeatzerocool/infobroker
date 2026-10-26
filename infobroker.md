@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.10.22
+**Spec version:** 2026.10.26
 
 ## Contents
 
@@ -175,7 +175,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–117 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -401,13 +401,13 @@ The server SHALL support a `financial` task type serving queries for filings, ma
 The build SHALL produce an instruction file at `instructions/search-preferences.md` that maps user intent to Infobroker tools. The instruction file SHALL direct the client to prefer knowledge base search over external web search for content that may have been previously indexed, treating external providers as fallback when the knowledge base returns no relevant results. The instruction file SHALL direct the client to rely on the `search_web` tool's built-in knowledge-base-first retrieval for external queries and SHALL reserve a direct `manage_kb` search for answering from stored content alone or inspecting the knowledge base. This file is sourced by the MCP client's instruction loader. _Check:_ G3 (file presence, content verification).
 
 **REQ-051 — Orchestrator Skill**
-The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `search_web` tool's built-in KB-first behavior satisfies, reserving a direct `manage_kb` search for stored-content-only answers and knowledge-base inspection. The skill SHALL also escalate high-stakes requests to the gated-analysis skill (REQ-088). _Check:_ G3 (file presence, content verification).
+The build SHALL produce an OpenCode-compatible skill at `skills/infobroker/SKILL.md` that chains Infobroker tools with the bundled writing and research skills. The skill SHALL define a Research Professional pipeline and a Fact-Check Pipeline. Each pipeline SHALL include a knowledge-base retrieval phase before external web search that the `search_web` tool's built-in KB-first behavior satisfies, reserving a direct `manage_kb` search for stored-content-only answers and knowledge-base inspection. The skill SHALL also escalate high-stakes requests to the gated-analysis skill (REQ-088). The skill SHALL emit the report manifest and run the report quality gate before delivery, and SHALL archive finished reports with a receipt and revalidate them before reuse. _Check:_ G3 (file presence, content verification).
 
 **REQ-052 — Bundled Skills**
 The build SHALL produce an orchestrator skill (REQ-051) that references four pipeline skills — summarization, technical-writing, proofreading, and translation — by name, and that routes research requests to workflow shapes defined in `skills/infobroker/references/workflows.md`. These skills SHALL be shipped in the repository so the build is self-contained and requires no external skill dependency. _Check:_ G3 (content verification).
 
 **REQ-053 — Pipeline Reference**
-The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline, `skills/infobroker/references/provider-map.md` with the task→provider dispatch table, `skills/infobroker/references/workflows.md` with the workflow-shape definitions, and `skills/infobroker/references/journeys.md` mapping user intents to the workflow shapes, tool sequence, and recovery procedures each journey follows. _Check:_ G3 (file presence).
+The build SHALL include `skills/infobroker/references/pipeline-map.md` with a Mermaid diagram of the skill pipeline, `skills/infobroker/references/provider-map.md` with the task→provider dispatch table, `skills/infobroker/references/workflows.md` with the workflow-shape definitions, `skills/infobroker/references/journeys.md` mapping user intents to the workflow shapes, tool sequence, and recovery procedures each journey follows, and `skills/infobroker/references/confidence.md` defining the shared confidence, likelihood, and source-grade scale. _Check:_ G3 (file presence).
 
 **REQ-054 — User Documentation**
 The build SHALL generate a `README.md` documenting: setup steps, provider configuration, `opencode.json` integration snippet, skill pipeline overview, and how to add new providers. _Check:_ G3 (file presence).
@@ -416,7 +416,19 @@ The build SHALL generate a `README.md` documenting: setup steps, provider config
 Every tool reference in the client routing surface SHALL resolve to a registered tool, and every operation reference SHALL resolve to an operation declared by the live tool schema. Every registered tool SHALL be cited at least once across the routing surface. Every declared operation SHALL be cited at least once across the routing surface. A gate SHALL fail when a citation is unresolved, when a tool or operation is uncovered, or when a seeded stale citation is not detected. *Acceptance criterion:* a renamed tool or operation fails the gate, and the seeded-stale fixture fails as expected. _Check:_ G3.
 
 **REQ-088 — Gated-Analysis Technique Selection**
-The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
+The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The skill SHALL record the assumptions behind each finding and at least one alternative considered. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
+
+**REQ-114 — Report Manifest Contract**
+Every generated report SHALL carry a `report-manifest` block declaring its shape and claims, and MAY declare audience, methodology, assumptions, alternatives, gaps, revision, supersedes, and per-claim verdict, confidence, likelihood, and source ids. The manifest SHALL use the confidence, likelihood, and verdict values defined by the report quality standard. The manifest SHALL be the payload archived in the report receipt so a stored report and its claims remain machine-checkable. The block SHALL appear before the first report section. _Check:_ G3.
+
+**REQ-115 — Confidence Model**
+Reports and gated analysis SHALL use one confidence scale with three labels, one calibrated likelihood lexicon, and one source-grade scheme. Confidence SHALL distinguish the strength of a judgment from the likelihood of the judged event. Source reliability and information credibility SHALL be graded independently. The bundled references SHALL define the label bands, likelihood terms, and source grades, and the report and analysis artifacts SHALL cite that definition rather than restating a divergent scale. _Check:_ G3.
+
+**REQ-117 — Monitoring Baseline and Delta Contract**
+A monitoring run SHALL baseline the current report with a verification receipt and SHALL revalidate that baseline with `verify_report` before comparing. The delta SHALL report new, changed, and removed claims or sources separately and SHALL surface source drift and unverifiable sources rather than treating them as unchanged. A new report revision SHALL increment the revision number and name the baseline report it supersedes. A delta SHALL NOT restate unchanged findings as new. _Check:_ G3.
+
+**REQ-116 — Report Quality Gate**
+A report SHALL carry the shared skeleton, a `report-manifest` block, and a Source Register that resolves every `[S#]` citation to a row with a URL. The manifest SHALL declare the report shape and MAY declare audience, methodology, assumptions, alternatives, gaps, revision, and per-claim verdict, confidence, and likelihood. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A gate SHALL fail when a required section is absent, a Key Findings item lacks a citation, a citation is unresolved, a Source Register row lacks a URL, or a manifest value is invalid. _Check:_ G3.
 
 ### 4.8 Spec Integrity
 
@@ -458,7 +470,7 @@ The `inspect_providers` spec action SHALL report a token-footprint record measur
 WHEN action is search, the tool SHALL return chunks ranked by relevance to the query, each with source URL, score, collection, `source_type`, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a `source_type` filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `manage_kb` ingest action**
-WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, format, and report verification receipt. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. A receipt SHALL be accepted only for a report with knowledge-base storage. _Check:_ G0, G1.
+WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, format, report verification receipt, and report manifest metadata. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. A receipt SHALL be accepted only for a report with knowledge-base storage. Manifest metadata SHALL be bounded and SHALL be stored with the receipt. _Check:_ G0, G1.
 
 **REQ-060c — `manage_kb` stats action**
 WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
@@ -479,7 +491,7 @@ WHEN action is encryption, the tool SHALL operate on the knowledge base's at-res
 WHEN action is `claims`, the tool SHALL return persisted claim records with their verdict, confidence, last-verified time, and linked sources, sorted newest first. The action SHALL accept an optional `query` to match claim text, an optional `source_url` to return claims linked to that source, and a `max_results` cap. A locked store SHALL return an error per REQ-002 and REQ-084; a backend without ledger support SHALL return an unsupported-backend error. _Check:_ G0, G1.
 
 **REQ-060i — `manage_kb` verify_report action**
-WHEN action is `verify_report`, the tool SHALL revalidate a stored report receipt against the cached report and its cited sources without network access. The action SHALL report the report state, each source state, the stored digest, and whether the digest matches. A missing receipt SHALL return an error; a report or source whose hash differs SHALL be reported as drift, and a source absent from the cache SHALL be reported as unverifiable rather than drift. _Check:_ G0, G1.
+WHEN action is `verify_report`, the tool SHALL revalidate a stored report receipt against the cached report and its cited sources without network access. The action SHALL report the report state, each source state, the stored digest, whether the digest matches, the report manifest metadata, and the report's revision chain and age. A missing receipt SHALL return an error; a report or source whose hash differs SHALL be reported as drift, and a source absent from the cache SHALL be reported as unverifiable rather than drift. A report older than its freshness decay window SHALL be reported stale while remaining verifiable. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
 Search results from `search_web`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
@@ -509,7 +521,7 @@ When the knowledge base is configured, every web search SHALL query the knowledg
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
 
 **REQ-083 — Report Storage**
-The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report `source_type` and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base. _Check:_ G1.
+The knowledge base SHALL store generated reports as a distinct content class. A report SHALL be tagged with a report `source_type` and stored per REQ-065 so that it remains retrievable in full and enumerable via the `list` action. A report SHALL be retained indefinitely and SHALL NOT be auto-removed, while its retrieval confidence SHALL decay with age per its freshness tier so that an outdated report does not satisfy KB-first sufficiency for time-sensitive queries. A report revision SHALL record the identity it supersedes and a monotonic revision number so a corrected report is distinguishable from its predecessor. Ingesting a report SHALL support an optional save destination that writes the report to a local file as well as, or instead of, the knowledge base. _Check:_ G1.
 
 **REQ-084 — KB At-Rest Encryption**
 The knowledge base SHALL support optional at-rest encryption of its stored content and of reports written to disk, where the key SHALL be derived from a user-supplied secret that is never stored with the content. WHEN encryption is enabled, the server SHALL NOT persist knowledge-base content or reports in plaintext, SHALL refuse knowledge-base operations when the required secret is unavailable or invalid, reporting the refusal as an error per REQ-002, and SHALL report the encryption state in the stats action. The server SHALL support changing the secret without loss of stored content. WHEN encryption is disabled, stored content SHALL remain readable. _Check:_ G1.
@@ -530,7 +542,7 @@ The knowledge base SHALL remain operable when the persisted chunk data exceeds t
 WHEN `verify_claims` produces findings, the server SHALL persist each finding as a claim record linked to its corroborating sources with the retrieval time of each source. The ledger SHALL be stored in the local knowledge base and SHALL be sealed at rest whenever at-rest encryption is enabled. A persistence failure SHALL NOT fail or alter the `verify_claims` response. The ledger SHALL be available only with the SQLite store; the legacy JSON store SHALL report that the ledger is unsupported. _Check:_ G1.
 
 **REQ-110 — Report Verification Receipt**
-WHEN a report is ingested with a receipt, the server SHALL store a canonical manifest of claim, source, retrieval time, grade, report content hash, and per-source hash. The server SHALL compute the report hash from the stored document and SHALL ignore caller-supplied hashes and digests. The manifest SHALL be sealed at rest when at-rest encryption is enabled and SHALL be bounded in claim and source count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
+WHEN a report is ingested with a receipt, the server SHALL store a canonical manifest of claim, source, retrieval time, grade, verdict, confidence, likelihood, report metadata, report content hash, and per-source hash. The report metadata SHALL cover shape, audience, methodology, assumptions, alternatives, gaps, and revision chain. The server SHALL compute the report hash from the stored document and SHALL ignore caller-supplied hashes and digests. The manifest SHALL be sealed at rest when at-rest encryption is enabled and SHALL be bounded in claim, source, and metadata count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
 
 **REQ-103 — Local Embedding Execution**
 Knowledge-base and passage retrieval SHALL be performed with an embedding model that executes within the server instance, and content submitted for embedding SHALL NOT be transmitted to a third party. The model reference SHALL be configurable so an alternative model can be selected without a specification change. WHEN no model is available, retrieval SHALL degrade with a remediation message and SHALL NOT prevent non-knowledge-base operation. Changing the configured model SHALL reconcile stored content per REQ-082. The active model name and availability SHALL be reported per REQ-060c. _Check:_ G1.
@@ -1100,6 +1112,10 @@ verdict is preserved (REQ-026f).
 | REQ-054 | User Documentation | 4.7 | G3 |
 | REQ-107 | Routing Citation Integrity | 4.7 | G3 |
 | REQ-088 | Gated-Analysis Technique Selection | 4.7 | G3 |
+| REQ-114 | Report Manifest Contract | 4.7 | G3 |
+| REQ-115 | Confidence Model | 4.7 | G3 |
+| REQ-116 | Report Quality Gate | 4.7 | G3 |
+| REQ-117 | Monitoring Baseline and Delta Contract | 4.7 | G3 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
@@ -1589,7 +1605,7 @@ secondary concerns rather than duplicating the REQ.
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107 | G3 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 

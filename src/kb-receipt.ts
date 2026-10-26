@@ -1,4 +1,4 @@
-// @implements REQ-110 REQ-060i REQ-060b
+// @implements REQ-110 REQ-060i REQ-060b REQ-114 REQ-083
 // Report verification receipts. A receipt is a canonical manifest of
 // claim -> source -> retrieval time -> grade plus the hashes the server
 // computed at ingest (REQ-110). This module is pure: canonical JSON, hashing,
@@ -6,6 +6,7 @@
 // `verify_report` action (REQ-060i). It never performs network I/O.
 import { createHash } from "node:crypto";
 import type {
+  ReportManifestMeta,
   ReportReceiptClaim,
   ReportReceiptInput,
   ReportReceiptManifest,
@@ -21,6 +22,11 @@ export const RECEIPT_LIMITS = {
   claimChars: 2000,
   urlChars: 2048,
   snippetChars: 2000,
+  metaLabelChars: 120,
+  metaTextChars: 2000,
+  metaListItems: 20,
+  metaListItemChars: 500,
+  revisionMax: 1_000_000,
 } as const;
 
 export type ReceiptInputError =
@@ -84,6 +90,56 @@ function normalizeSource(raw: unknown): ReportReceiptSourceInput | null {
   };
 }
 
+function normalizeMeta(raw: unknown): { ok: true; value?: ReportManifestMeta } | { ok: false } {
+  if (raw === undefined) return { ok: true };
+  if (!isPlainObject(raw)) return { ok: false };
+  const label = (key: string): string | undefined => {
+    const value = raw[key];
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed.slice(0, RECEIPT_LIMITS.metaLabelChars);
+  };
+  const text = (key: string): string | undefined => {
+    const value = raw[key];
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed.slice(0, RECEIPT_LIMITS.metaTextChars);
+  };
+  const list = (key: string): string[] | undefined => {
+    const value = raw[key];
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) return undefined;
+    const items = value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item !== "")
+      .slice(0, RECEIPT_LIMITS.metaListItems)
+      .map((item) => item.slice(0, RECEIPT_LIMITS.metaListItemChars));
+    return items.length > 0 ? items : undefined;
+  };
+  const revisionRaw = raw["revision"];
+  let revision: number | undefined;
+  if (revisionRaw !== undefined) {
+    if (typeof revisionRaw !== "number" || !Number.isInteger(revisionRaw) || revisionRaw < 1 || revisionRaw > RECEIPT_LIMITS.revisionMax) {
+      return { ok: false };
+    }
+    revision = revisionRaw;
+  }
+  const meta: ReportManifestMeta = {
+    ...(label("shape") ? { shape: label("shape") } : {}),
+    ...(label("audience") ? { audience: label("audience") } : {}),
+    ...(text("methodology") ? { methodology: text("methodology") } : {}),
+    ...(list("assumptions") ? { assumptions: list("assumptions") } : {}),
+    ...(list("alternatives") ? { alternatives: list("alternatives") } : {}),
+    ...(list("gaps") ? { gaps: list("gaps") } : {}),
+    ...(label("supersedes") ? { supersedes: label("supersedes") } : {}),
+    ...(revision !== undefined ? { revision } : {}),
+  };
+  return { ok: true, ...(Object.keys(meta).length > 0 ? { value: meta } : {}) };
+}
+
 /**
  * Validate a caller-supplied receipt. Only structure is taken from the
  * caller: identity fields and every hash are computed by the server, so any
@@ -91,9 +147,16 @@ function normalizeSource(raw: unknown): ReportReceiptSourceInput | null {
  */
 export function normalizeReceiptInput(
   raw: unknown,
-): { ok: true; value: { claims: ReportReceiptInput["claims"] } } | { ok: false; error: ReceiptInputError } {
+): { ok: true; value: { claims: ReportReceiptInput["claims"]; report?: ReportManifestMeta } } | { ok: false; error: ReceiptInputError } {
   if (!isPlainObject(raw)) {
     return { ok: false, error: { code: "invalid_input", message: "receipt must be an object" } };
+  }
+  const reportResult = normalizeMeta(raw["report"]);
+  if (!reportResult.ok) {
+    return {
+      ok: false,
+      error: { code: "invalid_input", message: "receipt.report must be an object with bounded string and list fields" },
+    };
   }
   const rawClaims = raw["claims"];
   if (!Array.isArray(rawClaims)) {
@@ -151,9 +214,25 @@ export function normalizeReceiptInput(
       sources.push(source);
     }
     const grade = typeof item["grade"] === "string" && item["grade"].trim() !== "" ? item["grade"].trim() : undefined;
-    claims.push({ claim, ...(grade ? { grade } : {}), sources });
+    const verdict = typeof item["verdict"] === "string" && item["verdict"].trim() !== "" ? item["verdict"].trim().slice(0, RECEIPT_LIMITS.metaLabelChars) : undefined;
+    const likelihood = typeof item["likelihood"] === "string" && item["likelihood"].trim() !== "" ? item["likelihood"].trim().slice(0, RECEIPT_LIMITS.metaLabelChars) : undefined;
+    const rawConfidence = item["confidence"];
+    if (rawConfidence !== undefined && rawConfidence !== "High" && rawConfidence !== "Medium" && rawConfidence !== "Low") {
+      return {
+        ok: false,
+        error: { code: "invalid_input", message: `receipt.claims[${index}].confidence must be High, Medium, or Low` },
+      };
+    }
+    claims.push({
+      claim,
+      ...(grade ? { grade } : {}),
+      ...(verdict ? { verdict } : {}),
+      ...(rawConfidence ? { confidence: rawConfidence } : {}),
+      ...(likelihood ? { likelihood } : {}),
+      sources,
+    });
   }
-  return { ok: true, value: { claims } };
+  return { ok: true, value: { claims, ...(reportResult.value ? { report: reportResult.value } : {}) } };
 }
 
 /**
@@ -165,11 +244,15 @@ export function buildReceiptManifest(args: {
   reportId: string;
   contentSha256: string;
   claims: ReportReceiptInput["claims"];
+  report?: ReportManifestMeta;
   cachedDocument: (url: string) => { text: string; title: string } | null;
 }): ReportReceiptManifest {
   const claims: ReportReceiptClaim[] = args.claims.map((claim) => ({
     claim: claim.claim,
     ...(claim.grade ? { grade: claim.grade } : {}),
+    ...(claim.verdict ? { verdict: claim.verdict } : {}),
+    ...(claim.confidence ? { confidence: claim.confidence } : {}),
+    ...(claim.likelihood ? { likelihood: claim.likelihood } : {}),
     sources: claim.sources.map((source) => {
       const cached = args.cachedDocument(source.url);
       const basis = cached !== null ? ("document" as const) : ("snippet" as const);
@@ -188,6 +271,7 @@ export function buildReceiptManifest(args: {
     version: 1,
     report_id: args.reportId,
     content_sha256: args.contentSha256,
+    ...(args.report ? { report: args.report } : {}),
     claims,
   };
   return { ...manifest, digest_sha256: receiptDigest(manifest) };
@@ -256,6 +340,9 @@ export function verifyReceipt(args: {
     report: reportState,
     report_id: manifest.report_id,
     content_sha256: manifest.content_sha256,
+    ...(manifest.report ? { report_meta: manifest.report } : {}),
+    ...(manifest.report?.revision !== undefined ? { revision: manifest.report.revision } : {}),
+    ...(manifest.report?.supersedes ? { supersedes: manifest.report.supersedes } : {}),
     claims: manifest.claims.length,
     sources: {
       total: sourcesVerified + sourcesUnverifiable + sourcesDrift,

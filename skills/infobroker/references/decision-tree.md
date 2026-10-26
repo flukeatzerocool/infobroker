@@ -68,15 +68,19 @@ Rule of thumb: `search_web` for lookups and uncontested breadth;
 
 ## 3. Escalate to `analysis-loop`?
 
-Score one point for each that holds. Escalate at **3 or more**.
+Fill the form, then sum the points. Escalate at **3 or more**.
 
-- **Stakes.** A wrong answer has real cost (budget, safety, policy, reputation).
-- **Decision.** The answer directly drives a decision the user must make.
-- **Contest.** The claim is contested or likely to have partisan sources.
-- **Breadth.** The question decomposes into multiple EEIs needing graded sources.
-- **Reproducibility.** The user needs a confidence-scored, source-graded audit trail.
+```
+Stakes:          [ ] 0   [ ] 1  a wrong answer has real cost
+Decision:        [ ] 0   [ ] 1  it directly drives a decision
+Contest:         [ ] 0   [ ] 1  contested or partisan sources likely
+Breadth:         [ ] 0   [ ] 1  multiple EEIs need graded sources
+Reproducibility: [ ] 0   [ ] 1  needs a confidence-scored, graded audit trail
+Total: __ / 5
+```
 
 Below 3, run the `infobroker` pipeline. At 3+, escalate to `analysis-loop`.
+Record the total and the checked inputs in the report's methodology.
 
 ## 4. Edge-case recovery
 

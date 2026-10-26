@@ -14,7 +14,7 @@ row below.
 | "deep dive / comprehensive" | Deep-Dive | deep-dive | — |
 | "compare / evaluate / X vs Y" | Competitive Evaluation | evaluation | — |
 | "literature review / state of the art" | Literature Review | lit-review | — |
-| "what changed / monitor / track" | Monitoring / Delta | monitor | — |
+| "what changed / monitor / track" | Monitoring / Delta | monitor (receipt baseline → `verify_report` → revision with `supersedes`) | — |
 | "red-team / stress-test" | Adversarial / Red-Team | red-team | — |
 | "vet / background check / due diligence" | Vetting / Due-Diligence | vetting | — |
 | high-stakes, decision-driving | Gated Analysis | — | `analysis-loop` |
@@ -38,7 +38,7 @@ row below.
 | Check provider status | `inspect_providers (action: list)` / `inspect_providers (action: health)` | list state (incl. inactivity reason) → live health per slug |
 | Report build and spec identity | `inspect_providers (action: spec)` | build version, provider counts, token footprint, state paths, state health (config drift, migrations, update status) |
 | Knowledge base search | `manage_kb (action: search)` | vector + keyword hybrid → freshness-adjusted score; pass `collection: "reports"` to recall stored reports (search/list default to the `default` collection) |
-| Store a report | `manage_kb (action: ingest, source_type: report)` | index → `reports` collection → revisit via list/get with `collection: "reports"` |
+| Store a report | `manage_kb (action: ingest, source_type: report)` | index → `reports` collection with a receipt (manifest claims + sources) → revisit via list/get with `collection: "reports"` → `verify_report` before reuse |
 | List stored entries | `manage_kb (action: list)` | enumerate entries, optionally scoped to a collection |
 | Retrieve a stored entry | `manage_kb (action: get)` | fetch one entry by its source URL |
 | Knowledge base stats | `manage_kb (action: stats)` | chunk counts, collections, freshness tiers, last ingestion |

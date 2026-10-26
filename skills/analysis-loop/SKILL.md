@@ -111,6 +111,11 @@ you still run the collection tools for that scope before analyzing.
 
 Grade every source used:
 
+Use the single scale in `skills/infobroker/references/confidence.md` for
+confidence labels, the likelihood lexicon, source grades, and source-interest
+disclosure. The tables below are the working reference; that file is
+canonical.
+
 **Source Reliability:**
 | Grade | Meaning |
 |-------|---------|
@@ -173,6 +178,8 @@ the intelligence cycle.
    - **Medium** — B-level sources, some corroboration, minor inconsistencies.
    - **Low** — C-level or below, single source, significant contradictions.
    - **No confidence** — no reliable source found.
+   Give a likelihood term separately when the finding is probabilistic, and
+   state the assumption or alternative behind it.
 
 3. **Contradictions.** When sources disagree: report both sides with their
    reliability grades. Note whether the disagreement is factual (same claim,
@@ -267,6 +274,10 @@ Maps to the Dissemination and Feedback step of the intelligence cycle.
 Deliver findings and close the loop on gaps.
 
 ### Dissemination
+
+Carry the assumptions and alternatives into the report's `Assumptions` and
+`Analysis of Alternatives` sections; do not bury them in prose. Archive the
+report with a receipt and, on a later run, verify it before reuse.
 
 Adapt vocabulary and depth to the audience defined in Phase 0. A CISO needs
 "finding is well-supported by multiple authoritative sources" — not an

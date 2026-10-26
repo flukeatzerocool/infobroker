@@ -283,6 +283,55 @@ test("manage_kb ingests, searches, and reports stats", async () => {
   expect(Number(statsBody.chunk_count)).toBeGreaterThan(0);
 });
 
+test("manage_kb stores report manifest metadata and verifies it offline", async () => {
+  scenario = "kb-manifest";
+  const ingest = expectOk(
+    (
+      await call("infobroker_manage_kb", {
+        action: "ingest",
+        title: "Arena manifest report",
+        text: "The arena manifest records a report revision for offline verification.",
+        source_type: "report",
+        save_to: "kb",
+        receipt: {
+          claims: [
+            {
+              claim: "the arena records a report revision",
+              grade: "A",
+              verdict: "True",
+              confidence: "High",
+              likelihood: "likely",
+              sources: [{ url: "https://example.com/arena-source", snippet: "arena source excerpt" }],
+            },
+          ],
+          report: {
+            shape: "Fact-Check",
+            audience: "analyst",
+            methodology: "one deterministic fixture",
+            assumptions: ["the fixture is stable"],
+            alternatives: ["recheck against a live source"],
+            gaps: ["no live source in the arena"],
+            supersedes: "report://arena-manifest-v1",
+            revision: 2,
+          },
+        },
+      })
+    ).text
+  );
+  const receiptMeta = (ingest.meta as Record<string, unknown>).receipt as Record<string, unknown>;
+  expect(receiptMeta).toBeDefined();
+  const reportId = String(receiptMeta.report_id);
+
+  const verify = expectOk(
+    (await call("infobroker_manage_kb", { action: "verify_report", source_url: reportId })).text
+  );
+  const row = (verify.results as Array<Record<string, unknown>>)[0]!;
+  expect(row.digest_match).toBe(true);
+  expect((row.report_meta as Record<string, unknown>).shape).toBe("Fact-Check");
+  expect(row.revision).toBe(2);
+  expect(row.supersedes).toBe("report://arena-manifest-v1");
+});
+
 test("reload_config applies a patch without erroring", async () => {
   scenario = "reload";
   const out = await call("infobroker_reload_config", { patch: { output: { verbose: true } } });

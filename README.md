@@ -294,8 +294,8 @@ the cache, `manage_kb` archives the reports you generate: ingest with
 `source_type: "report"`
 (and default to the knowledge base) and revisit them with `manage_kb` list and
 `manage_kb` get, or write them to a local directory instead. Each archived report
-records its source's last-updated date, so you can compare it against the
-live source and refresh only what has actually changed. Other search MCP
+records its source's last-updated date, so you can refresh only what
+changed. Other search MCP
 servers re-fetch the same facts every session; Infobroker remembers and
 reuses what it already found.
 
@@ -313,7 +313,10 @@ of claims and cited sources; the server hashes the stored report and every
 cached source. `verify_report` rechecks it offline — no network call — and
 reports drift when the report or a source changed, unverifiable for an
 uncached source, and a digest mismatch for a tampered manifest. The manifest
-is sealed at rest, and encryption transitions reseal it.
+can also carry report metadata and a revision chain; `verify_report` reports
+age and staleness alongside drift, so monitoring can baseline a report,
+revalidate it, and publish a delta revision. The
+manifest is sealed at rest, and encryption transitions reseal it.
 
 ### Research Pipeline
 
@@ -358,11 +361,16 @@ maps your request to a workflow shape: research-and-write, fact-check,
 deep-dive, competitive evaluation, literature review, monitoring,
 red-team, vetting, or gated analysis. Each shape composes the same
 primitives — recall from the knowledge base, search, extract, verify,
-write, and cite — into its own sequence and ends with a grep-able
-completion token so you can confirm the outcome. Four writing sub-skills
-execute the writing phases: `summarization` condenses findings before
-writing, `technical-writing` drafts reports and docs, `proofreading`
-polishes language, and `translation` produces multilingual output.
+write, validate, and cite — into its own sequence and ends with a grep-able
+completion token so you can confirm the outcome. Every report carries a
+machine-readable manifest and a graded Source Register; a validation gate
+checks its sections, citations, and manifest values before delivery, and a
+shared reference fixes one confidence, likelihood, and source-grade scale.
+Finished reports render to self-contained HTML, and two manifests diff offline
+for monitoring. Four writing sub-skills execute the writing phases: `summarization`
+condenses findings before writing, `technical-writing` drafts reports and
+docs, `proofreading` polishes language, and `translation` produces
+multilingual output.
 
 Gated analysis is the escalation shape. When a question is high-stakes or
 decision-driving, the classify gate routes to the `analysis-loop` skill —
@@ -675,7 +683,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-10-22.
+Last updated: 2026-10-26.
 
 ## Contribute
 
@@ -705,7 +713,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.10.22), which defines every requirement and the gates that verify it.
+(v2026.10.26), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers. The routing gate resolves every cited tool and

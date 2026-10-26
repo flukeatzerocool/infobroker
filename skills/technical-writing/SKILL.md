@@ -60,10 +60,14 @@ not generic documentation:
 1. **Use the routed shape.** The orchestrator supplies the workflow shape,
    audience, and target length. The structure is the shared skeleton in
    `skills/infobroker/references/report-template.md` plus that shape's block.
+   Emit the `report-manifest` block and record the audience profile
+   (executive / analyst / engineer) in it.
 2. **Fill every section.** Executive Summary, Methodology & Scope, Key
-   Findings, Evidence & Sources, Contradictions, Gaps, Source Register, and
-   Recommendations. Do not drop a section because it is empty — state "none
-   found" or why it does not apply.
+   Findings, Assumptions, Analysis of Alternatives, Evidence & Sources,
+   Contradictions, Gaps, Source Register, and Recommendations. Do not drop a
+   section because it is empty — state "none found" or why it does not apply.
+   For a Literature Review, also fill the PRISMA-style identification and
+   screening table with exclusion reasons.
 3. **Preserve evidence binding.** Keep the `[S#]` marker assigned during
    verification on every factual claim. Do not introduce a claim while
    drafting that the collected evidence does not support.

@@ -5,8 +5,10 @@ The orchestrator's Phase 0 Classify gate maps user intent to one of these
 shapes, then executes the shape's tool sequence. Read only the shape you
 route to — sections are independent. For the ordered classification
 questions and the escalation rubric, see `decision-tree.md`; for each
-shape's output structure, see `report-template.md`; for how `verify_claims`
-reaches a verdict, see `corroboration.md`.
+shape's output structure, see `report-template.md`; for the single confidence,
+likelihood, and source-grade scale, see `confidence.md`; for how
+`verify_claims` reaches a verdict, see `corroboration.md`. Every report is
+validated by `scripts/validate-report.ts` (REQ-116) before it is delivered.
 
 ## Shared Primitives
 
@@ -31,12 +33,19 @@ rather than restating them.
   the ranked passages that address it are returned. For a one-call
   search-and-read, `search_web (deep)` returns ranked passages per
   source.
-- **VERIFY** — cross-reference across sources, score confidence, flag
-  contradictions explicitly. Use `verify_claims` for contested claims and
-  read its result per `corroboration.md`.
-- **WRITE** — `technical-writing`, filling the shared skeleton and the routed
-  shape's block in `report-template.md`; the orchestrator passes the shape,
-  audience, and target length.
+- **VERIFY** — cross-reference across sources, score confidence on the
+  `confidence.md` scale, flag contradictions explicitly. Use `verify_claims`
+  for contested claims and read its result per `corroboration.md`.
+- **WRITE** — `technical-writing`, filling the shared skeleton, the
+  `report-manifest` block, and the routed shape's block in
+  `report-template.md`; the orchestrator passes the shape, audience, and
+  target length.
+- **VALIDATE** — run `scripts/validate-report.ts --report <file>`; fix every
+  error before delivering (missing section, uncited finding, unresolved
+  `[S#]`, register row without URL, invalid manifest value).
+- **ARCHIVE** — ingest the finished report with `source_type: "report"` and a
+  `receipt` carrying the manifest claims and sources; a later `RECALL` runs
+  `verify_report` to surface source drift before reuse.
 - **POLISH** — `proofreading` for language quality.
 - **TRANSLATE** — `translation` when the target language is not English.
 - **CITE** — every factual claim carries an inline `[S#]` marker resolving to
@@ -64,9 +73,10 @@ writing.
 **Pipeline:** RECALL → extract claims → SEARCH per claim → `verify_claims`
 cross-reference → verdict → `summarization` digest → CITE.
 
-**Verdict:** True, Mostly True, Half True, Mostly False, False, or
-Unverifiable, each with a 0.0–1.0 confidence and a justification. Split
-bundled claims; discard opinions as "not checkable."
+**Verdict:** True, Mostly True, Half True, Mostly False, False, Misleading,
+Mixture, or Unverifiable, each with a confidence label, a likelihood term
+where probabilistic, and a justification. Split bundled claims; discard
+opinions as "not checkable."
 
 **Technique:** Quality-of-Information Check — grade each source used for a
 verdict; hold every claim to primary sources where they exist.
@@ -127,6 +137,8 @@ rationale with confidence. Flag criteria lacking evidence as gaps.
 **Pipeline:** define inclusion/exclusion criteria → SEARCH scholarly chains
 (Semantic Scholar, arXiv, CORE) → deduplicate → screen by title/abstract →
 EXTRACT full texts → theme synthesis → gap analysis → related-work section.
+Record identified, deduplicated, screened, excluded (with reasons), and
+included counts in the PRISMA-style flow block.
 
 **Technique:** inclusion/exclusion screening (systematic-review method) with a
 theme synthesis across included works.
@@ -141,8 +153,11 @@ naming what is absent, and a source register.
 **Trigger:** track a topic across time ("what changed", "monitor X",
 "watch this", "weekly briefing").
 
-**Pipeline:** establish baseline → `manage_kb (action: stats)` freshness check → re-SEARCH →
-compare to baseline → report only the deltas → `manage_kb (action: ingest)` the new results.
+**Pipeline:** establish a baseline report with a receipt → on the next run,
+`manage_kb (action: verify_report)` to surface source drift and unverifiable
+sources → `manage_kb (action: stats)` freshness check → re-SEARCH → compare to
+the baseline → report only the deltas → ingest a new report revision with
+`supersedes` set to the baseline identity.
 
 **Technique:** Indicators — define signposts for the topic before comparing,
 so the delta is reported against what would confirm or weaken change.

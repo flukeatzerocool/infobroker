@@ -217,11 +217,30 @@ export interface ReportReceiptSourceInput {
 export interface ReportReceiptClaimInput {
   claim: string;
   grade?: string;
+  verdict?: string;
+  confidence?: "High" | "Medium" | "Low";
+  likelihood?: string;
   sources: ReportReceiptSourceInput[];
+}
+
+/**
+ * Optional report-level metadata carried beside the receipt claims (REQ-114).
+ * Additive: a manifest without it remains valid and verifiable (REQ-110).
+ */
+export interface ReportManifestMeta {
+  shape?: string;
+  audience?: string;
+  methodology?: string;
+  assumptions?: string[];
+  alternatives?: string[];
+  gaps?: string[];
+  supersedes?: string;
+  revision?: number;
 }
 
 export interface ReportReceiptInput {
   claims: ReportReceiptClaimInput[];
+  report?: ReportManifestMeta;
 }
 
 /** One cited source inside a stored manifest, with the server's hash. */
@@ -240,17 +259,22 @@ export interface ReportReceiptSource {
 export interface ReportReceiptClaim {
   claim: string;
   grade?: string;
+  verdict?: string;
+  confidence?: "High" | "Medium" | "Low";
+  likelihood?: string;
   sources: ReportReceiptSource[];
 }
 
 /**
  * Canonical manifest stored for a report (REQ-110). `digest_sha256` is the
- * hash of the canonical JSON of the manifest without that field.
+ * hash of the canonical JSON of the manifest without that field. The optional
+ * `report` block is additive so version-1 manifests remain verifiable.
  */
 export interface ReportReceiptManifest {
   version: 1;
   report_id: string;
   content_sha256: string;
+  report?: ReportManifestMeta;
   claims: ReportReceiptClaim[];
   digest_sha256: string;
 }
@@ -280,6 +304,13 @@ export interface ReportVerificationResult {
   report: "verified" | "drift" | "unverifiable";
   report_id: string;
   content_sha256: string;
+  report_meta?: ReportManifestMeta;
+  revision?: number;
+  supersedes?: string;
+  created_at?: string;
+  age_days?: number;
+  freshness_tier?: string;
+  stale?: boolean;
   claims: number;
   sources: {
     total: number;

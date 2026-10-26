@@ -74,10 +74,17 @@ EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
 VERIFY     cross-reference, score confidence, flag contradictions
 SUMMARIZE  `summarization` skill — condense findings before writing
 WRITE      `technical-writing` skill — hand it the routed shape, audience, and
-           target length; use the shared skeleton plus the shape's block in
-           `references/report-template.md` so every report carries
-           Methodology & Scope → Executive Summary → Key Findings → Evidence &
+           target length; use the shared skeleton, the `report-manifest` block,
+           and the shape's block in `references/report-template.md` so every
+           report carries Executive Summary → Methodology & Scope → Key
+           Findings → Assumptions → Analysis of Alternatives → Evidence &
            Sources → Contradictions → Gaps → Source Register → Recommendations
+VALIDATE   `scripts/validate-report.ts --report <file>` — fix every error
+           (missing section, uncited finding, unresolved [S#], register row
+           without a URL, invalid manifest value) before delivering
+ARCHIVE    `manage_kb (action: ingest, source_type: "report")` with a `receipt`
+           carrying the manifest claims and sources; on recall, run
+           `manage_kb (action: verify_report)` before reusing the report
 POLISH     `proofreading` skill — grammar, spelling, style, clarity, tone
 TRANSLATE  load and apply the `translation` skill — when the user asked for a
            non-English output; end that step with its `translation complete.`
@@ -96,6 +103,9 @@ not emit the token and drop the translation:
 research complete. <N> sources | <K> findings | <gap> gaps noted
 ```
 
+Every report uses one confidence scale, one likelihood lexicon, and one set of
+source grades from `references/confidence.md`. Do not invent a second scale.
+
 ## Pipeline: Fact-Check
 
 Use when the user wants to verify specific claims.
@@ -105,8 +115,9 @@ RECALL       Infobroker `search_web` KB-first (automatic); `manage_kb (action: s
 EXTRACT      claims from the user's input
 SEARCH       each claim with Infobroker `search_web` (per-claim queries)
 CROSS-CHECK  Infobroker `verify_claims` for multi-source verification
-VERDICT      assign True→Unverifiable + confidence + justification
+VERDICT      assign True→Unverifiable + confidence + likelihood + justification
 SUMMARIZE    `summarization` skill — executive summary
+VALIDATE     run `scripts/validate-report.ts --report <file>` before delivery
 CITE         source URLs with every verdict
 ```
 

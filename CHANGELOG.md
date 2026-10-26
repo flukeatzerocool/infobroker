@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026.10.26 — Reporting and analysis uplift
+
+- Report receipts accept optional report-level metadata (shape, audience,
+  methodology, assumptions, alternatives, gaps) and per-claim verdict,
+  confidence, and likelihood fields, stored in the canonical manifest and
+  covered by its digest. Version-1 manifests without the new fields still
+  verify. `verify_report` reports the metadata, revision chain, report age, and
+  a staleness flag derived from the report's freshness tier. (REQ-110,
+  REQ-060b, REQ-060i, REQ-083)
+- Reports carry a `report-manifest` block and a graded Source Register. A
+  shared `confidence.md` fixes one confidence scale, one calibrated likelihood
+  lexicon, and independent Admiralty source grades; the report skeleton adds
+  Assumptions and Analysis of Alternatives, and each shape gains manifest
+  fields, PRISMA-style screening counts, audience profiles, and refined
+  fact-check verdicts. (REQ-114, REQ-115, REQ-051, REQ-052, REQ-053, REQ-088)
+- `scripts/validate-report.ts` checks required sections, manifest values,
+  `[S#]` resolution, and Source Register URLs; `npm run check-report-fixtures`
+  proves the validator against good and defect fixtures. (REQ-116)
+- Monitoring runs baseline a receipt-bearing report, revalidate it with
+  `verify_report` before comparing, and publish a delta revision that records
+  `supersedes`. Drift and unverifiable sources are reported rather than folded
+  into "unchanged". (REQ-117)
+- `render-report` turns a validated report into a self-contained HTML
+  document, and `monitor-delta` compares two report manifests offline into
+  new, changed, and removed claims and sources. Scheduling remains client-side:
+  a cron or CI job invokes the pipeline and archives each delta revision.
+
 ## 2026.10.22 — State-health notices, safe startup, and update discovery
 
 - Successful tool responses now carry a bounded top-level `notices` array when

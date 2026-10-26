@@ -23,7 +23,7 @@ import {
   resolveReportIdentity,
   ingestDestinations,
 } from "./kb.js";
-import { canonicalJson, receiptDigest, normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
+import { canonicalJson, receiptDigest, normalizeReceiptInput, verifyReceipt, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { SqliteStore } from "./kb-sqlite.js";
 import type { KbConfig, ReportReceiptInput } from "./types.js";
 
@@ -496,5 +496,81 @@ describe("receipt ingest refusal (REQ-060b)", () => {
     expect(ingestDestinations("disk")).toEqual({ kb: false, disk: true });
     expect(ingestDestinations("both")).toEqual({ kb: true, disk: true });
     expect(ingestDestinations("kb")).toEqual({ kb: true, disk: false });
+  });
+});
+
+describe("report manifest metadata (REQ-114, REQ-110)", () => {
+  it("round-trips report metadata and per-claim grading fields", () => {
+    const seeded = seedReport();
+    const withMeta: ReportReceiptInput = {
+      ...receipt(),
+      report: {
+        shape: "Deep-Dive",
+        audience: "analyst",
+        methodology: "Two independent fetches plus corroboration.",
+        assumptions: ["The cached page reflects the live source."],
+        alternatives: ["The inspection record may be superseded."],
+        gaps: ["No load-rating baseline was available."],
+        supersedes: "report://previous",
+        revision: 2,
+      },
+    };
+    withMeta.claims[0]!.verdict = "Mostly True";
+    withMeta.claims[0]!.confidence = "Medium";
+    withMeta.claims[0]!.likelihood = "likely";
+    const stored = kbPutReportReceipt(seeded.reportId, withMeta);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error("unreachable");
+    expect(stored.record.manifest.report?.audience).toBe("analyst");
+    expect(stored.record.manifest.claims[0]!.confidence).toBe("Medium");
+
+    const result = verify(seeded.reportId);
+    expect(result.state).toBe("verified");
+    expect(result.report_meta?.shape).toBe("Deep-Dive");
+    expect(result.revision).toBe(2);
+    expect(result.supersedes).toBe("report://previous");
+    expect(result.created_at).toBeDefined();
+    expect(result.age_days).toBeGreaterThanOrEqual(0);
+    expect(result.freshness_tier).toBe("report");
+    expect(result.stale).toBe(false);
+  });
+
+  it("verifies a version-1 manifest that predates the report block", () => {
+    const seeded = seedReport();
+    const doc = kbGet(seeded.reportId);
+    expect(doc).not.toBeNull();
+    const base = {
+      version: 1 as const,
+      report_id: seeded.reportId,
+      content_sha256: createHash("sha256").update(doc!.text).digest("hex"),
+      claims: [],
+    };
+    const manifest = { ...base, digest_sha256: receiptDigest(base) };
+    const result = verifyReceipt({
+      manifest,
+      reportText: doc!.text,
+      cachedDocument: () => null,
+    });
+    expect(result.digest_match).toBe(true);
+    expect(result.report).toBe("verified");
+    expect(result.report_meta).toBeUndefined();
+  });
+
+  it("rejects an invalid confidence value and leaves the report writable", () => {
+    const bad = normalizeReceiptInput({
+      claims: [{ claim: "x", confidence: "Certain", sources: [] }],
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) throw new Error("unreachable");
+    expect(bad.error.code).toBe("invalid_input");
+
+    const good = normalizeReceiptInput({
+      claims: [{ claim: "x", confidence: "High", verdict: "True", sources: [] }],
+      report: { shape: "Fact-Check", assumptions: ["one"] },
+    });
+    expect(good.ok).toBe(true);
+    if (!good.ok) throw new Error("unreachable");
+    expect(good.value.report?.shape).toBe("Fact-Check");
+    expect(good.value.claims[0]!.confidence).toBe("High");
   });
 });

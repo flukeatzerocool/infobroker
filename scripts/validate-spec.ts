@@ -64,7 +64,7 @@ while ((match = reqPattern.exec(specText)) !== null) {
 
 // Client- and distribution-artifact REQs verified by file presence (skills,
 // docs, server.json, build wiring), not by src/ source citations.
-const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091", "REQ-101"]);
+const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091", "REQ-101", "REQ-115", "REQ-116", "REQ-117"]);
 
 // Meta-REQs that describe the spec process itself
 const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080", "REQ-096"]);
@@ -576,7 +576,7 @@ function checkArtifactContent(): void {
 
   // REQ-053: required reference files present; pipeline-map carries a Mermaid diagram.
   const refDir = join(ROOT, "skills", "infobroker", "references");
-  for (const f of ["pipeline-map.md", "provider-map.md", "workflows.md", "journeys.md"]) {
+  for (const f of ["pipeline-map.md", "provider-map.md", "workflows.md", "journeys.md", "confidence.md"]) {
     if (!existsSync(join(refDir, f))) {
       error(`skills/infobroker/references/${f}: missing (REQ-053)`);
     }
@@ -604,6 +604,24 @@ function checkArtifactContent(): void {
     const techniqueCount = (catalog.match(/^###\s+/gm) ?? []).length;
     if (techniqueCount < 6) {
       error(`skills/analysis-loop/references/techniques.md: fewer than 6 techniques (${techniqueCount}) — REQ-088`);
+    }
+  }
+
+  // REQ-114/115 — manifest block and one canonical confidence scale.
+  const reportTemplatePath = join(refDir, "report-template.md");
+  if (!existsSync(reportTemplatePath) || !/```report-manifest/.test(readFileSync(reportTemplatePath, "utf-8"))) {
+    error("skills/infobroker/references/report-template.md: missing report-manifest block (REQ-114)");
+  }
+  if (!existsSync(reportTemplatePath) || !/## Baseline and Verification/.test(readFileSync(reportTemplatePath, "utf-8"))) {
+    error("skills/infobroker/references/report-template.md: missing monitoring baseline block (REQ-117)");
+  }
+  const confidencePath = join(refDir, "confidence.md");
+  if (existsSync(confidencePath)) {
+    const confidence = readFileSync(confidencePath, "utf-8");
+    for (const required of ["High", "Medium", "Low", "almost certain", "Reliability", "Credibility"]) {
+      if (!confidence.includes(required)) {
+        error(`skills/infobroker/references/confidence.md: missing '${required}' (REQ-115)`);
+      }
     }
   }
 }
