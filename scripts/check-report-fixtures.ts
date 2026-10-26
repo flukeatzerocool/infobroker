@@ -1,7 +1,8 @@
 #!/usr/bin/env npx tsx
 // check-report-fixtures.ts — gate: prove the report contract validator accepts
-// the good fixture and rejects each defect fixture (REQ-116). Wired into
-// `npm run check`; the fixture corpus lives under `test-fixtures/reports/`.
+// the good fixture and rejects each defect fixture (REQ-114, REQ-116, REQ-118,
+// REQ-119, REQ-120). Wired into `npm run check`; the fixture corpus lives under
+// `test-fixtures/reports/`.
 //
 // Exit codes: 0 = every fixture matches its expected verdict; 1 = expectation
 // violation; 2 = fatal (unreadable corpus, unknown flag).

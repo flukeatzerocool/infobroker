@@ -39,15 +39,25 @@ rather than restating them.
 - **WRITE** — `technical-writing`, filling the shared skeleton, the
   `report-manifest` block, and the routed shape's block in
   `report-template.md`; the orchestrator passes the shape, audience, and
-  target length.
+  target length. Every shape uses the shared skeleton unless its block says
+  "skeleton omitted".
+- **REDRAFT-CHECK** — extract every claim from the draft and re-check it
+  against the collected evidence and the manifest. Remove or mark unverified
+  any claim the evidence does not support.
 - **VALIDATE** — run `scripts/validate-report.ts --report <file>`; fix every
-  error before delivering (missing section, uncited finding, unresolved
-  `[S#]`, register row without URL, invalid manifest value).
+  error before delivering (missing section or shape block, uncited or
+  unlabeled finding, unresolved `[S#]`, register row missing a grade, date, or
+  URL, invalid manifest value).
 - **ARCHIVE** — ingest the finished report with `source_type: "report"` and a
   `receipt` carrying the manifest claims and sources; a later `RECALL` runs
   `verify_report` to surface source drift before reuse.
 - **POLISH** — `proofreading` for language quality.
-- **TRANSLATE** — `translation` when the target language is not English.
+- **TRANSLATE** — `translation` when the target language is not English;
+  keep the canonical section headings.
+- **REVALIDATE** — run the report validator again on the final artifact after
+  polish and translation.
+- **ARCHIVE** — ingest the finished report with a receipt; on recall, verify
+  the receipt before reuse.
 - **CITE** — every factual claim carries an inline `[S#]` marker resolving to
   the Source Register, whose row carries the URL.
 
@@ -59,7 +69,8 @@ Each shape ends with a grepable one-line status token in the form
 **Trigger:** open-ended research that ends in a written artifact.
 
 **Pipeline:** RECALL → SEARCH → EXTRACT → VERIFY → SUMMARIZE
-(`summarization`) → WRITE → POLISH → TRANSLATE (if needed) → CITE.
+(`summarization`) → WRITE → REDRAFT-CHECK → VALIDATE → POLISH → TRANSLATE
+(if needed) → REVALIDATE → ARCHIVE → CITE.
 
 **Technique:** Key Assumptions Check on the report's central thesis before
 writing.
@@ -71,7 +82,9 @@ writing.
 **Trigger:** verify specific claims from user input.
 
 **Pipeline:** RECALL → extract claims → SEARCH per claim → `verify_claims`
-cross-reference → verdict → `summarization` digest → CITE.
+cross-reference → verdict → `summarization` digest → WRITE (shared skeleton +
+verdict table) → REDRAFT-CHECK → VALIDATE → POLISH → TRANSLATE (if needed) →
+REVALIDATE → ARCHIVE → CITE.
 
 **Verdict:** True, Mostly True, Half True, Mostly False, False, Misleading,
 Mixture, or Unverifiable, each with a confidence label, a likelihood term

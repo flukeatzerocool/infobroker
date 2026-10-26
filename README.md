@@ -353,8 +353,8 @@ much capacity remains.
 ## Skills
 
 The MCP server is one half of the product. The bundled skills are the
-other. Six client skills ship in the repository — no external dependency,
-no separate install — and they turn raw research into finished work.
+other. Six client skills ship in the repository and turn raw research into
+finished work.
 
 The orchestrator skill (`infobroker`) opens with a classify gate that
 maps your request to a workflow shape: research-and-write, fact-check,
@@ -362,15 +362,17 @@ deep-dive, competitive evaluation, literature review, monitoring,
 red-team, vetting, or gated analysis. Each shape composes the same
 primitives — recall from the knowledge base, search, extract, verify,
 write, validate, and cite — into its own sequence and ends with a grep-able
-completion token so you can confirm the outcome. Every report carries a
+completion token. Every report carries a
 machine-readable manifest and a graded Source Register; a validation gate
 checks its sections, citations, and manifest values before delivery, and a
 shared reference fixes one confidence, likelihood, and source-grade scale.
-Finished reports render to self-contained HTML, and two manifests diff offline
-for monitoring. Four writing sub-skills execute the writing phases: `summarization`
+Four writing sub-skills execute the writing phases: `summarization`
 condenses findings before writing, `technical-writing` drafts reports and
 docs, `proofreading` polishes language, and `translation` produces
 multilingual output.
+
+The writing pipeline requires a client that loads bundled skills; without
+skill loading, Infobroker provides tool-level research, not a finished report.
 
 Gated analysis is the escalation shape. When a question is high-stakes or
 decision-driving, the classify gate routes to the `analysis-loop` skill —

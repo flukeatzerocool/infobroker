@@ -44,7 +44,22 @@ const scanAll = rest.includes("--scan=all-assistant") || manifest.scan === "all-
 const text = scanAll ? extractAllAssistantText(raw) : extractFinalAssistantText(raw);
 const after = workdir ? readIfExists(join(workdir, "input.txt")) : null;
 const before = workdir ? readIfExists(join(workdir, "input.pre.txt")) : null;
-const checks = evaluateChecks(manifest, text, { before, after });
+const artifactPath = workdir && manifest.output_file ? join(workdir, manifest.output_file) : null;
+const artifact = readIfExists(artifactPath);
+let validationOk = null;
+if (manifest.checks?.validate_report && artifactPath) {
+  try {
+    execSync(`npx tsx ${JSON.stringify(join(import.meta.dirname, "..", "..", "scripts", "validate-report.ts"))} --report ${JSON.stringify(artifactPath)} --json`, {
+      cwd: join(import.meta.dirname, "..", ".."),
+      stdio: "pipe",
+    });
+    validationOk = true;
+  } catch {
+    // validator exited non-zero: report the gate failure, do not throw
+    validationOk = false;
+  }
+}
+const checks = evaluateChecks(manifest, text, { before, after, artifact, validationOk });
 
 const tokens = manifest.expected_tokens ?? [];
 const missing = [];
@@ -66,6 +81,7 @@ for (const tok of tokens) {
 
 function emit(result) {
   if (checks) result.checks = checks;
+  result.manifest = manifestPath;
   process.stdout.write(JSON.stringify(result) + "\n");
   process.exit(0);
 }

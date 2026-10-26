@@ -153,8 +153,8 @@ for manifest in "${MANIFESTS[@]}"; do
   # opencode resolves its working directory to the repo root regardless of the
   # subshell cwd, so substitute the absolute input path into the prompt.
   prompt_file="$workdir/prompt.md"
-  node -e 'const j=require(process.argv[1]);console.log(j.prompt)' "$manifest" \
-    | sed "s|\./input\.txt|$workdir/input.txt|g" > "$prompt_file"
+  node -e 'const fs=require("fs"),path=require("path");const j=require(process.argv[1]);process.stdout.write(j.prompt_file?fs.readFileSync(path.resolve(path.dirname(process.argv[1]),j.prompt_file),"utf8"):j.prompt)' "$manifest" \
+    | sed -e "s|\./input\.txt|$workdir/input.txt|g" -e "s|\./report\.md|$workdir/report.md|g" > "$prompt_file"
 
   info "════ Testing $skill ════"
   SKILLS_RUN=$((SKILLS_RUN + 1))
@@ -195,7 +195,7 @@ node -e '
   let pass=0,fail=0,skip=0;
   for(const l of lines){
     let o; try{o=JSON.parse(l)}catch{continue}
-    out.skills[o.skill]=o;
+    out.skills[o.manifest || o.skill]=o;
     if(o.status==="pass")pass++;
     else if(o.status==="fail")fail++;
     else skip++;
@@ -212,13 +212,13 @@ info "Skill test results"
 info "═══════════════════════════════════════════════"
 node -e '
   const r=require(process.argv[1]);
-  for(const [s,o] of Object.entries(r.skills)){
+  for(const [,o] of Object.entries(r.skills)){
     const mark=o.status==="pass"?"PASS":"FAIL";
     const bits=[];
     if(o.missing?.length) bits.push("missing: "+o.missing.join(", "));
     if(o.outOfOrder?.length) bits.push("out of order: "+o.outOfOrder.join(", "));
     if(o.checks) bits.push(o.checks.passed?"checks: pass":"checks: fail ("+o.checks.failed.join("; ")+")");
-    console.log(`  ${mark.padEnd(5)} ${s}${bits.length?" — "+bits.join("; "):""}`)
+    console.log(`  ${mark.padEnd(5)} ${o.skill}${bits.length?" — "+bits.join("; "):""}`)
   }
   const sm=r.summary;
   console.log(`\n  ${sm.pass}/${sm.total} passed`);

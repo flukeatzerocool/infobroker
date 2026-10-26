@@ -53,3 +53,27 @@ test("advisory failures are reported but do not fail the run", () => {
   assert.deepEqual(result.failed, []);
   assert.match(result.advisory_failed.join("\n"), /required_any: none of: never/);
 });
+
+test("validate_report gates on the validator result", () => {
+  const manifest = { checks: { validate_report: true } };
+  const failed = evaluateChecks(manifest, "text", { artifact: "report", validationOk: false });
+  assert.equal(failed.passed, false);
+  assert.match(failed.failed.join("\n"), /validate_report/);
+  const passed = evaluateChecks(manifest, "text", { artifact: "report", validationOk: true });
+  assert.equal(passed.passed, true);
+});
+
+test("require_output_file needs a declared artifact", () => {
+  const manifest = { checks: { require_output_file: true } };
+  const missing = evaluateChecks(manifest, "text", { artifact: null });
+  assert.equal(missing.passed, false);
+  assert.match(missing.failed.join("\n"), /require_output_file/);
+  const present = evaluateChecks(manifest, "text", { artifact: "report" });
+  assert.equal(present.passed, true);
+});
+
+test("artifact_required_facts checks the written artifact", () => {
+  const manifest = { checks: { artifact_required_facts: ["Executive Summary"] } };
+  const result = evaluateChecks(manifest, "text", { artifact: "## Executive Summary" });
+  assert.equal(result.passed, true);
+});

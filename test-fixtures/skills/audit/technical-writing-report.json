@@ -1,0 +1,41 @@
+{
+  "skill": "technical-writing",
+  "prompt_file": "prompts/report-mode.md",
+  "inputs": [],
+  "output_file": "report.md",
+  "expected_tokens": [
+    "technical-writing complete."
+  ],
+  "checks": {
+    "require_output_file": true,
+    "validate_report": true,
+    "artifact_required_facts": [
+      "report-manifest",
+      "Executive Summary",
+      "Methodology & Scope",
+      "Key Findings",
+      "Assumptions",
+      "Analysis of Alternatives",
+      "Evidence & Sources",
+      "Contradictions",
+      "Gaps",
+      "Source Register",
+      "Recommendations",
+      "https://",
+      "Internet Archive"
+    ],
+    "forbidden_patterns": [
+      "TODO",
+      "lorem ipsum"
+    ]
+  },
+  "rubric": [
+    "Research Reports mode used, not a generic API reference",
+    "Shared skeleton and shape block present",
+    "Every finding has a confidence label and resolved citation",
+    "Source Register carries grades, dates, and interests",
+    "Validator passes",
+    "Completion line present"
+  ],
+  "time_limit": "none"
+}

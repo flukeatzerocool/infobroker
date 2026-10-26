@@ -4,6 +4,10 @@
 {
   "shape": "Fact-Check",
   "audience": "analyst",
+  "target_length": 800,
+  "language": "en",
+  "as_of": "2026-10-26",
+  "handling": "TLP:CLEAR",
   "methodology": "Two independent sources, cross-checked.",
   "assumptions": ["The cached source reflects the live page."],
   "alternatives": ["A newer revision may supersede the source."],
@@ -60,9 +64,9 @@ No load-rating baseline was available.
 
 ## Source Register
 
-| # | Source | Type | Reliability | Credibility | URL |
-|---|--------|------|-------------|-------------|-----|
-| S1 | Bridge inspection | primary | A | 1 | https://example.com/bridge-inspection |
+| # | Source | Type | Primary/Secondary | Reliability | Credibility | Relevant interests | Published | Accessed | DOI | URL |
+|---|--------|------|-------------------|-------------|-------------|--------------------|-----------|----------|-----|-----|
+| S1 | Bridge inspection | primary | primary | A | 1 | none | 2026-01-15 | 2026-10-26 | 10.1000/example | https://example.com/bridge-inspection |
 
 ## Recommendations
 

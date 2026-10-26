@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.10.26 — Report contract hardening
+
+- Skill-audit results are keyed by manifest path, so two manifests that
+  exercise the same skill no longer overwrite each other; the report-mode
+  audit prompt moves to a reusable Markdown template. Appendix B adds the
+  gate-observable condition convention.
+- The report manifest now requires shape, claims, and an as-of date; the gate
+  rejects catalog-external shape and audience values, a misplaced manifest,
+  an invalid handling classification, and a later revision without
+  `supersedes`. (REQ-114, REQ-118)
+- Reports are shape-aware: each workflow shape's output block is gated, every
+  finding carries a confidence label and a resolved citation, and the Source
+  Register requires reliability, credibility, primacy, interests, publication
+  and access dates, and a durable citation identifier when one exists.
+  (REQ-118, REQ-119)
+- One canonical pipeline order now governs the orchestrator, workflow
+  references, and the pipeline map; drafting is followed by a redraft check,
+  validation, polish, translation, and a final revalidation. (REQ-120)
+- `validate-report` reports readability as an advisory warning and the
+  confidence reference adds an informational GRADE mapping. (REQ-115)
+- The skill audit harness can require a written output artifact and gate it
+  through `validate-report`; a report-mode audit manifest now exercises the
+  full writing path. (REQ-116, REQ-120)
+
 ## 2026.10.26 — Reporting and analysis uplift
 
 - Report receipts accept optional report-level metadata (shape, audience,

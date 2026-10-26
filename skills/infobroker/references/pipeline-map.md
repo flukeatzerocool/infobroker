@@ -21,12 +21,18 @@ flowchart TD
         RPe --> RPv["verify & triangulate"]
         RPv --> RPs["summarization"]
         RPs --> RPw["technical-writing"]
-        RPw --> RPp["proofreading"]
+        RPw --> RPd["redraft-check"]
+        RPd --> RPv2["validate-report"]
+        RPv2 --> RPp["proofreading"]
         RPp --> RPt["translation (optional)"]
+        RPt --> RPr2["revalidate-report"]
+        RPr2 --> RPa["archive + cite"]
     end
 
     subgraph FC["Fact-Check"]
         FCc["extract claims → search_web → verify_claims"] --> FCv["assign verdicts"]
+        FCv --> FCw["write skeleton + verdict table"]
+        FCw --> FCd["redraft-check → validate → polish → revalidate → archive"]
     end
 
     subgraph DD["Deep-Dive"]

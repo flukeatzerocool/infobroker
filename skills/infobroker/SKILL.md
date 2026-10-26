@@ -36,6 +36,11 @@ description: >
 - Purely conversational questions with no research component
 - Tasks that require only the AI's internal knowledge, no web lookup
 
+The writing pipeline runs only in a client that loads bundled skills. In a
+client without skill loading, Infobroker tools still retrieve and verify
+evidence, but no report manifest, validator, or writing pipeline runs; say so
+rather than claiming a finished report.
+
 ## Phase 0: Classify
 
 Map the request to one workflow shape before any search. Consult
@@ -66,32 +71,39 @@ structured analytic techniques — score it with the rubric in
 Default shape for reports, articles, documentation, and analysis.
 
 ```
-RECALL     Infobroker `search_web` KB-first (automatic); `manage_kb (action: search)` only for stored-only answers
-SEARCH     Infobroker `search_web`; `verify_claims` for contested claims
-EXTRACT    Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
-           reading a page to answer a specific question, pass `question` to get
-           the ranked passages that address it instead of the whole page
-VERIFY     cross-reference, score confidence, flag contradictions
-SUMMARIZE  `summarization` skill — condense findings before writing
-WRITE      `technical-writing` skill — hand it the routed shape, audience, and
-           target length; use the shared skeleton, the `report-manifest` block,
-           and the shape's block in `references/report-template.md` so every
-           report carries Executive Summary → Methodology & Scope → Key
-           Findings → Assumptions → Analysis of Alternatives → Evidence &
-           Sources → Contradictions → Gaps → Source Register → Recommendations
-VALIDATE   `scripts/validate-report.ts --report <file>` — fix every error
-           (missing section, uncited finding, unresolved [S#], register row
-           without a URL, invalid manifest value) before delivering
-ARCHIVE    `manage_kb (action: ingest, source_type: "report")` with a `receipt`
-           carrying the manifest claims and sources; on recall, run
-           `manage_kb (action: verify_report)` before reusing the report
-POLISH     `proofreading` skill — grammar, spelling, style, clarity, tone
-TRANSLATE  load and apply the `translation` skill — when the user asked for a
-           non-English output; end that step with its `translation complete.`
-           token
-CITE       an inline `[S#]` marker on every factual claim, resolving to the
-           Source Register entry that carries the URL
+RECALL       Infobroker `search_web` KB-first (automatic); `manage_kb (action: search)` only for stored-only answers
+SEARCH       Infobroker `search_web`; `verify_claims` for contested claims
+EXTRACT      Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
+             reading a page to answer a specific question, pass `question` to get
+             the ranked passages that address it instead of the whole page
+VERIFY       cross-reference, score confidence, flag contradictions
+SUMMARIZE    `summarization` skill — condense findings before writing
+WRITE        `technical-writing` skill — hand it the routed shape, audience, and
+             target length; use the shared skeleton, the `report-manifest` block,
+             and the shape's block in `references/report-template.md`
+REDRAFT-CHECK  extract every claim in the draft and re-check it against the
+             collected evidence and the manifest; remove or mark unverified any
+             claim the evidence does not support
+VALIDATE     `scripts/validate-report.ts --report <file>` — fix every error
+             (missing section or shape block, uncited or unlabeled finding,
+             unresolved [S#], register row missing a grade, date, or URL,
+             invalid manifest value) before delivery
+POLISH       `proofreading` skill — grammar, spelling, style, clarity, tone
+TRANSLATE    load and apply the `translation` skill when the user asked for a
+             non-English output; keep the canonical section headings
+REVALIDATE   run `scripts/validate-report.ts` again on the final artifact after
+             polish and translation; fix every error before delivering
+ARCHIVE      `manage_kb (action: ingest, source_type: "report")` with a `receipt`
+             carrying the manifest claims and sources; on recall, run
+             `manage_kb (action: verify_report)` before reusing the report
+CITE         an inline `[S#]` marker on every factual claim, resolving to the
+             Source Register entry that carries the URL
 ```
+
+Every shape uses the shared skeleton unless its block in `report-template.md`
+explicitly says "skeleton omitted". The canonical order above is the only
+pipeline order; `references/workflows.md` and `references/pipeline-map.md`
+repeat it verbatim.
 
 Run every pipeline step that applies to the request, in order, and complete
 the tail steps (WRITE, POLISH, TRANSLATE, CITE) before emitting the token.
@@ -117,7 +129,13 @@ SEARCH       each claim with Infobroker `search_web` (per-claim queries)
 CROSS-CHECK  Infobroker `verify_claims` for multi-source verification
 VERDICT      assign True→Unverifiable + confidence + likelihood + justification
 SUMMARIZE    `summarization` skill — executive summary
+WRITE        `technical-writing` skill — the shared skeleton plus the Fact-Check verdict table
+REDRAFT-CHECK  re-check every verdict against the collected evidence
 VALIDATE     run `scripts/validate-report.ts --report <file>` before delivery
+POLISH       `proofreading` skill
+TRANSLATE    `translation` skill when the user asked for a non-English output
+REVALIDATE   run the report validator again on the final artifact
+ARCHIVE      `manage_kb (action: ingest, source_type: "report")` with a receipt
 CITE         source URLs with every verdict
 ```
 

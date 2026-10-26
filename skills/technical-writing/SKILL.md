@@ -69,8 +69,10 @@ not generic documentation:
    For a Literature Review, also fill the PRISMA-style identification and
    screening table with exclusion reasons.
 3. **Preserve evidence binding.** Keep the `[S#]` marker assigned during
-   verification on every factual claim. Do not introduce a claim while
-   drafting that the collected evidence does not support.
+   verification on every factual claim. Before handing the draft back,
+   perform a redraft check: extract each claim from the draft, confirm the
+   evidence set supports it, and remove or mark unverified any claim it does
+   not support. Do not introduce a claim while drafting.
 4. **Calibrate to the reader.** Executive audiences lead with the summary and
    recommendations; technical audiences lead with method and findings. Honor
    the requested length rather than padding to a fixed size.

@@ -64,7 +64,7 @@ while ((match = reqPattern.exec(specText)) !== null) {
 
 // Client- and distribution-artifact REQs verified by file presence (skills,
 // docs, server.json, build wiring), not by src/ source citations.
-const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091", "REQ-101", "REQ-115", "REQ-116", "REQ-117"]);
+const artifactReqs = new Set(["REQ-050", "REQ-051", "REQ-052", "REQ-053", "REQ-054", "REQ-088", "REQ-091", "REQ-101", "REQ-114", "REQ-115", "REQ-116", "REQ-117", "REQ-118", "REQ-119", "REQ-120"]);
 
 // Meta-REQs that describe the spec process itself
 const metaReqs = new Set(["REQ-055", "REQ-077", "REQ-078", "REQ-080", "REQ-096"]);
@@ -563,6 +563,27 @@ function checkArtifactContent(): void {
     if (!/End your reply with[\s\S]{0,160}token/i.test(content)) {
       error("skills/infobroker/SKILL.md: completion token is not stated as an imperative emit instruction (REQ-051)");
     }
+    const canonicalOrder = ["RECALL", "SEARCH", "EXTRACT", "VERIFY", "SUMMARIZE", "WRITE", "REDRAFT-CHECK", "VALIDATE", "POLISH", "TRANSLATE", "REVALIDATE", "ARCHIVE", "CITE"];
+    let cursor = 0;
+    for (const phase of canonicalOrder) {
+      const next = content.indexOf(phase, cursor);
+      if (next === -1) {
+        error(`skills/infobroker/SKILL.md: canonical pipeline is missing or out of order at ${phase} (REQ-120)`);
+        break;
+      }
+      cursor = next + phase.length;
+    }
+    const workflowsPath = join(ROOT, "skills", "infobroker", "references", "workflows.md");
+    if (!existsSync(workflowsPath)) {
+      error("skills/infobroker/references/workflows.md: missing (REQ-120)");
+    } else {
+      const workflows = readFileSync(workflowsPath, "utf-8");
+      for (const phase of ["REDRAFT-CHECK", "VALIDATE", "POLISH", "TRANSLATE", "REVALIDATE", "ARCHIVE"]) {
+        if (!workflows.includes(phase)) {
+          error(`skills/infobroker/references/workflows.md: missing ${phase} phase (REQ-120)`);
+        }
+      }
+    }
     // REQ-052: the orchestrator references the four pipeline skills by name.
     for (const s of ["summarization", "technical-writing", "proofreading", "translation"]) {
       if (!content.includes(s)) {
@@ -612,13 +633,24 @@ function checkArtifactContent(): void {
   if (!existsSync(reportTemplatePath) || !/```report-manifest/.test(readFileSync(reportTemplatePath, "utf-8"))) {
     error("skills/infobroker/references/report-template.md: missing report-manifest block (REQ-114)");
   }
+  if (existsSync(reportTemplatePath)) {
+    const template = readFileSync(reportTemplatePath, "utf-8");
+    for (const required of ["as_of", "Published", "Accessed", "Relevant interests", "policy", "journalist"]) {
+      if (!template.includes(required)) {
+        error(`skills/infobroker/references/report-template.md: missing '${required}' (REQ-114, REQ-118)`);
+      }
+    }
+    if (!/skeleton\s+omitted/.test(template)) {
+      error("skills/infobroker/references/report-template.md: missing skeleton-omitted escape rule (REQ-119)");
+    }
+  }
   if (!existsSync(reportTemplatePath) || !/## Baseline and Verification/.test(readFileSync(reportTemplatePath, "utf-8"))) {
     error("skills/infobroker/references/report-template.md: missing monitoring baseline block (REQ-117)");
   }
   const confidencePath = join(refDir, "confidence.md");
   if (existsSync(confidencePath)) {
     const confidence = readFileSync(confidencePath, "utf-8");
-    for (const required of ["High", "Medium", "Low", "almost certain", "Reliability", "Credibility"]) {
+    for (const required of ["High", "Medium", "Low", "almost certain", "Reliability", "Credibility", "GRADE"]) {
       if (!confidence.includes(required)) {
         error(`skills/infobroker/references/confidence.md: missing '${required}' (REQ-115)`);
       }

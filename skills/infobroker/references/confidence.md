@@ -49,6 +49,18 @@ Record the pair in the Source Register. Do not let a reliable source raise the
 credibility of its own claim, and do not let corroboration raise a source's
 reliability grade.
 
+## GRADE mapping (informational)
+
+For evidence-synthesis readers, the three-label scale maps to GRADE
+certainty as follows. The mapping is informational; it does not create a
+second scale, and a report still grades each claim on the scale above.
+
+| Report confidence | GRADE certainty |
+|-------------------|-----------------|
+| High | High |
+| Medium | Moderate |
+| Low | Low to Very Low |
+
 ## Verdicts (fact-check)
 
 True · Mostly True · Half True · Mostly False · False · Misleading · Mixture ·

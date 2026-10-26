@@ -14,13 +14,18 @@ checks this contract before the report is delivered.
 ## Report manifest
 
 Every report opens with a fenced `report-manifest` JSON block. It is the
-machine-readable summary of the report and the receipt payload. Only `shape`
-and `claims` are required; omit a field rather than guess.
+machine-readable summary of the report and the receipt payload. Only `shape`,
+`claims`, and `as_of` are required; omit a field rather than guess.
+`target_length` is a word budget; `handling` is required. Use the audience values defined below.
 
 ```report-manifest
 {
   "shape": "Research & Write",
   "audience": "analyst",
+  "target_length": 1200,
+  "language": "en",
+  "as_of": "2026-10-26",
+  "handling": "TLP:CLEAR",
   "methodology": "One line: scope, searches run, inclusion rules.",
   "assumptions": ["What was assumed rather than verified."],
   "alternatives": ["A competing hypothesis or option considered."],
@@ -43,7 +48,10 @@ to the prior report identity. Archive the report with a receipt
 (`manage_kb` ingest, `source_type: "report"`) so `verify_report` can detect
 source drift later.
 
-## Shared skeleton (Research & Write, Deep-Dive, Gated Analysis, and the other shapes)
+## Shared skeleton
+
+Every shape uses this skeleton unless its per-shape block says "skeleton
+omitted". The shared sections are mandatory; a shape adds its own block.
 
 ````
 # <Title>
@@ -90,8 +98,8 @@ change the judgment.]
 [Questions left open and why.]
 
 ## Source Register
-| # | Source | Type | Primary/Secondary | Reliability | Credibility | Relevant interests | URL |
-|---|--------|------|-------------------|-------------|-------------|--------------------|-----|
+| # | Source | Type | Primary/Secondary | Reliability | Credibility | Relevant interests | Published | Accessed | DOI | URL |
+|---|--------|------|-------------------|-------------|-------------|--------------------|-----------|----------|-----|-----|
 
 ## Recommendations
 [Actions implied by the findings, or "none" when the request was descriptive.]
@@ -100,6 +108,8 @@ change the judgment.]
 ## Per-shape blocks
 
 ### Fact-Check
+
+Uses the shared skeleton plus this verdict table.
 
 ```
 | # | Claim | Verdict | Confidence | Likelihood | Justification | Sources |
@@ -204,12 +214,29 @@ Register, and Recommendations, and this block for its analysis sections.
 
 ## Audience profiles
 
-Record the audience in the manifest and let it set depth, not facts:
+Record the audience in the manifest and let it set depth, not facts. The
+manifest audience value MUST be one of these; the report gate rejects any
+other value.
 
-- **executive** — answer first, one-page summary, implications and
-  recommendations, minimal method detail.
+- **executive** — answer first, one-page summary (default 400-word
+  `target_length`), implications and recommendations, minimal method detail.
 - **analyst** — full skeleton, source grades, alternatives, and gaps.
 - **engineer** — technical detail, exact versions, reproduction steps, and
   primary documentation over commentary.
+- **policy** — decision framing, jurisdictional scope, legal and
+  distributional implications, and explicit uncertainty.
+- **legal** — facts, standards applied, chain of evidence, and unresolved
+  factual disputes; no unsupported inference.
+- **journalist** — verifiable claims, named sources and interests, dates,
+  and what remains unconfirmed.
+- **investor** — thesis, material risks, time horizon, and evidence quality;
+  distinguish fact from forecast.
+
+## Handling and citation identifiers
+
+Record a `handling` value (`TLP:CLEAR`, `TLP:GREEN`, `TLP:AMBER`,
+`TLP:AMBER+STRICT`, or `TLP:RED`) when access is restricted. The marking is
+descriptive; it is not an access-control mechanism. Record a DOI, ISBN, or
+archival permalink in the `DOI` column when the source provides one.
 
 Always end the reply with the shape's completion token from `workflows.md`.

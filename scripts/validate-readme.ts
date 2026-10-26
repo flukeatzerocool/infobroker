@@ -683,6 +683,12 @@ function checkDesignLimits(text: string): Issue[] {
   return issues;
 }
 
+
+function checkDegradedMode(text: string): Issue[] {
+  if (/client that loads bundled skills/i.test(text) && /without\s+skill loading/i.test(text)) return [];
+  return [{ error: true, msg: "README must state the degraded path for clients without skill loading (REQ-120)" }];
+}
+
 function main(): void {
   const text = readReadme();
   let errors = 0;
@@ -707,6 +713,7 @@ function main(): void {
     { name: "Spec version parity", run: checkSpecVersion, severity: "hard" },
     { name: "Numeric claims", run: checkNumericClaims, severity: "hard" },
     { name: "Design limits", run: checkDesignLimits, severity: "hard" },
+    { name: "Degraded mode", run: checkDegradedMode, severity: "hard" },
   ];
 
   for (const { name, run, severity } of checks) {

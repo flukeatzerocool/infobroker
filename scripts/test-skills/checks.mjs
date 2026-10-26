@@ -6,7 +6,7 @@
 // reported but excluded from `passed`, so an unreliable check can stay
 // visible without making the strict audit gate red.
 
-export function evaluateChecks(manifest, text, { before = null, after = null } = {}) {
+export function evaluateChecks(manifest, text, { before = null, after = null, artifact = null, validationOk = null } = {}) {
   const checks = manifest?.checks;
   if (!checks) return null;
 
@@ -22,6 +22,20 @@ export function evaluateChecks(manifest, text, { before = null, after = null } =
     if (Object.prototype.hasOwnProperty.call(advisory, name)) advisoryFailed.push(message);
     else failed.push(message);
   };
+
+  if (checks.require_output_file) {
+    record("require_output_file", artifact !== null, "declared output file missing");
+  }
+
+  if (checks.validate_report) {
+    record("validate_report", validationOk === true, "report validator failed");
+  }
+
+  if (Array.isArray(checks.artifact_required_facts) && checks.artifact_required_facts.length > 0) {
+    const body = artifact ?? "";
+    const missing = checks.artifact_required_facts.filter((fact) => !body.toLowerCase().includes(fact.toLowerCase()));
+    record("artifact_required_facts", missing.length === 0, missing.join(", "));
+  }
 
   if (checks.require_file_change) {
     record(

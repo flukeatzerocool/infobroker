@@ -163,6 +163,10 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Agreement map** | The corroboration summary grouping findings as `green` (agreed), `yellow` (contested), or `red` (gaps) (§8.2). |
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
+| **Report** | A delivered research artifact that carries the shared skeleton, a report manifest, and a Source Register, produced by a bundled writing skill. |
+| **Report quality standard** | The bundled confidence, likelihood, verdict, audience, shape, and handling definitions that report artifacts and their gate cite rather than restate (REQ-114, REQ-115, REQ-118, REQ-119). |
+| **Handling classification** | A report-level access marking (for example a TLP marking) recorded when the report's access is restricted. |
+| **Durable citation identifier** | A persistent source identifier such as a DOI, ISBN, or archival permalink, recorded when the source provides one. |
 | **Client routing surface** | The instruction file and skill reference files that map user intent to Infobroker tools: `instructions/search-preferences.md`, `SKILL.md`, and the skill reference tables (REQ-050, REQ-053, REQ-107). |
 | **Provider priority** | A configuration value ordering providers within a dispatch chain (REQ-010). |
 | **Routing priority** | The `search_web` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
@@ -175,7 +179,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–117 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -419,7 +423,7 @@ Every tool reference in the client routing surface SHALL resolve to a registered
 The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The skill SHALL record the assumptions behind each finding and at least one alternative considered. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
 
 **REQ-114 — Report Manifest Contract**
-Every generated report SHALL carry a `report-manifest` block declaring its shape and claims, and MAY declare audience, methodology, assumptions, alternatives, gaps, revision, supersedes, and per-claim verdict, confidence, likelihood, and source ids. The manifest SHALL use the confidence, likelihood, and verdict values defined by the report quality standard. The manifest SHALL be the payload archived in the report receipt so a stored report and its claims remain machine-checkable. The block SHALL appear before the first report section. _Check:_ G3.
+Every generated report SHALL carry a `report-manifest` block declaring its shape and claims, and MAY declare audience, target length, language, methodology, assumptions, alternatives, gaps, revision, supersedes, and per-claim verdict, confidence, likelihood, and source ids. The manifest SHALL use the confidence, likelihood, and verdict values defined by the report quality standard. The manifest SHALL be the payload archived in the report receipt so a stored report and its claims remain machine-checkable. The block SHALL appear before the first report section. A gate SHALL reject a manifest that omits its shape or claims, that names a shape or audience value outside the report quality standard, or that places the block after the first report section. _Check:_ G3.
 
 **REQ-115 — Confidence Model**
 Reports and gated analysis SHALL use one confidence scale with three labels, one calibrated likelihood lexicon, and one source-grade scheme. Confidence SHALL distinguish the strength of a judgment from the likelihood of the judged event. Source reliability and information credibility SHALL be graded independently. The bundled references SHALL define the label bands, likelihood terms, and source grades, and the report and analysis artifacts SHALL cite that definition rather than restating a divergent scale. _Check:_ G3.
@@ -428,7 +432,16 @@ Reports and gated analysis SHALL use one confidence scale with three labels, one
 A monitoring run SHALL baseline the current report with a verification receipt and SHALL revalidate that baseline with `verify_report` before comparing. The delta SHALL report new, changed, and removed claims or sources separately and SHALL surface source drift and unverifiable sources rather than treating them as unchanged. A new report revision SHALL increment the revision number and name the baseline report it supersedes. A delta SHALL NOT restate unchanged findings as new. _Check:_ G3.
 
 **REQ-116 — Report Quality Gate**
-A report SHALL carry the shared skeleton, a `report-manifest` block, and a Source Register that resolves every `[S#]` citation to a row with a URL. The manifest SHALL declare the report shape and MAY declare audience, methodology, assumptions, alternatives, gaps, revision, and per-claim verdict, confidence, and likelihood. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A gate SHALL fail when a required section is absent, a Key Findings item lacks a citation, a citation is unresolved, a Source Register row lacks a URL, or a manifest value is invalid. _Check:_ G3.
+A report SHALL carry the shared skeleton and a Source Register that resolves every `[S#]` citation to a row with a URL. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A gate SHALL fail when a required skeleton section is absent, a Key Findings item lacks a citation, a citation is unresolved, or a Source Register row lacks a URL. _Check:_ G3.
+
+**REQ-118 — Report Provenance and Grading**
+A report Source Register SHALL record each source's publication date when determinable, its access date, its source-reliability grade, its information-credibility grade, its primary or secondary classification, and any relevant interest, and SHALL record a durable citation identifier when one exists. The report manifest SHALL record the report's as-of date and a handling classification. A revised report manifest SHALL name the report it supersedes. A report quality gate SHALL reject a row missing a required provenance or grading field, and SHALL reject a manifest without an as-of date or with an unresolved supersession for a later revision. Omitted publication dates SHALL be reported as undeterminable rather than guessed. _Check:_ G3.
+
+**REQ-119 — Shape-Aware Report Contract**
+A report SHALL carry the output block defined for its declared workflow shape in addition to the shared skeleton. The report quality gate SHALL reject a report whose declared shape's block is absent, and SHALL reject a finding entry that lacks a confidence label or at least one resolved source citation. A shape that defines no additional block SHALL satisfy the shared skeleton alone. _Check:_ G3.
+
+**REQ-120 — Report Delivery Verification**
+The orchestrator skill and its reference files SHALL define one pipeline order. The report pipeline SHALL re-verify each drafted claim against the collected evidence before the report quality gate. A claim introduced during drafting that the evidence does not support SHALL be removed or marked unverified. The report quality gate SHALL run on the final artifact after language polish and after translation. A translated report SHALL retain the canonical section headings and record its language in the manifest. _Check:_ G3.
 
 ### 4.8 Spec Integrity
 
@@ -1116,6 +1129,9 @@ verdict is preserved (REQ-026f).
 | REQ-115 | Confidence Model | 4.7 | G3 |
 | REQ-116 | Report Quality Gate | 4.7 | G3 |
 | REQ-117 | Monitoring Baseline and Delta Contract | 4.7 | G3 |
+| REQ-118 | Report Provenance and Grading | 4.7 | G3 |
+| REQ-119 | Shape-Aware Report Contract | 4.7 | G3 |
+| REQ-120 | Report Delivery Verification | 4.7 | G3 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
@@ -1387,6 +1403,12 @@ no algorithm descriptions, no default values, no catalog enumerations
 and no blank lines. A REQ body IS a single paragraph — if it needs more, it is
 at minimum two REQs. Sub-REQs (REQ-XXXa) handle composable, separable concerns.
 
+**Gate-observable conditions.** A REQ SHALL express a conditional obligation
+only when the named condition is observable by a gate. If the condition cannot
+be observed — a fact about the world, an unrecorded state, a writer's intent —
+state the obligation unconditionally instead. A conditional the gate cannot
+test is a silent exemption, not a contract.
+
 **Keyword semantics.** The key words "SHALL", "SHALL NOT", "MUST",
 "MUST NOT", "SHOULD", and "MAY" in REQ bodies carry RFC 2119 meaning —
 normative only in uppercase (RFC 8174). Lowercase "shall" and "must" are
@@ -1605,7 +1627,7 @@ secondary concerns rather than duplicating the REQ.
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117 | G3 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 
