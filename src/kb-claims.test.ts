@@ -3,12 +3,12 @@
 // (REQ-060h). The ledger is SQLite-only; the legacy JSON backend must report
 // unsupported_backend, and a locked store must error without hiding the
 // findings `verify_claims` already produced.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import {
   initKb,
   flushKbWrites,
@@ -283,6 +283,36 @@ describe("claim ledger failure modes (REQ-109 REQ-060h)", () => {
     expect(kbSupportsClaims()).toBe(false);
     expect(kbRecordClaims([bundle()])).toBe(false);
     expect(kbClaims({})).toBeNull();
+  });
+
+  it("streams claim rows instead of materializing the ledger before the bound", () => {
+    const dir = tempDir("ibk-claims-stream-");
+    initKb(baseConfig(dir));
+    const store = new SqliteStore(dir);
+    store.init();
+    const all = vi.spyOn(StatementSync.prototype, "all");
+    try {
+      // Seed past the bound so a materializing read would have to decode all
+      // of them; the streaming read must stop at CLAIM_SCAN_LIMIT.
+      const claims = Array.from({ length: CLAIM_SCAN_LIMIT + 1 }, (_, i) => ({
+        claim: `streamed claim ${i}`,
+        verdict: "unverified" as const,
+        confidence: 0.3,
+        sources: [] as Array<{ url: string; title: string; retrieved_at: string }>,
+      }));
+      store.upsertClaims(claims);
+      all.mockClear();
+      // A filter matching nothing forces the scan to run to its bound.
+      const result = store.claims({ query: "no such claim text anywhere", max_results: 50 });
+      expect(result.scanned).toBe(CLAIM_SCAN_LIMIT);
+      expect(result.truncated).toBe(true);
+      expect(result.claims.length).toBe(0);
+      // The claim SELECT must not go through `.all()` (materialize); it streams.
+      expect(all).not.toHaveBeenCalled();
+    } finally {
+      all.mockRestore();
+      store.close();
+    }
   });
 
   it("reports truncated when the scan bound is hit", () => {

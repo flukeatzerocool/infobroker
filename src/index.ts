@@ -18,6 +18,7 @@ import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefu
 import { isBotChallenge } from "./lib/bot-challenge.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
+import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
 import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
@@ -1533,7 +1534,7 @@ instrumentTool(
       action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption", "claims", "verify_report"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
       key_file: z.string().optional().describe("Path to a key file (generate_key writes here; rekey reads the target key from here). Never pass the secret itself — only a file path."),
-      query: z.string().optional().describe("Search query (for search action)"),
+      query: z.string().optional().describe("Search query (search action) or claim-text filter (claims action)"),
       text: z.string().optional().describe("Raw text to index (for ingest action)"),
       url: z.string().optional().describe("URL to fetch and index (for ingest action)"),
       title: z.string().optional().describe("Document/report title"),
@@ -1543,8 +1544,8 @@ instrumentTool(
       last_updated: z.string().optional().describe("Source last-updated date to store (e.g. '2026-08-24'); auto-detected from fetched URLs when omitted"),
       save_to: z.enum(["kb", "disk", "both"]).optional().describe("Where to save (ingest action): kb, disk, or both. Default kb"),
       format: z.enum(["markdown", "text", "json"]).optional().default("markdown").describe("File format for disk save"),
-      source_url: z.string().optional().describe("Source URL filter (get/delete action) or identity for ingest"),
-      max_results: z.number().min(1).max(50).optional().default(8).describe("Maximum results to return (1-50, default 8)"),
+      source_url: z.string().optional().describe("Source URL filter (get/delete/claims action), the report identity for verify_report, or identity for ingest"),
+      max_results: z.number().min(1).max(50).optional().default(8).describe("Maximum results to return (search/claims action; 1-50, default 8)"),
       receipt: z
         .object({
           claims: z
@@ -1558,7 +1559,7 @@ instrumentTool(
                       url: z.string(),
                       title: z.string().optional(),
                       retrieved_at: z.string().optional(),
-                      snippet: z.string().optional(),
+                      snippet: z.string().max(RECEIPT_LIMITS.snippetChars).optional(),
                     })
                   )
                   .optional(),
@@ -1717,6 +1718,9 @@ instrumentTool(
         // REQ-110: a receipt is report-only and needs the knowledge base. A
         // disk-only ingest cannot hold one, so it is refused before writing.
         const receipt = params.receipt;
+        // Validate before the write: a rejected receipt must not leave a stored
+        // report behind. The normalized value is what the store receives.
+        let normalizedReceipt: Extract<ReturnType<typeof normalizeReceiptInput>, { ok: true }>["value"] | null = null;
         if (receipt !== undefined && receipt !== null) {
           if (!isReport) {
             return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "A verification receipt is only supported for source_type \"report\"", "Ingest the report with source_type: \"report\" or omit the receipt"))}` }] };
@@ -1724,6 +1728,11 @@ instrumentTool(
           if (!ingestDestinations(saveTo).kb) {
             return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "receipt_requires_kb", "A verification receipt requires knowledge-base storage", "Use save_to: \"kb\" (or \"both\"); a disk-only ingest has no stored report to verify"))}` }] };
           }
+          const validated = normalizeReceiptInput(receipt);
+          if (!validated.ok) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", validated.error.code, validated.error.message, `Check the receipt bounds (${RECEIPT_LIMITS.claims} claims, ${RECEIPT_LIMITS.sourcesPerClaim} sources per claim, ${RECEIPT_LIMITS.claimChars} characters per claim, ${RECEIPT_LIMITS.urlChars} per URL, ${RECEIPT_LIMITS.snippetChars} per snippet) and store with save_to: \"kb\"`))}` }] };
+          }
+          normalizedReceipt = validated.value;
         }
 
         const dest = ingestDestinations(saveTo);
@@ -1756,12 +1765,13 @@ instrumentTool(
           ? `saved to disk${diskPath ? `: ${diskPath}` : ""}`
           : `${count} chunks ingested`;
         // REQ-110: the receipt is stored after the content lands, so the
-        // content hash covers the canonical stored document.
+        // content hash covers the canonical stored document. It was validated
+        // above, so this write cannot fail on receipt bounds.
         let receiptMeta: Record<string, unknown> = {};
-        if (receipt !== undefined && receipt !== null) {
-          const stored = kbPutReportReceipt(finalUrl, receipt);
+        if (normalizedReceipt !== null) {
+          const stored = kbPutReportReceipt(finalUrl, normalizedReceipt);
           if (!stored.ok) {
-            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", stored.error.code, stored.error.message, "Check the receipt bounds (100 claims, 25 sources per claim, 2,000 characters per claim, 2048 per URL) and store with save_to: \"kb\""))}` }] };
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", stored.error.code, stored.error.message, `Check the receipt bounds (${RECEIPT_LIMITS.claims} claims, ${RECEIPT_LIMITS.sourcesPerClaim} sources per claim, ${RECEIPT_LIMITS.claimChars} characters per claim, ${RECEIPT_LIMITS.urlChars} per URL, ${RECEIPT_LIMITS.snippetChars} per snippet) and store with save_to: \"kb\"`))}` }] };
           }
           receiptMeta = {
             receipt: {

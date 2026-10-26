@@ -23,7 +23,7 @@ import {
   resolveReportIdentity,
   ingestDestinations,
 } from "./kb.js";
-import { canonicalJson, receiptDigest } from "./kb-receipt.js";
+import { canonicalJson, receiptDigest, normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { SqliteStore } from "./kb-sqlite.js";
 import type { KbConfig, ReportReceiptInput } from "./types.js";
 
@@ -334,6 +334,48 @@ describe("receipt bounds (REQ-110)", () => {
       claims: [{ claim: "one claim", sources: [{ url: `https://example.com/${"a".repeat(2048)}` }] }],
     });
     expect(longUrl.ok === false && longUrl.error.code).toBe("invalid_input");
+  });
+
+  it("rejects an invalid or oversized receipt before storing anything", () => {
+    // The tool layer validates with this normalizer before kbIngest, so a
+    // rejected receipt can never leave a stored report behind. A new report
+    // identity stays absent when the receipt is refused.
+    const dir = tempDir("ibk-receipt-prevalidate-");
+    initKb(baseConfig(dir));
+    const reportId = resolveReportIdentity("A report that must not be stored");
+    expect(kbGet(reportId)).toBeNull();
+
+    const invalid = normalizeReceiptInput({ claims: [] });
+    expect(invalid.ok).toBe(false);
+    if (invalid.ok) throw new Error("unreachable");
+    expect(invalid.error.code).toBe("invalid_input");
+
+    const oversized = normalizeReceiptInput({
+      claims: [{ claim: "one claim", sources: [{ url: "https://example.com/x", snippet: "s".repeat(RECEIPT_LIMITS.snippetChars + 1) }] }],
+    });
+    expect(oversized.ok).toBe(false);
+    if (oversized.ok) throw new Error("unreachable");
+    expect(oversized.error.code).toBe("invalid_input");
+
+    // Nothing was written: the report identity is still absent and no receipt
+    // exists for it.
+    expect(kbGet(reportId)).toBeNull();
+    expect(kbGetReportReceipt(reportId)).toBeNull();
+  });
+
+  it("rejects a source snippet over the 2,000-character bound before hashing", () => {
+    const atLimit = normalizeReceiptInput({
+      claims: [{ claim: "one claim", sources: [{ url: "https://example.com/x", snippet: "s".repeat(RECEIPT_LIMITS.snippetChars) }] }],
+    });
+    expect(atLimit.ok).toBe(true);
+
+    const overLimit = normalizeReceiptInput({
+      claims: [{ claim: "one claim", sources: [{ url: "https://example.com/x", snippet: "s".repeat(RECEIPT_LIMITS.snippetChars + 1) }] }],
+    });
+    expect(overLimit.ok).toBe(false);
+    if (overLimit.ok) throw new Error("unreachable");
+    expect(overLimit.error.code).toBe("invalid_input");
+    expect(RECEIPT_LIMITS.snippetChars).toBe(2000);
   });
 
   it("rejects an empty claim list and a non-array receipt", () => {

@@ -9,6 +9,9 @@
   unverifiable. (REQ-110, REQ-060i, REQ-060b)
 - Receipt rows are sealed at rest and re-sealed when encryption is enabled,
   disabled, or rekeyed. A disk-only report cannot carry a receipt.
+- Report ingest validates a receipt before writing the report and rejects
+  source snippets over 2,000 characters, so a rejected receipt leaves no
+  partial report.
 
 ## 2026.10.22 — Claim ledger for verified claims
 
@@ -20,6 +23,9 @@
 - Claim rows are sealed at rest and re-sealed when encryption is enabled,
   disabled, or rekeyed; the legacy JSON store reports the ledger as
   unsupported.
+- Claim reads stream only up to the scan bound instead of materializing the
+  whole ledger, and the tool parameter descriptions now name the claim and
+  receipt filters.
 
 ## 2026.10.22 — Dependency gate: lockfile remediation
 

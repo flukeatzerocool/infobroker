@@ -20,6 +20,7 @@ export const RECEIPT_LIMITS = {
   sourcesPerClaim: 25,
   claimChars: 2000,
   urlChars: 2048,
+  snippetChars: 2000,
 } as const;
 
 export type ReceiptInputError =
@@ -71,11 +72,15 @@ function normalizeSource(raw: unknown): ReportReceiptSourceInput | null {
   if (url === null) return null;
   const title = typeof raw["title"] === "string" ? raw["title"].slice(0, RECEIPT_LIMITS.claimChars) : "";
   const retrievedAt = raw["retrieved_at"];
+  // REQ-110: the snippet is hashed when no cached document backs the source,
+  // so it is bounded before it reaches the hasher. Oversize is rejected.
+  const rawSnippet = raw["snippet"];
+  if (typeof rawSnippet === "string" && rawSnippet.length > RECEIPT_LIMITS.snippetChars) return null;
   return {
     url,
     title,
     ...(typeof retrievedAt === "string" && retrievedAt.trim() !== "" ? { retrieved_at: retrievedAt.trim() } : {}),
-    ...(typeof raw["snippet"] === "string" ? { snippet: raw["snippet"] } : {}),
+    ...(typeof rawSnippet === "string" ? { snippet: rawSnippet } : {}),
   };
 }
 
@@ -139,7 +144,7 @@ export function normalizeReceiptInput(
           ok: false,
           error: {
             code: "invalid_input",
-            message: `receipt.claims[${index}].sources entries need a url of at most ${RECEIPT_LIMITS.urlChars} characters`,
+            message: `receipt.claims[${index}].sources entries need a url of at most ${RECEIPT_LIMITS.urlChars} characters and a snippet of at most ${RECEIPT_LIMITS.snippetChars} characters`,
           },
         };
       }

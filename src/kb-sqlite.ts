@@ -462,9 +462,11 @@ export class SqliteStore implements KbStore {
     const max = Math.max(1, Math.min(50, query.max_results ?? 8));
     const needle = query.query ? SqliteStore.normalizeClaim(query.query) : null;
     const wantedUrl = query.source_url?.trim() || null;
+    // Stream the rows so the scan bound stops the read before every payload is
+    // decoded; `.all()` would materialize the whole ledger first.
     const rows = this.db
       .prepare("SELECT id, claim_key, first_seen_at, updated_at, payload FROM claims ORDER BY updated_at DESC")
-      .all() as Array<{ id: string; claim_key: string; first_seen_at: string; updated_at: string; payload: Uint8Array }>;
+      .iterate() as Iterable<{ id: string; claim_key: string; first_seen_at: string; updated_at: string; payload: Uint8Array }>;
 
     const out: ClaimRecord[] = [];
     let scanned = 0;
