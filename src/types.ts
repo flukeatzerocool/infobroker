@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-084 REQ-085
+// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-084 REQ-085 REQ-110 REQ-060i
 export interface SearchResult {
   title: string;
   url: string;
@@ -185,6 +185,94 @@ export interface ClaimLedgerResult {
   claims: ClaimRecord[];
   truncated: boolean;
   scanned: number;
+}
+
+/**
+ * Caller-supplied receipt structure for a report ingest (REQ-110). Only the
+ * claim text, optional grade, and cited sources are read; the server owns the
+ * identity, every hash, and the digest.
+ */
+export interface ReportReceiptSourceInput {
+  url: string;
+  title?: string;
+  retrieved_at?: string;
+  snippet?: string;
+}
+
+export interface ReportReceiptClaimInput {
+  claim: string;
+  grade?: string;
+  sources: ReportReceiptSourceInput[];
+}
+
+export interface ReportReceiptInput {
+  claims: ReportReceiptClaimInput[];
+}
+
+/** One cited source inside a stored manifest, with the server's hash. */
+export interface ReportReceiptSource {
+  url: string;
+  title: string;
+  retrieved_at?: string;
+  /**
+   * `document` when the source was hashed from its cached KB document;
+   * `snippet` when only a supplied excerpt was available (unverifiable).
+   */
+  hash_basis: "document" | "snippet";
+  source_sha256: string;
+}
+
+export interface ReportReceiptClaim {
+  claim: string;
+  grade?: string;
+  sources: ReportReceiptSource[];
+}
+
+/**
+ * Canonical manifest stored for a report (REQ-110). `digest_sha256` is the
+ * hash of the canonical JSON of the manifest without that field.
+ */
+export interface ReportReceiptManifest {
+  version: 1;
+  report_id: string;
+  content_sha256: string;
+  claims: ReportReceiptClaim[];
+  digest_sha256: string;
+}
+
+/** A stored receipt as read back from the store. */
+export interface ReportReceiptRecord {
+  id: string;
+  report_key: string;
+  report_id: string;
+  created_at: string;
+  updated_at: string;
+  manifest: ReportReceiptManifest;
+}
+
+export interface ReportSourceCheck {
+  claim_index: number;
+  url: string;
+  state: "drift" | "unverifiable";
+  hash_basis: "document" | "snippet";
+}
+
+/** Result of the read-only, offline `verify_report` action (REQ-060i). */
+export interface ReportVerificationResult {
+  state: "verified" | "drift" | "incomplete" | "unverifiable";
+  digest_match: boolean;
+  digest_sha256: string;
+  report: "verified" | "drift" | "unverifiable";
+  report_id: string;
+  content_sha256: string;
+  claims: number;
+  sources: {
+    total: number;
+    verified: number;
+    drift: number;
+    unverifiable: number;
+    details: ReportSourceCheck[];
+  };
 }
 
 export interface CorroborationResult {

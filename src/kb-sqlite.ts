@@ -1,4 +1,4 @@
-// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060h REQ-084 REQ-085 REQ-109
+// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060h REQ-084 REQ-085 REQ-109 REQ-110 REQ-060i
 // SQLite-backed knowledge base. Chunks stream from the database one row at a
 // time, so search/list/get/stats do not require the full store in memory.
 // When encryption is enabled the whole row payload, the model state, and event
@@ -7,7 +7,15 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ClaimLedgerQuery, ClaimLedgerResult, ClaimRecord, ClaimSourceEdge, KbChunk } from "./types.js";
+import type {
+  ClaimLedgerQuery,
+  ClaimLedgerResult,
+  ClaimRecord,
+  ClaimSourceEdge,
+  KbChunk,
+  ReportReceiptManifest,
+  ReportReceiptRecord,
+} from "./types.js";
 import {
   LEGACY_JSON_STORE,
   LIVE_SQLITE_STORE,
@@ -54,6 +62,12 @@ CREATE TABLE IF NOT EXISTS claim_sources (
   PRIMARY KEY (claim_id, source_key)
 );
 CREATE INDEX IF NOT EXISTS claim_sources_key ON claim_sources(source_key);
+CREATE TABLE IF NOT EXISTS report_receipts (
+  id TEXT PRIMARY KEY,
+  report_key TEXT NOT NULL UNIQUE,
+  encrypted INTEGER NOT NULL DEFAULT 0,
+  payload BLOB NOT NULL
+);
 `;
 
 export interface SqliteStoreOptions {
@@ -66,6 +80,7 @@ export interface SqliteStoreOptions {
 export class SqliteStore implements KbStore {
   readonly backend = "sqlite" as const;
   readonly supportsClaims = true;
+  readonly supportsReportReceipts = true;
   readonly path: string;
   private db: DatabaseSync | null = null;
   private metaCache: KbMeta | null = null;
@@ -480,6 +495,76 @@ export class SqliteStore implements KbStore {
     return { claims: out, truncated, scanned };
   }
 
+  // --- Report verification receipts (REQ-110, REQ-060i) ---------------------
+  //
+  // A receipt row keeps only the random id and the keyed `report_key` in clear
+  // columns; the report identity, claims, URLs, and hashes live in the sealed
+  // payload. The key is HMAC-SHA256 with the row key when encryption is on and
+  // SHA-256 otherwise, so the raw database cannot be matched against a
+  // candidate report identity.
+
+  reportKey(reportId: string): string {
+    return this.keyedHash(reportId.trim());
+  }
+
+  private encodeReceipt(receipt: Omit<ReportReceiptRecord, "id" | "report_key">): Buffer {
+    const clear = Buffer.from(JSON.stringify(receipt), "utf-8");
+    return this.encrypted && this.rowKey ? sealRow(this.rowKey, clear) : clear;
+  }
+
+  private decodeReceipt(payload: Uint8Array): Omit<ReportReceiptRecord, "id" | "report_key"> | null {
+    try {
+      const clear = this.encrypted && this.rowKey ? openRow(this.rowKey, Buffer.from(payload)) : Buffer.from(payload);
+      return JSON.parse(clear.toString("utf-8")) as Omit<ReportReceiptRecord, "id" | "report_key">;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Store or replace the receipt for a report identity. The row keeps its
+   * random id and first `created_at`; the manifest is replaced.
+   */
+  putReportReceipt(
+    reportId: string,
+    manifest: ReportReceiptManifest,
+    reportKey = this.reportKey(reportId)
+  ): ReportReceiptRecord {
+    if (!this.db) throw new Error("knowledge base store is not open");
+    const now = new Date().toISOString();
+    const existing = this.db
+      .prepare("SELECT id, payload FROM report_receipts WHERE report_key = ?")
+      .get(reportKey) as { id: string; payload: Uint8Array } | undefined;
+    const prior = existing ? this.decodeReceipt(existing.payload) : null;
+    const id = existing?.id ?? randomUUID();
+    const createdAt = prior?.created_at ?? now;
+    const body = { report_id: reportId, created_at: createdAt, updated_at: now, manifest };
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO report_receipts (id, report_key, encrypted, payload) VALUES (?, ?, ?, ?)"
+      )
+      .run(id, reportKey, this.encrypted ? 1 : 0, this.encodeReceipt(body));
+    this.hardenPermissions();
+    return { id, report_key: reportKey, ...body };
+  }
+
+  getReportReceipt(reportId: string): ReportReceiptRecord | null {
+    if (!this.db) return null;
+    const row = this.db
+      .prepare("SELECT id, report_key, payload FROM report_receipts WHERE report_key = ?")
+      .get(this.reportKey(reportId)) as { id: string; report_key: string; payload: Uint8Array } | undefined;
+    if (!row) return null;
+    const body = this.decodeReceipt(row.payload);
+    if (!body) return null;
+    return { id: row.id, report_key: row.report_key, ...body };
+  }
+
+  reportReceiptCount(): number {
+    if (!this.db) return 0;
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM report_receipts").get() as { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
   private claimSources(claimId: string): ClaimSourceEdge[] {
     if (!this.db) return [];
     const rows = this.db
@@ -513,6 +598,12 @@ export class SqliteStore implements KbStore {
       .prepare("SELECT claim_id, source_key, retrieved_at, payload FROM claim_sources")
       .all() as Array<{ claim_id: string; source_key: string; retrieved_at: string; payload: Uint8Array }>;
     const decodedEdges = edgeRows.map((row) => ({ claim_id: row.claim_id, edge: this.decodeEdge(row.payload) }));
+    // REQ-110: receipt payloads are sealed too. Decode them under the current
+    // key before the switch, then re-encode and re-key under the next key.
+    const receiptRows = this.db
+      .prepare("SELECT id, payload FROM report_receipts")
+      .all() as Array<{ id: string; payload: Uint8Array }>;
+    const decodedReceipts = receiptRows.map((row) => ({ id: row.id, body: this.decodeReceipt(row.payload) }));
     this.rowKey = next.key;
     this.encrypted = next.encrypted;
     this.transaction(() => {
@@ -551,6 +642,18 @@ export class SqliteStore implements KbStore {
           this.encodeEdge(item.edge)
         );
       });
+      const updateReceipt = this.db!.prepare(
+        "UPDATE report_receipts SET report_key = ?, encrypted = ?, payload = ? WHERE id = ?"
+      );
+      for (const item of decodedReceipts) {
+        if (!item.body) throw new Error("report receipt row could not be decoded during reseal");
+        updateReceipt.run(
+          this.keyedHash(item.body.report_id),
+          next.encrypted ? 1 : 0,
+          this.encodeReceipt(item.body),
+          item.id
+        );
+      }
       this.metaCache = null;
       this.writeRawMeta("encryption", next.encrypted ? "1" : "0");
       if (this.salt) this.writeRawMeta("salt", this.salt.toString("base64"));

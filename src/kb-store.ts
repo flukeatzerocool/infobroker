@@ -1,9 +1,16 @@
-// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-085 REQ-109
+// @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-085 REQ-109 REQ-110
 // Storage seam for the knowledge base. A backend owns persistence and chunk
 // iteration; the chunking, freshness, policy, and tool-response logic stays in
 // kb.ts. The JSON backend keeps the legacy in-memory array; the SQLite backend
 // streams rows so the whole store is never resident.
-import type { ClaimLedgerQuery, ClaimLedgerResult, ClaimRecord, KbChunk } from "./types.js";
+import type {
+  ClaimLedgerQuery,
+  ClaimLedgerResult,
+  ClaimRecord,
+  KbChunk,
+  ReportReceiptManifest,
+  ReportReceiptRecord,
+} from "./types.js";
 
 export const LIVE_SQLITE_STORE = "vector-store.sqlite";
 export const LEGACY_JSON_STORE = "vector-store.json";
@@ -48,6 +55,12 @@ export interface KbStore {
   }>): number;
   /** REQ-060h: read persisted claims, newest first. */
   claims?(query?: ClaimLedgerQuery): ClaimLedgerResult;
+  /** REQ-110: true when the backend stores report verification receipts. */
+  readonly supportsReportReceipts?: boolean;
+  /** REQ-110: store or replace a report's receipt. */
+  putReportReceipt?(reportId: string, manifest: ReportReceiptManifest): ReportReceiptRecord;
+  /** REQ-060i: read a report's receipt, or null when none is stored. */
+  getReportReceipt?(reportId: string): ReportReceiptRecord | null;
 }
 
 // --- Canonical artifact names (D3a) -----------------------------------------

@@ -150,6 +150,7 @@ early.
 | Ingest into knowledge base | `manage_kb (action: ingest)` | Text or URL |
 | Knowledge base stats | `manage_kb (action: stats)` | Operational metrics |
 | Persisted claim ledger | `manage_kb (action: claims)` | Claims recorded by `verify_claims`, newest first; filter by `query` or `source_url` |
+| Verify a report receipt | `manage_kb (action: verify_report)` | Offline recheck of a stored report receipt against the cached report and its cited sources; reports drift, unverifiable, or receipt_not_found |
 | Delete from knowledge base | `manage_kb (action: delete)` | By collection or source URL |
 | Translate findings | `translation` skill | Multilingual output |
 

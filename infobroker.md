@@ -175,7 +175,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–109 and sub-REQs `060a`–`060h` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -452,13 +452,13 @@ The `inspect_providers` spec action SHALL report a token-footprint record measur
 ### 4.9 Knowledge Base
 
 **REQ-060 — `manage_kb`**
-`manage_kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption, claims) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
+`manage_kb` manages the local knowledge base and stored reports. Parameters: `action` (required: search, ingest, list, get, stats, delete, encryption, claims, `verify_report`) and the parameters of the selected action's sub-REQ. Each action SHALL behave per its sub-REQ. When the knowledge base is unconfigured or invalid, every action SHALL return an error per REQ-002. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
 
 **REQ-060a — `manage_kb` search action**
 WHEN action is search, the tool SHALL return chunks ranked by relevance to the query, each with source URL, score, collection, `source_type`, and a matching snippet. The tool SHALL accept a maximum-results count (default 8, max 50), a collection filter, and a `source_type` filter, and SHALL return zero results when the knowledge base is empty or no matches are found. _Check:_ G0, G1.
 
 **REQ-060b — `manage_kb` ingest action**
-WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, and format. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. _Check:_ G0, G1.
+WHEN action is ingest, the tool SHALL index provided text or a fetched URL into the knowledge base, accepting an optional title, collection, `source_type`, freshness tier, source last-updated date, save destination, format, and report verification receipt. At least one of text or URL SHALL be provided; a fetch failure SHALL return an error. The tool SHALL report the number of chunks ingested and the source identifier. A receipt SHALL be accepted only for a report with knowledge-base storage. _Check:_ G0, G1.
 
 **REQ-060c — `manage_kb` stats action**
 WHEN action is stats, the tool SHALL report total chunk count, per-collection chunk counts, estimated storage size, last ingestion timestamp, embedding model availability, and any status events such as storage-corruption recovery. _Check:_ G1.
@@ -477,6 +477,9 @@ WHEN action is encryption, the tool SHALL operate on the knowledge base's at-res
 
 **REQ-060h — `manage_kb` claims action**
 WHEN action is `claims`, the tool SHALL return persisted claim records with their verdict, confidence, last-verified time, and linked sources, sorted newest first. The action SHALL accept an optional `query` to match claim text, an optional `source_url` to return claims linked to that source, and a `max_results` cap. A locked store SHALL return an error per REQ-002 and REQ-084; a backend without ledger support SHALL return an unsupported-backend error. _Check:_ G0, G1.
+
+**REQ-060i — `manage_kb` verify_report action**
+WHEN action is `verify_report`, the tool SHALL revalidate a stored report receipt against the cached report and its cited sources without network access. The action SHALL report the report state, each source state, the stored digest, and whether the digest matches. A missing receipt SHALL return an error; a report or source whose hash differs SHALL be reported as drift, and a source absent from the cache SHALL be reported as unverifiable rather than drift. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
 Search results from `search_web`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
@@ -525,6 +528,9 @@ The knowledge base SHALL remain operable when the persisted chunk data exceeds t
 
 **REQ-109 — Claim Ledger Persistence**
 WHEN `verify_claims` produces findings, the server SHALL persist each finding as a claim record linked to its corroborating sources with the retrieval time of each source. The ledger SHALL be stored in the local knowledge base and SHALL be sealed at rest whenever at-rest encryption is enabled. A persistence failure SHALL NOT fail or alter the `verify_claims` response. The ledger SHALL be available only with the SQLite store; the legacy JSON store SHALL report that the ledger is unsupported. _Check:_ G1.
+
+**REQ-110 — Report Verification Receipt**
+WHEN a report is ingested with a receipt, the server SHALL store a canonical manifest of claim, source, retrieval time, grade, report content hash, and per-source hash. The server SHALL compute the report hash from the stored document and SHALL ignore caller-supplied hashes and digests. The manifest SHALL be sealed at rest when at-rest encryption is enabled and SHALL be bounded in claim and source count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
 
 **REQ-103 — Local Embedding Execution**
 Knowledge-base and passage retrieval SHALL be performed with an embedding model that executes within the server instance, and content submitted for embedding SHALL NOT be transmitted to a third party. The model reference SHALL be configurable so an alternative model can be selected without a specification change. WHEN no model is available, retrieval SHALL degrade with a remediation message and SHALL NOT prevent non-knowledge-base operation. Changing the configured model SHALL reconcile stored content per REQ-082. The active model name and availability SHALL be reported per REQ-060c. _Check:_ G1.
@@ -1099,6 +1105,7 @@ verdict is preserved (REQ-026f).
 | REQ-060f | `manage_kb` get action | 4.9 | G1 |
 | REQ-060g | `manage_kb` encryption action | 4.9 | G0, G1 |
 | REQ-060h | `manage_kb` claims action | 4.9 | G0, G1 |
+| REQ-060i | `manage_kb` verify_report action | 4.9 | G0, G1 |
 | REQ-064 | Auto-Indexing | 4.9 | G1 |
 | REQ-065 | Collection Scoping | 4.9 | G1 |
 | REQ-066 | Content Expiry | 4.9 | G1 |
@@ -1116,6 +1123,7 @@ verdict is preserved (REQ-026f).
 | REQ-103 | Local Embedding Execution | 4.9 | G1 |
 | REQ-108 | Knowledge Base Capacity | 4.9 | G1 |
 | REQ-109 | Claim Ledger Persistence | 4.9 | G1 |
+| REQ-110 | Report Verification Receipt | 4.9 | G1 |
 | REQ-104 | Key-Pool Rotation | 4.2 | G1 |
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
@@ -1566,7 +1574,7 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
-| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109 | G0, G1 |
+| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107 | G3 |

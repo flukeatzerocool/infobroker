@@ -308,6 +308,13 @@ entry in place instead of adding a duplicate. Read them with
 The ledger is sealed at rest when encryption is on, and it requires the SQLite
 backend: the legacy JSON store returns `unsupported_backend`.
 
+A report can also carry a verification receipt. Ingest it with a `receipt`
+of claims and cited sources; the server hashes the stored report and every
+cached source. `verify_report` rechecks it offline — no network call — and
+reports drift when the report or a source changed, unverifiable for an
+uncached source, and a digest mismatch for a tampered manifest. The manifest
+is sealed at rest, and encryption transitions reseal it.
+
 ### Research Pipeline
 
 > "Research the construction of the Death Star, then draft a summary."

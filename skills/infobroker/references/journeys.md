@@ -43,6 +43,7 @@ row below.
 | Retrieve a stored entry | `manage_kb (action: get)` | fetch one entry by its source URL |
 | Knowledge base stats | `manage_kb (action: stats)` | chunk counts, collections, freshness tiers, last ingestion |
 | Review persisted claims | `manage_kb (action: claims)` | SQLite store only → ledger rows newest first, each with verdict, confidence, last-verified time, and linked sources; filter by `query` (claim text) or `source_url` |
+| Verify a report receipt | `manage_kb (action: verify_report)` | SQLite store only → offline recheck of the report and each cited source: `verified`, `drift` (report or source hash changed), `unverifiable` (snippet basis or uncached source), `incomplete` (digest mismatch), or `receipt_not_found` |
 | Delete stored content | `manage_kb (action: delete)` | destructive; report the chunks removed |
 | Hot-reload config | `reload_config` | re-read config → reconfigure providers → re-init KB |
 | Migrate a user config layer | `reload_config (migrate)` | back up and apply registered user-layer migrations before reloading |

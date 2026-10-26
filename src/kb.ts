@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-060h REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087 REQ-097 REQ-098 REQ-099 REQ-109
+// @implements REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-060h REQ-064 REQ-065 REQ-066 REQ-067 REQ-072 REQ-074 REQ-075 REQ-076 REQ-082 REQ-083 REQ-084 REQ-085 REQ-086 REQ-087 REQ-097 REQ-098 REQ-099 REQ-109 REQ-110 REQ-060i
 import { randomUUID, randomBytes } from "node:crypto";
 import {
   readFileSync,
@@ -17,7 +17,26 @@ import {
 } from "node:fs";
 import { join, dirname, basename, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import type { KbConfig, KbChunk, KbSearchResult, KbListEntry, KbStats, ClaimLedgerQuery, ClaimLedgerResult, ClaimRecord } from "./types.js";
+import type {
+  KbConfig,
+  KbChunk,
+  KbSearchResult,
+  KbListEntry,
+  KbStats,
+  ClaimLedgerQuery,
+  ClaimLedgerResult,
+  ClaimRecord,
+  ReportReceiptInput,
+  ReportReceiptRecord,
+  ReportVerificationResult,
+} from "./types.js";
+import {
+  buildReceiptManifest,
+  normalizeReceiptInput,
+  sha256Hex,
+  verifyReceipt,
+  type ReceiptInputError,
+} from "./kb-receipt.js";
 import {
   sealEnvelope,
   openEnvelope,
@@ -1289,6 +1308,83 @@ export function kbClaims(query: ClaimLedgerQuery = {}): ClaimLedgerResult | null
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!sqliteStore || !sqliteStore.supportsClaims) return null;
   return sqliteStore.claims(query);
+}
+
+/** True when the active backend can persist report receipts (REQ-110). */
+export function kbSupportsReportReceipts(): boolean {
+  return sqliteStore?.supportsReportReceipts === true;
+}
+
+/** Read the cached document text for one identity, or null when absent. */
+function cachedDocument(url: string): { text: string; title: string } | null {
+  const doc = url === "" ? null : kbGet(url);
+  return doc === null ? null : { text: doc.text, title: doc.title };
+}
+
+/**
+ * REQ-110: compute and store the receipt for a report. The caller has already
+ * validated the structure; the identity and the content hash come from the
+ * stored document, never from the caller.
+ */
+export function kbPutReportReceipt(
+  reportId: string,
+  receipt: ReportReceiptInput,
+): { ok: true; record: ReportReceiptRecord } | { ok: false; error: ReceiptInputError } {
+  const normalized = normalizeReceiptInput(receipt);
+  if (!normalized.ok) return normalized;
+  if (!sqliteStore || !sqliteStore.supportsReportReceipts || !sqliteStore.putReportReceipt) {
+    return {
+      ok: false,
+      error: { code: "receipt_requires_kb", message: "report receipts require the SQLite knowledge-base store" },
+    };
+  }
+  const doc = kbGet(reportId);
+  if (doc === null) {
+    return { ok: false, error: { code: "invalid_input", message: "report is not stored in the knowledge base" } };
+  }
+  // The report hash covers the canonical stored document (kbGet text), which
+  // differs from the pre-chunk input because chunking prefixes the title.
+  const manifest = buildReceiptManifest({
+    reportId,
+    contentSha256: sha256Hex(doc.text),
+    claims: normalized.value.claims,
+    cachedDocument,
+  });
+  const record = sqliteStore.putReportReceipt(reportId, manifest);
+  return { ok: true, record };
+}
+
+/** Read a stored receipt without verifying it (tests and diagnostics). */
+export function kbGetReportReceipt(reportId: string): ReportReceiptRecord | null {
+  if (!sqliteStore?.getReportReceipt) return null;
+  return sqliteStore.getReportReceipt(reportId);
+}
+
+/**
+ * REQ-060i: revalidate a stored receipt offline. No network access is made;
+ * the report and every cited source are compared against the cache only.
+ */
+export function kbVerifyReport(
+  reportId: string,
+): { ok: true; result: ReportVerificationResult } | { ok: false; error: { code: string; message: string } } {
+  if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
+  if (!sqliteStore?.getReportReceipt) {
+    return { ok: false, error: { code: "unsupported_backend", message: "report receipts require the SQLite store" } };
+  }
+  const record = sqliteStore.getReportReceipt(reportId);
+  if (record === null) {
+    return {
+      ok: false,
+      error: { code: "receipt_not_found", message: `No report receipt is stored for "${reportId}"` },
+    };
+  }
+  const doc = kbGet(reportId);
+  const result = verifyReceipt({
+    manifest: record.manifest,
+    reportText: doc === null ? null : doc.text,
+    cachedDocument: (url) => cachedDocument(url)?.text ?? null,
+  });
+  return { ok: true, result };
 }
 
 export function kbDelete(collection?: string, sourceUrl?: string): number {

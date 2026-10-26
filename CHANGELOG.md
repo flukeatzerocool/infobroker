@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.10.22 — Report verification receipts
+
+- Report ingest accepts an optional receipt: claims, sources, retrieval times,
+  grades, and server-computed content and source hashes. `manage_kb` action
+  `verify_report` rechecks a stored receipt against the cached report and its
+  sources without network access and reports verified, drift, incomplete, or
+  unverifiable. (REQ-110, REQ-060i, REQ-060b)
+- Receipt rows are sealed at rest and re-sealed when encryption is enabled,
+  disabled, or rekeyed. A disk-only report cannot carry a receipt.
+
 ## 2026.10.22 — Claim ledger for verified claims
 
 - `verify_claims` now persists each finding as a claim record linked to the

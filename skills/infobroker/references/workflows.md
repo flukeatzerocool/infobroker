@@ -17,7 +17,9 @@ rather than restating them.
   external providers; use a direct `manage_kb (action: search)` only when stored
   content alone can answer the task or to inspect the store. When a prior
   `verify_claims` run already settled the question, read the persisted rows
-  with `manage_kb (action: claims)` instead of searching again.
+  with `manage_kb (action: claims)` instead of searching again. When
+  publishing or reusing an archived report, `manage_kb (action: verify_report)`
+  rechecks its receipt against the cached sources offline.
 - **SEARCH** — `search_web` (multi-provider, auto-selection, fallback
   chain). Use `verify_claims` when a claim is contested; use `search_web (deep)`
   when you want passages read from the top results, not just snippets.

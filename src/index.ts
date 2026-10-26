@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -16,7 +16,7 @@ import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
 import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
 import { audit } from "./audit-log.js";
@@ -1528,9 +1528,9 @@ instrumentTool(
   "infobroker_manage_kb",
   {
     title: "Knowledge Base",
-    description: "Manage the local knowledge base: search cached content, ingest text or URLs, list/get/delete entries, view stats, read persisted claim records, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content, or manage encryption keys. Do NOT use for fresh external search (use infobroker_search_web) or to fetch a new page (use infobroker_fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Parameter semantics: `action` selects the operation; `query` for search, `text`/`url` plus `title` and `collection` for ingest, `source_url` for get/delete, and `operation` with `key_file` for the encryption sub-actions; `source_type` and `freshness_tier` tag an ingest and filter search/list; `save_to` defaults to 'kb', `format` to 'markdown', `max_results` to 8; `last_updated` is auto-detected from fetched URLs when omitted. Responses carry an [OK] or [ERROR] envelope: search/list/get return entries, stats returns counts, delete reports the chunks removed.",
+    description: "Manage the local knowledge base: search cached content, ingest text or URLs, list/get/delete entries, view stats, read persisted claim records, and manage at-rest encryption. Use when you need to archive a generated report (ingest with source_type 'report' and save_to 'kb'), revisit stored content, or manage encryption keys. Do NOT use for fresh external search (use infobroker_search_web) or to fetch a new page (use infobroker_fetch_page). The delete action is destructive and cannot be undone; a lost encryption key makes the store unrecoverable by design. Parameter semantics: `action` selects the operation; `query` for search, `text`/`url` plus `title` and `collection` for ingest, `source_url` for get/delete, and `operation` with `key_file` for the encryption sub-actions; `source_type` and `freshness_tier` tag an ingest and filter search/list; `save_to` defaults to 'kb', `format` to 'markdown', `max_results` to 8; `last_updated` is auto-detected from fetched URLs when omitted; `receipt` attaches a claim-to-source manifest to a report ingest and `verify_report` rechecks it offline. Responses carry an [OK] or [ERROR] envelope: search/list/get return entries, stats returns counts, delete reports the chunks removed.",
     inputSchema: {
-      action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption", "claims"]).describe("Operation to perform"),
+      action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption", "claims", "verify_report"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
       key_file: z.string().optional().describe("Path to a key file (generate_key writes here; rekey reads the target key from here). Never pass the secret itself — only a file path."),
       query: z.string().optional().describe("Search query (for search action)"),
@@ -1545,6 +1545,31 @@ instrumentTool(
       format: z.enum(["markdown", "text", "json"]).optional().default("markdown").describe("File format for disk save"),
       source_url: z.string().optional().describe("Source URL filter (get/delete action) or identity for ingest"),
       max_results: z.number().min(1).max(50).optional().default(8).describe("Maximum results to return (1-50, default 8)"),
+      receipt: z
+        .object({
+          claims: z
+            .array(
+              z.object({
+                claim: z.string(),
+                grade: z.string().optional(),
+                sources: z
+                  .array(
+                    z.object({
+                      url: z.string(),
+                      title: z.string().optional(),
+                      retrieved_at: z.string().optional(),
+                      snippet: z.string().optional(),
+                    })
+                  )
+                  .optional(),
+              })
+            )
+            .optional(),
+        })
+        .optional()
+        .describe(
+          "Optional verification receipt for a report ingest (REQ-110): claims with cited sources. The server computes the report hash, per-source hashes, and the digest; any caller hashes or digest are ignored. Requires source_type 'report' and KB storage."
+        ),
     },
     annotations: {
       destructiveHint: true,
@@ -1557,7 +1582,7 @@ instrumentTool(
     if (!isKbConfigured()) {
       return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("system", "config_error", "Knowledge base not configured", "Add a kb section to config.json"))}` }] };
     }
-    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete" | "encryption" | "claims";
+    const action = params.action as "search" | "ingest" | "list" | "get" | "stats" | "delete" | "encryption" | "claims" | "verify_report";
     // The encryption action is the recovery surface: it must remain reachable
     // even when the store is locked so the user can verify a key, restore a
     // backup, or re-key. All other actions honor the lock.
@@ -1689,6 +1714,18 @@ instrumentTool(
         const freshnessTier = (params.freshness_tier as string) || (isReport ? "report" : undefined);
         const saveTo = (params.save_to as string) || getConfig().kb?.default_save_destination || "kb";
 
+        // REQ-110: a receipt is report-only and needs the knowledge base. A
+        // disk-only ingest cannot hold one, so it is refused before writing.
+        const receipt = params.receipt;
+        if (receipt !== undefined && receipt !== null) {
+          if (!isReport) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "A verification receipt is only supported for source_type \"report\"", "Ingest the report with source_type: \"report\" or omit the receipt"))}` }] };
+          }
+          if (!ingestDestinations(saveTo).kb) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "receipt_requires_kb", "A verification receipt requires knowledge-base storage", "Use save_to: \"kb\" (or \"both\"); a disk-only ingest has no stored report to verify"))}` }] };
+          }
+        }
+
         const dest = ingestDestinations(saveTo);
         let finalUrl = resolveReportIdentity(title, url || params.source_url as string | undefined);
         let diskPath: string | undefined;
@@ -1718,11 +1755,28 @@ instrumentTool(
         const snippet = dest.disk && !dest.kb
           ? `saved to disk${diskPath ? `: ${diskPath}` : ""}`
           : `${count} chunks ingested`;
+        // REQ-110: the receipt is stored after the content lands, so the
+        // content hash covers the canonical stored document.
+        let receiptMeta: Record<string, unknown> = {};
+        if (receipt !== undefined && receipt !== null) {
+          const stored = kbPutReportReceipt(finalUrl, receipt);
+          if (!stored.ok) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", stored.error.code, stored.error.message, "Check the receipt bounds (100 claims, 25 sources per claim, 2,000 characters per claim, 2048 per URL) and store with save_to: \"kb\""))}` }] };
+          }
+          receiptMeta = {
+            receipt: {
+              report_id: stored.record.report_id,
+              digest_sha256: stored.record.manifest.digest_sha256,
+              content_sha256: stored.record.manifest.content_sha256,
+              claims: stored.record.manifest.claims.length,
+            },
+          };
+        }
         const msg = json({
           status: "ok",
           provider: "knowledge_base",
           results: [{ title: dest.kb ? "ingested" : "saved", url: finalUrl, snippet }],
-          meta: { chunks_ingested: count, ingest_result: existed ? "replaced" : "created", source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}) },
+          meta: { chunks_ingested: count, ingest_result: existed ? "replaced" : "created", source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}), ...receiptMeta },
         });
         return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
       }
@@ -1745,6 +1799,27 @@ instrumentTool(
               results: ledger.claims,
               meta: { truncated: ledger.truncated, scanned: ledger.scanned },
             })}`,
+          }],
+        };
+      }
+      if (action === "verify_report") {
+        // REQ-060i: read-only and offline. The receipt is compared against
+        // the cached report and its cached sources; no provider is called.
+        const sourceUrl = params.source_url as string | undefined;
+        if (!sourceUrl) {
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "source_url is required for verify_report action", "Pass the stored report identity (for example report://<slug>) as source_url"))}` }] };
+        }
+        const verified = kbVerifyReport(sourceUrl);
+        if (!verified.ok) {
+          const remediation = verified.error.code === "receipt_not_found"
+            ? "Ingest the report again with a receipt, or list reports to find one that carries a receipt"
+            : "Report receipts require the SQLite knowledge base store";
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", verified.error.code, verified.error.message, remediation))}` }] };
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [verified.result], meta: { network: false } })}`,
           }],
         };
       }
