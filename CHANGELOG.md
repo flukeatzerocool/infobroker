@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.22 — Dependency gate: lockfile remediation
+
+- Development and test installs now resolve `zod 4.6.7` and `undici 7.30.1`,
+  clearing the three high advisories that failed the audit gate. The manifest
+  is unchanged, so there is no API or runtime behavior change. (REQ-101)
+- The remaining low and moderate advisories are in the `markdownlint-cli 0.49`
+  dependency chain and stay deferred; clearing them requires the breaking
+  `0.50` bump.
+
 ## 2026.10.22 — Session-log audit: input, URL, fetch, deep, and corroboration fixes
 
 - Batch inputs that arrive as a JSON-encoded array string are coerced instead
