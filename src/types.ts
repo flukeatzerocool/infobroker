@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-084 REQ-085 REQ-110 REQ-060i
+// @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-084 REQ-085 REQ-110 REQ-060i REQ-111
 export interface SearchResult {
   title: string;
   url: string;
@@ -87,6 +87,10 @@ export interface Config {
   };
   deep?: DeepConfig;
   kb?: KbConfig;
+  state?: {
+    auto_migrate_config?: boolean;
+    update_check?: boolean;
+  };
 }
 
 export interface HealthReport {
@@ -111,11 +115,21 @@ export interface ToolMeta {
   quota_remaining?: number;
 }
 
+/** REQ-111: one actionable state notice attached to a successful response. */
+export interface ToolNotice {
+  code: string;
+  severity: "action_required" | "info";
+  message: string;
+  remediation: string;
+  details?: Record<string, unknown>;
+}
+
 export interface ToolOkResponse {
   status: "ok";
   provider: string;
   results: SearchResult[];
   meta?: ToolMeta;
+  notices?: ToolNotice[];
   truncated?: boolean;
   output_path?: string;
 }
@@ -129,6 +143,7 @@ export interface ToolErrorResponse {
     remediation: string;
     details?: Record<string, unknown>;
   };
+  notices?: ToolNotice[];
 }
 
 export interface CorroborationSource {

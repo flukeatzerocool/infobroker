@@ -134,6 +134,8 @@ exits 0).
   any KB artifact or an in-repo `storage_path` is present.
 - **Quota**: `$TMPDIR/infobroker/quota.json` — daily/monthly counters, persists across restarts.
 - **Truncation**: `$TMPDIR/infobroker/trunc-*.txt` — full content of truncated responses.
+- **State notices**: `inspect_providers action=spec` reports `state_health`; successful tool responses carry a bounded top-level `notices` array only when config drift, pending migrations, backend-limited features, or an available update needs attention. An invalid user layer starts on shipped defaults without rewriting it (REQ-111, REQ-113).
+- **Update check**: `$TMPDIR/infobroker/update-check.json` — opt-in, cached npm version comparison. No update is downloaded or applied (REQ-112).
 
 ## Response Contract
 

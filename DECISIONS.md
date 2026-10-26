@@ -2,6 +2,24 @@
 
 ## Active Decisions
 
+### D-060: State-Health Notices, Safe Startup, and Opt-In Update Discovery (REQ-079, REQ-105, REQ-111, REQ-112, REQ-113; 2026.10.22)
+
+A stale user configuration was visible only on stderr at startup and in a
+`reload_config` response, and an invalid merged layer made the server refuse
+to start. External users could therefore miss a required migration or be
+locked out after an update. The server now reports state health through
+`inspect_providers` action `spec`, attaches a bounded top-level `notices`
+array to successful responses only when something is actionable, and falls
+back to shipped defaults without writing the user layer when that layer is
+invalid. Automatic user-layer migration remains opt-in via
+`state.auto_migrate_config`; it validates the merged result and writes a
+backup before replacing the layer. An opt-in `state.update_check` compares the
+build version with the published npm version, caches for a day, and never
+downloads or applies an update. KB data needs no version marker here because
+its schema changes are additive and the JSON store already migrates
+automatically; a KB schema marker is deferred until a real KB migration
+exists.
+
 ### D-059: Session-Log Findings — Claim-Seeded Corroboration and Fetch Cache (REQ-020, REQ-021g, REQ-026; 2026.10.22)
 
 `verify_claims` previously keyed findings on the titles of whatever pages a

@@ -1,5 +1,5 @@
-// @implements REQ-010 REQ-042 REQ-043 REQ-037 REQ-015 REQ-067
-import { describe, it, expect, beforeEach, vi } from "vitest";
+// @implements REQ-010 REQ-042 REQ-043 REQ-037 REQ-015 REQ-067 REQ-105 REQ-113
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -55,7 +55,7 @@ async function loadWithOverlay(base: Config, overlay: unknown): Promise<Config> 
   process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
   vi.resetModules();
   const mod = await import("./config.js");
-  const cfg = mod.loadConfig();
+  const cfg = mod.reloadConfig();
   rmSync(dir, { recursive: true, force: true });
   return cfg;
 }
@@ -344,5 +344,78 @@ describe("configuration overlay", () => {
     const written = JSON.parse(readFileSync(overlayPath, "utf-8")) as { config_version?: number };
     expect(written.config_version).toBe(1);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("startup config recovery and automatic migration (REQ-105, REQ-113)", () => {
+  let dir: string;
+  let basePath: string;
+  let overlayPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ib-cfg-recover-"));
+    basePath = join(dir, "config.json");
+    overlayPath = join(dir, "config.local.json");
+    writeFileSync(basePath, JSON.stringify(BASE));
+    process.env["INFOBROKER_CONFIG"] = basePath;
+    process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+    vi.resetModules();
+  });
+
+  it("starts on shipped defaults when the user layer is invalid, without writing it", async () => {
+    const overlay = JSON.stringify({ output: { fallback_depth: 0 } });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    const cfg = mod.loadConfig();
+    expect(cfg.output.max_chars).toBe(50000);
+    expect(mod.getStartupConfigIssue()?.code).toBe("invalid_merged_user_layer");
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+
+  it("starts on shipped defaults when the user layer is not valid JSON", async () => {
+    const overlay = "{ not json";
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    const cfg = mod.loadConfig();
+    expect(cfg.output.max_chars).toBe(50000);
+    expect(mod.getStartupConfigIssue()?.code).toBe("invalid_user_json");
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+
+  it("still rejects an invalid user layer on an explicit reload", async () => {
+    writeFileSync(overlayPath, JSON.stringify({ state: { update_check: "yes" } }));
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    expect(() => mod.reloadConfig()).toThrow(/update_check/);
+  });
+
+  it("auto-migrates the user layer when enabled", async () => {
+    writeFileSync(overlayPath, JSON.stringify({ config_version: 0, state: { auto_migrate_config: true } }));
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    const migration = mod.getStartupMigration();
+    expect(migration).not.toBeNull();
+    expect(migration!.backup).toBeTruthy();
+    expect(existsSync(migration!.backup!)).toBe(true);
+    const written = JSON.parse(readFileSync(overlayPath, "utf-8")) as { config_version?: number; state?: { auto_migrate_config?: boolean } };
+    expect(written.config_version).toBe(1);
+    expect(written.state?.auto_migrate_config).toBe(true);
+  });
+
+  it("does not write an auto-migration that would still be invalid", async () => {
+    const overlay = JSON.stringify({ config_version: 0, state: { auto_migrate_config: true }, output: { fallback_depth: 0 } });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    expect(mod.getStartupMigration()).toBeNull();
+    expect(mod.getStartupConfigIssue()?.code).toBe("auto_migration_invalid");
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
   });
 });

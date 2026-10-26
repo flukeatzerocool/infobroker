@@ -340,8 +340,12 @@ via `reload_config` — change providers, adjust chains, or tweak
 thresholds without dropping connections, or pass a `patch` to merge a
 change into your user layer with a backup. `search_web` doubles as
 DuckDuckGo query autocomplete. `inspect_providers` reports the server's build
-health and request stats. You always know what your search server is
-doing and how much capacity remains.
+health, request stats, and local state health — configuration drift,
+pending migrations, backend capabilities, and update status. When something
+actionable needs your attention, successful tool responses carry a bounded
+`notices` array with the condition and the fix, so a stale user layer does
+not stay invisible. You always know what your search server is doing and how
+much capacity remains.
 
 ## Skills
 
@@ -467,7 +471,17 @@ recognizes, the server reports the drift at startup and in every
 `reload_config` response without changing your file. Apply the registered
 migrations on demand by calling `reload_config` with `migrate` true: the
 server first copies your layer to a timestamped `*.bak-*` file, then updates
-it atomically, leaving anything it does not recognize untouched.
+it atomically, leaving anything it does not recognize untouched. Set
+`state.auto_migrate_config` to true to apply those migrations automatically at
+startup after the merged result validates; the same backup is written first.
+If a user layer is invalid, the server starts on shipped defaults, leaves the
+file untouched, and reports the error instead of refusing to start.
+
+`state.update_check` (off by default) enables an update-availability check
+against the published npm package. When enabled, the check runs in the
+background, caches its result for a day, and never downloads or applies an
+update. The result appears in `inspect_providers` action `spec` and, when a
+newer release exists, as a notice.
 
 The knowledge base ships empty. Retrieval runs on a configurable in-process
 embedding model selected by `kb.embedding_model`. By default, the store

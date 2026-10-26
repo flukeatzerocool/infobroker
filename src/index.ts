@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-112 REQ-113
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
@@ -44,6 +44,8 @@ import { shouldUseKbCache } from "./fetch-cache.js";
 import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
+import { collectNotices, computeStateHealth, injectNotices } from "./state-health.js";
+import { configureUpdateCheck } from "./update-check.js";
 
 const START_TIME = Date.now();
 const toolMetrics = createToolMetrics();
@@ -68,6 +70,18 @@ const RESPONSE_WINDOW = 100;
 loadConfig();
 configureAllProviders(getConfig());
 loadQuotaState();
+
+// REQ-113/REQ-105: record a degraded start or an automatic user-config
+// migration before serving requests.
+const startupIssue = getStartupConfigIssue();
+if (startupIssue) audit("config_invalid_startup", startupIssue.code);
+const startupMigration = getStartupMigration();
+if (startupMigration) {
+  audit("config_auto_migrate", `${startupMigration.changes.length} change(s); backup: ${startupMigration.backup ?? "none"}`);
+}
+
+// REQ-112: the check is opt-in and never blocks startup.
+configureUpdateCheck(getConfig().state?.update_check === true, BUILD_VERSION);
 
 startupHealthCheck();
 
@@ -1298,13 +1312,21 @@ function doSpecHealth(): string {
             : config.kb.storage_path)
         : undefined,
       truncation_dir: join(tmpdir(), "infobroker"),
+      state_health: computeStateHealth(),
     }],
   })}`;
 }
 
+const startupNoticeList = collectNotices();
+if (startupNoticeList.length > 0) {
+  console.error(`[infobroker] state notice: ${startupNoticeList.map((notice) => notice.message).join(" ")}`);
+}
 const server = new McpServer({
   name: "infobroker",
   version: "2026.10.22",
+  ...(startupNoticeList.length > 0
+    ? { instructions: `Infobroker state needs attention: ${startupNoticeList.map((notice) => notice.message).join(" ")}` }
+    : {}),
 });
 
 // --- search_web ---
@@ -1314,7 +1336,7 @@ const instrumentTool = (name: string, config: any, handler: any) =>
     try {
       const result = await handler(...args);
       toolMetrics.record(name, Date.now() - start, true);
-      return result;
+      return injectNotices(result, collectNotices());
     } catch (error) {
       toolMetrics.record(name, Date.now() - start, false);
       throw error;
@@ -1415,7 +1437,7 @@ instrumentTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
-    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state locally and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity locally. Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state locally and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status). Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),
@@ -1891,6 +1913,7 @@ instrumentTool(
       }
       const newConfig = reloadConfig();
       configureAllProviders(newConfig);
+      configureUpdateCheck(newConfig.state?.update_check === true, BUILD_VERSION);
       // REQ-040: rebuild generic providers so reload applies endpoint/mapping changes.
       resetGenericProviderCache();
       if (newConfig.kb) {
@@ -2023,6 +2046,7 @@ process.on("SIGHUP", () => {
   try {
     const newConfig = reloadConfig();
     configureAllProviders(newConfig);
+    configureUpdateCheck(newConfig.state?.update_check === true, BUILD_VERSION);
     if (newConfig.kb) {
       flushKbWrites();
       initKb(newConfig.kb);

@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084 REQ-105
+// @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084 REQ-105 REQ-113
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
@@ -16,6 +16,31 @@ let cachedConfig: Config | null = null;
 // so REQ-105 drift detection can run without re-reading the files.
 let userConfigLayer: Record<string, unknown> | null = null;
 let shippedTopLevel: string[] = [];
+
+/** REQ-113: why startup fell back to shipped defaults. */
+export interface StartupConfigIssue {
+  code: "invalid_user_json" | "invalid_merged_user_layer" | "auto_migration_invalid" | "auto_migration_failed";
+  message: string;
+  remediation: string;
+}
+
+/** REQ-105: the migration applied automatically at startup, if any. */
+export interface StartupMigration {
+  changes: string[];
+  backup: string | null;
+  path: string;
+}
+
+let startupConfigIssue: StartupConfigIssue | null = null;
+let startupMigration: StartupMigration | null = null;
+
+export function getStartupConfigIssue(): StartupConfigIssue | null {
+  return startupConfigIssue;
+}
+
+export function getStartupMigration(): StartupMigration | null {
+  return startupMigration;
+}
 
 export function getConfigPath(): string {
   if (!configPath) {
@@ -72,12 +97,59 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8"));
 }
 
-function loadConfigFromDisk(): Config {
+function loadConfigFromDisk(recoverUserLayer = false): Config {
   const base = readJson(getConfigPath()) as Config;
   shippedTopLevel = Object.keys(base as unknown as Record<string, unknown>);
+  startupConfigIssue = null;
+  startupMigration = null;
   const userPath = getUserConfigPath();
-  const rawUser = userPath && existsSync(userPath) ? readJson(userPath) : null;
+  let rawUser: unknown = null;
+  if (userPath && existsSync(userPath)) {
+    try {
+      rawUser = readJson(userPath);
+    } catch (e) {
+      if (!recoverUserLayer) throw e;
+      startupConfigIssue = {
+        code: "invalid_user_json",
+        message: `User configuration layer could not be parsed: ${e instanceof Error ? e.message : String(e)}`,
+        remediation: "Fix config.local.json (or INFOBROKER_CONFIG_LOCAL); the server is running on shipped defaults and has not modified the file.",
+      };
+      rawUser = null;
+    }
+  }
   userConfigLayer = isPlainObject(rawUser) ? rawUser : null;
+
+  // REQ-105: apply registered migrations at startup only when the user opted
+  // in. Apply in memory first and write only after the merged result validates,
+  // so an auto-migration can never replace a working layer with an invalid one.
+  if (userConfigLayer && (userConfigLayer["state"] as Record<string, unknown> | undefined)?.["auto_migrate_config"] === true) {
+    const applied = applyUserLayerMigrations(userConfigLayer);
+    if (applied.changes.length > 0 && userPath) {
+      const candidate = applyDefaults(mergeLayer(base, applied.layer));
+      try {
+        validateConfig(candidate);
+        try {
+          const backup = backupFile(userPath);
+          atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(applied.layer, null, 2)}\n`, "utf-8"));
+          userConfigLayer = applied.layer;
+          startupMigration = { changes: applied.changes, backup, path: userPath };
+        } catch (e) {
+          startupConfigIssue = {
+            code: "auto_migration_failed",
+            message: `Automatic user-config migration could not be written: ${e instanceof Error ? e.message : String(e)}`,
+            remediation: "The original config.local.json is unchanged. Check write permissions, then run reload_config with migrate=true.",
+          };
+        }
+      } catch (e) {
+        startupConfigIssue = {
+          code: "auto_migration_invalid",
+          message: `Automatic user-config migration would produce an invalid configuration: ${e instanceof Error ? e.message : String(e)}`,
+          remediation: "The original config.local.json is unchanged. Fix the reported values, then run reload_config with migrate=true.",
+        };
+      }
+    }
+  }
+
   const merged = userConfigLayer
     ? mergeLayer(base, userConfigLayer)
     : base;
@@ -111,6 +183,15 @@ export function getUserConfigDrift(): ConfigDrift | null {
   return detectConfigDrift(userConfigLayer, shippedTopLevel);
 }
 
+/** REQ-105: pure in-memory application of registered user-layer migrations. */
+export function applyUserLayerMigrations(layer: Record<string, unknown>): {
+  layer: Record<string, unknown>;
+  changes: string[];
+} {
+  const drift = detectConfigDrift(layer, shippedTopLevel);
+  return applyConfigMigrations(layer, drift);
+}
+
 /**
  * REQ-105: opt-in migration of the user configuration layer. Backs up the
  * existing file, applies registered migrations and the current schema stamp,
@@ -126,8 +207,7 @@ export function migrateUserConfigLayer(): {
   if (!userPath || !existsSync(userPath)) return null;
   if (!userConfigLayer) return null;
 
-  const drift = detectConfigDrift(userConfigLayer, shippedTopLevel);
-  const { layer, changes } = applyConfigMigrations(userConfigLayer, drift);
+  const { layer, changes } = applyUserLayerMigrations(userConfigLayer);
   if (changes.length === 0) return null;
 
   const backup = backupFile(userPath);
@@ -190,6 +270,19 @@ function validateConfig(config: Config): void {
         `config_version ${config.config_version} is newer than this server supports (${CURRENT_CONFIG_VERSION}); ` +
           `update the server or remove the field from the user configuration layer`
       );
+    }
+  }
+
+  if (config.state !== undefined) {
+    if (typeof config.state !== "object" || config.state === null || Array.isArray(config.state)) {
+      errors.push("state must be an object");
+    } else {
+      if (config.state.auto_migrate_config !== undefined && typeof config.state.auto_migrate_config !== "boolean") {
+        errors.push("state.auto_migrate_config must be a boolean");
+      }
+      if (config.state.update_check !== undefined && typeof config.state.update_check !== "boolean") {
+        errors.push("state.update_check must be a boolean");
+      }
     }
   }
 
@@ -472,8 +565,29 @@ function validateConfig(config: Config): void {
 }
 
 export function loadConfig(): Config {
-  const config = loadConfigFromDisk();
-  validateConfig(config);
+  const config = loadConfigFromDisk(true);
+  try {
+    validateConfig(config);
+  } catch (e) {
+    // REQ-113: a stale user layer must not prevent the server from starting.
+    // Recover only when the shipped defaults are valid; never write the layer.
+    if (!userConfigLayer) throw e;
+    const base = readJson(getConfigPath()) as Config;
+    const baseOnly = applyDefaults(structuredClone(base));
+    validateConfig(baseOnly);
+    if (!startupConfigIssue) {
+      startupConfigIssue = {
+        code: "invalid_merged_user_layer",
+        message: `User configuration is invalid: ${e instanceof Error ? e.message : String(e)}`,
+        remediation: "The server is running on shipped defaults and has not modified config.local.json. Fix the reported values, then run reload_config.",
+      };
+    }
+    console.warn(
+      `[infobroker] user configuration is invalid; starting on shipped defaults (user layer unchanged). ${startupConfigIssue.message}`
+    );
+    cachedConfig = baseOnly;
+    return baseOnly;
+  }
   cachedConfig = config;
   return config;
 }

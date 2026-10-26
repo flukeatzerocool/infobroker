@@ -322,6 +322,10 @@
       "adult_content": ["sexually explicit", "adult content"]
     }
   },
+  "state": {
+    "auto_migrate_config": false,
+    "update_check": false
+  },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",
     "store_backend": "sqlite",

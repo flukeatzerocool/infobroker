@@ -36,7 +36,7 @@ row below.
 | Multi-source truth-finding | `verify_claims` | search → iterate → cross-source verify → confidence-scored findings |
 | Academic references | `get_citations` | search scholarly sources → BibTeX citation per reference |
 | Check provider status | `inspect_providers (action: list)` / `inspect_providers (action: health)` | list state (incl. inactivity reason) → live health per slug |
-| Report build and spec identity | `inspect_providers (action: spec)` | build version, provider counts, token footprint, state paths |
+| Report build and spec identity | `inspect_providers (action: spec)` | build version, provider counts, token footprint, state paths, state health (config drift, migrations, update status) |
 | Knowledge base search | `manage_kb (action: search)` | vector + keyword hybrid → freshness-adjusted score; pass `collection: "reports"` to recall stored reports (search/list default to the `default` collection) |
 | Store a report | `manage_kb (action: ingest, source_type: report)` | index → `reports` collection → revisit via list/get with `collection: "reports"` |
 | List stored entries | `manage_kb (action: list)` | enumerate entries, optionally scoped to a collection |

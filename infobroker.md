@@ -175,7 +175,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -201,7 +201,7 @@ Tool outputs longer than the configured max length SHALL be truncated and writte
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
 
 **REQ-079 — Output Verbosity**
-The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. _Check:_ G1.
+The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. Action-required notices reported per REQ-111 SHALL be retained in compact verbosity. _Check:_ G1.
 
 ### 4.2 Provider Configuration
 
@@ -551,7 +551,16 @@ The server SHALL operate on preserved user state after an update without
 requiring reconfiguration. _Check:_ G1.
 
 **REQ-105 — User Configuration Layer Migration**
-WHEN a release advances the configuration schema, the server SHALL detect entries in the user configuration layer that no longer match the current schema and SHALL report the drift without modifying user state. The server SHALL provide an opt-in operation that migrates the user layer in place. Before writing, the operation SHALL preserve a recoverable backup of the user layer; the write SHALL be atomic; and entries the current schema does not recognize SHALL be retained rather than discarded. The operation SHALL report the changes it applied. _Check:_ G1.
+WHEN a release advances the configuration schema, the server SHALL detect entries in the user configuration layer that no longer match the current schema and SHALL report the drift without modifying user state. The server SHALL provide an opt-in operation that migrates the user layer in place. Before writing, the operation SHALL preserve a recoverable backup of the user layer; the write SHALL be atomic; and entries the current schema does not recognize SHALL be retained rather than discarded. The operation SHALL report the changes it applied. WHEN the user configuration enables automatic migration, the server SHALL apply the registered migrations at startup with the same backup, atomicity, and retention guarantees. _Check:_ G1.
+
+**REQ-111 — State health and migration notice**
+`inspect_providers` action `spec` SHALL report a state-health record covering user-configuration drift, pending configuration migrations, knowledge-base backend capabilities and storage format, and update-check status. WHEN actionable user-state drift exists, every successful tool response SHALL include a top-level `notices` array naming each condition and its remediation; the field SHALL be omitted when no notice exists and SHALL NOT alter existing response fields. The server SHALL emit the same notice through its startup diagnostics and MCP initialization instructions. State health SHALL be computed from local state without waiting on network access and SHALL NOT expose secrets or user content. _Check:_ G1.
+
+**REQ-112 — Update availability check**
+The server SHALL support an opt-in update check comparing its build version with the latest published package version. WHEN enabled, the server SHALL perform the check without blocking tool responses and SHALL cache the result for a bounded interval. The check SHALL report available, current, or unavailable, and a failed check SHALL NOT affect server operation. The server SHALL report the result through the state-health record and SHALL NOT download, install, or apply an update. The check SHALL require explicit user configuration to run. _Check:_ G1.
+
+**REQ-113 — Startup with an invalid user layer**
+WHEN the merged user configuration fails validation, the server SHALL start with the shipped default configuration, SHALL leave the user layer unchanged, and SHALL report the validation failure and its remediation through state health. The server SHALL NOT silently discard the user layer or write to it. A subsequent successful `reload_config` SHALL activate a corrected user layer. _Check:_ G1.
 
 **REQ-091 — Registry-Published Distribution**
 The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1, G3.
@@ -1128,6 +1137,9 @@ verdict is preserved (REQ-026f).
 | REQ-042 | Source Distribution | 4.10 | G1 |
 | REQ-043 | Update Preservation | 4.10 | G1 |
 | REQ-105 | User Configuration Layer Migration | 4.10 | G1 |
+| REQ-111 | State Health and Migration Notice | 4.10 | G1 |
+| REQ-112 | Update Availability Check | 4.10 | G1 |
+| REQ-113 | Startup with an Invalid User Layer | 4.10 | G1 |
 | REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
 | REQ-096 | Security Model Completeness | 4.11 | G3 |
 | REQ-097 | Content Policy | 4.11 | G0, G1 |
@@ -1575,7 +1587,7 @@ secondary concerns rather than duplicating the REQ.
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105 | G0, G1 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |

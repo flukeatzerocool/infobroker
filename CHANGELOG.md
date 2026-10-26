@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.10.22 — State-health notices, safe startup, and update discovery
+
+- Successful tool responses now carry a bounded top-level `notices` array when
+  actionable local state exists: user-config drift, pending migrations,
+  backend-limited features, or an available update. Clean responses are
+  byte-identical. `inspect_providers` action `spec` reports the same state as
+  `state_health`, and startup diagnostics plus MCP initialization instructions
+  carry the summary. (REQ-111, REQ-079)
+- An invalid user configuration no longer prevents startup: the server runs on
+  shipped defaults, leaves the layer untouched, and reports the validation
+  error. `state.auto_migrate_config` can apply registered user-layer
+  migrations at startup after validating the merged result and writing a
+  backup. (REQ-113, REQ-105)
+- `state.update_check` (off by default) enables a cached, non-blocking
+  comparison against the latest published npm version. It reports
+  available/current/unavailable and never downloads or applies an update.
+  (REQ-112)
+
 ## 2026.10.22 — Report verification receipts
 
 - Report ingest accepts an optional receipt: claims, sources, retrieval times,
