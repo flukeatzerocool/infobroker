@@ -30,6 +30,16 @@ export interface ProviderConfig {
   retry_backoff_ms?: number;
   degraded_latency_ms?: number;
   resells?: boolean;
+  /** ISO 639-1 tags this provider can serve, or "*" for any language (REQ-128). */
+  languages?: string[] | "*";
+  /** Explicit privacy-posture overrides; defaults are derived from tier (REQ-129). */
+  privacy?: {
+    query_forwarding?: "none" | "origin" | "third_party";
+    retains_query?: boolean | "unknown";
+    requires_account?: boolean;
+    resells?: boolean;
+    notes?: string;
+  };
   endpoint?: string;
   query_param?: string;
   results_path?: string;
@@ -104,6 +114,7 @@ export interface Config {
     max_pages_per_variant?: number;
   };
   deep?: DeepConfig;
+  analysis?: AnalysisConfig;
   kb?: KbConfig;
   state?: {
     auto_migrate_config?: boolean;
@@ -394,6 +405,15 @@ export interface SearchOptions {
   content_type?: string;
   region?: string;
   language?: string;
+}
+
+export interface AnalysisConfig {
+  enabled?: boolean;
+  max_topics?: number;
+  max_entities?: number;
+  cluster_threshold?: number;
+  min_cluster_size?: number;
+  timeline?: boolean;
 }
 
 export interface DeepConfig {

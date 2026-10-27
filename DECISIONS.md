@@ -2,7 +2,45 @@
 
 ## Active Decisions
 
-### D-063: Monitoring and Export Stay Client-Side (REQ-125, REQ-126; 2026.10.27)
+### D-067: Retrieval Benchmark Replays Committed Results (REQ-130; 2026.10.26)
+
+The retrieval benchmark stores raw multi-provider results and grades, then runs
+them through the real reconciliation path. Alternatives rejected: live network
+runs (non-deterministic and outside `npm run check`) and a frozen output
+snapshot (tautological — it would exercise no pipeline code). The floor is a
+deterministic test over committed inputs, kept separate from the REQ-123
+confidence-calibration gold set.
+
+### D-066: Privacy Posture Is Generated, Not Prose (REQ-129; 2026.10.26)
+
+Provider privacy posture is derived from tier, account requirements, and the
+resale flag with explicit per-provider overrides, then generated into
+`provider-privacy.md` and checked for staleness. Alternatives rejected:
+hand-written prose (drifts from configuration) and runtime-only reporting (no
+auditable artifact). Retention defaults to `unknown` rather than an implied
+privacy guarantee.
+
+### D-065: Unicode Tokenization Without a Model Bump (REQ-128; 2026.10.26)
+
+The tokenizer normalizes to NFKC and keeps every Unicode letter/number, with
+character bigrams for scripts that lack word separators. ASCII output is
+character-for-character identical to the legacy tokenizer, so existing English
+KB vectors stay comparable; non-Latin content improves on the next re-index.
+Alternatives rejected: a new embedding model id (forces REQ-082 reconciliation
+for no gain) and a third-party tokenizer (breaks the in-process, zero-dependency
+invariant of REQ-103). Language-restricted searches prefer providers that
+honor the language.
+
+### D-064: Analysis Is a `search_web` Mode, Not a Tool (REQ-127; 2026.10.26)
+
+Topic/entity extraction, result clustering, and timelines attach to
+`search_web` under a boolean `analyze` mode, following the existing
+`deep`/`research` pattern. Alternatives rejected: an eighth tool (forces TDQS,
+intent-citation, README, §D, and AGENTS tool-table changes for a lightweight
+feature) and a `manage_kb` action (wrong storage home). Analysis is computed
+in-process from the results already returned.
+
+### D-063: Monitoring and Export Stay Client-Side (REQ-125, REQ-126; 2026.10.26)
 
 Monitoring is a bounded CLI run, not an in-server daemon: `monitor-watchlist`
 selects due topics, calls the local MCP server over stdio, and writes one
@@ -12,7 +50,7 @@ stdio transport. Report export is a deterministic post-processing step over a
 validated Markdown report (HTML/JSON/CSV), not a second report format the
 generator must maintain.
 
-### D-061: Open-Web Scope Boundary (2026.10.27)
+### D-061: Open-Web Scope Boundary (2026.10.26)
 
 Infobroker remains an open-web search, analysis, and reporting tool. The
 review that compared it with professional OSINT practice surfaced coverage
@@ -26,7 +64,7 @@ full-spectrum OSINT platform (scope and liability without a differentiation
 advantage) and remove the intelligence-cycle framing entirely (loses the
 analysis/reporting story the skills implement).
 
-### D-062: Snapshots Reuse the Knowledge Base (REQ-122; 2026.10.27)
+### D-062: Snapshots Reuse the Knowledge Base (REQ-122; 2026.10.26)
 
 Citation-grade snapshots are stored as knowledge-base documents tagged
 `source_type: "snapshot"` with an evergreen freshness tier, not in a new

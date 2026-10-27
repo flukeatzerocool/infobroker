@@ -215,7 +215,10 @@ them, a preferred language is honored where a provider allows it, and anything
 the serving provider drops is reported rather than hidden. Pass an array of
 queries to batch several searches in one call. Ask for a deep read and it
 fetches the top results, then ranks each page's passages against your query,
-so you get the specific text that answers the question instead of links.
+so you get the specific text that answers the question instead of links. Ask
+for analysis and the same response carries topic terms, entity mentions,
+semantic clusters, and a dated timeline derived from those results — computed
+in-process, with no extra request.
 Failed providers fall back silently through a configurable chain so you get
 results, not error messages. Other search tools lock you to one engine;
 Infobroker routes every query to the right provider and keeps going when one
@@ -255,9 +258,13 @@ to paste into a reference list.
 The server knows its own capabilities. `search_web` auto-selects the
 best backend for your task, weighing capability, quota, and latency —
 or routes by your intent when you ask for privacy, speed, or free-only
-sources. `inspect_providers` surfaces every configured source and drills into a
-single provider's uptime and error history. No other search MCP server
-gives you operational visibility into every backend.
+sources. `inspect_providers` surfaces every configured source, reports its
+derived privacy posture, and drills into a single provider's uptime and error
+history. The generated `skills/infobroker/references/provider-privacy.md`
+documents query forwarding, retention, account requirements, and resale for
+every provider, marking what configuration cannot establish as unknown rather
+than assuming privacy. No other search MCP server gives you operational
+visibility into every backend.
 
 ### Multi-Source Verification
 
@@ -604,7 +611,10 @@ external service is unreachable the built-in assessment applies.
 Security-relevant events — refused network targets, policy flags, config
 reloads, encryption transitions, key operations, and quota exhaustion — are
 appended to an owner-only audit log at `output.audit_log_path` (default
-`~/.local/share/infobroker/audit.log`).
+`~/.local/share/infobroker/audit.log`). Per-provider privacy posture is
+generated from `config.json` into
+`skills/infobroker/references/provider-privacy.md`; the gate fails when that
+document drifts from configuration.
 
 ### Bring your own endpoint
 

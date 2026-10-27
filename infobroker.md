@@ -179,7 +179,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, 121–125, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -223,6 +223,9 @@ The server SHALL support a provider tier whose search behavior is defined by con
 
 **REQ-015 — Provider Removal by Disable**
 A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appear in fallback chains or provider recommendations, and it SHALL be skipped by all provider-selection logic. Disabling a provider SHALL require only a configuration change in the user configuration layer, SHALL NOT remove its configuration entry or backend module, and SHALL NOT require source-code changes. The disabled state SHALL be preserved across software updates. _Check:_ G1.
+
+**REQ-129 — Provider privacy posture**
+Every configured provider SHALL have a documented privacy posture stating whether its queries are forwarded to a third party, whether it retains queries, whether it requires an account or key, and whether it resells results. The posture SHALL be derived from provider configuration with explicit per-provider overrides taking precedence. `inspect_providers` SHALL report the posture for each provider it lists. The documentation SHALL be generated from configuration and a gate SHALL fail when the committed document is stale. A provider lacking an explicit posture SHALL be reported as unknown rather than assumed private. _Check:_ G1, G3.
 
 **REQ-104 — Key-Pool Rotation**
 Credential-requiring providers SHALL accept an ordered pool of credentials supplied through the environment per REQ-011. WHEN a provider rejects a credential for authentication, the server SHALL NOT retry that credential during the session; WHEN a credential is rate-limited, the server SHALL exclude that credential until its cooldown expires while other credentials remain usable. Credential selection state SHALL persist across restarts. Credentials SHALL NOT appear in configuration values, tool output, logs, errors, or provider reports. WHEN every credential in a pool is unavailable, the provider SHALL be treated as unavailable and SHALL NOT block fallback. _Check:_ G1.
@@ -319,11 +322,20 @@ WHEN source preservation is enabled, `verify_claims` and deep reading SHALL stor
 **REQ-123 — Confidence calibration**
 `verify_claims` SHALL expose a configurable calibration correction that caps confidence when every supporting source is secondary or aggregated. The server SHALL support measuring confidence calibration against a deterministic gold set, reporting a Brier score and a reliability curve. The correction SHALL be disableable without changing the underlying confidence ladder. _Check:_ G1.
 
+**REQ-130 — Retrieval-quality benchmark**
+The server SHALL support measuring retrieval quality against a committed benchmark of queries and relevance judgments, reporting precision, recall, rank-based quality, and the effect of result reconciliation. The benchmark SHALL run deterministically over committed inputs without network access. A regression threshold SHALL fail the suite when measured retrieval quality falls below the recorded baseline. The benchmark SHALL be distinct from the confidence-calibration gold set and SHALL report its corpus size and per-query results. _Check:_ G1.
+
 **REQ-027 — `get_citations`**
 The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
 
 **REQ-124 — `search_web` query operators and language**
 `search_web` SHALL accept common query operators (`site:`, `filetype:`, quoted phrases, exclusions) and a preferred result language. Operators SHALL be passed to providers that support them; when the serving provider cannot honor an operator or the language, the response SHALL report it in the ignored-parameter metadata rather than silently dropping it. An unrecognized operator SHALL remain ordinary query text. _Check:_ G1.
+
+**REQ-128 — Multilingual text handling and collection**
+Text vectorization SHALL tokenize every Unicode script rather than dropping non-Latin characters, and SHALL preserve existing tokenization for Latin-script text so stored vectors remain comparable. Scripts without word separators SHALL be segmented into bounded character n-grams. `search_web` SHALL route a language-restricted query to providers that honor that language and SHALL report providers that cannot. The language-capable collection SHALL include the language editions of the encyclopedia and dictionary providers and any news or self-hosted provider that accepts a language. WHEN no eligible provider supports the requested language, the tool SHALL fall back to the default chain and SHALL report the ignored language. _Check:_ G1.
+
+**REQ-127 — `search_web` analysis aids**
+WHEN `search_web` receives an analysis request, the tool SHALL return topics, entity mentions, result clusters, and a dated timeline derived from the results. Topics and entities SHALL be bounded by configuration and ordered by relevance. Clusters SHALL group results that express the same topic without removing any result from the primary list. The timeline SHALL order dated results chronologically and SHALL report undated results separately rather than guessing a date. Analysis SHALL be computed in-process and SHALL NOT require an additional outbound request. WHEN no results are available, analysis SHALL be omitted rather than fabricated. _Check:_ G0, G1.
 
 **REQ-028 — `search_web` deep reading**
 WHEN `search_web` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. Each ranked passage SHALL include a span anchor identifying the passage's position in the source. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
@@ -1089,6 +1101,7 @@ verdict is preserved (REQ-026f).
 | REQ-013 | Provider Discovery | 4.2 | G1 |
 | REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
+| REQ-129 | Provider privacy posture | 4.2 | G1, G3 |
 | REQ-020 | `search_web` | 4.3 | G0, G1 |
 | REQ-020a | `search_web` auto-selection | 4.3 | G1 |
 | REQ-020b | `search_web` suggestion mode | 4.3 | G0, G1 |
@@ -1119,9 +1132,12 @@ verdict is preserved (REQ-026f).
 | REQ-121 | Corroboration source families | 4.3 | G1 |
 | REQ-122 | Citation-grade source snapshots | 4.3 | G1 |
 | REQ-123 | Confidence calibration | 4.3 | G1 |
+| REQ-130 | Retrieval-quality benchmark | 4.3 | G1 |
 | REQ-027 | `get_citations` | 4.3 | G0, G1 |
 | REQ-028 | `search_web` deep reading | 4.3 | G1 |
+| REQ-127 | `search_web` analysis aids | 4.3 | G0, G1 |
 | REQ-124 | `search_web` query operators and language | 4.3 | G1 |
+| REQ-128 | Multilingual text handling and collection | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-092 | Tool-definition quality bar | 4.3 | G1, G3 |
@@ -1645,8 +1661,8 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
-| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |

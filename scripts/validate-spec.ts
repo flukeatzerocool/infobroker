@@ -13,6 +13,7 @@ import { execSync } from "node:child_process";
 import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
+import { writeProviderPrivacy, readPrivacyConfig } from "./lib/provider-privacy.js";
 
 // @implements REQ-055
 
@@ -406,6 +407,24 @@ function checkGeneratedProviderMapStale(): void {
 }
 
 checkGeneratedProviderMapStale();
+
+// --- Generated privacy reference staleness check (REQ-129) ---
+
+function checkGeneratedPrivacyStale(): void {
+  const privacyPath = join(ROOT, "skills", "infobroker", "references", "provider-privacy.md");
+  if (!existsSync(privacyPath)) {
+    error(`Generated privacy reference missing: ${privacyPath} — run 'npm run generate-privacy'`);
+    return;
+  }
+  writeProviderPrivacy(readPrivacyConfig());
+  try {
+    execSync(`git diff --exit-code -- "${privacyPath}"`, { cwd: ROOT, stdio: "pipe" });
+  } catch {
+    error(`Generated privacy reference is stale — run 'npm run generate-privacy' and commit the result`);
+  }
+}
+
+checkGeneratedPrivacyStale();
 
 // --- REQ manifest verification ---
 

@@ -1,4 +1,4 @@
-// @implements REQ-020c REQ-020d REQ-031a REQ-034
+// @implements REQ-020c REQ-020d REQ-031a REQ-034 REQ-128
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./config.js", () => ({
@@ -7,7 +7,7 @@ vi.mock("./config.js", () => ({
 }));
 
 import { getConfig, getDispatchChain } from "./config.js";
-import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
+import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
 
 function makeProvider(tier: string) {
   return { tier, enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10 };
@@ -147,5 +147,20 @@ describe("ignoredParams", () => {
 
   it("flags safe_search off for Yep, which applies only strict (REQ-020d)", () => {
     expect(ignoredParams("yep", { safe_search: "off" })).toEqual(["safe_search"]);
+  });
+});
+
+describe("preferLanguageCapable (REQ-128)", () => {
+  it("moves language-capable providers ahead without dropping others", () => {
+    expect(preferLanguageCapable(["duckduckgo", "wikipedia", "mojeek"], "de")).toEqual([
+      "wikipedia",
+      "duckduckgo",
+      "mojeek",
+    ]);
+  });
+
+  it("preserves order when no language is requested", () => {
+    const chain = ["duckduckgo", "wikipedia"];
+    expect(preferLanguageCapable(chain, undefined)).toEqual(chain);
   });
 });

@@ -1,4 +1,4 @@
-// @implements REQ-020 REQ-095
+// @implements REQ-020 REQ-095 REQ-128
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { provider as openalex } from "./openalex.js";
 import { provider as europe_pmc } from "./europe_pmc.js";
@@ -53,6 +53,12 @@ describe("zero-config financial/academic/news providers", () => {
     const results = await gdelt.search("q");
     expect(results).toHaveLength(1);
     expect(results[0].source_type).toBe("news");
+  });
+
+  it("gdelt forwards a requested source language (REQ-128)", async () => {
+    mockFetch.mockImplementation(async () => new Response(JSON.stringify({ articles: [] }), { status: 200 }));
+    await gdelt.search("q", { language: "de" });
+    expect(String(mockFetch.mock.calls[0][0])).toContain("sourcelang=german");
   });
 
   it("sec_edgar parses filings into financial results", async () => {

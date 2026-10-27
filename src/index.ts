@@ -13,7 +13,7 @@ import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./provide
 import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
 import { snapshotSource } from "./preservation.js";
-import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
+import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
 import { ignoredOperators, parseQuery } from "./query.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
 import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
@@ -36,6 +36,8 @@ import { deriveResearchVariants, compileResearchGroups } from "./research.js";
 import { keyPoolStatus } from "./key-pool.js";
 import { rankPassages } from "./rerank.js";
 import { deepRead } from "./deep-search.js";
+import { analyzeResults } from "./analysis.js";
+import { derivePrivacy } from "./privacy.js";
 import { detectUpdatedAt } from "./datetime.js";
 import { searchCitations } from "./cite.js";
 import { deriveExpansions } from "./expand.js";
@@ -226,6 +228,7 @@ async function doWebSearch(
   deep = false,
   research = false,
   fresh = false,
+  analyze = false,
   deepBudget?: { remaining: number }
 ): Promise<string> {
   // REQ-020: a union-typed input can arrive as a JSON-encoded array string.
@@ -247,7 +250,7 @@ async function doWebSearch(
     const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
     const envelopes = await Promise.all(
       queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, deepBudget)
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget)
       )
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
@@ -317,7 +320,7 @@ async function doWebSearch(
       const budget = { remaining: perVariantPages };
       return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
-        priority, false, contentType, region, language, false, true, false, false, budget
+        priority, false, contentType, region, language, false, true, false, false, false, budget
       );
     });
     return `[OK] ${json({
@@ -325,7 +328,13 @@ async function doWebSearch(
       provider: "research",
       query,
       groups,
-      meta: { query_time_ms: 0, fallback_used: false, research: true, variants: groups.length },
+      meta: {
+        query_time_ms: 0,
+        fallback_used: false,
+        research: true,
+        variants: groups.length,
+        ...(analyze ? { analysis: analyzeResults(groups.flatMap((g) => g.results), config.analysis) } : {}),
+      },
     })}`;
   }
 
@@ -352,6 +361,12 @@ async function doWebSearch(
             query_time_ms: 0,
             fallback_used: false,
             quota_remaining: undefined,
+            ...(analyze ? { analysis: analyzeResults(sufficientResults.map((r) => ({
+              title: r.title,
+              url: r.source_url,
+              snippet: r.snippet,
+              source_type: r.source_type,
+            })), config.analysis) } : {}),
           }))}`;
         }
       }
@@ -378,6 +393,8 @@ async function doWebSearch(
   }
 
   chain = selectChain(chain, priority, latency.avg);
+  // REQ-128: prefer providers that honor a caller-supplied language.
+  chain = preferLanguageCapable(chain, language);
 
   // REQ-020a: demote providers at quota warning below non-warning providers.
   chain = demoteQuotaWarnings(chain, (slug) =>
@@ -581,6 +598,7 @@ async function doWebSearch(
         ignored_operators: ignoredOperators(slug, parsedQuery),
         deep: true,
         pages_read: deepMeta.pages_read,
+        ...(analyze ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
         ...(policyNote ?? {}),
       }))}`;
     }
@@ -591,6 +609,7 @@ async function doWebSearch(
       quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
       ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
       ignored_operators: ignoredOperators(slug, parsedQuery),
+      ...(analyze ? { analysis: analyzeResults(filtered, config.analysis) } : {}),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -1193,6 +1212,8 @@ function doListProviders(filter?: string): string {
       quota_warning: quota.warning,
       quota_exhausted: quota.exhausted,
       priority: p.priority,
+      // REQ-129: report the derived privacy posture for every listed provider.
+      privacy: derivePrivacy(p),
     };
   });
 
@@ -1365,7 +1386,7 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `fresh: true` skips KB recall and searches external providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `fresh: true` skips KB recall and searches external providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -1378,6 +1399,7 @@ instrumentTool(
       expand: z.boolean().optional().default(false).describe("Return query-expansion strings instead of search results"),
       deep: z.boolean().optional().default(false).describe("Read the top results and return each page's ranked passages against the query"),
       research: z.boolean().optional().default(false).describe("Research compile: fan out to derived query variants and deep-read each, returning passages grouped by variant (default off)"),
+      analyze: z.boolean().optional().default(false).describe("Attach in-process analysis to the response: topic terms, entity mentions, semantic result clusters, and a dated timeline. Derived from the returned results only; adds no outbound request (default false)"),
       fresh: z.boolean().optional().default(false).describe("Skip the knowledge-base recall shortcut and search external providers (default false)"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
@@ -1406,7 +1428,8 @@ instrumentTool(
       Boolean(params.expand),
       Boolean(params.deep),
       Boolean(params.research),
-      Boolean(params.fresh)
+      Boolean(params.fresh),
+      Boolean(params.analyze)
     );
     return { content: [{ type: "text" as const, text: content }] };
   }
@@ -1457,7 +1480,7 @@ instrumentTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
-    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state locally and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status). Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state (including each provider's derived privacy posture) and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status). Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),

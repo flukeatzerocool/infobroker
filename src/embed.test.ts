@@ -1,4 +1,4 @@
-// @implements REQ-103 REQ-021b REQ-026f REQ-020g REQ-020b REQ-020e
+// @implements REQ-103 REQ-021b REQ-026f REQ-020g REQ-020b REQ-020e REQ-128
 import { describe, it, expect } from "vitest";
 import {
   createModel,
@@ -21,6 +21,34 @@ describe("embed (REQ-103)", () => {
 
   it("tokenizes to lowercase alphanumeric terms", () => {
     expect(tokenize("The Quick, brown FOX!")).toEqual(["the", "quick", "brown", "fox"]);
+  });
+
+  it("keeps ASCII tokenization identical to the legacy tokenizer", () => {
+    const legacy = (text: string) =>
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 1);
+    const corpus = [
+      "The Quick, brown FOX!",
+      "site:example.com filetype:pdf --draft",
+      "State-of-the-art 2026 results (n=42)",
+      "a b c",
+      "",
+    ];
+    for (const text of corpus) expect(tokenize(text)).toEqual(legacy(text));
+  });
+
+  it("tokenizes non-Latin scripts instead of dropping them", () => {
+    expect(tokenize("Привет мир")).toEqual(["привет", "мир"]);
+    expect(tokenize("مرحبا بالعالم")).toEqual(["مرحبا", "بالعالم"]);
+  });
+
+  it("segments scripts without word separators into character bigrams", () => {
+    expect(tokenize("日本語")).toEqual(["日本", "本語"]);
+    expect(tokenize("한국어")).toEqual(["한국", "국어"]);
+    expect(tokenize("日")).toEqual(["日"]);
   });
 
   it("hash model produces fixed-dimension vectors regardless of corpus", () => {

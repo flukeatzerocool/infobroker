@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "k": 5,
+  "queries": [
+    {
+      "id": "ev-battery-range",
+      "query": "electric vehicle battery range",
+      "language": "en",
+      "judgments": [
+        { "url": "https://energy.example.com/ev-range", "grade": 2 },
+        { "url": "https://auto.example.org/battery-guide", "grade": 1 },
+        { "url": "https://news.example.net/ev-sales", "grade": 1 }
+      ],
+      "results": [
+        { "title": "How far can an electric car go on one charge?", "url": "https://energy.example.com/ev-range", "snippet": "Battery range for electric vehicles depends on capacity, temperature, and driving speed.", "source_type": "web_search" },
+        { "title": "EV battery buying guide", "url": "https://auto.example.org/battery-guide", "snippet": "Compare electric vehicle battery chemistries, charging rates, and real-world range." },
+        { "title": "Electric car sales rise again", "url": "https://news.example.net/ev-sales", "snippet": "Electric vehicle sales rose, though range anxiety remains a concern for buyers." },
+        { "title": "How far can an electric car go on one charge?", "url": "https://mirror.example.net/ev-range-copy", "snippet": "Battery range for electric vehicles depends on capacity, temperature, and driving speed.", "original_source": "https://energy.example.com/ev-range" },
+        { "title": "Charging networks expand", "url": "https://news.example.net/charging", "snippet": "New fast-charging stations reduce downtime on long trips." }
+      ]
+    },
+    {
+      "id": "rag-evaluation",
+      "query": "retrieval augmented generation evaluation benchmarks",
+      "language": "en",
+      "judgments": [
+        { "url": "https://arxiv.example.org/abs/rag-eval", "grade": 2 },
+        { "url": "https://aclanthology.example.org/rag-survey", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Evaluating retrieval-augmented generation systems", "url": "https://arxiv.example.org/abs/rag-eval", "snippet": "We benchmark retrieval-augmented generation on question answering, factuality, and attribution." },
+        { "title": "RAG survey: methods and evaluation", "url": "https://aclanthology.example.org/rag-survey", "snippet": "A survey of retrieval augmented generation methods, datasets, and evaluation benchmarks." },
+        { "title": "Unrelated caching library", "url": "https://code.example.net/cache", "snippet": "A small in-memory cache for web applications." },
+        { "title": "RAG evaluation pitfalls", "url": "https://blog.example.org/rag-pitfalls", "snippet": "Common mistakes when measuring retrieval and generation quality." }
+      ]
+    },
+    {
+      "id": "klimawandel-de",
+      "query": "Klimawandel Folgen für Deutschland",
+      "language": "de",
+      "judgments": [
+        { "url": "https://umwelt.example.de/klimafolgen", "grade": 2 },
+        { "url": "https://wiki.example.de/klimawandel", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Folgen des Klimawandels in Deutschland", "url": "https://umwelt.example.de/klimafolgen", "snippet": "Hitze, Dürre und Starkregen nehmen in Deutschland infolge des Klimawandels zu." },
+        { "title": "Klimawandel", "url": "https://wiki.example.de/klimawandel", "snippet": "Der Klimawandel beschreibt die langfristige Veränderung des Klimas auf der Erde." },
+        { "title": "Wettervorhersage morgen", "url": "https://wetter.example.de/morgen", "snippet": "Regen und kühle Temperaturen am Wochenende." }
+      ]
+    },
+    {
+      "id": "cjk-semiconductor",
+      "query": "半導体 供給不足",
+      "language": "ja",
+      "judgments": [
+        { "url": "https://jp.example.org/semiconductor-supply", "grade": 2 },
+        { "url": "https://jp.example.net/chip-outlook", "grade": 1 }
+      ],
+      "results": [
+        { "title": "半導体の供給不足が続く", "url": "https://jp.example.org/semiconductor-supply", "snippet": "半導体の供給不足は自動車産業や電子機器の生産に影響している。" },
+        { "title": "半導体市場の見通し", "url": "https://jp.example.net/chip-outlook", "snippet": "半導体の需要は拡大し、供給体制の強化が課題となる。" },
+        { "title": "今日の天気", "url": "https://jp.example.net/weather", "snippet": "全国的に晴れ、気温は平年並み。" }
+      ]
+    },
+    {
+      "id": "ru-ai-regulation",
+      "query": "искусственный интеллект регулирование",
+      "language": "ru",
+      "judgments": [
+        { "url": "https://ru.example.org/ai-law", "grade": 2 },
+        { "url": "https://ru.example.net/ai-policy", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Регулирование искусственного интеллекта", "url": "https://ru.example.org/ai-law", "snippet": "Новые правила регулирования искусственного интеллекта обсуждают риски и ответственность." },
+        { "title": "Политика в области ИИ", "url": "https://ru.example.net/ai-policy", "snippet": "Государственная политика развития искусственного интеллекта и надзора." },
+        { "title": "Прогноз погоды", "url": "https://ru.example.net/weather", "snippet": "Ожидается солнечная погода." }
+      ]
+    },
+    {
+      "id": "aspirin-prevention",
+      "query": "aspirin cardiovascular prevention evidence",
+      "language": "en",
+      "judgments": [
+        { "url": "https://pubmed.example.org/aspirin", "grade": 2 },
+        { "url": "https://cardio.example.org/aspirin-guideline", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Aspirin for primary prevention of cardiovascular disease", "url": "https://pubmed.example.org/aspirin", "snippet": "Randomized trials show modest benefit and increased bleeding risk for aspirin in primary prevention." },
+        { "title": "Cardiology guideline update", "url": "https://cardio.example.org/aspirin-guideline", "snippet": "Guidelines recommend individualized aspirin use for cardiovascular prevention." },
+        { "title": "Headache treatment options", "url": "https://health.example.net/headache", "snippet": "Over-the-counter pain relief for headaches." }
+      ]
+    },
+    {
+      "id": "hagia-sophia",
+      "query": "Hagia Sophia architecture history",
+      "language": "en",
+      "judgments": [
+        { "url": "https://arch.example.org/hagia-sophia", "grade": 2 },
+        { "url": "https://history.example.org/byzantium", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Hagia Sophia: Byzantine architecture", "url": "https://arch.example.org/hagia-sophia", "snippet": "The Hagia Sophia dome and pendentives shaped Byzantine and Ottoman architecture." },
+        { "title": "Byzantine Empire overview", "url": "https://history.example.org/byzantium", "snippet": "A history of the Byzantine Empire and its monuments." },
+        { "title": "Istanbul travel guide", "url": "https://travel.example.net/istanbul", "snippet": "Where to eat and stay in Istanbul." }
+      ]
+    },
+    {
+      "id": "sec-risk-factors",
+      "query": "SEC 10-K risk factors disclosure",
+      "language": "en",
+      "judgments": [
+        { "url": "https://sec.example.gov/10k-guide", "grade": 2 },
+        { "url": "https://finance.example.org/risk-factors", "grade": 1 }
+      ],
+      "results": [
+        { "title": "SEC guidance on 10-K risk factors", "url": "https://sec.example.gov/10k-guide", "snippet": "Regulation S-K requires companies to disclose material risk factors in annual reports." },
+        { "title": "Reading a 10-K", "url": "https://finance.example.org/risk-factors", "snippet": "Risk factors are among the most important sections of a 10-K filing." },
+        { "title": "Stock market recap", "url": "https://finance.example.net/recap", "snippet": "Markets closed higher on Friday." }
+      ]
+    },
+    {
+      "id": "rust-tokio",
+      "query": "rust async runtime tokio",
+      "language": "en",
+      "judgments": [
+        { "url": "https://docs.example.org/tokio", "grade": 2 },
+        { "url": "https://rust.example.org/async", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Tokio: an asynchronous runtime for Rust", "url": "https://docs.example.org/tokio", "snippet": "Tokio provides an async runtime, tasks, timers, and I/O for Rust applications." },
+        { "title": "Asynchronous programming in Rust", "url": "https://rust.example.org/async", "snippet": "Futures and async/await syntax in Rust, and how runtimes execute them." },
+        { "title": "Python packaging tips", "url": "https://code.example.net/python", "snippet": "Virtual environments and dependency pinning." }
+      ]
+    },
+    {
+      "id": "central-bank-rates",
+      "query": "central bank interest rate decision",
+      "language": "en",
+      "judgments": [
+        { "url": "https://bank.example.org/decision", "grade": 2 },
+        { "url": "https://news.example.net/rates", "grade": 1 }
+      ],
+      "results": [
+        { "title": "Central bank holds interest rates steady", "url": "https://bank.example.org/decision", "snippet": "The central bank kept its policy interest rate unchanged, citing inflation progress." },
+        { "title": "Rate decision explained", "url": "https://news.example.net/rates", "snippet": "What the latest interest rate decision means for borrowers." },
+        { "title": "Sports results", "url": "https://sports.example.net/results", "snippet": "Weekend football scores." }
+      ]
+    }
+  ]
+}

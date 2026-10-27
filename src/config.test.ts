@@ -262,6 +262,48 @@ describe("configuration overlay", () => {
     expect(cfg.providers.duckduckgo.resells).toBe(true);
   });
 
+  it("accepts provider languages declarations (REQ-128)", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      providers: { duckduckgo: { languages: ["en", "de"] }, searxng: { languages: "*" } },
+    });
+    expect(cfg.providers.duckduckgo.languages).toEqual(["en", "de"]);
+    expect(cfg.providers.searxng.languages).toBe("*");
+  });
+
+  it("rejects a malformed provider languages declaration (REQ-128)", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { duckduckgo: { languages: [42] } } })
+    ).rejects.toThrow(/languages/);
+  });
+
+  it("accepts and validates the analysis block (REQ-127)", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      analysis: { max_topics: 5, cluster_threshold: 0.6, min_cluster_size: 3, timeline: false },
+    });
+    expect(cfg.analysis?.max_topics).toBe(5);
+    expect(cfg.analysis?.timeline).toBe(false);
+  });
+
+  it("rejects an out-of-range analysis cluster threshold (REQ-127)", async () => {
+    await expect(
+      loadWithOverlay(BASE, { analysis: { cluster_threshold: 1.5 } })
+    ).rejects.toThrow(/cluster_threshold/);
+  });
+
+  it("accepts and validates a provider privacy override (REQ-129)", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      providers: { searxng: { privacy: { query_forwarding: "third_party", retains_query: false, notes: "upstream" } } },
+    });
+    expect(cfg.providers.searxng.privacy?.query_forwarding).toBe("third_party");
+    expect(cfg.providers.searxng.privacy?.retains_query).toBe(false);
+  });
+
+  it("rejects an invalid provider privacy forwarding value (REQ-129)", async () => {
+    await expect(
+      loadWithOverlay(BASE, { providers: { searxng: { privacy: { query_forwarding: "elsewhere" } } } })
+    ).rejects.toThrow(/query_forwarding/);
+  });
+
   it("rejects a non-numeric rate_limit value (REQ-037)", async () => {
     await expect(
       loadWithOverlay(BASE, { providers: { duckduckgo: { rate_limit: { per_second: "fast" } } } })

@@ -19,12 +19,53 @@ export function isKnownModel(name: string): name is ModelName {
   return (KNOWN_MODELS as readonly string[]).includes(name);
 }
 
+// REQ-128: tokenize every Unicode script. The non-Latin extension keeps the
+// historical output for ASCII text (NFKC leaves it unchanged and \p{L}\p{N}
+// covers a-z0-9), so existing English vectors stay comparable. CJK runs have
+// no word separators and are segmented into adjacent character bigrams.
+const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+function cjkTokens(run: string): string[] {
+  if (run.length <= 1) return [run];
+  const grams: string[] = [];
+  for (let i = 0; i < run.length - 1; i++) grams.push(run.slice(i, i + 2));
+  return grams;
+}
+
+function segmentChunk(chunk: string): string[] {
+  const tokens: string[] = [];
+  let word = "";
+  let cjk = "";
+  const flushWord = () => {
+    if (word.length > 1) tokens.push(word);
+    word = "";
+  };
+  const flushCjk = () => {
+    if (cjk.length > 0) tokens.push(...cjkTokens(cjk));
+    cjk = "";
+  };
+  for (const ch of chunk) {
+    if (CJK_CHAR_RE.test(ch)) {
+      flushWord();
+      cjk += ch;
+    } else {
+      flushCjk();
+      word += ch;
+    }
+  }
+  flushWord();
+  flushCjk();
+  return tokens;
+}
+
 export function tokenize(text: string): string[] {
-  return (text ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1);
+  const normalized = (text ?? "").normalize("NFKC").toLowerCase();
+  const tokens: string[] = [];
+  for (const chunk of normalized.replace(/[^\p{L}\p{N}]+/gu, " ").split(/\s+/)) {
+    if (chunk.length === 0) continue;
+    tokens.push(...segmentChunk(chunk));
+  }
+  return tokens;
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {

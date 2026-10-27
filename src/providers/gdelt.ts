@@ -1,18 +1,24 @@
-// @implements REQ-020 REQ-070 REQ-071
-import type { SearchResult, Provider } from "../types.js";
+// @implements REQ-020 REQ-070 REQ-071 REQ-128
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
+import { languageDisplayName, normalizeLanguageTag } from "../language.js";
 
 const GDELT_API = "https://api.gdeltproject.org/api/v2/doc/doc";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     query,
     mode: "artlist",
     format: "json",
     maxrecords: "10",
   });
+  // REQ-128: GDELT takes a source-language name, not an ISO tag.
+  const sourceLanguage = languageDisplayName(options?.language);
+  if (normalizeLanguageTag(options?.language) && sourceLanguage) {
+    params.set("sourcelang", sourceLanguage.toLowerCase());
+  }
 
   const resp = await infobrokerFetch(`${GDELT_API}?${params.toString()}`, {
     providerSlug: "gdelt",

@@ -27,6 +27,7 @@
     "wikipedia": {
       "tier": "free_http",
       "capabilities": ["encyclopedia"],
+      "languages": "*",
       "rate_limit": { "per_second": 5 },
       "enabled": true,
       "priority": 20
@@ -34,6 +35,7 @@
     "wiktionary": {
       "tier": "free_http",
       "capabilities": ["encyclopedia", "definition"],
+      "languages": "*",
       "rate_limit": { "per_second": 5 },
       "enabled": true,
       "priority": 20
@@ -41,6 +43,7 @@
     "wikidata": {
       "tier": "free_http",
       "capabilities": ["structured_fact"],
+      "languages": "*",
       "rate_limit": { "per_second": 5 },
       "enabled": true,
       "priority": 20
@@ -156,6 +159,7 @@
     "gdelt": {
       "tier": "free_http",
       "capabilities": ["news"],
+      "languages": "*",
       "rate_limit": { "per_second": 0.2 },
       "enabled": true,
       "priority": 15,
@@ -180,6 +184,7 @@
     "brave": {
       "tier": "keyed_http",
       "capabilities": ["web_search", "news", "semantic"],
+      "languages": "*",
       "rate_limit": { "per_month": 2000 },
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
       "enabled": false,
@@ -207,6 +212,11 @@
     "searxng": {
       "tier": "self_hosted_http",
       "capabilities": ["web_search", "privacy_critical"],
+      "languages": "*",
+      "privacy": {
+        "query_forwarding": "third_party",
+        "notes": "self-hosted instance; upstream engines receive queries unless configured otherwise"
+      },
       "rate_limit": {},
       "url_env": "INFOBROKER_SEARXNG_URL",
       "enabled": false,
@@ -216,6 +226,7 @@
     "yep": {
       "tier": "keyed_http",
       "capabilities": ["web_search", "semantic", "synthesis"],
+      "languages": "*",
       "rate_limit": { "per_month": 1000 },
       "auth_env": "INFOBROKER_YEP_API_KEY",
       "enabled": false,
@@ -274,6 +285,14 @@
     "early_exit_score": 0.3,
     "max_ms": 8000,
     "detect_date": false
+  },
+  "analysis": {
+    "enabled": true,
+    "max_topics": 10,
+    "max_entities": 10,
+    "cluster_threshold": 0.55,
+    "min_cluster_size": 2,
+    "timeline": true
   },
   "corroboration": {
     "max_iterations": 5,

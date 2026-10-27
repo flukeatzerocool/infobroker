@@ -1,16 +1,17 @@
-// @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+// @implements REQ-020 REQ-128
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
+import { normalizeLanguageTag } from "../language.js";
 
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     action: "wbsearchentities",
     search: query,
-    language: "en",
+    language: normalizeLanguageTag(options?.language) ?? "en",
     limit: "10",
     format: "json",
     origin: "*",

@@ -1,9 +1,10 @@
-// @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+// @implements REQ-020 REQ-128
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
 import { infobrokerFetch } from "../http.js";
+import { normalizeLanguageTag } from "../language.js";
 
 let _searxngUrl: string | undefined;
 function searxngUrl(): string | undefined {
@@ -11,11 +12,13 @@ function searxngUrl(): string | undefined {
   return _searxngUrl;
 }
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const baseUrl = searxngUrl();
   if (!baseUrl) throw new Error("INFOBROKER_SEARXNG_URL not set");
 
   const params = new URLSearchParams({ q: query, format: "json" });
+  const language = normalizeLanguageTag(options?.language);
+  if (language) params.set("language", language);
   const resp = await infobrokerFetch(`${baseUrl}/search?${params.toString()}`, { providerSlug: "searxng" });
 
   if (!resp.ok) throw new RetryableError(`SearXNG returned HTTP ${resp.status}`, resp.status);

@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "k": 5,
+  "corpus": 10,
+  "reconciled": {
+    "mean_precision": 0.658,
+    "mean_recall": 1,
+    "mrr": 1,
+    "ndcg": 0.955
+  },
+  "raw": {
+    "mean_precision": 0.643,
+    "mean_recall": 1,
+    "mrr": 1,
+    "ndcg": 1
+  },
+  "cases": [
+    {
+      "id": "ev-battery-range",
+      "precision_at_k": 0.75,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 0.7579237460681981,
+      "returned": 4,
+      "relevant": 3
+    },
+    {
+      "id": "rag-evaluation",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 0.7967075809905066,
+      "returned": 4,
+      "relevant": 2
+    },
+    {
+      "id": "klimawandel-de",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "cjk-semiconductor",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "ru-ai-regulation",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "aspirin-prevention",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "hagia-sophia",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "sec-risk-factors",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "rust-tokio",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "central-bank-rates",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    }
+  ]
+}

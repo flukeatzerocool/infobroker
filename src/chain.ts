@@ -1,4 +1,4 @@
-// @implements REQ-020a REQ-020c REQ-020d REQ-031a
+// @implements REQ-020a REQ-020c REQ-020d REQ-031a REQ-128
 import { getDispatchChain, getConfig } from "./config.js";
 
 // Which of the filter-style options a provider actually honors. Used by
@@ -12,6 +12,9 @@ export const SUPPORTED_OPTIONS: Record<
   duckduckgo: { time_range: true, safe_search: true, region: true },
   wikipedia: { language: true },
   wiktionary: { language: true },
+  wikidata: { language: true },
+  gdelt: { language: true },
+  searxng: { language: true },
   // Brave maps `time_range` to `freshness` and `language` to `search_lang`; it
   // does not read `region`, so a caller-supplied region is reported as ignored.
   brave: { time_range: true, language: true },
@@ -100,4 +103,18 @@ export function crossTaskFallbackChain(
   if (taskType === "general_web") return [];
   const attemptedSet = new Set(attempted);
   return generalChain.filter((slug) => !attemptedSet.has(slug));
+}
+
+// REQ-128: when a caller restricts the result language, put providers that
+// honor it ahead of those that would report it as ignored, preserving the
+// relative order within each group.
+export function preferLanguageCapable(chain: string[], language?: string): string[] {
+  if (!language) return chain;
+  const capable: string[] = [];
+  const rest: string[] = [];
+  for (const slug of chain) {
+    if (SUPPORTED_OPTIONS[slug]?.language) capable.push(slug);
+    else rest.push(slug);
+  }
+  return capable.length > 0 ? [...capable, ...rest] : chain;
 }

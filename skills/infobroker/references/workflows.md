@@ -25,6 +25,9 @@ rather than restating them.
 - **SEARCH** — `search_web` (multi-provider, auto-selection, fallback
   chain). Use `verify_claims` when a claim is contested; use `search_web (deep)`
   when you want passages read from the top results, not just snippets.
+  Add `search_web (analyze)` when you want topic terms, entity mentions,
+  result clusters, and a dated timeline computed from the results already
+  returned (no extra outbound request).
   Use `search_web (research)` (multi-variant fan-out with deep reads) only for the
   Deep-Dive, Competitive Evaluation, and Gated Analysis shapes — it is
   token-expensive, and simple lookups never escalate to it.

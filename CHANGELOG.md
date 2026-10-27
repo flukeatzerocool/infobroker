@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.10.26 — Wave 3: analysis aids, multilingual collection, privacy posture, retrieval benchmark
+
+- `search_web (analyze)` now attaches in-process topics, entity mentions,
+  semantic clusters, and a dated timeline derived from the returned results,
+  with no extra outbound request. Empty result sets omit analysis rather than
+  fabricating it. (REQ-127)
+- Tokenization is Unicode-aware across Cyrillic, Arabic, Greek, Hebrew, and
+  CJK; scripts without word separators use character bigrams. ASCII token
+  output is unchanged, so existing English vectors remain comparable.
+  `search_web` now prefers providers that honor a requested language, and
+  Wikidata, GDELT, and SearXNG pass the language through. (REQ-128)
+- Every provider now has a derived privacy posture (query forwarding,
+  retention, account requirement, resale), exposed by `inspect_providers` and
+  generated into `skills/infobroker/references/provider-privacy.md` with a
+  staleness gate. Unestablished fields are reported as unknown. (REQ-129)
+- A deterministic retrieval-quality benchmark runs committed raw results
+  through the real reconciliation path and scores precision, recall, MRR, and
+  nDCG against a recorded baseline, separately from the confidence-calibration
+  gold set. (REQ-130)
+
 ## 2026.10.26 — Corroboration trust: source families, snapshots, calibration
 
 - `verify_claims` now counts independent source families rather than

@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-027 REQ-060 REQ-081 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-127 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -116,6 +116,24 @@ test("search_web returns a shape-valid result set from the pinned provider", asy
   expect((body.results as unknown[]).length).toBeGreaterThan(0);
   // REQ-020: the Wikipedia provider's real snippet survives normalization.
   expect(String((body.results as Array<Record<string, unknown>>)[0].snippet)).not.toBe("");
+});
+
+test("search_web analyze attaches in-process analysis (REQ-127)", async () => {
+  scenario = "search-analyze";
+  const out = await call("infobroker_search_web", {
+    query: "retrieval augmented generation",
+    provider: "wikipedia",
+    max_results: 3,
+    analyze: true,
+  });
+  const body = expectOk(out.text);
+  const analysis = (body.meta as Record<string, unknown>).analysis as Record<string, unknown>;
+  expect(analysis).toBeTruthy();
+  expect(Array.isArray(analysis.topics)).toBe(true);
+  expect(Array.isArray(analysis.entities)).toBe(true);
+  expect(Array.isArray(analysis.clusters)).toBe(true);
+  expect(analysis.timeline).toBeTruthy();
+  expectSearchResultShape(body.results as Array<Record<string, unknown>>);
 });
 
 test("search_web coerces a JSON-encoded array string into a batch", async () => {

@@ -319,6 +319,34 @@ function validateConfig(config: Config): void {
     if (provider.resells !== undefined && typeof provider.resells !== "boolean") {
       errors.push(`Provider "${slug}": resells must be a boolean`);
     }
+    if (provider.languages !== undefined) {
+      const ok =
+        provider.languages === "*" ||
+        (Array.isArray(provider.languages) &&
+          provider.languages.every((l) => typeof l === "string" && l.trim().length > 0));
+      if (!ok) errors.push(`Provider "${slug}": languages must be "*" or an array of language tags`);
+    }
+    if (provider.privacy !== undefined) {
+      const p = provider.privacy;
+      if (typeof p !== "object" || p === null || Array.isArray(p)) {
+        errors.push(`Provider "${slug}": privacy must be an object`);
+      } else {
+        if (p.query_forwarding !== undefined && !["none", "origin", "third_party"].includes(p.query_forwarding)) {
+          errors.push(`Provider "${slug}": privacy.query_forwarding must be none, origin, or third_party`);
+        }
+        if (p.retains_query !== undefined && p.retains_query !== "unknown" && typeof p.retains_query !== "boolean") {
+          errors.push(`Provider "${slug}": privacy.retains_query must be a boolean or "unknown"`);
+        }
+        for (const key of ["requires_account", "resells"] as const) {
+          if (p[key] !== undefined && typeof p[key] !== "boolean") {
+            errors.push(`Provider "${slug}": privacy.${key} must be a boolean`);
+          }
+        }
+        if (p.notes !== undefined && (typeof p.notes !== "string" || p.notes.trim().length === 0)) {
+          errors.push(`Provider "${slug}": privacy.notes must be a non-empty string`);
+        }
+      }
+    }
     if (provider.tier === "generic_http") {
       if (typeof provider.endpoint !== "string" || !/^https?:\/\//i.test(provider.endpoint)) {
         errors.push(`Provider "${slug}": generic_http requires an "endpoint" (http(s) URL)`);
@@ -519,6 +547,26 @@ function validateConfig(config: Config): void {
     }
     if (config.deep.detect_date !== undefined && typeof config.deep.detect_date !== "boolean") {
       errors.push("deep.detect_date must be a boolean");
+    }
+  }
+
+  if (config.analysis) {
+    const analysis = config.analysis;
+    for (const key of ["max_topics", "max_entities"] as const) {
+      if (analysis[key] !== undefined && (typeof analysis[key] !== "number" || analysis[key] < 1)) {
+        errors.push(`analysis.${key} must be a positive number`);
+      }
+    }
+    if (analysis.cluster_threshold !== undefined && (typeof analysis.cluster_threshold !== "number" || analysis.cluster_threshold < 0 || analysis.cluster_threshold > 1)) {
+      errors.push("analysis.cluster_threshold must be a number between 0 and 1");
+    }
+    if (analysis.min_cluster_size !== undefined && (typeof analysis.min_cluster_size !== "number" || analysis.min_cluster_size < 2)) {
+      errors.push("analysis.min_cluster_size must be a number of at least 2");
+    }
+    for (const key of ["enabled", "timeline"] as const) {
+      if (analysis[key] !== undefined && typeof analysis[key] !== "boolean") {
+        errors.push(`analysis.${key} must be a boolean`);
+      }
     }
   }
 

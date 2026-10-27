@@ -11,6 +11,9 @@ Run:
 npx tsx scripts/calibrate-confidence.ts
 ```
 
+Retrieval quality is measured separately by `test-fixtures/retrieval/`
+(REQ-130); this file covers confidence calibration only.
+
 The set is intentionally small and hand-authored. It verifies the correction's
 mechanics and gives a baseline for future expansion; it is not a claim that the
 confidence ladder is calibrated for production. Expand it with real verified

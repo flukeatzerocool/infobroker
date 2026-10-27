@@ -170,6 +170,7 @@ early.
 | Search web broadly | `search_web` | Auto-selected (default: DuckDuckGo) |
 | Read/scrape a URL | `fetch_page` | Jina Reader (auto Markdown); use `fetch_page (question)` to extract ranked passages |
 | Autocomplete a query | `search_web (suggest)` | DuckDuckGo |
+| Topics, entities, clusters, timeline | `search_web (analyze)` | Derived in-process from returned results |
 | "Which tool should I use?" | `search_web` | Auto-selection returns serving provider |
 | Multi-source truth-finding | `verify_claims` | Uses all active providers |
 | Academic citations | `get_citations` | BibTeX references from scholarly sources |
