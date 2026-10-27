@@ -3,28 +3,34 @@
 # server sync, provider auth sync, dead-code scan (project folder + git repo +
 # MCP server source), README/refs update, commit, push.
 #
-# Role: entry point — orchestrates the release pipeline. Exit 0 on success,
-# 1 on a gate failure (`die`), 2 reserved for fatal/unexpected errors (unused).
+# Role: entry point — orchestrates the release pipeline. Exit 0 on success
+# (including "committed locally, not pushed"), 1 on a gate failure or when
+# human approval is required (`die`), 2 on fatal/unexpected errors.
 #
 # This is the deep-clean — full from-scratch server rebuild against the
 # current spec, dead-code audit, and documentation refresh.
 #
 # Usage:
 #   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
-#                              [--resume] [--from=<step>] [--to=<step>]
-#                              [--parallel] [--scan-ai] [--force-tag]
+#                              [--resume] [--run-id=<id>]
+#                              [--from=<step>] [--to=<step>]
+#                              [--scan-ai] [--force-tag]
 #                              [--force-push] [--allow-secrets] [--help]
 #   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
 #                    steps, no commit. Leaves the working tree clean.
-#   --yes (-y)       Skip confirmation prompt before commit/push.
+#   --yes (-y)       Approve the final push without prompting (unattended/CI).
 #   --no-push        Commit but skip push, tag, and mirror sync.
 #   --no-commit      Run all steps (including AI edits) but stop before staging;
-#                    leaves the working tree dirty for inspection. This is the
-#                    behavior --dry-run had before 2026-10-02.
-#   --resume         Skip steps already recorded complete in the state journal.
+#                    leaves the working tree dirty for inspection.
+#   --resume         Continue the newest recorded run for this repo/branch.
+#                    Permitted to start from the dirty tree an interrupted run
+#                    left behind; HEAD and branch must still match.
+#   --run-id=<id>    Attach this invocation to a specific run directory.
 #   --from=<step>    Start at a named step (readthrough|sync|auth|changelog|scan|readme).
-#   --to=<step>      Stop after a named step (inclusive).
-#   --parallel       Run independent steps concurrently (auth ∥ readthrough).
+#   --to=<step>      Stop after a named step (inclusive). Bounded ranges never
+#                    commit or push — they are testing runs.
+#   --parallel       Deprecated no-op (auth now runs sequentially before
+#                    read-through to avoid a working-tree race).
 #   --scan-ai        Also run the AI scan prompts (default: deterministic scan only).
 #   --force-tag      Overwrite an existing version tag that is not an ancestor.
 #   --force-push     Force push with lease (otherwise refuse if diverged).
@@ -41,20 +47,51 @@
 #   Logs:         $TMPDIR/infobroker/pipeline-logs/  (per-run timestamped)
 #   Resume after a mid-pipeline failure: re-run with --resume.
 
-set -euo pipefail
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/pipeline/lib.sh
+source "$SCRIPT_DIR/pipeline/lib.sh"
+
+# ── Usage ──
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
+                                  [--resume] [--run-id=<id>]
+                                  [--from=<step>] [--to=<step>]
+                                  [--scan-ai] [--force-tag] [--force-push]
+                                  [--allow-secrets] [--help]
+
+  --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
+                   steps, no commit. Leaves the working tree clean.
+  --yes (-y)       Approve the final push without prompting (unattended/CI).
+  --no-push        Commit but skip push, tag, and mirror sync.
+  --no-commit      Run all steps (including AI edits) but stop before staging.
+  --resume         Continue the newest recorded run for this repo/branch.
+  --run-id=<id>    Attach this invocation to a specific run directory.
+  --from=S         Start at step (readthrough|sync|auth|changelog|scan|readme).
+  --to=S           Stop after step (inclusive); bounded ranges never commit/push.
+  --parallel       Deprecated no-op (auth runs before read-through).
+  --scan-ai        Also run the AI scan prompts (default: deterministic only).
+  --force-tag      Overwrite an existing version tag that is not an ancestor of HEAD.
+  --force-push     Force-push with lease if diverged.
+  --allow-secrets  Warn only on secret patterns.
+  --help (-h)      Show this message.
+EOF
+}
 
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
 NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false
-AUTH_PREFETCHED=false
-START_STEP=""; END_STEP=""
+START_STEP=""; END_STEP=""; RUN_ID=""
 
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=true ;;
     --yes|-y) FORCE=true ;;
     --resume) RESUME=true ;;
+    --run-id=*) RUN_ID="${arg#--run-id=}" ;;
     --parallel) PARALLEL=true ;;
     --scan-ai) SCAN_AI=true ;;
     --force-tag) FORCE_TAG=true ;;
@@ -64,52 +101,80 @@ for arg in "$@"; do
     --no-commit) NO_COMMIT=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --to=*) END_STEP="${arg#--to=}" ;;
-    --help|-h)
-      printf '%s\n' "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]"
-      printf '%s\n' "                              [--resume] [--from=<step>] [--to=<step>]"
-      printf '%s\n' "                              [--parallel] [--scan-ai] [--force-tag] [--force-push] [--allow-secrets]"
-      printf '%s\n' ""
-      printf '%s\n' "  --dry-run   Non-mutating: spec audit + deterministic scans only; no AI steps, no commit."
-      printf '%s\n' "  --yes (-y)  Skip confirmation prompt before commit/push."
-      printf '%s\n' "  --no-push   Commit but skip push, tag, and mirror sync."
-      printf '%s\n' "  --no-commit Run all steps (including AI edits) but stop before staging."
-      printf '%s\n' "  --resume    Skip steps already recorded complete."
-      printf '%s\n' "  --from=S    Start at step (readthrough|sync|auth|changelog|scan|readme)."
-      printf '%s\n' "  --to=S      Stop after step (inclusive)."
-      printf '%s\n' "  --parallel  Run independent steps concurrently (auth ∥ readthrough)."
-      printf '%s\n' "  --scan-ai   Also run the AI scan prompts (default: deterministic scan only)."
-      printf '%s\n' "  --force-tag Overwrite an existing version tag that is not an ancestor of HEAD."
-      printf '%s\n' "  --force-push Force-push with lease if diverged."
-      printf '%s\n' "  --allow-secrets  Warn only on secret patterns."
-      printf '%s\n' "  --help (-h) Show this message."
-      exit 0
+    --help|-h) usage; exit 0 ;;
+    *)
+      printf 'Unknown flag: %s\n\n' "$arg" >&2
+      usage >&2
+      exit 1
       ;;
-    *) echo "Unknown flag: $arg"; echo "Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes]"; exit 1 ;;
   esac
 done
 
-# ── Source shared helpers ──
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/pipeline/lib.sh
-source "$SCRIPT_DIR/pipeline/lib.sh"
+if $PARALLEL; then
+  warn "--parallel is deprecated: generate-auth now runs sequentially before read-through."
+fi
 
-# ── Cleanup trap ──
+# ── Paths, branch, run directory ──
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PROJECT_DIR")"
+BRANCH="$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'detached')"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+PIPELINE_LOG_DIR="${TMPDIR:-/tmp}/infobroker/pipeline-logs"
+
+# Bounded ranges are testing runs: never commit or push a partial pipeline.
+if [[ -n "$START_STEP" || -n "$END_STEP" ]]; then
+  if ! $NO_COMMIT || ! $NO_PUSH; then
+    info "Bounded range: forcing --no-commit and --no-push (testing mode)."
+  fi
+  NO_COMMIT=true
+  NO_PUSH=true
+fi
+
+RESUMED=false
+if [[ -n "$RUN_ID" ]]; then
+  PIPELINE_RUN_DIR="$PIPELINE_LOG_DIR/run-$RUN_ID"
+  [[ -f "$PIPELINE_RUN_DIR/state.json" ]] && RESUMED=true
+elif [[ -n "${PIPELINE_RUN_DIR:-}" ]]; then
+  [[ -f "$PIPELINE_RUN_DIR/state.json" ]] && RESUMED=true
+elif $RESUME; then
+  PIPELINE_RUN_DIR="$(latest_run_dir "$PIPELINE_LOG_DIR" "$REPO_ROOT" "$BRANCH" || true)"
+  [[ -n "$PIPELINE_RUN_DIR" ]] || die "No resumable run for $REPO_ROOT on $BRANCH under $PIPELINE_LOG_DIR."
+  RESUMED=true
+else
+  PIPELINE_RUN_DIR="$PIPELINE_LOG_DIR/run-${TIMESTAMP}"
+fi
+mkdir -p "$PIPELINE_RUN_DIR"
+PIPELINE_LOG_FILE="$PIPELINE_RUN_DIR/pipeline.log"
+STATE_FILE="$PIPELINE_RUN_DIR/state.json"
+
+if $RESUMED; then
+  [[ "$(json_from_file "$STATE_FILE" repo)" == "$REPO_ROOT" ]] \
+    || die "Cannot resume: run directory belongs to a different repo ($(json_from_file "$STATE_FILE" repo))."
+  [[ "$(json_from_file "$STATE_FILE" branch)" == "$BRANCH" ]] \
+    || die "Cannot resume: run was started on branch '$(json_from_file "$STATE_FILE" branch)', now on '$BRANCH'."
+  [[ "$(json_from_file "$STATE_FILE" head)" == "$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)" ]] \
+    || die "Cannot resume: HEAD moved since the run started."
+else
+  state_init "$STATE_FILE" "$REPO_ROOT" "$BRANCH" "$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
+fi
+
+# ── Traps ──
 cleanup() {
   stop_server
   local child_pids
   child_pids=$(jobs -p 2>/dev/null || true)
   [[ -n "$child_pids" ]] && { kill $child_pids 2>/dev/null; sleep 1; kill -9 $child_pids 2>/dev/null; } || true
 }
-trap cleanup EXIT SIGINT SIGTERM
+on_err() {
+  local rc=$?
+  error "Unexpected failure (exit ${rc}) at line ${BASH_LINENO[0]} — see $PIPELINE_LOG_FILE"
+  log_line "FATAL(unexpected): exit ${rc} at line ${BASH_LINENO[0]}"
+  exit 2
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT TERM
+trap on_err ERR
 
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-PIPELINE_LOG_DIR="${TMPDIR:-/tmp}/infobroker/pipeline-logs"
-PIPELINE_RUN_DIR="$PIPELINE_LOG_DIR/run-${TIMESTAMP}"
-mkdir -p "$PIPELINE_RUN_DIR"
-
-PIPELINE_LOG_FILE="$PIPELINE_RUN_DIR/pipeline.log"
-STATE_FILE="$PIPELINE_RUN_DIR/state.json"
 PROMPT_DIR="$SCRIPT_DIR/pipeline/prompts"
 
 # Per-step output files
@@ -131,24 +196,33 @@ PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
 
-: > "$PIPELINE_LOG_FILE"
+if ! $RESUMED; then
+  : > "$PIPELINE_LOG_FILE"
+fi
 log_line "===== Infobroker push pipeline — $(date +%Y-%m-%dT%H:%M:%S%z) ====="
-log_line "run dir: $PIPELINE_RUN_DIR"
+log_line "run dir: $PIPELINE_RUN_DIR${RESUMED:+ (resumed)}"
 log_line "args: ${*:-<none>}"
+log_line "branch: $BRANCH  head: $(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
 mkdir -p "$PIPELINE_RUN_DIR/timings"
 
 # ── State journal ────────────────────────────────────────────────────────────
 state_done() { [[ "$(json_from_file "$STATE_FILE" "$1")" == "true" ]]; }
 state_mark() {
   local key="$1"
-  node -e 'const fs=require("fs");const p=process.argv[1];let j={};try{j=require(p)}catch{};j[process.argv[2]]=true;fs.writeFileSync(p,JSON.stringify(j,null,2))' \
-    "$STATE_FILE" "$key" 2>/dev/null || true
+  node -e '
+    const fs = require("fs");
+    const [p, key] = process.argv.slice(1);
+    let j = {};
+    try { j = JSON.parse(fs.readFileSync(p, "utf8")); } catch { j = {}; }
+    j[key] = true;
+    fs.writeFileSync(p, JSON.stringify(j, null, 2));
+  ' "$STATE_FILE" "$key" 2>/dev/null || true
 }
-# step_skip <key> — true if the step should be skipped (resume journal OR --from).
+# step_skip <key> — true if the step should be skipped (resume journal OR --from/--to).
 STEP_ORDER="readthrough sync auth changelog scan readme"
 # Reject unknown --from/--to steps up front (before pre-flight, so a typo has
 # no side effects) — an unrecognized step would otherwise silently skip nothing
-# and run the whole pipeline, including commit/push.
+# and run the whole pipeline.
 validate_step() {
   [[ -z "$1" ]] && return 0
   [[ " $STEP_ORDER " == *" $1 "* ]] || die "Unknown step '$1' (valid: $STEP_ORDER)."
@@ -161,28 +235,17 @@ if [[ -n "$START_STEP" && -n "$END_STEP" ]]; then
 fi
 step_skip() {
   [[ "$RESUME" == "true" ]] && state_done "$1" && return 0
-  if [[ -n "$START_STEP" ]]; then
-    # Skip any step that sorts before START_STEP.
-    local before="${STEP_ORDER%%$START_STEP*}"
-    [[ "$before" == "$STEP_ORDER" ]] && return 1   # START_STEP not found → skip nothing
-    [[ " $before " == *" $1 "* ]] && return 0
-  fi
-  if [[ -n "$END_STEP" ]]; then
-    # Skip any step at or after END_STEP (END_STEP itself is inclusive).
-    local upto="${STEP_ORDER%%$END_STEP*}"
-    [[ "$upto" == "$STEP_ORDER" ]] || [[ " $upto " == *" $1 "* ]] || [[ "$1" == "$END_STEP" ]] || return 0
-  fi
-  return 1
+  ! step_should_run "$STEP_ORDER" "$1" "$START_STEP" "$END_STEP"
 }
 
-# scan_findings — sum `findings` across the project scan (scan-project.json)
-# and the git scan summary (scan-git.json). Prints "?" if none is parseable.
+# scan_findings — sum findings across every scan summary. Prints "?" when no
+# summary parses (a missing/invalid AI summary is handled as a hard failure at
+# its call site, not silently folded into the total).
 scan_findings() {
   local total=0 found=false f count
   for f in "$PIPELINE_RUN_DIR"/scan-*.json; do
     [[ -f "$f" ]] || continue
-    count=$(json_from_file "$f" findings)
-    if [[ "$count" =~ ^[0-9]+$ ]]; then
+    if count=$(findings_count "$f"); then
       total=$((total + count))
       found=true
     fi
@@ -192,7 +255,10 @@ scan_findings() {
 
 # ── pre-flight checks ────────────────────────────────────────────────────────
 FAILED_PRECHECKS=""
-for tool in opencode node npx curl; do
+required_tools=(node npm git npx)
+# opencode/curl are only needed when AI steps can run.
+$DRY_RUN || required_tools+=(opencode curl)
+for tool in "${required_tools[@]}"; do
   command -v "$tool" >/dev/null 2>&1 || FAILED_PRECHECKS="$FAILED_PRECHECKS $tool"
 done
 if [[ -n "$FAILED_PRECHECKS" ]]; then
@@ -208,17 +274,26 @@ info "Pre-flight checks: PASSED"
 echo ""
 
 # ── clean working tree ──────────────────────────────────────────────────────
-git -C "$PROJECT_DIR" diff --exit-code --quiet 2>/dev/null || {
-  error "Working tree has unstaged changes. Commit or stash before running."
-  git -C "$PROJECT_DIR" status --short
-  exit 1
-}
-git -C "$PROJECT_DIR" diff --cached --exit-code --quiet 2>/dev/null || {
-  error "Working tree has staged changes. Commit or unstage before running."
-  git -C "$PROJECT_DIR" status --short
-  exit 1
-}
-info "Working tree: clean"
+if $RESUMED; then
+  # A failed run leaves its edits behind by design; resuming must accept them.
+  # Snapshot the inherited diff for audit, then let the remaining gates judge it.
+  { git -C "$PROJECT_DIR" status --short; git -C "$PROJECT_DIR" diff; } \
+    > "$PIPELINE_RUN_DIR/resume-dirty.txt" 2>/dev/null || true
+  warn "Resume: accepting the interrupted run's working tree (snapshot: resume-dirty.txt)."
+else
+  git -C "$PROJECT_DIR" diff --exit-code --quiet 2>/dev/null || {
+    error "Working tree has unstaged changes. Commit or stash before running."
+    git -C "$PROJECT_DIR" status --short
+    exit 1
+  }
+  git -C "$PROJECT_DIR" diff --cached --exit-code --quiet 2>/dev/null || {
+    error "Working tree has staged changes. Commit or unstage before running."
+    git -C "$PROJECT_DIR" status --short
+    exit 1
+  }
+  info "Working tree: clean"
+fi
+$RESUMED || prune_runs "$PIPELINE_LOG_DIR" "${PIPELINE_KEEP_RUNS:-10}"
 echo ""
 
 # ── step 1: spec audit ──────────────────────────────────────────────────────
@@ -228,7 +303,7 @@ info "════════════════════════�
 echo ""
 
 set +e
-npx markdownlint infobroker.md >/dev/null 2>&1
+npm run lint:md >/dev/null 2>&1
 SPECLINT_RC=$?
 set -e
 [[ $SPECLINT_RC -ne 0 ]] && warn "infobroker.md lint warnings (non-blocking)"
@@ -259,6 +334,16 @@ info "════════════════════════�
 info "Step 2: Full spec read-through — style conformance"
 info "═══════════════════════════════════════════════"
 echo ""
+
+# run_fast_spec_gates <label> <log> — the subset of `npm run check` that can
+# catch spec/README/source drift after an AI edit, without re-running the full
+# slow suite twice. The full gate still runs at the start and after sync.
+run_fast_spec_gates() {
+  local label="$1" log="$2"
+  run_gate "$label" "$log" bash -c \
+    'npm run typecheck && npm run validate-spec && npm run validate-readme && npm run check-script-discipline' \
+    || return 1
+}
 
 # run_readthrough_pass <prompt-file> — one read-through turn plus its summary
 # gate. Sets RT_CRITICAL/RT_HIGH/RT_INFO on success; dies on a failed turn, a
@@ -303,10 +388,11 @@ else
   # Substitute the summary-json path into the prompt.
   sed "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
 
-  # generate-auth is independent of read-through; run concurrently if --parallel.
-  if $PARALLEL; then
-    npm run generate-auth >/dev/null 2>&1 &
-    GEN_AUTH_PID=$!
+  # generate-auth mutates a tracked file; run it deterministically before the
+  # AI steps instead of racing an AI edit on the same working tree.
+  if ! step_skip auth; then
+    warn "Generating provider-auth.md from config.json (before read-through)..."
+    npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
   fi
 
   warn "Launching read-through session..."
@@ -329,7 +415,7 @@ else
     run_pipeline_step "$PIPELINE_RUN_DIR/fix-high.prompt.md" "$OUT_FIX" --model "$PIPELINE_MODEL" --retry
     FIX_RC=$OPC_RC
     [[ $FIX_RC -ne 0 ]] && die "High-finding repair FAILED. Check $OUT_FIX."
-    run_gate "Post-repair spec checks" "$PIPELINE_RUN_DIR/check-post-fix.txt" npm run check \
+    run_fast_spec_gates "Post-repair spec checks" "$PIPELINE_RUN_DIR/check-post-fix.txt" \
       || die "Spec checks FAILED after high-finding repair."
 
     # Re-review with the repair dispositions in view: the reviewer must
@@ -347,22 +433,14 @@ else
   fi
   echo ""
 
-  if git -C "$PROJECT_DIR" diff --name-only | grep -q 'infobroker.md'; then
-    warn "infobroker.md modified by read-through — re-verifying spec checks..."
-    run_gate "Post-read-through spec checks" "$PIPELINE_RUN_DIR/check-post-readthrough.txt" npm run check \
+  if ! git -C "$PROJECT_DIR" diff --quiet -- infobroker.md src/ config.json package.json scripts/ skills/ 2>/dev/null \
+      || [[ -n "$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard -- src/ scripts/ skills/ 2>/dev/null)" ]]; then
+    warn "Read-through changed gate-relevant files — re-verifying spec checks..."
+    run_fast_spec_gates "Post-read-through spec checks" "$PIPELINE_RUN_DIR/check-post-readthrough.txt" \
       || die "Spec checks FAILED after read-through auto-fix."
     info "Post-read-through spec checks: PASSED"
   fi
   state_mark readthrough
-
-  if [[ -n "${GEN_AUTH_PID:-}" ]]; then
-    if wait "$GEN_AUTH_PID"; then
-      AUTH_PREFETCHED=true
-    else
-      warn "Parallel generate-auth failed — will retry in the auth step."
-    fi
-    unset GEN_AUTH_PID
-  fi
 fi
 echo ""
 
@@ -406,13 +484,9 @@ echo ""
 if $DRY_RUN || step_skip auth; then
   info "Provider auth sync: SKIPPED (dry run / state journal)"
 else
-  if [[ "$AUTH_PREFETCHED" == "true" ]]; then
-    info "generate-auth: already run in parallel with read-through"
-  else
-    warn "Generating provider-auth.md from config.json..."
-    npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
-    info "generate-auth: OK"
-  fi
+  warn "Generating provider-auth.md from config.json..."
+  npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
+  info "generate-auth: OK"
 
   if git -C "$PROJECT_DIR" diff --quiet skills/infobroker/references/provider-auth.md 2>/dev/null; then
     info "Provider-auth.md: no drift from config.json"
@@ -598,6 +672,13 @@ else
     SCAN_GIT_PID=$!
     wait "$SCAN_PID" || die "AI scan FAILED. Check $OUT_SCAN."
     wait "$SCAN_GIT_PID" || die "AI scan-git FAILED. Check $OUT_SCAN_GIT."
+    local sfile
+    for sfile in scan-project.json scan-git.json; do
+      if ! findings_count "$PIPELINE_RUN_DIR/$sfile" >/dev/null \
+          || [[ "$(json_from_file "$PIPELINE_RUN_DIR/$sfile" status)" != "complete" ]]; then
+        die "AI scan summary missing, malformed, or incomplete: $sfile"
+      fi
+    done
     info "AI scan: $(scan_findings) total finding(s)"
   fi
   state_mark scan
@@ -663,25 +744,39 @@ info "Stage changes"
 info "═══════════════════════════════════════════════"
 echo ""
 
-# Pre-commit guard: node_modules must not appear.
-git -C "$PROJECT_DIR" diff --name-only | grep -q '^node_modules/' && die "node_modules in diff — aborting commit."
+# Stage the whole tree (including new files, deletions, and tracked paths the
+# old hardcoded allowlist silently omitted: test-fixtures/, DECISIONS.md,
+# ROADMAP.md, bin/, .githooks/, and others), then prove nothing is left over.
+git -C "$PROJECT_DIR" add -A -- .
 
-# Stage explicit root files (skip missing without error).
-for f in infobroker.md README.md CHANGELOG.md AGENTS.md CONTRIBUTING.md CODE_OF_CONDUCT.md package.json package-lock.json tsconfig.json config.json server.json; do
-  [[ -f "$f" ]] && git -C "$PROJECT_DIR" add "$f"
-done
-# Stage everything under these directories — INCLUDING new untracked files,
-# so a sync that adds a source file actually ships it.
-git -C "$PROJECT_DIR" add instructions/ src/ skills/ scripts/ debate-club/ .opencode/ .github/
+# Deny-list: artifacts that must never be committed even if a bad .gitignore
+# or a force-add tries to include them.
+STAGED_FILES=$(git -C "$PROJECT_DIR" diff --cached --name-only 2>/dev/null || true)
+DENY_RE='^(node_modules/|dist/|knowledge-base/|\.infobroker/|\.env($|\.)|.*\.(sqlite|sqlite-wal|sqlite-shm)$|.*vector-store.*\.json$)'
+if [[ -n "$STAGED_FILES" ]] && grep -qE "$DENY_RE" <<<"$STAGED_FILES"; then
+  error "Denied artifact staged — refusing to commit:"
+  grep -E "$DENY_RE" <<<"$STAGED_FILES" | head -20
+  exit 1
+fi
 
-# Secret scan over staged content.
+# Nothing may remain unstaged/untracked after the add; a leftover means the
+# commit would silently under-ship the run.
+LEFTOVERS=$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null || true)
+if [[ -n "$LEFTOVERS" ]]; then
+  error "Staging incomplete — these paths would not be committed:"
+  printf '%s\n' "$LEFTOVERS"
+  exit 1
+fi
+
+# Secret scan over staged content. Matches are reported as path:line only;
+# the value is never printed or logged.
 SECRETS=$(scan_staged_for_secrets)
 if [[ -n "$SECRETS" ]]; then
   if $ALLOW_SECRETS; then
-    warn "Secret-pattern match found (allowed):"; echo "$SECRETS" | head -20
+    warn "Secret-pattern match found (allowed):"; printf '%s\n' "$SECRETS" | head -20
   else
     error "Secret-pattern match in staged content — refusing to commit (use --allow-secrets to override)."
-    echo "$SECRETS" | head -20
+    printf '%s\n' "$SECRETS" | head -20
     exit 1
   fi
 fi
@@ -745,17 +840,17 @@ if [[ -n "$UPSTREAM" ]]; then
   if [[ "$BEHIND" -gt 0 ]]; then
     if $FORCE_PUSH; then
       warn "Local is behind remote by ${BEHIND} commit(s) — force-pushing with lease."
-      git -C "$PROJECT_DIR" push --force-with-lease origin main
+      git -C "$PROJECT_DIR" push --force-with-lease origin "$BRANCH"
     else
       die "Local is behind remote by ${BEHIND} commit(s). Pull/rebase first, or use --force-push."
     fi
   else
-    warn "Pushing main..."
-    git -C "$PROJECT_DIR" push origin main
+    warn "Pushing ${BRANCH}..."
+    git -C "$PROJECT_DIR" push origin "$BRANCH"
   fi
 else
-  warn "Pushing main..."
-  git -C "$PROJECT_DIR" push origin main
+  warn "Pushing ${BRANCH}..."
+  git -C "$PROJECT_DIR" push origin "$BRANCH"
 fi
 info "Push: DONE"
 
@@ -791,7 +886,7 @@ info "════════════════════════�
 info "Mirror sync (github)"
 info "═══════════════════════════════════════════════"
 if git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
-  git -C "$PROJECT_DIR" push github main || warn "Mirror push (main) FAILED — GitHub mirror is behind origin."
+  git -C "$PROJECT_DIR" push github "$BRANCH" || warn "Mirror push (${BRANCH}) FAILED — GitHub mirror is behind origin."
   if $TAG_MOVED; then
     git -C "$PROJECT_DIR" push github "v${VERSION}" --force || warn "Mirror tag push FAILED."
   else

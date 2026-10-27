@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.10.26 — Push-pipeline hardening
+
+- The release pipeline stages the whole tree with a deny-list and a
+  fail-closed leftover check. Tracked paths the old hardcoded allowlist
+  omitted — `test-fixtures/`, `DECISIONS.md`, `ROADMAP.md`, `bin/`,
+  `.githooks/` — can no longer be silently dropped from a release.
+- `--resume` now continues the newest run recorded for the current repo and
+  branch, accepts the dirty tree an interrupted run left behind, and refuses
+  only when HEAD or the branch has moved. `--run-id` (or `PIPELINE_RUN_DIR`)
+  pins a specific run directory. Old run directories are pruned.
+- Push, tag, mirror, and divergence checks use the current branch instead of a
+  hardcoded `main`.
+- Secret scanning reports `path:line` with a pattern label and never prints or
+  logs the matched value.
+- Bounded `--from`/`--to` runs are testing-only: they force `--no-commit` and
+  `--no-push`, so a partial pipeline cannot commit or publish.
+- Pre-flight requires `git` and `npm`, and only requires `opencode`/`curl`
+  when AI steps can run (not under `--dry-run`).
+- Scan summaries accept an integer `findings` count or an array; a missing,
+  malformed, or incomplete AI summary fails the step instead of degrading to
+  `?`. Read-through re-checks gate-relevant paths, not only `infobroker.md`.
+- `--parallel` is a deprecated no-op: provider auth is generated before the
+  read-through, removing a working-tree race.
+- Unexpected command failures exit 2; gate failures still exit 1.
+
 ## 2026.10.26 — Wave 3: analysis aids, multilingual collection, privacy posture, retrieval benchmark
 
 - The npm package now ships `config.json`, `skills/`, and `instructions/`, and

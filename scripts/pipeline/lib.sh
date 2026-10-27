@@ -62,12 +62,21 @@ summary_counts() {
 }
 
 # ── Secret scan ──────────────────────────────────────────────────────────────
-# scan_staged_for_secrets → lists matched staged lines; returns 0 if any.
+# scan_staged_for_secrets → one `path:line [secret-pattern]` per match in the
+# index. The matched value is NEVER printed: diagnostics and pipeline.log must
+# not become a secondary leak. Searches the index (not the working tree), so
+# partially staged files are judged by what would actually ship.
 # Portable grep -E pattern; no -P dependency.
+SECRET_PATTERN='sk-[A-Za-z0-9]{20,}|api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9]{16,}|password[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']+["'"'"']|INFOBROKER_[A-Z_]+_API_KEY[[:space:]]*=[^[:space:]]+'
 scan_staged_for_secrets() {
-  git -C "$PROJECT_DIR" diff --staged --unified=0 | grep -E \
-    '^\+(.*(sk-[A-Za-z0-9]{20,}|api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9]{16,}|password[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']+["'"'"']|INFOBROKER_[A-Z_]+_API_KEY[[:space:]]*=[^[:space:]]+))' \
-    | grep -v '^+++' || true
+  local hit path rest lineno
+  while IFS= read -r hit; do
+    [[ -z "$hit" ]] && continue
+    path="${hit%%:*}"
+    rest="${hit#*:}"
+    lineno="${rest%%:*}"
+    printf '%s:%s [secret-pattern]\n' "$path" "$lineno"
+  done < <(git -C "$PROJECT_DIR" grep --cached -n -I -E "$SECRET_PATTERN" -- . 2>/dev/null || true)
 }
 
 # ── git identity guard ───────────────────────────────────────────────────────
@@ -76,6 +85,88 @@ require_git_identity() {
   name=$(git -C "$PROJECT_DIR" config user.name 2>/dev/null || true)
   email=$(git -C "$PROJECT_DIR" config user.email 2>/dev/null || true)
   [[ -n "$name" && -n "$email" ]] || die "git user.name/user.email not configured — set them before committing."
+}
+
+# ── Run journal helpers ──────────────────────────────────────────────────────
+# latest_run_dir <log-root> <repo> <branch> → newest run-* directory whose
+# state.json records the same repo and branch. This is what makes --resume
+# work across processes: without it the journal lives in a fresh timestamped
+# directory and is unreachable on the next invocation.
+latest_run_dir() {
+  local root="$1" repo="$2" branch="$3" d
+  [[ -d "$root" ]] || return 1
+  while IFS= read -r d; do
+    [[ -f "$d/state.json" ]] || continue
+    [[ "$(json_from_file "$d/state.json" repo)" == "$repo" ]] || continue
+    [[ "$(json_from_file "$d/state.json" branch)" == "$branch" ]] || continue
+    printf '%s\n' "$d"
+    return 0
+  done < <(find "$root" -maxdepth 1 -type d -name 'run-*' 2>/dev/null | sort -r)
+  return 1
+}
+
+# prune_runs <log-root> <keep> — delete older run-* directories beyond <keep>.
+# Only directories directly under the log root matching run-* are touched.
+prune_runs() {
+  local root="$1" keep="${2:-10}" d i=0
+  [[ -d "$root" ]] || return 0
+  while IFS= read -r d; do
+    i=$((i + 1))
+    (( i <= keep )) && continue
+    [[ -d "$d" && "$d" == "$root"/run-* ]] || continue
+    rm -rf -- "$d"
+  done < <(find "$root" -maxdepth 1 -type d -name 'run-*' 2>/dev/null | sort -r)
+}
+
+# state_init <state-file> <repo> <branch> <head> — initialize the journal.
+state_init() {
+  local path="$1" repo="$2" branch="$3" head="$4"
+  node -e '
+    const fs = require("fs");
+    const [p, repo, branch, head] = process.argv.slice(1);
+    fs.writeFileSync(p, JSON.stringify({ repo, branch, head }, null, 2));
+  ' "$path" "$repo" "$branch" "$head" 2>/dev/null || true
+}
+
+# ── Findings parsing ─────────────────────────────────────────────────────────
+# findings_count <path> → prints the finding count when the summary parses and
+# `findings` is an integer or an array; exits 1 otherwise. A malformed AI
+# summary must fail the step rather than silently degrade to "?".
+findings_count() {
+  node -e '
+    const fs = require("fs");
+    let j;
+    try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); }
+    catch { process.exit(1); }
+    const f = j.findings;
+    if (Number.isInteger(f)) { console.log(f); process.exit(0); }
+    if (Array.isArray(f)) { console.log(f.length); process.exit(0); }
+    process.exit(1);
+  ' "$1" 2>/dev/null
+}
+
+# ── Step-range selection ─────────────────────────────────────────────────────
+# step_should_run <order> <step> <start> <end> → 0 when <step> is inside the
+# requested range, 1 when it should be skipped. Pure: depends only on its
+# arguments, so it is unit-testable without running the pipeline.
+step_should_run() {
+  local order="$1" step="$2" start="$3" end="$4" before upto
+  if [[ -n "$start" ]]; then
+    before="${order%%"$start"*}"
+    if [[ "$before" != "$order" && " $before " == *" $step "* ]]; then
+      return 1
+    fi
+  fi
+  if [[ -n "$end" ]]; then
+    upto="${order%%"$end"*}"
+    if [[ "$upto" != "$order" ]]; then
+      if [[ " $upto " == *" $step "* || "$step" == "$end" ]]; then
+        return 0
+      fi
+      return 1
+    fi
+  fi
+  return 0
 }
 
 # ── opencode session helpers ─────────────────────────────────────────────────
@@ -207,7 +298,7 @@ run_pipeline_step() {
       --model) model="$2"; shift 2 ;;
       --agent) agent="$2"; shift 2 ;;
       --retry) retry=true; shift ;;
-      *) shift ;;
+      *) die "run_pipeline_step: unknown option '$1'" ;;
     esac
   done
 

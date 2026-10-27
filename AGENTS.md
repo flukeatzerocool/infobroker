@@ -66,7 +66,9 @@ npm run typecheck   # tsc --noEmit
 `scripts/push-pipeline.sh` runs its review-only AI steps (read-through,
 changelog, scan, README) under the non-thinking `pipeline-fast` agent
 (`.opencode/agents/pipeline-fast.md`); the server-sync step keeps the full
-`build` agent. Step 6 is deterministic (`scripts/scan-refs.ts`,
+`build` agent. Provider auth is generated deterministically before the
+read-through (the old `--parallel` auth race is a deprecated no-op). Step 6 is
+deterministic (`scripts/scan-refs.ts`,
 `scripts/scan-git-refs.ts`); pass `--scan-ai` for the deep AI scan, which runs
 its two prompts concurrently in isolated sessions. A read-through that reports
 high-severity findings triggers one bounded repair pass under the full model
@@ -76,10 +78,19 @@ recorded under the run directory (`timings/`, one file per step, so concurrent
 scans cannot clobber each other) and printed at the end; the fixture-refresh
 cadence report is surfaced in the final summary. `--from=<step>` /
 `--to=<step>` run a bounded range for testing and are validated against the
-step list (an unknown step is rejected before any work runs). `--dry-run` is
+step list (an unknown step is rejected before any work runs); a bounded range
+never commits or pushes. `--resume` continues the newest run recorded for the
+current repo and branch and accepts the dirty tree an interrupted run left
+behind, refusing only if HEAD or the branch moved. `--run-id=<id>` (or a
+`PIPELINE_RUN_DIR` override) pins a specific run directory. `--dry-run` is
 non-mutating (spec audit + deterministic scans only, working tree left clean);
 `--no-commit` runs all steps including AI edits but stops before staging,
-leaving the tree dirty for inspection.
+leaving the tree dirty for inspection. Staging is whole-tree with a deny-list
+and a fail-closed leftover check, so tracked paths the old allowlist omitted
+(e.g. `test-fixtures/`, `DECISIONS.md`, `bin/`) can no longer be silently
+dropped. Secret scanning reports `path:line` only and never logs the matched
+value. Push, tag, and mirror operations target the current branch rather than
+a hardcoded `main`. An unexpected command failure exits 2; gate failures exit 1.
 
 ## Script Discipline
 

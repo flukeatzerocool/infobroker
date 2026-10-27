@@ -36,6 +36,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
+    "lint:md": "markdownlint infobroker.md",
     "test": "vitest run",
     "test-skills": "bash scripts/test-skills.sh",
     "test-research": "bash scripts/test-research.sh",
