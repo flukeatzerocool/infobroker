@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.26 — Repository hygiene
+
+- Ignore rules now cover build artifacts (`*.tsbuildinfo`, `coverage/`,
+  `*.tgz`), editor/OS noise, environment files, and SQLite sidecars, so local
+  runs no longer surface as untracked files.
+- The opencode plugin dependency is pinned with a committed
+  `.opencode/package.json` and lockfile, making contributor tooling
+  reproducible.
+
 ## 2026.10.26 — Push pipeline: fix, report, then ask before publishing
 
 - The default pipeline now finishes the work, repairs bounded gate failures,
