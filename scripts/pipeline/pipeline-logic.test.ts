@@ -182,3 +182,55 @@ describe("CLI surface", () => {
     expect(res.stderr).toContain("--run-id=<id>");
   });
 });
+
+describe("push_action", () => {
+  it("skips when --no-push is set", () => {
+    expect(runLib('push_action true false false true').trim()).toBe("skip");
+  });
+
+  it("reports nothing to ship when there is no commit, no ahead, and a tag exists", () => {
+    expect(runLib('push_action false false false false').trim()).toBe("nothing");
+  });
+
+  it("auto-approves with --yes on a shippable run", () => {
+    expect(runLib('push_action false true false true').trim()).toBe("auto");
+  });
+
+  it("prompts on an interactive shippable run", () => {
+    expect(runLib('push_action false false true true').trim()).toBe("prompt");
+  });
+
+  it("fails closed on a non-interactive run without --yes", () => {
+    const res = runLibStatus('push_action false false false true');
+    expect(res.status).toBe(1);
+    expect(res.stdout.trim()).toBe("require-tty");
+  });
+});
+
+describe("ERR-trap tolerance", () => {
+  it("run_gate captures a failure without tripping the caller's ERR trap", () => {
+    const log = join(tempDir("pipe-gate-"), "gate.log");
+    const out = runLib(
+      `set -Ee; trap 'exit 99' ERR; rc=0; run_gate probe "$1" false || rc=$?; echo "rc=$rc"`,
+      [log],
+    );
+    expect(out).toContain("rc=1");
+  });
+});
+
+describe("scan_staged_for_secrets scope", () => {
+  it("does not flag secrets that were already committed", () => {
+    const dir = tempDir("pipe-secret-committed-");
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "test"], { cwd: dir });
+    writeFileSync(join(dir, "leak.txt"), `token = sk-${"B".repeat(24)}\n`);
+    execFileSync("git", ["add", "leak.txt"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "seed"], { cwd: dir });
+    writeFileSync(join(dir, "clean.txt"), "nothing sensitive here\n");
+    execFileSync("git", ["add", "clean.txt"], { cwd: dir });
+
+    const out = runLib("scan_staged_for_secrets", [], { PROJECT_DIR: dir });
+    expect(out.trim()).toBe("");
+  });
+});

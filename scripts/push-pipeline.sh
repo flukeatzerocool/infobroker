@@ -195,12 +195,22 @@ PIPELINE_LIGHT_MODEL="${PIPELINE_LIGHT_MODEL:-${PIPELINE_MODEL:-}}"
 PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
+VERSION=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || echo "unknown")
+# Bounded auto-repair budget per failure class. Exhaustion is a human call.
+PIPELINE_FIX_ATTEMPTS="${PIPELINE_FIX_ATTEMPTS:-2}"
+declare -A STEP_STATUS=()
+declare -A REPAIR_ATTEMPTS=()
+status_set() { STEP_STATUS["$1"]="$2"; }
 
 if ! $RESUMED; then
   : > "$PIPELINE_LOG_FILE"
 fi
 log_line "===== Infobroker push pipeline — $(date +%Y-%m-%dT%H:%M:%S%z) ====="
-log_line "run dir: $PIPELINE_RUN_DIR${RESUMED:+ (resumed)}"
+if $RESUMED; then
+  log_line "run dir: $PIPELINE_RUN_DIR (resumed)"
+else
+  log_line "run dir: $PIPELINE_RUN_DIR"
+fi
 log_line "args: ${*:-<none>}"
 log_line "branch: $BRANCH  head: $(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
 mkdir -p "$PIPELINE_RUN_DIR/timings"
@@ -253,6 +263,36 @@ scan_findings() {
   if $found; then echo "$total"; else echo "?"; fi
 }
 
+# print_readiness_report — the pre-push proof: what ran, what was repaired,
+# what changed, and what is still advisory. Every claim comes from recorded
+# state, never from an assumption that a step ran.
+print_readiness_report() {
+  local step sha stat
+  sha=$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo "none")
+  stat=$(git -C "$PROJECT_DIR" diff --shortstat HEAD~1..HEAD 2>/dev/null || true)
+  [[ -z "$stat" ]] && stat="no file changes in HEAD"
+  info "═══════════════════════════════════════════════"
+  info "Readiness report"
+  info "═══════════════════════════════════════════════"
+  printf '  Branch:        %s\n' "$BRANCH"
+  printf '  Version:       %s\n' "${VERSION:-unknown}"
+  printf '  HEAD:          %s (%s)\n' "$sha" "$stat"
+  for step in $STEP_ORDER; do
+    printf '  %-13s %s\n' "$step:" "${STEP_STATUS[$step]:-not run}"
+  done
+  if ((${#REPAIR_ATTEMPTS[@]} > 0)); then
+    local label
+    for label in "${!REPAIR_ATTEMPTS[@]}"; do
+      (( ${REPAIR_ATTEMPTS[$label]:-0} > 0 )) || continue
+      printf '  repaired:      %s (%s attempt(s))\n' "$label" "${REPAIR_ATTEMPTS[$label]}"
+    done
+  fi
+  printf '  Scan findings: %s\n' "${SCAN_FINDINGS:-?}"
+  printf '  Fixtures:      %s stale\n' "${FIXTURE_STALE:-?}"
+  printf '  Run dir:       %s\n' "$PIPELINE_RUN_DIR"
+  echo ""
+}
+
 # ── pre-flight checks ────────────────────────────────────────────────────────
 FAILED_PRECHECKS=""
 required_tools=(node npm git npx)
@@ -302,16 +342,27 @@ info "Step 1: Spec audit"
 info "═══════════════════════════════════════════════"
 echo ""
 
+SAVED_ERR_TRAP=$(trap -p ERR 2>/dev/null || true)
+trap - ERR
 set +e
 npm run lint:md >/dev/null 2>&1
 SPECLINT_RC=$?
 set -e
+[[ -n "$SAVED_ERR_TRAP" ]] && eval "$SAVED_ERR_TRAP"
 [[ $SPECLINT_RC -ne 0 ]] && warn "infobroker.md lint warnings (non-blocking)"
 echo ""
 
 warn "Running spec checks (typecheck + validate-spec + validate-readme + test)..."
-run_gate "Spec audit" "$PIPELINE_RUN_DIR/check.txt" npm run check \
-  || die "Spec audit FAILED (full output: $PIPELINE_RUN_DIR/check.txt)."
+if ! run_gate "Spec audit" "$PIPELINE_RUN_DIR/check.txt" npm run check; then
+  if grep -qiE 'ENOTFOUND|ECONNREFUSED|EAI_AGAIN|network|registry|npm (ERR!)' "$PIPELINE_RUN_DIR/check.txt" 2>/dev/null; then
+    die "Spec audit FAILED for an environmental reason (network/registry) — not auto-repairing. See $PIPELINE_RUN_DIR/check.txt."
+  fi
+  warn "Spec audit failed — attempting bounded repair..."
+  repair_loop "Spec audit" "npm run check" "$PROMPT_DIR/fix-gate.md" \
+    "$PIPELINE_FIX_ATTEMPTS" "$PIPELINE_RUN_DIR/check.txt" "$PIPELINE_RUN_DIR/check-fix.txt" \
+    || die "Spec audit FAILED after ${PIPELINE_FIX_ATTEMPTS} repair attempt(s)."
+fi
+status_set audit "passed"
 echo ""
 info "Spec audit: PASSED"
 echo ""
@@ -384,6 +435,7 @@ run_readthrough_pass() {
 
 if $DRY_RUN || step_skip readthrough; then
   info "Read-through: SKIPPED (dry run / state journal)"
+  status_set readthrough "skipped"
 else
   # Substitute the summary-json path into the prompt.
   sed "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
@@ -401,21 +453,27 @@ else
   info "Read-through: DONE — ${RT_CRITICAL}c / ${RT_HIGH}h / ${RT_INFO}i"
 
   # High findings are divergences the deterministic gates cannot see. Give
-  # them one bounded repair pass under the full model, then a fresh
-  # read-through; if high findings survive, refuse to push rather than warn
-  # and continue.
-  if (( RT_HIGH > 0 )); then
-    warn "Read-through: ${RT_HIGH} high-severity finding(s) — running one repair pass."
-    cp "$OUT_READTHROUGH" "$PIPELINE_RUN_DIR/readthrough.first.txt"
-    cp "$PIPELINE_RUN_DIR/readthrough.json" "$PIPELINE_RUN_DIR/readthrough.first.json"
-    sed -e "s|<READTHROUGH_TXT>|$PIPELINE_RUN_DIR/readthrough.first.txt|g" \
-        -e "s|<READTHROUGH_JSON>|$PIPELINE_RUN_DIR/readthrough.first.json|g" \
+  # them a bounded repair loop under the full model, re-reviewing after each
+  # attempt; if high findings survive the budget, stop for human attention.
+  RT_ATTEMPT=0
+  while (( RT_HIGH > 0 )); do
+    if (( RT_ATTEMPT >= PIPELINE_FIX_ATTEMPTS )); then
+      die "Read-through still reports ${RT_HIGH} high-severity finding(s) after ${RT_ATTEMPT} repair attempt(s) — refusing to push. See $OUT_READTHROUGH and $OUT_FIX."
+    fi
+    RT_ATTEMPT=$((RT_ATTEMPT + 1))
+    warn "Read-through: ${RT_HIGH} high-severity finding(s) — repair attempt ${RT_ATTEMPT}/${PIPELINE_FIX_ATTEMPTS}."
+    rt_first="$PIPELINE_RUN_DIR/readthrough.attempt-${RT_ATTEMPT}.txt"
+    rt_json="$PIPELINE_RUN_DIR/readthrough.attempt-${RT_ATTEMPT}.json"
+    cp "$OUT_READTHROUGH" "$rt_first"
+    cp "$PIPELINE_RUN_DIR/readthrough.json" "$rt_json"
+    sed -e "s|<READTHROUGH_TXT>|$rt_first|g" \
+        -e "s|<READTHROUGH_JSON>|$rt_json|g" \
         -e "s|<FIX_TXT>|$OUT_FIX|g" \
         "$PROMPT_DIR/fix-high.md" > "$PIPELINE_RUN_DIR/fix-high.prompt.md"
     run_pipeline_step "$PIPELINE_RUN_DIR/fix-high.prompt.md" "$OUT_FIX" --model "$PIPELINE_MODEL" --retry
     FIX_RC=$OPC_RC
     [[ $FIX_RC -ne 0 ]] && die "High-finding repair FAILED. Check $OUT_FIX."
-    run_fast_spec_gates "Post-repair spec checks" "$PIPELINE_RUN_DIR/check-post-fix.txt" \
+    run_fast_spec_gates "Post-repair spec checks" "$PIPELINE_RUN_DIR/check-post-fix-${RT_ATTEMPT}.txt" \
       || die "Spec checks FAILED after high-finding repair."
 
     # Re-review with the repair dispositions in view: the reviewer must
@@ -426,9 +484,9 @@ else
     } > "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
     warn "Re-reviewing after repair..."
     run_readthrough_pass "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
-    if (( RT_HIGH > 0 )); then
-      die "Read-through still reports ${RT_HIGH} high-severity finding(s) after one repair pass — refusing to push. See $OUT_READTHROUGH and $OUT_FIX."
-    fi
+  done
+  if (( RT_ATTEMPT > 0 )); then
+    REPAIR_ATTEMPTS["Read-through"]="$RT_ATTEMPT"
     info "Read-through: repair cleared the high findings."
   fi
   echo ""
@@ -441,6 +499,7 @@ else
     info "Post-read-through spec checks: PASSED"
   fi
   state_mark readthrough
+  status_set readthrough "passed"
 fi
 echo ""
 
@@ -452,6 +511,7 @@ echo ""
 
 if $DRY_RUN || step_skip sync; then
   info "Server sync: SKIPPED (dry run / state journal)"
+  status_set sync "skipped"
 else
   warn "Launching server sync session..."
   sed "s|<READTHROUGH_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/sync.md" > "$PIPELINE_RUN_DIR/sync.prompt.md"
@@ -459,19 +519,20 @@ else
   SYNC_RC=$OPC_RC
   [[ $SYNC_RC -ne 0 ]] && die "Server sync FAILED. Check $OUT_SYNC."
 
-  # Post-sync gates: tests + version consistency + typecheck, on what we're about to ship.
+  # Post-sync gates: tests + version consistency + typecheck, on what we're
+  # about to ship. A failure gets the bounded repair loop, then human attention.
   warn "Post-sync gates (test + version-sync + typecheck)..."
-  run_gate "Post-sync tests" "$PIPELINE_RUN_DIR/post-sync-test.txt" npm test \
-    || die "Post-sync tests FAILED (see $PIPELINE_RUN_DIR/post-sync-test.txt)."
-  run_gate "Version sync" "$PIPELINE_RUN_DIR/post-sync-version.txt" npm run version-sync \
-    || die "Version sync FAILED after version-bump."
-  run_gate "Typecheck" "$PIPELINE_RUN_DIR/post-sync-typecheck.txt" npm run typecheck \
-    || die "Typecheck FAILED after sync."
+  repair_loop "Post-sync gates" \
+    "npm test && npm run version-sync && npm run typecheck" \
+    "$PROMPT_DIR/fix-gate.md" "$PIPELINE_FIX_ATTEMPTS" \
+    "$PIPELINE_RUN_DIR/post-sync-gate.txt" "$PIPELINE_RUN_DIR/post-sync-fix.txt" \
+    || die "Post-sync gates FAILED after ${PIPELINE_FIX_ATTEMPTS} repair attempt(s) (see $PIPELINE_RUN_DIR/post-sync-gate.txt)."
   info "Post-sync gates: PASSED"
 
   echo ""
   info "Server sync: DONE"
   state_mark sync
+  status_set sync "passed"
 fi
 echo ""
 
@@ -483,6 +544,7 @@ echo ""
 
 if $DRY_RUN || step_skip auth; then
   info "Provider auth sync: SKIPPED (dry run / state journal)"
+  status_set auth "skipped"
 else
   warn "Generating provider-auth.md from config.json..."
   npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
@@ -494,6 +556,7 @@ else
     warn "Provider-auth.md regenerated — will be included in commit."
   fi
   state_mark auth
+  status_set auth "passed"
 fi
 echo ""
 
@@ -602,21 +665,38 @@ fi
 
 if $DRY_RUN || step_skip changelog; then
   info "Changelog update: SKIPPED (dry run / state journal)"
+  status_set changelog "skipped"
 else
   warn "Launching changelog update session..."
   run_pipeline_step "$PROMPT_DIR/changelog.md" "$OUT_CHANGELOG" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
   CHANGELOG_RC=$OPC_RC
   [[ $CHANGELOG_RC -ne 0 ]] && die "Changelog update FAILED. Check $OUT_CHANGELOG."
 
+  CH_ATTEMPT=0
+  while ! grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null; do
+    if [[ -z "$CHANGELOG_DIRTY" ]]; then
+      info "Changelog update: NO CHANGE (nothing semantic)"
+      break
+    fi
+    if (( CH_ATTEMPT >= PIPELINE_FIX_ATTEMPTS )); then
+      die "Spec or server changed but the changelog reported no update after ${CH_ATTEMPT} repair attempt(s) (spec provenance requires a CHANGELOG entry)."
+    fi
+    CH_ATTEMPT=$((CH_ATTEMPT + 1))
+    warn "Changelog: semantic change detected but no entry — repair attempt ${CH_ATTEMPT}/${PIPELINE_FIX_ATTEMPTS}."
+    {
+      cat "$PROMPT_DIR/changelog.md"
+      printf '\n\nThe pipeline detected a semantic change this run (REQ or src behavior). Add the entry now; do not report CHANGELOG NO CHANGE.\n'
+    } > "$PIPELINE_RUN_DIR/changelog.retry.prompt.md"
+    run_pipeline_step "$PIPELINE_RUN_DIR/changelog.retry.prompt.md" "$OUT_CHANGELOG" \
+      --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
+    [[ $OPC_RC -ne 0 ]] && die "Changelog repair attempt FAILED. Check $OUT_CHANGELOG."
+  done
   if grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null; then
     info "Changelog update: ADDED"
-  else
-    info "Changelog update: NO CHANGE"
-    if [[ -n "$CHANGELOG_DIRTY" ]]; then
-      die "Spec or server changed but changelog reported no update (spec provenance requires a CHANGELOG entry — REQ changes)."
-    fi
+    (( CH_ATTEMPT > 0 )) && REPAIR_ATTEMPTS["Changelog"]="$CH_ATTEMPT"
   fi
   state_mark changelog
+  status_set changelog "passed"
 fi
 echo ""
 
@@ -651,6 +731,7 @@ info "════════════════════════�
 echo ""
 if step_skip scan; then
   info "Scan: SKIPPED (state journal / --from / --to)"
+  status_set scan "skipped"
 else
   warn "Running deterministic scan (scan-refs + scan-git-refs)..."
   run_scan_deterministic
@@ -682,6 +763,7 @@ else
     info "AI scan: $(scan_findings) total finding(s)"
   fi
   state_mark scan
+  status_set scan "passed"
 fi
 echo ""
 
@@ -692,12 +774,14 @@ info "════════════════════════�
 echo ""
 if $DRY_RUN || step_skip readme; then
   info "README update: SKIPPED (dry run / state journal / --from / --to)"
+  status_set readme "skipped"
 else
   warn "Launching README update session..."
   run_pipeline_step "$PROMPT_DIR/readme.md" "$OUT_README" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
   README_RC=$OPC_RC
   [[ $README_RC -ne 0 ]] && die "README update FAILED. Check $OUT_README."
   state_mark readme
+  status_set readme "passed"
 fi
 
 SCAN_FINDINGS=$(scan_findings)
@@ -715,8 +799,9 @@ fi
 
 # validate-readme as a post-session shell gate
 warn "Validating README..."
-run_gate "README validation" "$PIPELINE_RUN_DIR/validate-readme.txt" npm run validate-readme \
-  || die "README validation FAILED (see $PIPELINE_RUN_DIR/validate-readme.txt)."
+repair_loop "README validation" "npm run validate-readme" "$PROMPT_DIR/fix-gate.md" \
+  "$PIPELINE_FIX_ATTEMPTS" "$PIPELINE_RUN_DIR/validate-readme.txt" "$PIPELINE_RUN_DIR/readme-fix.txt" \
+  || die "README validation FAILED after ${PIPELINE_FIX_ATTEMPTS} repair attempt(s) (see $PIPELINE_RUN_DIR/validate-readme.txt)."
 info "README validation: PASSED"
 echo ""
 
@@ -725,12 +810,12 @@ echo ""
 
 # ── Dry-run / no-commit exits ────────────────────────────────────────────────
 if $DRY_RUN; then
-  echo ""
+  print_readiness_report
   warn "[DRY RUN] Non-mutating checks passed. Working tree left clean."
   exit 0
 fi
 if $NO_COMMIT; then
-  echo ""
+  print_readiness_report
   warn "[NO COMMIT] All steps passed. Working tree left dirty for inspection:"
   git -C "$PROJECT_DIR" status --short || true
   echo ""
@@ -790,7 +875,6 @@ info "════════════════════════�
 echo ""
 
 require_git_identity
-VERSION=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || echo "unknown")
 COMMIT_DATE=$(date +%Y-%m-%d)
 
 COMMIT_SUMMARY=""
@@ -799,6 +883,7 @@ grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && COMMIT_SUMMARY="${C
 [[ -n "$SCAN_FINDINGS" && "$SCAN_FINDINGS" != "?" ]] && COMMIT_SUMMARY="${COMMIT_SUMMARY}Dead-code scan: ${SCAN_FINDINGS} findings. "
 COMMIT_SUMMARY="${COMMIT_SUMMARY}Spec audited, README and references refreshed."
 
+COMMITTED=false
 if git -C "$PROJECT_DIR" diff --staged --quiet 2>/dev/null; then
   warn "No changes to commit."
 else
@@ -806,26 +891,57 @@ else
   warn "Changes about to be committed:"
   git -C "$PROJECT_DIR" diff --staged --stat
   echo ""
-
-  if ! $FORCE; then
-    [[ -t 0 ]] || die "Non-interactive terminal — use --yes to skip the confirmation prompt."
-    read -r -p "Commit, push, and tag? (y/N) " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
-  fi
-  echo ""
-
   warn "Committing changes..."
   git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}
 
 ${COMMIT_SUMMARY}"
+  COMMITTED=true
   info "Commit: DONE"
 fi
 echo ""
 
+# ── readiness report + push approval ────────────────────────────────────────
+# The commit is local and reversible. Publication happens only after the
+# report below and an explicit approval (or --yes).
+print_readiness_report
+
+git -C "$PROJECT_DIR" fetch origin >/dev/null 2>&1 || true
+AHEAD=$(git -C "$PROJECT_DIR" rev-list --count @{u}..HEAD 2>/dev/null || echo 1)
+SHIPPABLE=false
+if $COMMITTED; then SHIPPABLE=true; fi
+[[ "${AHEAD:-0}" -gt 0 ]] && SHIPPABLE=true
+# A moved local tag also needs publishing.
+if ! git -C "$PROJECT_DIR" tag -l "v${VERSION}" | grep -q "v${VERSION}"; then SHIPPABLE=true; fi
+
+INTERACTIVE=false
+[[ -t 0 ]] && INTERACTIVE=true
+
+if ! ACTION=$(push_action "$NO_PUSH" "$FORCE" "$INTERACTIVE" "$SHIPPABLE"); then
+  die "Push approval required: re-run with --yes (or --no-push to stop after the local commit)."
+fi
+case "$ACTION" in
+  skip)
+    warn "No-push mode: push, tag, and mirror sync skipped (commit is local only)."
+    exit 0
+    ;;
+  nothing)
+    info "Nothing to ship — no new commit, nothing ahead of upstream, tag present."
+    exit 0
+    ;;
+  prompt)
+    read -r -p "Push ${BRANCH}, tag v${VERSION}, and sync the mirror? (y/N) " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      warn "Push declined — the local commit is kept. Re-run with --yes to publish."
+      exit 0
+    fi
+    ;;
+  auto)
+    warn "Push pre-approved (--yes)."
+    ;;
+esac
+echo ""
+
 # ── push ────────────────────────────────────────────────────────────────────
-if $NO_PUSH; then
-  warn "No-push mode: skipping push, tag, mirror sync, and remote check (commit is local only)."
-else
 info "═══════════════════════════════════════════════"
 info "Push to origin"
 info "═══════════════════════════════════════════════"
@@ -908,7 +1024,6 @@ info "npm + MCP Registry publish: handled by the GitHub mirror CI (OIDC)."
 git -C "$PROJECT_DIR" ls-remote origin HEAD >/dev/null 2>&1
 info "Remote check: OK"
 echo ""
-fi
 
 # ── post-run cleanliness report ─────────────────────────────────────────────
 LEFTOVERS=$(git -C "$PROJECT_DIR" status --short || true)
@@ -924,23 +1039,17 @@ info "════════════════════════�
 info "Infobroker push pipeline — COMPLETE"
 info "═══════════════════════════════════════════════"
 echo ""
-echo "  Spec audited and read-through complete."
-grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && echo "  Server synced to spec."
-echo "  Provider auth docs regenerated."
-grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && echo "  Changelog updated."
-echo "  Dead-code scan: ${SCAN_FINDINGS} finding(s)."
-echo "  Fixture freshness: ${FIXTURE_STALE} stale."
+for step in $STEP_ORDER; do
+  printf '  %-13s %s\n' "$step:" "${STEP_STATUS[$step]:-not run}"
+done
+printf '  %-13s %s\n' "scan:" "${SCAN_FINDINGS} finding(s)"
+printf '  %-13s %s stale\n' "fixtures:" "$FIXTURE_STALE"
 [[ "$FIXTURE_STALE" != "0" && "$FIXTURE_STALE" != "?" ]] && warn "  ${FIXTURE_STALE} fixture(s) past the refresh cadence (see $PIPELINE_RUN_DIR/fixture-freshness.txt)."
-echo "  README and skill references refreshed."
-if $NO_PUSH; then
-  echo "  Committed locally — push skipped (--no-push)."
-else
-  echo "  Pushed to origin — v${VERSION}"
-fi
 if [[ -d "$PIPELINE_RUN_DIR/timings" ]]; then
   echo "  Step timings (seconds):"
   print_timings "$PIPELINE_RUN_DIR/timings"
 fi
+echo "  Pushed to origin/${BRANCH} — v${VERSION}"
 echo "  Logs: $PIPELINE_RUN_DIR"
 echo ""
 info "Done."

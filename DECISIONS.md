@@ -2,6 +2,25 @@
 
 ## Active Decisions
 
+### D-070: Push Requires Post-Commit Human Approval (2026.10.26)
+
+The pipeline used to ask "Commit, push, and tag?" *before* any of those
+happened, which conflated finishing the work with publishing it. The default
+now runs every step, repairs bounded gate failures, commits locally, prints a
+readiness report, and only then asks whether to publish. Declining keeps the
+commit local and exits 0; `--yes` pre-approves for unattended runs; a
+non-interactive run without `--yes` exits 1 rather than publishing or silently
+skipping the push. Auto-repair is bounded (`PIPELINE_FIX_ATTEMPTS`, default 2)
+because unbounded fixing can thrash the tree and would violate the review-loop
+termination rule. The loop never resolves secrets, destructive git operations,
+divergence forcing, or non-ancestor tags; those remain human decisions.
+Bounded `--from`/`--to` runs force both `--no-commit` and `--no-push` so a
+partial pipeline cannot publish. Alternatives rejected: keeping the
+pre-commit confirmation (too early to review the result), auto-pushing after
+a green run (no human gate on publication), and unbounded repair (no
+termination guarantee). Verification: `scripts/pipeline/pipeline-logic.test.ts`,
+`bash -n`, and the pipeline rehearsal in a scratch clone.
+
 ### D-068: Encrypted-Compatible Knowledge Base Prefilter (REQ-108, REQ-060a; 2026.10.27)
 
 The roadmap deferred a prefilter until SQLite search latency on the production

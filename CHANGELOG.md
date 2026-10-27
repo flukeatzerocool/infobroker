@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.10.26 — Push pipeline: fix, report, then ask before publishing
+
+- The default pipeline now finishes the work, repairs bounded gate failures,
+  commits locally, prints a readiness report, and only then asks whether to
+  push. `--yes` pre-approves for unattended runs; declining leaves the commit
+  local and exits 0.
+- A non-interactive run without `--yes` stops with exit 1 instead of
+  publishing or silently skipping the push.
+- Every failing gate goes through the same bounded repair loop
+  (`PIPELINE_FIX_ATTEMPTS`, default 2) with `fix-gate.md`; read-through high
+  findings use `fix-high.md` plus a re-review. Exhausted budgets stop for human
+  attention, and destructive git fixes, secret matches, divergence, and
+  non-ancestor tags are never auto-resolved.
+- The readiness report lists per-step status, repair attempts, scan findings,
+  fixture staleness, commit SHA, diff size, and the run directory.
+- The completion banner is generated from recorded step status instead of
+  unconditional claims.
+
 ## 2026.10.26 — Push-pipeline hardening
 
 - The release pipeline stages the whole tree with a deny-list and a

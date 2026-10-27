@@ -63,20 +63,29 @@ summary_counts() {
 
 # ── Secret scan ──────────────────────────────────────────────────────────────
 # scan_staged_for_secrets → one `path:line [secret-pattern]` per match in the
-# index. The matched value is NEVER printed: diagnostics and pipeline.log must
-# not become a secondary leak. Searches the index (not the working tree), so
-# partially staged files are judged by what would actually ship.
+# staged additions. The matched value is NEVER printed: diagnostics and
+# pipeline.log must not become a secondary leak. Only added lines are scanned,
+# so pre-existing example keys in the tree do not block every run.
 # Portable grep -E pattern; no -P dependency.
 SECRET_PATTERN='sk-[A-Za-z0-9]{20,}|api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9]{16,}|password[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']+["'"'"']|INFOBROKER_[A-Z_]+_API_KEY[[:space:]]*=[^[:space:]]+'
 scan_staged_for_secrets() {
-  local hit path rest lineno
-  while IFS= read -r hit; do
-    [[ -z "$hit" ]] && continue
-    path="${hit%%:*}"
-    rest="${hit#*:}"
-    lineno="${rest%%:*}"
-    printf '%s:%s [secret-pattern]\n' "$path" "$lineno"
-  done < <(git -C "$PROJECT_DIR" grep --cached -n -I -E "$SECRET_PATTERN" -- . 2>/dev/null || true)
+  git -C "$PROJECT_DIR" diff --cached --unified=0 --no-color --diff-filter=ACMR 2>/dev/null \
+    | awk '
+        /^\+\+\+ b\// { file = substr($0, 7); next }
+        /^@@ / {
+          if (match($0, /\+[0-9]+/)) { ln = substr($0, RSTART + 1, RLENGTH - 1) + 0 }
+          next
+        }
+        /^\+/ && !/^\+\+\+/ {
+          printf "%s\t%d\t%s\n", file, ln, substr($0, 2)
+          ln++
+          next
+        }
+      ' \
+    | grep -E "$SECRET_PATTERN" \
+    | cut -f1,2 \
+    | sed -e 's/\t/:/' -e 's/$/ [secret-pattern]/' \
+    || true
 }
 
 # ── git identity guard ───────────────────────────────────────────────────────
@@ -259,12 +268,15 @@ print_timings() {
 # exit code unchanged (so callers keep `set -e` semantics).
 time_it() {
   local label="$1"; shift
-  local start end rc
+  local start end rc saved
   start=$(date +%s)
+  saved=$(trap -p ERR 2>/dev/null || true)
+  trap - ERR
   set +e
   "$@"
   rc=$?
   set -e
+  [[ -n "$saved" ]] && eval "$saved"
   end=$(date +%s)
   record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings" "$label" "$((end - start))"
   return $rc
@@ -274,11 +286,14 @@ time_it() {
 # print a short tail on failure, and return the command's exit code unchanged.
 run_gate() {
   local label="$1" log="$2"; shift 2
-  local rc
+  local rc saved
+  saved=$(trap -p ERR 2>/dev/null || true)
+  trap - ERR
   set +e
   "$@" > "$log" 2>&1
   rc=$?
   set -e
+  [[ -n "$saved" ]] && eval "$saved"
   if [[ $rc -ne 0 ]]; then
     warn "${label} FAILED (exit ${rc}) — last lines of ${log}:"
     tail -30 "$log" 2>/dev/null || true
@@ -316,21 +331,28 @@ run_pipeline_step() {
 
   local start end
   start=$(date +%s)
+  local saved
+  saved=$(trap -p ERR 2>/dev/null || true)
+  trap - ERR
   set +e
   "${timeout_cmd[@]}" "${args[@]}" "$prompt" > "$out_file" 2>> "$PIPELINE_LOG_FILE"
   OPC_RC=$?
   set -e
+  [[ -n "$saved" ]] && eval "$saved"
 
   if [[ $OPC_RC -ne 0 ]] && $retry; then
     warn "Session step '${prompt_file}' failed (exit ${OPC_RC}) — retrying once in a forked session..."
     # Fork: use a fresh continuation to avoid a poisoned conversation state.
     local retry_args=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --fork --agent "$agent" --auto)
     [[ -n "$model" ]] && retry_args+=(--model "$model")
+    saved=$(trap -p ERR 2>/dev/null || true)
+    trap - ERR
     set +e
     "${timeout_cmd[@]}" "${retry_args[@]}" "$prompt" > "${out_file}.retry" 2>> "$PIPELINE_LOG_FILE"
     OPC_RC=$?
     if [[ $OPC_RC -eq 0 ]]; then mv "${out_file}.retry" "$out_file"; fi
     set -e
+    [[ -n "$saved" ]] && eval "$saved"
   fi
 
   end=$(date +%s)
@@ -344,4 +366,62 @@ stop_server() {
     kill "$OPC_SERVE_PID" 2>/dev/null || true
     unset OPC_SERVE_PID
   fi
+}
+
+# ── Bounded auto-repair ──────────────────────────────────────────────────────
+# repair_loop <label> <gate-cmd> <prompt-template> <max> <log> <out>
+# Runs a gate; on failure renders the fix-gate prompt with the failure log and
+# runs one repair turn under the full model, then re-runs the gate. Returns the
+# gate's exit code. Callers must treat a non-zero return as "human attention
+# required" and stop. The loop is bounded so a repair can never spiral.
+repair_loop() {
+  local label="$1" gate_cmd="$2" prompt_template="$3" max="$4" log="$5" out="$6"
+  local attempt=0 rc prompt_file=""
+  while :; do
+    local saved
+    saved=$(trap -p ERR 2>/dev/null || true)
+    trap - ERR
+    set +e
+    ( cd "$PROJECT_DIR" && bash -c "$gate_cmd" ) > "$log" 2>&1
+    rc=$?
+    set -e
+    [[ -n "$saved" ]] && eval "$saved"
+    if [[ $rc -eq 0 ]]; then
+      [[ $attempt -gt 0 ]] && info "$label: PASSED after ${attempt} repair attempt(s)."
+      REPAIR_ATTEMPTS["$label"]="$attempt"
+      return 0
+    fi
+    if (( attempt >= max )); then
+      REPAIR_ATTEMPTS["$label"]="$attempt"
+      error "$label: FAILED after ${attempt} repair attempt(s) — human attention required."
+      tail -20 "$log" 2>/dev/null || true
+      return "$rc"
+    fi
+    attempt=$((attempt + 1))
+    warn "$label: FAILED (exit ${rc}) — repair attempt ${attempt}/${max}..."
+    prompt_file="$PIPELINE_RUN_DIR/repair-$(printf '%s' "$label" | tr ' /' '--')-${attempt}.prompt.md"
+    sed -e "s|<LABEL>|$label|g" \
+        -e "s|<GATE_CMD>|$gate_cmd|g" \
+        -e "s|<FAILURE_LOG>|$log|g" \
+        -e "s|<FIX_TXT>|$out|g" \
+        -e "s|<ATTEMPT>|$attempt|g" \
+        -e "s|<MAX_ATTEMPTS>|$max|g" \
+        "$prompt_template" > "$prompt_file"
+    run_pipeline_step "$prompt_file" "${out}.attempt-${attempt}" --model "$PIPELINE_MODEL" --retry
+    if [[ $OPC_RC -ne 0 ]]; then
+      warn "$label: repair turn failed (exit ${OPC_RC}); re-checking the gate."
+    fi
+  done
+}
+
+# push_action <no_push> <yes> <interactive> <shippable> → one of:
+#   skip | nothing | auto | prompt | require-tty
+# Returns 1 for require-tty so the caller can fail closed.
+push_action() {
+  local no_push="$1" yes="$2" interactive="$3" shippable="$4"
+  if [[ "$no_push" == "true" ]]; then printf 'skip\n'; return 0; fi
+  if [[ "$shippable" != "true" ]]; then printf 'nothing\n'; return 0; fi
+  if [[ "$yes" == "true" ]]; then printf 'auto\n'; return 0; fi
+  if [[ "$interactive" != "true" ]]; then printf 'require-tty\n'; return 1; fi
+  printf 'prompt\n'
 }

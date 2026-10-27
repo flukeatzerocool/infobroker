@@ -70,14 +70,18 @@ changelog, scan, README) under the non-thinking `pipeline-fast` agent
 read-through (the old `--parallel` auth race is a deprecated no-op). Step 6 is
 deterministic (`scripts/scan-refs.ts`,
 `scripts/scan-git-refs.ts`); pass `--scan-ai` for the deep AI scan, which runs
-its two prompts concurrently in isolated sessions. A read-through that reports
-high-severity findings triggers one bounded repair pass under the full model
-(`scripts/pipeline/prompts/fix-high.md`) followed by a fresh read-through; if
-high findings survive, the pipeline refuses to commit or push. Per-step wall times are
-recorded under the run directory (`timings/`, one file per step, so concurrent
-scans cannot clobber each other) and printed at the end; the fixture-refresh
-cadence report is surfaced in the final summary. `--from=<step>` /
-`--to=<step>` run a bounded range for testing and are validated against the
+its two prompts concurrently in isolated sessions. Every failing gate enters a
+bounded auto-repair loop (`PIPELINE_FIX_ATTEMPTS`, default 2) driven by
+`scripts/pipeline/prompts/fix-gate.md`; read-through high findings keep the
+dedicated `fix-high.md` repair plus a fresh re-review. Exhausting the budget
+stops the run for human attention; it never loops unbounded. The default run
+commits locally, prints a readiness report, and then asks for push approval —
+`--yes` pre-approves, `--no-push` commits locally and exits 0, and a
+non-interactive run without `--yes` exits 1 rather than publishing. Per-step
+wall times are recorded under the run directory (`timings/`, one file per step,
+so concurrent scans cannot clobber each other) and printed at the end; the
+fixture-refresh cadence report is surfaced in the final summary. `--from=<step>`
+/ `--to=<step>` run a bounded range for testing and are validated against the
 step list (an unknown step is rejected before any work runs); a bounded range
 never commits or pushes. `--resume` continues the newest run recorded for the
 current repo and branch and accepts the dirty tree an interrupted run left
@@ -90,7 +94,8 @@ and a fail-closed leftover check, so tracked paths the old allowlist omitted
 (e.g. `test-fixtures/`, `DECISIONS.md`, `bin/`) can no longer be silently
 dropped. Secret scanning reports `path:line` only and never logs the matched
 value. Push, tag, and mirror operations target the current branch rather than
-a hardcoded `main`. An unexpected command failure exits 2; gate failures exit 1.
+a hardcoded `main`. An unexpected command failure exits 2; gate failures and
+required human approval exit 1.
 
 ## Script Discipline
 
