@@ -5,10 +5,13 @@ import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 import { stripHtml } from "../lib/html.js";
 
+const DEFAULT_LANG = "en";
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 
 async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const maxResults = options?.max_results ?? 10;
+  const lang = options?.language || DEFAULT_LANG;
+  const wikiApi = `https://${lang}.wikipedia.org/w/api.php`;
 
   const params = new URLSearchParams({
     action: "query",
@@ -19,7 +22,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     origin: "*",
   });
 
-  const resp = await infobrokerFetch(`${WIKI_API}?${params.toString()}`, { providerSlug: "wikipedia" });
+  const resp = await infobrokerFetch(`${wikiApi}?${params.toString()}`, { providerSlug: "wikipedia" });
 
   if (!resp.ok) {
     throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);
@@ -31,7 +34,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const raw = (data.query?.search || []).map((item) => ({
     title: item.title,
-    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, "_"))}`,
+    url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, "_"))}`,
     snippet: stripHtml(item.snippet || ""),
     published_date: item.timestamp,
     source_type: "encyclopedia",

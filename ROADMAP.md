@@ -1,5 +1,23 @@
 # Roadmap
 
+## Open-web scope boundary
+
+Infobroker is an open-web search, analysis, and reporting tool, not a
+professional OSINT platform. The following are explicit non-goals: SOCMINT
+platform collection; WHOIS/DNS/certificate-transparency/attack-surface data;
+corporate registries and beneficial ownership; sanctions/PEP screening;
+breach/leak indexes; image/video/audio forensics; STIX/MISP/OpenCTI and graph
+link analysis; court-admissible chain-of-custody; multi-user case management
+and ACLs; enterprise scheduling.
+
+## Deferred (Wave 3, optional)
+
+- Analysis aids: topic/entity extraction, result clustering, and timelines
+  derived from search results (no graph/link-analysis platform).
+- Multilingual embeddings and expanded non-English collection.
+- Privacy-posture documentation per provider.
+- Retrieval-quality benchmark expansion beyond the calibration gold set.
+
 <!--
   Format: one `## <title>` per upcoming item, followed by 1–3 bullet lines.
   Newest first. Remove entries once they ship (they move to CHANGELOG.md).

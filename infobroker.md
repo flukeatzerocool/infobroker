@@ -179,7 +179,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, 121–125, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -230,7 +230,7 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
-`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `expand` (default false), `content_type` (default all), `region`, `research` (default false), `fresh` (default false), and `deep` (default false). When `suggest` is true, the tool SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `expand` (default false), `content_type` (default all), `region`, `language`, `research` (default false), `fresh` (default false), and `deep` (default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
 **REQ-020a — `search_web` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -302,7 +302,7 @@ Each finding returned by `verify_claims` SHALL associate every corroborating sou
 WHEN source preservation is enabled in the configuration, `verify_claims` SHALL attempt to capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
 
 **REQ-026d — corroboration provenance record**
-The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, and the per-source-type contribution to each finding. The record SHALL be present in verbose output. _Check:_ G1.
+The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, the per-source-type contribution to each finding, the effective configuration hash, and for each source its retrieval time, content hash, source family, and provider. The record SHALL be present in verbose output. _Check:_ G1.
 
 **REQ-026e — corroboration knowledge-base recall**
 WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
@@ -310,8 +310,20 @@ WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHA
 **REQ-026f — Semantic claim reconciliation**
 WHEN `verify_claims` reconciles claims, sources whose claims express the same proposition SHALL be grouped even when paraphrased, and sources whose claims conflict SHALL be reported as contested with their perspectives. Reconciliation SHALL distinguish agreement from contradiction rather than relying on textual overlap alone. A finding SHALL NOT be marked confirmed from sources that express conflicting propositions. _Check:_ G1.
 
+**REQ-121 — Corroboration source families**
+Confidence counting for `verify_claims` SHALL count independent source families rather than registrable domains alone. Sources that share a canonical URL or republish substantially the same text SHALL be counted as one family, and sources on the same registrable domain SHALL remain one family. Each finding SHALL report its family count, and the family similarity threshold SHALL be configurable. _Check:_ G1.
+
+**REQ-122 — Citation-grade source snapshots**
+WHEN source preservation is enabled, `verify_claims` and deep reading SHALL store a retrievable snapshot of each cited source and report the snapshot hash and freshness tier alongside the live URL. Snapshots SHALL be bounded per finding and per source, SHALL use the knowledge base's storage and encryption guarantees, and SHALL NOT alter confidence, verdict, or the response when storage fails. Content rejected by the content policy SHALL NOT be stored. _Check:_ G1.
+
+**REQ-123 — Confidence calibration**
+`verify_claims` SHALL expose a configurable calibration correction that caps confidence when every supporting source is secondary or aggregated. The server SHALL support measuring confidence calibration against a deterministic gold set, reporting a Brier score and a reliability curve. The correction SHALL be disableable without changing the underlying confidence ladder. _Check:_ G1.
+
 **REQ-027 — `get_citations`**
 The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
+
+**REQ-124 — `search_web` query operators and language**
+`search_web` SHALL accept common query operators (`site:`, `filetype:`, quoted phrases, exclusions) and a preferred result language. Operators SHALL be passed to providers that support them; when the serving provider cannot honor an operator or the language, the response SHALL report it in the ignored-parameter metadata rather than silently dropping it. An unrecognized operator SHALL remain ordinary query text. _Check:_ G1.
 
 **REQ-028 — `search_web` deep reading**
 WHEN `search_web` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. Each ranked passage SHALL include a span anchor identifying the passage's position in the source. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
@@ -434,6 +446,9 @@ A monitoring run SHALL baseline the current report with a verification receipt a
 **REQ-116 — Report Quality Gate**
 A report SHALL carry the shared skeleton and a Source Register that resolves every `[S#]` citation to a row with a URL. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A gate SHALL fail when a required skeleton section is absent, a Key Findings item lacks a citation, a citation is unresolved, or a Source Register row lacks a URL. _Check:_ G3.
 
+**REQ-125 — Watchlist monitoring runner**
+The server SHALL provide a watchlist runner that reads topics, a query, and an interval; selects the topics that are due; and records each run with the claims found and a delta against the prior run. Scheduling SHALL remain external to the server. A due topic whose run fails SHALL be recorded as an error without aborting the remaining topics. The runner SHALL support a dry-run that selects due topics without contacting providers. _Check:_ G1, G3.
+
 **REQ-118 — Report Provenance and Grading**
 A report Source Register SHALL record each source's publication date when determinable, its access date, its source-reliability grade, its information-credibility grade, its primary or secondary classification, and any relevant interest, and SHALL record a durable citation identifier when one exists. The report manifest SHALL record the report's as-of date and a handling classification. A revised report manifest SHALL name the report it supersedes. A report quality gate SHALL reject a row missing a required provenance or grading field, and SHALL reject a manifest without an as-of date or with an unresolved supersession for a later revision. Omitted publication dates SHALL be reported as undeterminable rather than guessed. _Check:_ G3.
 
@@ -444,6 +459,9 @@ A report SHALL carry the output block defined for its declared workflow shape in
 The orchestrator skill and its reference files SHALL define one pipeline order. The report pipeline SHALL re-verify each drafted claim against the collected evidence before the report quality gate. A claim introduced during drafting that the evidence does not support SHALL be removed or marked unverified. The report quality gate SHALL run on the final artifact after language polish and after translation. A translated report SHALL retain the canonical section headings and record its language in the manifest. _Check:_ G3.
 
 ### 4.8 Spec Integrity
+
+**REQ-126 — Report artifact export**
+The report tooling SHALL export a validated report as JSON and CSV in addition to HTML. The JSON export SHALL carry the report manifest, section list, sources, and claims; CSV exports SHALL carry the Source Register and the claims table. Export SHALL be deterministic and SHALL validate the report before writing unless the caller explicitly skips validation. _Check:_ G3.
 
 **REQ-055 — Spec-Code Traceability**
 Every source file in `src/` SHALL cite in a header comment each REQ it
@@ -1098,8 +1116,12 @@ verdict is preserved (REQ-026f).
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
 | REQ-026f | Semantic claim reconciliation | 4.3 | G1 |
+| REQ-121 | Corroboration source families | 4.3 | G1 |
+| REQ-122 | Citation-grade source snapshots | 4.3 | G1 |
+| REQ-123 | Confidence calibration | 4.3 | G1 |
 | REQ-027 | `get_citations` | 4.3 | G0, G1 |
 | REQ-028 | `search_web` deep reading | 4.3 | G1 |
+| REQ-124 | `search_web` query operators and language | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
 | REQ-090 | Tool naming convention | 4.3 | G0, G1 |
 | REQ-092 | Tool-definition quality bar | 4.3 | G1, G3 |
@@ -1129,9 +1151,11 @@ verdict is preserved (REQ-026f).
 | REQ-115 | Confidence Model | 4.7 | G3 |
 | REQ-116 | Report Quality Gate | 4.7 | G3 |
 | REQ-117 | Monitoring Baseline and Delta Contract | 4.7 | G3 |
+| REQ-125 | Watchlist monitoring runner | 4.7 | G1, G3 |
 | REQ-118 | Report Provenance and Grading | 4.7 | G3 |
 | REQ-119 | Shape-Aware Report Contract | 4.7 | G3 |
 | REQ-120 | Report Delivery Verification | 4.7 | G3 |
+| REQ-126 | Report artifact export | 4.7 | G3 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |
@@ -1621,13 +1645,13 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
-| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f | G0, G1 |
+| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120 | G3 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-125, REQ-126 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 

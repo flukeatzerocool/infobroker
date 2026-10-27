@@ -1,4 +1,4 @@
-// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-121 REQ-122 REQ-123
 import type { SearchResult, CorroborationResult, CorroborationFinding, CorroborationSource } from "./types.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { getConfig, getActiveProviders, getDispatchChain } from "./config.js";
@@ -7,6 +7,9 @@ import { checkQuota, increment } from "./quota.js";
 import { retryWithBackoff } from "./retry.js";
 import { isKbConfigured, kbSearch } from "./kb.js";
 import { pairwiseSimilarity } from "./embed.js";
+import { assignSourceFamilies, familyCount } from "./source-family.js";
+import { capConfidence, type CalibrationOptions } from "./calibration.js";
+import { sha256Text, snapshotSource } from "./preservation.js";
 import { getDomain } from "tldts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -21,6 +24,9 @@ function readVersion(): string {
     return "unknown";
   }
 }
+
+const DEFAULT_FAMILY_SIMILARITY = 0.9;
+const DEFAULT_SECONDARY_CAP = 0.7;
 
 type Searcher = (query: string, opts?: { max_results?: number }) => Promise<SearchResult[]>;
 
@@ -173,6 +179,9 @@ function attributeSource(
     source_type: r.source_type,
     original_source: r.original_source,
     retrieved_at: retrievedAt ? retrievedAt() : new Date().toISOString(),
+    source_family: r.source_family,
+    provider: r.provider,
+    content_sha256: r.content_sha256,
   };
 }
 
@@ -183,6 +192,8 @@ export function reconcileClaims(
   authorityWeights?: Record<string, number>,
   claimSeeded = false,
   retrievedAt?: () => string,
+  familySimilarityThreshold = 0.9,
+  calibration?: CalibrationOptions,
 ): void {
   for (const r of results) {
     if (!r.title) continue;
@@ -229,8 +240,15 @@ export function reconcileClaims(
 
   for (const [, finding] of findings) {
     const sources = finding.sources;
+    if (sources.length > 0) {
+      const families = assignSourceFamilies(sources, familySimilarityThreshold);
+      sources.forEach((source, i) => {
+        source.source_family = families[i];
+      });
+      finding.family_count = familyCount(families);
+    }
     if (sources.length < 2) {
-      finding.confidence = 0.3;
+      finding.confidence = capConfidence(0.3, sources, calibration);
       finding.verdict = "unverified";
       continue;
     }
@@ -271,22 +289,22 @@ export function reconcileClaims(
       );
 
     if (crossClusterConflict) {
-      finding.confidence = Math.max(computeConfidence(dominant.members, authorityWeights), 0.1);
+      finding.confidence = capConfidence(Math.max(computeConfidence(dominant.members, authorityWeights), 0.1), dominant.members, calibration);
       finding.verdict = "contested";
       finding.perspectives = clusters.map((c) => c.representative);
     } else if (clusters.length === 1) {
-      finding.confidence = computeConfidence(dominant.members, authorityWeights);
+      finding.confidence = capConfidence(computeConfidence(dominant.members, authorityWeights), dominant.members, calibration);
       if (dominant.members.length >= 2 && finding.confidence >= 0.5) {
         finding.verdict = "confirmed";
       } else {
         finding.verdict = "unverified";
       }
     } else if (dominant.members.length >= 2) {
-      finding.confidence = computeConfidence(dominant.members, authorityWeights);
+      finding.confidence = capConfidence(computeConfidence(dominant.members, authorityWeights), dominant.members, calibration);
       finding.verdict = "confirmed";
     } else {
       finding.confidence = Math.max(
-        computeConfidence(dominant.members, authorityWeights),
+        capConfidence(computeConfidence(dominant.members, authorityWeights), dominant.members, calibration),
         0.1
       );
       finding.verdict = "contested";
@@ -316,20 +334,26 @@ export function computeConfidence(
   sources: Source[],
   authorityWeights?: Record<string, number>,
 ): number {
-  const uniqueDomains = new Map<string, string>();
+  // REQ-121: count distinct source families, not distinct hosts. A caller that
+  // has not assigned families falls back to the registrable domain.
+  const uniqueFamilies = new Map<string, string>();
   for (const s of sources) {
-    let domain: string;
-    try {
-      domain = registrableDomain(new URL(s.url).hostname);
-    } catch {
-      domain = s.url;
+    let family: string;
+    if (s.source_family) {
+      family = s.source_family;
+    } else {
+      try {
+        family = registrableDomain(new URL(s.url).hostname);
+      } catch {
+        family = s.url;
+      }
     }
-    if (!uniqueDomains.has(domain)) {
-      uniqueDomains.set(domain, s.source_type ?? s.url);
+    if (!uniqueFamilies.has(family)) {
+      uniqueFamilies.set(family, s.source_type ?? s.url);
     }
   }
 
-  const count = uniqueDomains.size;
+  const count = uniqueFamilies.size;
   let base: number;
   if (count >= 5) base = 1.0;
   else if (count >= 3) base = 0.9;
@@ -338,7 +362,7 @@ export function computeConfidence(
   else base = 0.0;
 
   if (!authorityWeights) return base;
-  const weights = [...uniqueDomains.values()].map((st) => authorityWeights[st] ?? 1.0);
+  const weights = [...uniqueFamilies.values()].map((st) => authorityWeights[st] ?? 1.0);
   const avgWeight = weights.reduce((a, b) => a + b, 0) / weights.length;
   return Math.min(1.0, base * avgWeight);
 }
@@ -479,6 +503,7 @@ export async function corroborate(
     priority?: "speed" | "quality" | "privacy" | "free_only";
     latency?: (slug: string) => number;
     searchers?: Record<string, Searcher>;
+    fetchSource?: (url: string) => Promise<string | null>;
   } = {}
 ): Promise<CorroborationResult> {
   const config = getConfig();
@@ -494,6 +519,11 @@ export async function corroborate(
   const similarityThreshold = config.corroboration.similarity_threshold;
   const authorityWeights = config.corroboration.authority_weights;
   const kbRecall = config.corroboration.kb_recall !== false;
+  const familySimilarityThreshold = config.corroboration.family_similarity_threshold ?? DEFAULT_FAMILY_SIMILARITY;
+  const calibrationOptions: CalibrationOptions = {
+    enabled: config.corroboration.calibration?.enabled !== false,
+    secondaryOnlyCap: config.corroboration.calibration?.secondary_only_cap ?? DEFAULT_SECONDARY_CAP,
+  };
   const searchers = options.searchers ?? SEARCHERS;
 
   // REQ-026: corroborate defaults to all active providers that expose a search
@@ -548,7 +578,7 @@ export async function corroborate(
         snippet: r.snippet,
         source_type: r.source_type,
       }));
-      reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true);
+      reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
     } catch {
       // KB unavailable — proceed to external providers.
     }
@@ -599,7 +629,7 @@ export async function corroborate(
             totalCalls++;
             providersUsed.add(result.value.slug);
             increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-            reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true);
+            reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
           }
         }
 
@@ -647,7 +677,7 @@ export async function corroborate(
           totalCalls++;
           providersUsed.add(slug);
           increment(slug, config.providers[slug]?.rate_limit);
-          reconcileClaims(findings, results, similarityThreshold, authorityWeights, true);
+          reconcileClaims(findings, results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
         }
       }
     }
@@ -687,6 +717,10 @@ export async function corroborate(
     await archiveCondensedSources(condensed);
   }
 
+  if (config.preservation?.enabled !== false) {
+    await snapshotCondensedSources(condensed, config.preservation, options.fetchSource);
+  }
+
   const synthesis = buildSynthesis(condensed);
 
   const sourceTypes: Record<string, number> = {};
@@ -714,8 +748,64 @@ export async function corroborate(
       max_iterations: maxIterations,
       confidence_threshold: confidenceThreshold,
       source_types: sourceTypes,
+      config_hash: sha256Text(JSON.stringify({
+        corroboration: config.corroboration,
+        preservation: config.preservation ?? {},
+      })),
+      sources: condensed.flatMap((f) =>
+        f.sources.map((s) => ({
+          url: s.url,
+          retrieved_at: s.retrieved_at,
+          content_sha256: s.content_sha256,
+          source_family: s.source_family,
+          provider: s.provider,
+        })),
+      ),
     },
   };
+}
+
+async function snapshotCondensedSources(
+  findings: CorroborationFinding[],
+  preservation: ReturnType<typeof getConfig>["preservation"],
+  fetchSource?: (url: string) => Promise<string | null>,
+): Promise<void> {
+  const maxSources = Math.max(0, preservation?.max_sources_per_finding ?? 3);
+  const maxBytes = Math.max(1, preservation?.max_bytes ?? 2_000_000);
+  const tasks: Array<{ source: CorroborationSource }> = [];
+  for (const finding of findings) {
+    for (const source of finding.sources.slice(0, maxSources)) {
+      if (!source.content_sha256) tasks.push({ source });
+    }
+  }
+  let idx = 0;
+  async function worker(): Promise<void> {
+    while (idx < tasks.length) {
+      const { source } = tasks[idx++];
+      let text = source.snippet;
+      if (fetchSource) {
+        try {
+          const fetched = await fetchSource(source.url);
+          if (fetched && fetched.trim().length > 0) text = fetched;
+        } catch {
+          // Fetch failed — keep the snippet as the citation basis.
+        }
+      }
+      const snap = snapshotSource({
+        url: source.url,
+        title: source.title || source.url,
+        text,
+        provider: source.provider,
+        maxBytes,
+      });
+      if (snap) {
+        source.content_sha256 = snap.snapshot_sha256;
+        source.snapshot_tier = snap.snapshot_tier;
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(4, tasks.length) }, worker);
+  await Promise.allSettled(workers);
 }
 
 function buildSynthesis(findings: CorroborationFinding[]): string {

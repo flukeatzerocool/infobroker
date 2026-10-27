@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026.10.26 — Corroboration trust: source families, snapshots, calibration
+
+- `verify_claims` now counts independent source families rather than
+  registrable domains alone. Republished wire copy and mirrors collapse into
+  one family, findings report `family_count`, and the similarity threshold is
+  configurable. (REQ-121)
+- Cited sources are copied into the knowledge base as retrievable, hashed
+  snapshots with an evergreen freshness tier and a bounded per-finding count.
+  Verification snapshots the text it already holds; deep reading snapshots the
+  page it already fetched and records the content hash and retrieval time, so
+  no extra outbound request is made. Snapshot failures never change
+  confidence, verdict, or the response. (REQ-122)
+- A configurable secondary-only confidence cap and an offline calibration
+  harness (Brier score, reliability curve) make the confidence ladder
+  measurable before any renumbering. (REQ-123)
+- `validate-report` warns on Source Register rows that are never cited and on
+  Key Findings sections with no resolved citation, without changing the
+  existing error contract. (REQ-118)
+- `monitor-watchlist` selects due topics, runs `verify_claims` through the
+  local MCP server, and writes a per-topic claim delta; scheduling stays with
+  cron/CI and `--dry-run` is offline. (REQ-125)
+- `render-report` exports a validated report as JSON (manifest, sections,
+  sources, claims) or CSV (Source Register, claims), with `--claims-out` for a
+  claims sidecar; HTML remains the default. (REQ-126)
+- `search_web` accepts `site:`, `filetype:`, quoted-phrase, and exclusion
+  operators plus a preferred language; unsupported operators and languages are
+  reported in `meta.ignored_operators`/`meta.ignored_params`. (REQ-124)
+- The corroboration provenance record now names the effective configuration
+  hash and each source's retrieval time, content hash, source family, and
+  provider. (REQ-026d)
+
 ## 2026.10.26 — Report contract hardening
 
 - Skill-audit results are keyed by manifest path, so two manifests that

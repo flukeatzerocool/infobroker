@@ -12,7 +12,9 @@ import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quot
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
 import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
 import { corroborate } from "./corroborate.js";
+import { snapshotSource } from "./preservation.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain } from "./chain.js";
+import { ignoredOperators, parseQuery } from "./query.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
 import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
@@ -219,6 +221,7 @@ async function doWebSearch(
   suggest = false,
   contentType?: string,
   region?: string,
+  language?: string,
   expand = false,
   deep = false,
   research = false,
@@ -244,7 +247,7 @@ async function doWebSearch(
     const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
     const envelopes = await Promise.all(
       queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, expand, deep, research, fresh, deepBudget)
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, deepBudget)
       )
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
@@ -314,7 +317,7 @@ async function doWebSearch(
       const budget = { remaining: perVariantPages };
       return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
-        priority, false, contentType, region, false, true, false, false, budget
+        priority, false, contentType, region, language, false, true, false, false, budget
       );
     });
     return `[OK] ${json({
@@ -385,7 +388,8 @@ async function doWebSearch(
     return `[ERROR] ${json(err("none", "config_error", "No active search providers configured", "Check config.json"))}`;
   }
 
-  const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType };
+  const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType, language };
+  const parsedQuery = parseQuery(Array.isArray(query) ? query[0] ?? "" : String(query));
   let lastError: ToolErrorResponse | null = null;
   // REQ-002: any rate-limit-attributable failure in the chain makes the final
   // error `rate_limited` in preference to a generic provider-unavailable code.
@@ -495,6 +499,9 @@ async function doWebSearch(
   // "the serving provider was not the chain's first-choice provider" (the
   // hedge raced ahead of the primary), not merely "a provider errored".
   const buildSuccess = async (slug: string, filtered: SearchResult[], elapsed: number): Promise<string> => {
+    for (const result of filtered) {
+      result.provider = result.provider ?? slug;
+    }
     // REQ-097: search results are assessed before storage; in the strictest
     // mode flagged results are also withheld from the response.
     let policyFlags = 0;
@@ -547,6 +554,15 @@ async function doWebSearch(
           // REQ-097: the strictest mode refuses flagged pages to the caller.
           const policy = await checkContent(fetched.content, url);
           if (disposition(policy.flagged) === "refuse") return null;
+          if (config.preservation?.enabled !== false) {
+            snapshotSource({
+              url,
+              title: url,
+              text: fetched.content,
+              provider: fetched.slug,
+              maxBytes: config.preservation?.max_bytes,
+            });
+          }
           return { content: fetched.content, slug: fetched.slug };
         },
         {
@@ -561,7 +577,8 @@ async function doWebSearch(
         query_time_ms: elapsed,
         fallback_used: slug !== primarySlug,
         quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
+        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+        ignored_operators: ignoredOperators(slug, parsedQuery),
         deep: true,
         pages_read: deepMeta.pages_read,
         ...(policyNote ?? {}),
@@ -572,7 +589,8 @@ async function doWebSearch(
       query_time_ms: elapsed,
       fallback_used: slug !== primarySlug,
       quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-      ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region }),
+      ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+      ignored_operators: ignoredOperators(slug, parsedQuery),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -1363,6 +1381,7 @@ instrumentTool(
       fresh: z.boolean().optional().default(false).describe("Skip the knowledge-base recall shortcut and search external providers (default false)"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
+      language: z.string().optional().describe("Preferred result language (ISO 639-1, e.g. 'de'). Providers that cannot honor it report it in meta.ignored_params"),
     },
     annotations: {
       readOnlyHint: true,
@@ -1383,6 +1402,7 @@ instrumentTool(
       Boolean(params.suggest),
       params.content_type as string | undefined,
       params.region as string | undefined,
+      params.language as string | undefined,
       Boolean(params.expand),
       Boolean(params.deep),
       Boolean(params.research),

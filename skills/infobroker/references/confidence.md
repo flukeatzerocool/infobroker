@@ -12,7 +12,10 @@ invent a second scale or leave a claim ungraded.
 | Low | 0.00–0.49 | Thin, single-source, or conflicting evidence; treat as provisional. |
 
 `verify_claims` reports numeric confidence in this range; map it to the label
-for a report and never round up.
+for a report and never round up. When every supporting source is secondary or
+aggregated, the configured calibration cap applies before the label is
+assigned. `family_count` is the number of independent source families, not the
+number of URLs.
 
 ## Likelihood (probability of the event) — separate from confidence
 

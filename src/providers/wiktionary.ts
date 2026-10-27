@@ -1,13 +1,16 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 import { stripHtml } from "../lib/html.js";
 
+const DEFAULT_LANG = "en";
 const WIKTIONARY_API = "https://en.wiktionary.org/w/api.php";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+  const lang = options?.language || DEFAULT_LANG;
+  const wiktionaryApi = `https://${lang}.wiktionary.org/w/api.php`;
   const params = new URLSearchParams({
     action: "query",
     list: "search",
@@ -17,7 +20,7 @@ async function search(query: string): Promise<SearchResult[]> {
     origin: "*",
   });
 
-  const resp = await infobrokerFetch(`${WIKTIONARY_API}?${params.toString()}`, { providerSlug: "wiktionary" });
+  const resp = await infobrokerFetch(`${wiktionaryApi}?${params.toString()}`, { providerSlug: "wiktionary" });
 
   if (!resp.ok) throw new RetryableError(`Wiktionary returned HTTP ${resp.status}`, resp.status);
 
@@ -27,7 +30,7 @@ async function search(query: string): Promise<SearchResult[]> {
 
   const raw = (data.query?.search || []).map((item) => ({
     title: item.title,
-    url: `https://en.wiktionary.org/wiki/${encodeURIComponent(item.title.replace(/ /g, "_"))}`,
+    url: `https://${lang}.wiktionary.org/wiki/${encodeURIComponent(item.title.replace(/ /g, "_"))}`,
     snippet: stripHtml(item.snippet || ""),
     published_date: item.timestamp,
     source_type: "definition",

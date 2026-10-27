@@ -209,7 +209,10 @@ spec.
 
 `search_web` sends one query to every provider that can answer it. Search
 across DuckDuckGo, Wikipedia, academic databases, news, code repositories —
-or describe your task and the server picks the best source. Pass an array of
+or describe your task and the server picks the best source. Common operators
+(`site:`, `filetype:`, quoted phrases) pass through to engines that support
+them, a preferred language is honored where a provider allows it, and anything
+the serving provider drops is reported rather than hidden. Pass an array of
 queries to batch several searches in one call. Ask for a deep read and it
 fetches the top results, then ranks each page's passages against your query,
 so you get the specific text that answers the question instead of links.
@@ -268,10 +271,12 @@ cross-source reconciliation, and targeted follow-up for gaps, dispatched
 in parallel and stopping early once the truth is pinned down. Claims
 corroborated across independent sources score high confidence, weighted
 by each source's authority; every source is bound to the claim it
-supports. Contradictions are surfaced with all perspectives. Gaps
-trigger refined queries that broaden to the rest of your providers. It
-also remembers: prior findings in your knowledge base participate as
-corroborating sources before it queries the network. You get a
+supports. Republished wire copy and mirrors are collapsed into one source
+family, so confidence counts origins, not hosts, and a secondary-only
+finding is capped rather than overstated. Contradictions are surfaced with
+all perspectives. Gaps trigger refined queries that broaden to the rest of
+your providers. It also remembers: prior findings in your knowledge base
+participate as corroborating sources before it queries the network. You get a
 structured report — confirmed, contested, and unverified findings — with
 source provenance, per-source claims, and confidence scores. Every other
 search tool returns a list of links; Infobroker finds the truth and
@@ -285,7 +290,7 @@ tells you how sure it is.
 Every search, fetch, and corroboration run is cached in a local knowledge
 base. `manage_kb` checks the cache before hitting external providers, falling
 back to the network only when the cached results aren't fresh enough
-or relevant enough. Its actions ingest new text or a URL by hand, report
+or relevant enough. Its actions ingest text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
 freshness schedule, and deduplicated by source. Retrieval runs on your
 machine with a configurable in-process embedding model — your content is
@@ -293,22 +298,20 @@ never sent to a third party to be embedded. Beyond
 the cache, `manage_kb` archives the reports you generate: ingest with
 `source_type: "report"`
 (and default to the knowledge base) and revisit them with `manage_kb` list and
-`manage_kb` get, or write them to a local directory instead. Each archived report
-records its source's last-updated date, so you can refresh only what
-changed. Other search MCP
-servers re-fetch the same facts every session; Infobroker remembers and
-reuses what it already found.
+`manage_kb` get, or write them to a local directory instead.
 
 Corroboration results are also kept as claim records. Each `verify_claims` run
 stores one ledger entry per finding, linked to the sources that supported it
 with the time each source was retrieved, and re-verifying a claim updates that
-entry in place instead of adding a duplicate. Read them with
+entry in place instead of adding a duplicate. Cited sources are copied into
+the knowledge base as retrievable, hashed snapshots, so a report can be
+rechecked after the live page changes. Read them with
 `manage_kb` action=claims, optionally filtered by `query` (claim text) or
 `source_url`, newest first and capped by `max_results` (default 8, max 50).
 The ledger is sealed at rest when encryption is on, and it requires the SQLite
 backend: the legacy JSON store returns `unsupported_backend`.
 
-A report can also carry a verification receipt. Ingest it with a `receipt`
+A watchlist runner records due-topic claim deltas; cron owns the schedule. A report can also carry a verification receipt. Ingest it with a `receipt`
 of claims and cited sources; the server hashes the stored report and every
 cached source. `verify_report` rechecks it offline — no network call — and
 reports drift when the report or a source changed, unverifiable for an
@@ -388,7 +391,7 @@ when the cache falls short. Wire it and the skills directory into your
 OpenCode config once — the Quick Start section shows the exact snippet —
 and every research request follows the pipeline automatically.
 
-Write your own skill into `skills/` to add a workflow shape of your own.
+Validated reports export as HTML, JSON, or CSV for reading and archiving. Write your own skill into `skills/` to add a workflow shape of your own.
 The pipeline diagram lives in `references/pipeline-map.md` and the
 workflow-shape definitions in `references/workflows.md`. Other search MCP
 servers return links; Infobroker ships the writers that turn them into

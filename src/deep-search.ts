@@ -1,6 +1,7 @@
-// @implements REQ-028
+// @implements REQ-028 REQ-122
 import type { SearchResult, DeepConfig } from "./types.js";
 import type { RankedPassage } from "./rerank.js";
+import { sha256Text } from "./preservation.js";
 
 export interface DeepEnrichedResult {
   title: string;
@@ -14,6 +15,8 @@ export interface DeepEnrichedResult {
   last_updated?: string;
   date_source?: string;
   date_confidence?: string;
+  retrieved_at?: string;
+  content_sha256?: string;
   read_error?: string;
 }
 
@@ -84,6 +87,8 @@ export function deepRead(
       return;
     }
 
+    base.retrieved_at = new Date().toISOString();
+    base.content_sha256 = sha256Text(fetched.content);
     const passages = rank(fetched.content, query, passageSize, maxPassages);
     const top = passages[0];
     const dateMeta = pageDate

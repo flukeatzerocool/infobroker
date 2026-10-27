@@ -589,6 +589,28 @@ export function validateReport(text: string): ReportValidation {
     });
   }
 
+  const registerStart = text.indexOf("## Source Register");
+  const bodyBeforeRegister = registerStart === -1 ? text : text.slice(0, registerStart);
+  const usedIds = new Set([...bodyBeforeRegister.matchAll(/\[S(\d+)\]/g)].map((m) => `S${m[1]}`));
+  for (const id of register.sources.keys()) {
+    if (!usedIds.has(id)) {
+      findings.push({
+        level: "warning",
+        code: "register-orphan",
+        message: `Source Register row ${id} is never cited in the report body`,
+      });
+    }
+  }
+
+  const keyFindings = sections.find((section) => normalizeHeading(section) === normalizeHeading("Key Findings"));
+  if (manifest?.claims?.length && keyFindings && !/\[S\d+\]/.test(keyFindings)) {
+    findings.push({
+      level: "warning",
+      code: "findings-uncited",
+      message: "Key Findings carries no [S#] citation resolving to a manifest claim",
+    });
+  }
+
   if (manifest?.claims) {
     for (const [index, claim] of manifest.claims.entries()) {
       for (const id of claim.sources ?? []) {

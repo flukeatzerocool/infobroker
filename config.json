@@ -284,6 +284,8 @@
     "similarity_threshold": 0.3,
     "archive_sources": false,
     "kb_recall": true,
+    "family_similarity_threshold": 0.9,
+    "calibration": { "enabled": true, "secondary_only_cap": 0.7 },
     "authority_weights": {
       "academic": 1.0,
       "encyclopedia": 1.0,
@@ -352,5 +354,10 @@
     "kb_first_confidence_threshold": 0.5,
     "maintenance_interval_minutes": 60,
     "keys_dir": "~/.local/share/infobroker/keys"
+  },
+  "preservation": {
+    "enabled": true,
+    "max_sources_per_finding": 3,
+    "max_bytes": 2000000
   }
 }

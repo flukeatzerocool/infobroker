@@ -17,6 +17,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     limit: options?.max_results ?? 10,
   };
   if (options?.region) body.location = options.region;
+  if (options?.language) body.language = options.language;
   if (options?.safe_search === "strict") body.safe_search = true;
   if (options?.content_type && options.content_type !== "all") {
     body.content_type = mapContentType(options.content_type);

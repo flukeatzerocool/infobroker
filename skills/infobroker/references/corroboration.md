@@ -24,8 +24,12 @@ findings consistently in reports (see `report-template.md`).
 
 ## Confidence
 
-Confidence starts from the number of **independent** sources (distinct
-registrable domains) and is then scaled by the sources' authority weight.
+Confidence starts from the number of **independent source families** (distinct
+origins: a canonical URL, a registrable domain, or a distinct text that is not
+republished wire copy) and is then scaled by the sources' authority weight.
+`family_count` reports the family count, and a finding supported only by
+secondary or aggregated sources is capped at the configured
+`corroboration.calibration.secondary_only_cap`.
 
 | Independent sources | Base confidence |
 |---------------------|-----------------|
@@ -38,8 +42,8 @@ registrable domains) and is then scaled by the sources' authority weight.
 Authority weights (`corroboration.authority_weights`) scale this up or down:
 `academic`, `encyclopedia`, `archive`, `structured_fact`, `definition`,
 `location` = 1.0; `code`, `semantic`, `synthesis` = 0.9; `news` = 0.8;
-`web_search` = 0.7. Two pages on the same registrable domain are not
-independent.
+`web_search` = 0.7. Two pages on the same registrable domain are not independent, and neither are
+two domains republishing substantially the same text.
 
 ## Verdicts and the agreement map
 

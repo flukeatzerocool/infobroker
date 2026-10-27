@@ -2,6 +2,44 @@
 
 ## Active Decisions
 
+### D-063: Monitoring and Export Stay Client-Side (REQ-125, REQ-126; 2026.10.27)
+
+Monitoring is a bounded CLI run, not an in-server daemon: `monitor-watchlist`
+selects due topics, calls the local MCP server over stdio, and writes one
+claim-delta record per topic. Cron or CI owns the schedule. This keeps the MCP
+server request-scoped and avoids a background process inside a client-managed
+stdio transport. Report export is a deterministic post-processing step over a
+validated Markdown report (HTML/JSON/CSV), not a second report format the
+generator must maintain.
+
+### D-061: Open-Web Scope Boundary (2026.10.27)
+
+Infobroker remains an open-web search, analysis, and reporting tool. The
+review that compared it with professional OSINT practice surfaced coverage
+gaps (SOCMINT, infrastructure, corporate registries, sanctions/PEP, breach
+data, media forensics), but the product does not compete there: dedicated
+OSINT platforms do those jobs better. Those categories are recorded as
+non-goals on `ROADMAP.md`, and the improvement work concentrates on trust in
+what the server already collects — source independence, citation-grade
+snapshots, calibration, and reporting. Alternatives rejected: build the
+full-spectrum OSINT platform (scope and liability without a differentiation
+advantage) and remove the intelligence-cycle framing entirely (loses the
+analysis/reporting story the skills implement).
+
+### D-062: Snapshots Reuse the Knowledge Base (REQ-122; 2026.10.27)
+
+Citation-grade snapshots are stored as knowledge-base documents tagged
+`source_type: "snapshot"` with an evergreen freshness tier, not in a new
+SQLite table or a plaintext sidecar directory. The KB already provides
+atomic writes, deduplication by source URL, optional at-rest encryption, and
+the hashing `verify_report` uses, so a snapshot is immediately verifiable.
+A sidecar would bypass encryption; a new table would add a schema migration
+without adding capability. Snapshots remain bounded per finding and per
+source and are skipped when the KB is unconfigured. Verification snapshots the
+snippet it already holds; deep reading snapshots the page it already fetched.
+This avoids adding an outbound request during corroboration and keeps the
+tool's HTTP-call budget and offline contract fixtures intact.
+
 ### D-060: State-Health Notices, Safe Startup, and Opt-In Update Discovery (REQ-079, REQ-105, REQ-111, REQ-112, REQ-113; 2026.10.22)
 
 A stale user configuration was visible only on stderr at startup and in a

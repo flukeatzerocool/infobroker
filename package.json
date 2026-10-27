@@ -1,7 +1,7 @@
 {
   "name": "infobroker",
   "version": "2026.10.26",
-  "description": "Infobroker MCP Server — multi-provider research & writing backend",
+  "description": "Infobroker MCP Server \u2014 multi-provider research & writing backend",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -45,7 +45,8 @@
     "push": "bash scripts/push-pipeline.sh",
     "check": "npm run typecheck && npm run version-sync && npm run validate-spec && npm run validate-readme && npm run check-report-fixtures && npm run check-script-discipline && npm run check-tdqs && npm run check-intent-citations && npm run check-harness-expectations && npm run check-gate-coverage && npm run check-skill-harness && npm run test && npm run test-debate-club && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts",
     "render-report": "npx tsx scripts/render-report.ts",
-    "monitor-delta": "npx tsx scripts/monitor-delta.ts"
+    "monitor-delta": "npx tsx scripts/monitor-delta.ts",
+    "monitor-watchlist": "npx tsx scripts/monitor-watchlist.ts"
   },
   "keywords": [
     "search",

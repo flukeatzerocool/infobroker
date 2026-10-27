@@ -1,4 +1,4 @@
-// @implements REQ-020g
+// @implements REQ-020g REQ-121
 // Cross-provider result reconciliation: collapse results that express the same
 // content into one representative and order the survivors by semantic
 // relevance to the query. Provenance (source type and original source) is
@@ -17,6 +17,7 @@ function resultText(r: SearchResult): string {
 function mergeProvenance(keep: SearchResult, dup: SearchResult): void {
   if (!keep.original_source && dup.original_source) keep.original_source = dup.original_source;
   if (!keep.source_type && dup.source_type) keep.source_type = dup.source_type;
+  if (!keep.source_family && dup.source_family) keep.source_family = dup.source_family;
 }
 
 export function reconcileResults(

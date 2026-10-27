@@ -16,6 +16,9 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   if (options?.time_range) {
     params.set("freshness", mapTimeRange(options.time_range));
   }
+  if (options?.language) {
+    params.set("search_lang", options.language);
+  }
 
   const resp = await infobrokerFetch(`${BRAVE_API}?${params.toString()}`, {
     providerSlug: "brave",

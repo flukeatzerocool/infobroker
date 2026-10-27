@@ -1,0 +1,6 @@
+{
+  "topics": [
+    { "id": "example-due", "query": "example claim", "interval_hours": 24 },
+    { "id": "example-fresh", "query": "another claim", "interval_hours": 24, "last_run": "2099-01-01T00:00:00Z" }
+  ]
+}

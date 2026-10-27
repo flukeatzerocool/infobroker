@@ -218,19 +218,25 @@ Record the audience in the manifest and let it set depth, not facts. The
 manifest audience value MUST be one of these; the report gate rejects any
 other value.
 
-- **executive** — answer first, one-page summary (default 400-word
-  `target_length`), implications and recommendations, minimal method detail.
-- **analyst** — full skeleton, source grades, alternatives, and gaps.
-- **engineer** — technical detail, exact versions, reproduction steps, and
-  primary documentation over commentary.
-- **policy** — decision framing, jurisdictional scope, legal and
-  distributional implications, and explicit uncertainty.
-- **legal** — facts, standards applied, chain of evidence, and unresolved
-  factual disputes; no unsupported inference.
-- **journalist** — verifiable claims, named sources and interests, dates,
-  and what remains unconfirmed.
-- **investor** — thesis, material risks, time horizon, and evidence quality;
-  distinguish fact from forecast.
+| Audience | Default `target_length` | Emphasis | Citation density |
+|---|---|---|---|
+| **executive** | 400 | answer, implications, recommendations | one marker per finding |
+| **analyst** | 1200 | full skeleton, grades, alternatives, gaps | every claim |
+| **engineer** | 1200 | versions, reproduction, primary docs | every technical claim |
+| **policy** | 1000 | decision framing, jurisdiction, distributional effects | every claim |
+| **legal** | 1200 | facts, standards, disputes, evidence chain | every claim, primary preferred |
+| **journalist** | 900 | verifiable claims, named sources, dates, unknowns | every claim |
+| **investor** | 900 | thesis, risks, horizon, evidence quality | every material claim |
+
+The audience sets depth and emphasis, never facts. Use the smallest budget
+that still carries the evidence the audience needs.
+
+## Project scope
+
+A research project is a knowledge-base collection. Ingest the project's
+sources and reports with the same `collection` value; recall, revision chains,
+and `verify_report` then operate within that project. The collection is a
+retrieval scope, not an access-control boundary.
 
 ## Handling and citation identifiers
 

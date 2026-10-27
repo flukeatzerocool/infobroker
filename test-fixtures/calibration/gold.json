@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "note": "Deterministic calibration set for REQ-123. Each entry states the raw confidence, whether the finding was correct, and the source types used. No network.",
+  "entries": [
+    { "id": "c01", "confidence": 0.9, "correct": true, "sources": ["academic", "encyclopedia", "news"] },
+    { "id": "c02", "confidence": 0.7, "correct": true, "sources": ["web_search", "news"] },
+    { "id": "c03", "confidence": 0.3, "correct": false, "sources": ["web_search"] },
+    { "id": "c04", "confidence": 0.9, "correct": true, "sources": ["encyclopedia", "structured_fact", "academic"] },
+    { "id": "c05", "confidence": 0.7, "correct": false, "sources": ["web_search", "semantic"] },
+    { "id": "c06", "confidence": 0.3, "correct": true, "sources": ["news"] },
+    { "id": "c07", "confidence": 1.0, "correct": true, "sources": ["academic", "encyclopedia", "archive", "structured_fact", "news"] },
+    { "id": "c08", "confidence": 0.9, "correct": false, "sources": ["academic", "news", "web_search"] },
+    { "id": "c09", "confidence": 0.7, "correct": true, "sources": ["news", "semantic", "web_search"] },
+    { "id": "c10", "confidence": 0.3, "correct": false, "sources": ["semantic"] },
+    { "id": "c11", "confidence": 0.9, "correct": true, "sources": ["encyclopedia", "archive", "code"] },
+    { "id": "c12", "confidence": 0.7, "correct": true, "sources": ["web_search", "news", "synthesis"] }
+  ]
+}

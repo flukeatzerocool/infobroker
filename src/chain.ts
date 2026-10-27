@@ -7,20 +7,22 @@ import { getDispatchChain, getConfig } from "./config.js";
 // `content_type` is a server-side post-filter (never honored by a provider).
 export const SUPPORTED_OPTIONS: Record<
   string,
-  { time_range?: boolean; page?: boolean; safe_search?: boolean; region?: boolean }
+  { time_range?: boolean; page?: boolean; safe_search?: boolean; region?: boolean; language?: boolean }
 > = {
   duckduckgo: { time_range: true, safe_search: true, region: true },
-  // Brave maps `time_range` to `freshness`; it does not read `region`, so a
-  // caller-supplied region is reported as ignored rather than silently dropped.
-  brave: { time_range: true },
-  // Yep reads `region` (location) and `time_range` (start_published_date); it
-  // applies `safe_search` only for the `strict` value, so `off` stays ignored.
-  yep: { time_range: true, region: true },
+  wikipedia: { language: true },
+  wiktionary: { language: true },
+  // Brave maps `time_range` to `freshness` and `language` to `search_lang`; it
+  // does not read `region`, so a caller-supplied region is reported as ignored.
+  brave: { time_range: true, language: true },
+  // Yep reads `region` (location), `time_range`, and `language`; it applies
+  // `safe_search` only for the `strict` value, so `off` stays ignored.
+  yep: { time_range: true, region: true, language: true },
 };
 
 export function ignoredParams(
   provider: string,
-  opts: { safe_search?: string; time_range?: string; page?: number; content_type?: string; region?: string },
+  opts: { safe_search?: string; time_range?: string; page?: number; content_type?: string; region?: string; language?: string },
 ): string[] {
   const supported = SUPPORTED_OPTIONS[provider] ?? {};
   const ignored: string[] = [];
@@ -29,6 +31,7 @@ export function ignoredParams(
   if (opts.safe_search === "off" && !supported.safe_search) ignored.push("safe_search");
   if (opts.region && !supported.region) ignored.push("region");
   if (opts.content_type && opts.content_type !== "all") ignored.push("content_type");
+  if (opts.language && !supported.language) ignored.push("language");
   return ignored;
 }
 

@@ -6,6 +6,14 @@ export interface SearchResult {
   published_date?: string;
   source_type?: string;
   original_source?: string;
+  /** Canonical URL / content family used for independence checks (REQ-121). */
+  source_family?: string;
+  /** Serving provider slug, when known. */
+  provider?: string;
+  /** SHA-256 of the stored source text (REQ-122/REQ-026d). */
+  content_sha256?: string;
+  /** ISO time the source was retrieved. */
+  retrieved_at?: string;
 }
 
 export interface ProviderConfig {
@@ -50,6 +58,16 @@ export interface Config {
     authority_weights?: Record<string, number>;
     archive_sources?: boolean;
     kb_recall?: boolean;
+    family_similarity_threshold?: number;
+    calibration?: {
+      enabled?: boolean;
+      secondary_only_cap?: number;
+    };
+  };
+  preservation?: {
+    enabled?: boolean;
+    max_sources_per_finding?: number;
+    max_bytes?: number;
   };
   output: {
     max_chars: number;
@@ -156,6 +174,14 @@ export interface CorroborationSource {
   original_source?: string;
   /** ISO time the source was first attributed to this claim (REQ-109). */
   retrieved_at?: string;
+  /** Source family used for independence counting (REQ-121). */
+  source_family?: string;
+  /** Serving provider slug. */
+  provider?: string;
+  /** SHA-256 of the snapshot text (REQ-122). */
+  content_sha256?: string;
+  /** Freshness tier used for the snapshot (REQ-122). */
+  snapshot_tier?: string;
 }
 
 export interface CorroborationFinding {
@@ -166,6 +192,8 @@ export interface CorroborationFinding {
   sources: CorroborationSource[];
   perspectives?: string[];
   source_types?: Record<string, number>;
+  /** Number of independent source families (REQ-121). */
+  family_count?: number;
 }
 
 /**
@@ -338,6 +366,14 @@ export interface CorroborationProvenance {
   max_iterations: number;
   confidence_threshold: number;
   source_types: Record<string, number>;
+  config_hash?: string;
+  sources?: Array<{
+    url: string;
+    retrieved_at?: string;
+    content_sha256?: string;
+    source_family?: string;
+    provider?: string;
+  }>;
 }
 
 export interface Provider {
@@ -357,6 +393,7 @@ export interface SearchOptions {
   page?: number;
   content_type?: string;
   region?: string;
+  language?: string;
 }
 
 export interface DeepConfig {

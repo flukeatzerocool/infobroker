@@ -368,6 +368,44 @@ function validateConfig(config: Config): void {
     errors.push("corroboration.kb_recall must be a boolean");
   }
   if (
+    config.corroboration?.family_similarity_threshold !== undefined &&
+    (typeof config.corroboration.family_similarity_threshold !== "number" ||
+      config.corroboration.family_similarity_threshold < 0 ||
+      config.corroboration.family_similarity_threshold > 1)
+  ) {
+    errors.push("corroboration.family_similarity_threshold must be a number between 0 and 1");
+  }
+  if (config.corroboration?.calibration) {
+    const cal = config.corroboration.calibration;
+    if (cal.enabled !== undefined && typeof cal.enabled !== "boolean") {
+      errors.push("corroboration.calibration.enabled must be a boolean");
+    }
+    if (
+      cal.secondary_only_cap !== undefined &&
+      (typeof cal.secondary_only_cap !== "number" || cal.secondary_only_cap < 0 || cal.secondary_only_cap > 1)
+    ) {
+      errors.push("corroboration.calibration.secondary_only_cap must be a number between 0 and 1");
+    }
+  }
+  if (config.preservation) {
+    const preservation = config.preservation;
+    if (preservation.enabled !== undefined && typeof preservation.enabled !== "boolean") {
+      errors.push("preservation.enabled must be a boolean");
+    }
+    if (
+      preservation.max_sources_per_finding !== undefined &&
+      (typeof preservation.max_sources_per_finding !== "number" || preservation.max_sources_per_finding < 0)
+    ) {
+      errors.push("preservation.max_sources_per_finding must be a non-negative number");
+    }
+    if (
+      preservation.max_bytes !== undefined &&
+      (typeof preservation.max_bytes !== "number" || preservation.max_bytes < 1)
+    ) {
+      errors.push("preservation.max_bytes must be a positive number");
+    }
+  }
+  if (
     config.corroboration?.first_pass_max_providers !== undefined &&
     (typeof config.corroboration.first_pass_max_providers !== "number" ||
       config.corroboration.first_pass_max_providers < 1)
