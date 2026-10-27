@@ -1,5 +1,5 @@
 {
-  "config_version": 1,
+  "config_version": 2,
   "defaults": {
     "timeout": 12000,
     "retry_count": 2,
@@ -349,7 +349,6 @@
   },
   "kb": {
     "storage_path": "~/.local/share/infobroker/knowledge-base",
-    "store_backend": "sqlite",
     "embedding_model": "signed-hash-tfidf",
     "chunk_size": 1024,
     "chunk_overlap": 64,

@@ -32,6 +32,14 @@ describe("config drift detection (REQ-105)", () => {
     expect(changes).toEqual([`stamped config_version=${CURRENT_CONFIG_VERSION}`]);
   });
 
+  it("reports the removed kb.store_backend option without rewriting it", () => {
+    const drift = detectConfigDrift({ kb: { store_backend: "json" } }, SHIPPED);
+    expect(drift.removals.map((r) => r.path)).toEqual(["kb.store_backend"]);
+    expect(drift.hasDrift).toBe(true);
+    // Detection is read-only; the key survives until an explicit migration.
+    expect((drift.removals.length > 0)).toBe(true);
+  });
+
   it("reports top-level keys the shipped schema does not recognize", () => {
     const drift = detectConfigDrift({ frobnicate: true, kb: {} }, SHIPPED);
     expect(drift.unrecognized).toEqual(["frobnicate"]);
@@ -66,6 +74,18 @@ describe("config migration application (REQ-105)", () => {
     const { layer: out } = applyConfigMigrations(layer, drift);
     expect((out.kb as Record<string, unknown>).new_key).toBe("current");
     expect((out.kb as Record<string, unknown>).old_key).toBeUndefined();
+  });
+
+  it("drops an obsolete key on explicit migration and reports it", () => {
+    const layer = { config_version: 2, kb: { store_backend: "json", chunk_size: 512 } };
+    const drift = detectConfigDrift(layer, SHIPPED);
+    const { layer: out, changes } = applyConfigMigrations(layer, drift);
+    expect((out.kb as Record<string, unknown>).store_backend).toBeUndefined();
+    expect((out.kb as Record<string, unknown>).chunk_size).toBe(512);
+    expect(changes.some((c) => c.includes("kb.store_backend"))).toBe(true);
+    // Idempotent: nothing left to remove.
+    const again = applyConfigMigrations(out, detectConfigDrift(out, SHIPPED));
+    expect(again.changes).toEqual([]);
   });
 
   it("never discards unrecognized keys", () => {

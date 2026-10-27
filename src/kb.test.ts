@@ -1,6 +1,6 @@
 // @implements REQ-075 REQ-082 REQ-060a REQ-060b REQ-060d REQ-060e REQ-060f REQ-065 REQ-072 REQ-074 REQ-087 REQ-076 REQ-083
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, kbDelete, resolveReportIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
@@ -11,7 +11,6 @@ const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
 function makeConfig(overrides: Record<string, unknown> = {}): KbConfig {
   return {
     storage_path: dir,
-    store_backend: "json",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
@@ -126,7 +125,7 @@ describe("storage path change and write flush", () => {
     // Ingest into the primary store and flush so it is durable at `dir`.
     kbIngest("the sky is blue on a clear day", "path-change", "https://example.com/path", "test");
     flushKbWrites();
-    expect(existsSync(join(dir, "vector-store.json"))).toBe(true);
+    expect(existsSync(join(dir, "vector-store.sqlite"))).toBe(true);
 
     // Switch storage path: data at the old path must remain, and an event is
     // recorded on the (now-empty) new store.
@@ -139,8 +138,7 @@ describe("storage path change and write flush", () => {
     expect(stats.events.some((e) => e.includes("Storage path changed"))).toBe(true);
 
     // Old path data is not migrated/deleted.
-    const oldStore = JSON.parse(readFileSync(join(dir, "vector-store.json"), "utf-8"));
-    expect(oldStore.chunks.length).toBeGreaterThan(0);
+    expect(statSync(join(dir, "vector-store.sqlite")).size).toBeGreaterThan(0);
 
     rmSync(dir2, { recursive: true, force: true });
   });

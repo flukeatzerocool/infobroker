@@ -1,8 +1,8 @@
 // @implements REQ-108 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-085 REQ-109 REQ-110
 // Storage seam for the knowledge base. A backend owns persistence and chunk
 // iteration; the chunking, freshness, policy, and tool-response logic stays in
-// kb.ts. The JSON backend keeps the legacy in-memory array; the SQLite backend
-// streams rows so the whole store is never resident.
+// kb.ts. The SQLite backend streams rows so the whole store is never resident;
+// a legacy vector-store.json is migrated into it, never served directly.
 import type {
   ClaimLedgerQuery,
   ClaimLedgerResult,
@@ -23,18 +23,17 @@ export interface KbMeta {
 }
 
 export interface KbStore {
-  readonly backend: "json" | "sqlite";
+  readonly backend: "sqlite";
   readonly path: string;
-  /**
-   * REQ-109: true when the backend persists the claim ledger. The legacy JSON
-   * store reports false and the `claims` action returns unsupported_backend.
-   */
-  readonly supportsClaims?: boolean;
+  /** REQ-109: the backend persists the claim ledger. */
+  readonly supportsClaims: boolean;
   init(): void;
   close(): void;
   flush(): void;
   /** Stream every chunk in insertion order. Never materialize the full set. */
   iterateChunks(): Iterable<KbChunk>;
+  /** Stream only the given chunk ids, in insertion order. */
+  iterateChunksByIds(ids: Iterable<string>): Iterable<KbChunk>;
   insertChunks(chunks: readonly KbChunk[]): void;
   /** Replace all chunks belonging to a source URL in one transaction. */
   replaceChunks(sourceUrl: string, chunks: readonly KbChunk[]): void;
@@ -55,8 +54,8 @@ export interface KbStore {
   }>): number;
   /** REQ-060h: read persisted claims, newest first. */
   claims?(query?: ClaimLedgerQuery): ClaimLedgerResult;
-  /** REQ-110: true when the backend stores report verification receipts. */
-  readonly supportsReportReceipts?: boolean;
+  /** REQ-110: the backend stores report verification receipts. */
+  readonly supportsReportReceipts: boolean;
   /** REQ-110: store or replace a report's receipt. */
   putReportReceipt?(reportId: string, manifest: ReportReceiptManifest): ReportReceiptRecord;
   /** REQ-060i: read a report's receipt, or null when none is stored. */

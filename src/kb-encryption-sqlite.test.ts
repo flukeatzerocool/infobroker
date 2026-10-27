@@ -19,7 +19,6 @@ import type { KbConfig } from "./types.js";
 function config(dir: string, keyFile: string, enabled: boolean): KbConfig {
   return {
     storage_path: dir,
-    store_backend: "sqlite",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
@@ -79,6 +78,29 @@ describe("SQLite at-rest encryption (REQ-084)", () => {
       expect(verifyStoreKey(next)).toBe(true);
       expect(verifyStoreKey(oldKey)).toBe(false);
       expect(kbSearch("rekey content", 5).length).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps lexical search results identical with the in-memory prefilter", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-enc-prefilter-"));
+    try {
+      const key = keyFile(dir, "prefilter.key");
+      initKb(config(dir, key, true));
+      for (let i = 0; i < 25; i++) {
+        kbIngest(
+          `encrypted alpha beta document ${i} with shared terms`,
+          `enc ${i}`,
+          `https://example.com/encrypted-${i}`,
+          "test"
+        );
+      }
+      const first = kbSearch("encrypted alpha beta", 10);
+      expect(first.length).toBeGreaterThan(0);
+      const second = kbSearch("encrypted alpha beta", 10);
+      const rank = (rows: typeof first) => rows.map((r) => ({ url: r.source_url, score: r.score, title: r.title }));
+      expect(rank(second)).toEqual(rank(first));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

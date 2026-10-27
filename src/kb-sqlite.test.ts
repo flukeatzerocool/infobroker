@@ -1,8 +1,10 @@
 // @implements REQ-108 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-072 REQ-087
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SqliteStore } from "./kb-sqlite.js";
 import {
   initKb,
   kbIngest,
@@ -20,7 +22,6 @@ const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-sqlite-"));
 
 const cfg: KbConfig = {
   storage_path: dir,
-  store_backend: "sqlite",
   embedding_model: "signed-hash-tfidf",
   chunk_size: 512,
   chunk_overlap: 64,
@@ -98,10 +99,58 @@ describe("SQLite knowledge base (REQ-108)", () => {
     expect(kbGet("https://example.com/pottery")?.text).toContain("updated pottery");
   });
 
+  it("returns identical results once the lexical prefilter is built", () => {
+    for (let i = 0; i < 40; i++) {
+      kbIngest(
+        `alpha beta gamma document ${i} with shared lexical terms`,
+        `doc ${i}`,
+        `https://example.com/prefilter-${i}`,
+        "test"
+      );
+    }
+    const first = kbSearch("alpha beta", 10);
+    expect(first.length).toBeGreaterThan(0);
+    const second = kbSearch("alpha beta", 10);
+    const rank = (rows: typeof first) => rows.map((r) => ({ url: r.source_url, score: r.score, title: r.title }));
+    expect(rank(second)).toEqual(rank(first));
+  });
+
   it("deletes by source and persists across re-init", () => {
     expect(kbDelete(undefined, "https://example.com/pottery")).toBeGreaterThan(0);
     initKb(cfg);
     expect(kbGet("https://example.com/pottery")).toBeNull();
     expect(kbSearch("quantum error correction", 5).length).toBeGreaterThan(0);
+  });
+});
+
+describe("encrypted archive cleanup (REQ-084, REQ-085)", () => {
+  it("removes plaintext archives on encrypted open but spares a protected migration source", () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "infobroker-kb-archive-"));
+    try {
+      const key = { kind: "raw" as const, dek: randomBytes(32) };
+      const store = new SqliteStore(archiveDir);
+      store.init();
+      store.enableEncryption(key);
+      store.close();
+
+      writeFileSync(join(archiveDir, "vector-store.json.migrated-1"), "plaintext archive");
+      const reopened = new SqliteStore(archiveDir, { secret: key });
+      reopened.init();
+      reopened.close();
+      expect(existsSync(join(archiveDir, "vector-store.json.migrated-1"))).toBe(false);
+
+      writeFileSync(join(archiveDir, "vector-store.json"), "migration source");
+      writeFileSync(join(archiveDir, "vector-store.json.migrated-2"), "plaintext archive");
+      const guarded = new SqliteStore(archiveDir, {
+        secret: key,
+        protectedLegacyPath: join(archiveDir, "vector-store.json"),
+      });
+      guarded.init();
+      guarded.close();
+      expect(existsSync(join(archiveDir, "vector-store.json"))).toBe(true);
+      expect(existsSync(join(archiveDir, "vector-store.json.migrated-2"))).toBe(false);
+    } finally {
+      rmSync(archiveDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
   });
 });

@@ -330,8 +330,7 @@ the knowledge base as retrievable, hashed snapshots, so a report can be
 rechecked after the live page changes. Read them with
 `manage_kb` action=claims, optionally filtered by `query` (claim text) or
 `source_url`, newest first and capped by `max_results` (default 8, max 50).
-The ledger is sealed at rest when encryption is on, and it requires the SQLite
-backend: the legacy JSON store returns `unsupported_backend`.
+The ledger is sealed at rest when encryption is on.
 
 A watchlist runner records due-topic claim deltas; cron owns the schedule. A report can also carry a verification receipt. Ingest it with a `receipt`
 of claims and cited sources; the server hashes the stored report and every
@@ -524,11 +523,10 @@ embedding model selected by `kb.embedding_model`. By default, the store
 writes to a user-scoped path (`~/.local/share/infobroker/knowledge-base`)
 outside the repository, so the content you research and cache stays on your
 machine and is never committed. Each deployed instance accumulates its own
-store. `kb.store_backend` selects `sqlite` (default) or the one-release
-`json` legacy backend; opening a legacy `vector-store.json` store migrates it
-automatically and preserves the original as `vector-store.json.migrated-<timestamp>`.
-Rollback to the JSON backend is available only if encryption has never been
-enabled (enabling encryption removes the plaintext migration archive).
+store. A legacy `vector-store.json` store is migrated automatically on first
+open and preserved as `vector-store.json.migrated-<timestamp>`; when encryption
+is enabled the plaintext archive is removed instead. There is no legacy backend
+to roll back to: recover with a key backup or rekey.
 
 ### Knowledge base encryption
 

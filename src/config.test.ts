@@ -356,8 +356,8 @@ describe("configuration overlay", () => {
   });
 
   it("accepts the current config_version", async () => {
-    const cfg = await loadWithOverlay(BASE, { config_version: 1 });
-    expect(cfg.config_version).toBe(1);
+    const cfg = await loadWithOverlay(BASE, { config_version: 2 });
+    expect(cfg.config_version).toBe(2);
   });
 
   it("warns about unrecognized user-layer keys without modifying them", async () => {
@@ -371,7 +371,7 @@ describe("configuration overlay", () => {
     const dir = mkdtempSync(join(tmpdir(), "ib-cfg-"));
     const basePath = join(dir, "config.json");
     const overlayPath = join(dir, "config.local.json");
-    writeFileSync(basePath, JSON.stringify({ ...BASE, config_version: 1 }));
+    writeFileSync(basePath, JSON.stringify({ ...BASE, config_version: 2 }));
     writeFileSync(overlayPath, JSON.stringify({}));
     process.env["INFOBROKER_CONFIG"] = basePath;
     process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
@@ -385,7 +385,7 @@ describe("configuration overlay", () => {
     expect(result!.backup).toBeTruthy();
     expect(existsSync(result!.backup!)).toBe(true);
     const written = JSON.parse(readFileSync(overlayPath, "utf-8")) as { config_version?: number };
-    expect(written.config_version).toBe(1);
+    expect(written.config_version).toBe(2);
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -448,7 +448,7 @@ describe("startup config recovery and automatic migration (REQ-105, REQ-113)", (
     expect(migration!.backup).toBeTruthy();
     expect(existsSync(migration!.backup!)).toBe(true);
     const written = JSON.parse(readFileSync(overlayPath, "utf-8")) as { config_version?: number; state?: { auto_migrate_config?: boolean } };
-    expect(written.config_version).toBe(1);
+    expect(written.config_version).toBe(2);
     expect(written.state?.auto_migrate_config).toBe(true);
   });
 

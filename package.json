@@ -62,6 +62,7 @@
     "check": "npm run typecheck && npm run version-sync && npm run validate-spec && npm run validate-readme && npm run check-report-fixtures && npm run check-script-discipline && npm run check-tdqs && npm run check-intent-citations && npm run check-harness-expectations && npm run check-gate-coverage && npm run check-skill-harness && npm run test && npm run check-pack && npm run test-debate-club && npm run audit && npx tsx scripts/check-shipped-kb-empty.ts",
     "render-report": "npx tsx scripts/render-report.ts",
     "benchmark-retrieval": "npx tsx scripts/benchmark-retrieval.ts",
+    "benchmark-kb": "npx tsx scripts/benchmark-kb-store.ts",
     "monitor-delta": "npx tsx scripts/monitor-delta.ts",
     "monitor-watchlist": "npx tsx scripts/monitor-watchlist.ts"
   },

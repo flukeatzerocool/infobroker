@@ -35,7 +35,6 @@ const REPORT_BODY =
 function baseConfig(dir: string): KbConfig {
   return {
     storage_path: dir,
-    store_backend: "sqlite",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 128,
     chunk_overlap: 16,
@@ -482,17 +481,8 @@ describe("receipt encryption transitions (REQ-110)", () => {
   });
 });
 
-describe("receipt ingest refusal (REQ-060b)", () => {
-  it("refuses a receipt when the backend cannot persist one", () => {
-    // The tool layer maps save_to: disk to receipt_requires_kb before writing
-    // (asserted below); the KB helper refuses a backend without receipts.
-    const jsonConfig = { ...baseConfig(tempDir("ibk-receipt-json-")), store_backend: "json" as const };
-    initKb(jsonConfig);
-    expect(kbSupportsReportReceipts()).toBe(false);
-    const refused = kbPutReportReceipt(resolveReportIdentity("x"), receipt());
-    expect(refused.ok).toBe(false);
-    if (refused.ok) throw new Error("unreachable");
-    expect(refused.error.code).toBe("receipt_requires_kb");
+describe("receipt ingest destination (REQ-060b)", () => {
+  it("maps save destinations to knowledge-base and disk writes", () => {
     expect(ingestDestinations("disk")).toEqual({ kb: false, disk: true });
     expect(ingestDestinations("both")).toEqual({ kb: true, disk: true });
     expect(ingestDestinations("kb")).toEqual({ kb: true, disk: false });

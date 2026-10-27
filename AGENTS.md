@@ -5,7 +5,7 @@
 ```
 src/types.ts  →  src/config.ts  →  src/rate-limiter.ts  →  src/quota.ts  →  src/normalizer.ts  →  src/providers/ (→ src/corroborate.ts)  →  src/index.ts
 
-Knowledge base: src/kb.ts (tool logic) → src/kb-store.ts (seam + artifact predicates) → src/kb-sqlite.ts (default backend) / legacy JSON path; src/kb-migrate.ts, src/kb-row-crypto.ts, src/kb-crypto.ts.
+Knowledge base: src/kb.ts (tool logic) → src/kb-store.ts (seam + artifact predicates) → src/kb-sqlite.ts (only backend) → src/kb-prefilter.ts (in-memory lexical prefilter); src/kb-migrate.ts (one-way legacy JSON migration), src/kb-row-crypto.ts, src/kb-crypto.ts.
 ```
 
 ## Tool Surface (7 tools)

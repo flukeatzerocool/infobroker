@@ -1,8 +1,7 @@
 // @implements REQ-109 REQ-060h
 // Claim ledger persistence (REQ-109) and the read-only `claims` action
-// (REQ-060h). The ledger is SQLite-only; the legacy JSON backend must report
-// unsupported_backend, and a locked store must error without hiding the
-// findings `verify_claims` already produced.
+// (REQ-060h). A locked store must error without hiding the findings
+// `verify_claims` already produced.
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,7 +28,6 @@ const SOURCE_URL = "https://example.com/bridge-inspection";
 function baseConfig(dir: string): KbConfig {
   return {
     storage_path: dir,
-    store_backend: "sqlite",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
@@ -277,14 +275,6 @@ describe("claim ledger encryption (REQ-109)", () => {
 });
 
 describe("claim ledger failure modes (REQ-109 REQ-060h)", () => {
-  it("returns unsupported_backend semantics on the JSON backend, without failing a write", () => {
-    const dir = tempDir("ibk-claims-json-");
-    initKb({ ...baseConfig(dir), store_backend: "json" });
-    expect(kbSupportsClaims()).toBe(false);
-    expect(kbRecordClaims([bundle()])).toBe(false);
-    expect(kbClaims({})).toBeNull();
-  });
-
   it("streams claim rows instead of materializing the ledger before the bound", () => {
     const dir = tempDir("ibk-claims-stream-");
     initKb(baseConfig(dir));

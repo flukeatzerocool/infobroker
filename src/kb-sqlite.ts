@@ -75,6 +75,11 @@ export interface SqliteStoreOptions {
   encryptionEnabled?: boolean;
   fileName?: string;
   journalMode?: "WAL" | "DELETE";
+  /**
+   * Migration guard: the legacy JSON store is the migration's own source and
+   * must survive until the database commit and archive rename complete.
+   */
+  protectedLegacyPath?: string;
 }
 
 export class SqliteStore implements KbStore {
@@ -113,6 +118,10 @@ export class SqliteStore implements KbStore {
       if (!this.verifyKey(this.opts.secret)) {
         throw new Error("knowledge base key does not match the encrypted store");
       }
+      // REQ-084: opening an encrypted store must not leave a plaintext
+      // migration/corruption archive behind (for example one created by the
+      // migration that just completed, or by an interrupted earlier run).
+      this.removePlaintextArchives();
     } else if (this.opts.encryptionEnabled) {
       if (!this.opts.secret) throw new Error("encryption is enabled but no key is available");
       this.enableEncryption(this.opts.secret);
@@ -181,6 +190,26 @@ export class SqliteStore implements KbStore {
       if (!(payload instanceof Uint8Array)) continue;
       const chunk = this.decodePayload(payload);
       if (chunk) yield chunk;
+    }
+  }
+
+  *iterateChunksByIds(ids: Iterable<string>): Iterable<KbChunk> {
+    if (!this.db) return;
+    const list = [...ids];
+    // Stay well under SQLite's bound-parameter limit.
+    const batchSize = 400;
+    for (let start = 0; start < list.length; start += batchSize) {
+      const batch = list.slice(start, start + batchSize);
+      const placeholders = batch.map(() => "?").join(",");
+      const stmt = this.db.prepare(
+        `SELECT payload FROM chunks WHERE id IN (${placeholders}) ORDER BY ingested_at, rowid`
+      );
+      for (const row of stmt.iterate(...batch) as Iterable<Record<string, unknown>>) {
+        const payload = row["payload"];
+        if (!(payload instanceof Uint8Array)) continue;
+        const chunk = this.decodePayload(payload);
+        if (chunk) yield chunk;
+      }
     }
   }
 
@@ -684,8 +713,10 @@ export class SqliteStore implements KbStore {
     for (const name of readdirSync(dir)) {
       if (name === LIVE_SQLITE_STORE || name.startsWith(`${LIVE_SQLITE_STORE}-`)) continue;
       if (!isKbArchiveArtifact(name) && name !== LEGACY_JSON_STORE) continue;
+      const candidate = join(dir, name);
+      if (this.opts.protectedLegacyPath && candidate === this.opts.protectedLegacyPath) continue;
       try {
-        unlinkSync(join(dir, name));
+        unlinkSync(candidate);
       } catch (e) {
         throw new Error(
           `plaintext archive "${name}" could not be removed after enabling encryption: ${e instanceof Error ? e.message : String(e)}`

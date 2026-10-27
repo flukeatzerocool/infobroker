@@ -1,15 +1,17 @@
 // @implements REQ-108 REQ-085
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, existsSync, readdirSync, rmSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { mkdtempSync, writeFileSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { migrateLegacyJson } from "./kb-migrate.js";
+import { sealEnvelope } from "./kb-crypto.js";
 import { join } from "node:path";
-import { initKb, kbGet, kbStats } from "./kb.js";
+import { initKb, kbGet, kbStats, kbStoreFormat } from "./kb.js";
 import type { KbConfig, KbChunk } from "./types.js";
 
 function config(dir: string): KbConfig {
   return {
     storage_path: dir,
-    store_backend: "sqlite",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
@@ -67,6 +69,42 @@ describe("legacy JSON migration (REQ-108)", () => {
       initKb(config(dir));
       const after = readdirSync(dir).filter((f) => f.startsWith("vector-store.json.migrated-")).length;
       expect(after).toBe(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates into an encrypted store without deleting its source (REQ-084, REQ-085)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-migrate-enc-"));
+    try {
+      writeFileSync(join(dir, "vector-store.json"), legacy(baseChunk("legacy alpha text")));
+      const keyFile = join(dir, "key");
+      writeFileSync(keyFile, `${randomBytes(32).toString("base64")}\n`, { mode: 0o600 });
+      initKb({ ...config(dir), encryption: { enabled: true, key_file: keyFile } });
+      expect(kbStoreFormat()).toBe("encrypted");
+      expect(kbGet("https://example.com/legacy")?.text).toContain("legacy alpha text");
+      expect(existsSync(join(dir, "vector-store.json"))).toBe(false);
+      expect(readdirSync(dir).some((f) => f.startsWith("vector-store.json.migrated-"))).toBe(false);
+      expect(kbStats().events.some((e) => e.includes("plaintext prior store removed"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a newer encrypted legacy format without modifying it (REQ-085)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-migrate-newer-"));
+    try {
+      const key = { kind: "raw" as const, dek: randomBytes(32) };
+      const sealed = sealEnvelope(key, Buffer.from(legacy(baseChunk("future format"))));
+      sealed[Buffer.from("INFOKB1", "utf-8").length] = 99;
+      const jsonPath = join(dir, "vector-store.json");
+      writeFileSync(jsonPath, sealed);
+      const keyFile = join(dir, "key");
+      writeFileSync(keyFile, `${key.dek.toString("base64")}\n`, { mode: 0o600 });
+      const result = migrateLegacyJson({ storagePath: dir, encryptionEnabled: true, keyFile });
+      expect(result.status).toBe("locked");
+      expect(readFileSync(jsonPath)[Buffer.from("INFOKB1", "utf-8").length]).toBe(99);
+      expect(existsSync(join(dir, "vector-store.sqlite"))).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

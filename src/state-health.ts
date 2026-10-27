@@ -24,7 +24,7 @@ export interface StateHealth {
   };
   kb: {
     configured: boolean;
-    backend: "sqlite" | "json" | null;
+    backend: "sqlite" | null;
     encryption: "enabled" | "disabled" | "locked";
     supports_claims: boolean;
     supports_report_receipts: boolean;
@@ -63,12 +63,12 @@ function collect(bound: number): ToolNotice[] {
   }
 
   const drift = getUserConfigDrift();
-  const config = getConfig();
   if (drift) {
-    if (drift.renames.length > 0 || drift.outdatedVersion) {
+    if (drift.renames.length > 0 || drift.removals.length > 0 || drift.outdatedVersion) {
       const pieces: string[] = [];
       if (drift.outdatedVersion) pieces.push(`schema v${drift.declaredVersion} → v${drift.currentVersion}`);
       if (drift.renames.length > 0) pieces.push(summarize(drift.renames.map((r) => `${r.from} → ${r.to}`)));
+      if (drift.removals.length > 0) pieces.push(summarize(drift.removals.map((r) => r.path)));
       notices.push({
         code: "config_migration_pending",
         severity: "action_required",
@@ -85,6 +85,15 @@ function collect(bound: number): ToolNotice[] {
         remediation: "Replace the deprecated key in config.local.json manually; it is not rewritten automatically.",
       });
     }
+    if (drift.removals.length > 0) {
+      notices.push({
+        code: "config_key_removed",
+        severity: "info",
+        message: `Obsolete user config key: ${summarize(drift.removals.map((r) => r.path))}.`,
+        remediation:
+          "Run infobroker_reload_config with migrate: true to drop it; a legacy vector-store.json migrates automatically.",
+      });
+    }
     if (drift.unrecognized.length > 0) {
       notices.push({
         code: "config_key_unrecognized",
@@ -93,15 +102,6 @@ function collect(bound: number): ToolNotice[] {
         remediation: "Remove or correct these top-level keys in config.local.json; they are retained but ignored.",
       });
     }
-  }
-
-  if (isKbConfigured() && (config.kb?.store_backend ?? "json") !== "sqlite") {
-    notices.push({
-      code: "feature_requires_sqlite",
-      severity: "info",
-      message: "The claim ledger and report receipts are unavailable on the legacy JSON backend.",
-      remediation: 'Set kb.store_backend to "sqlite" and run infobroker_reload_config; the JSON store migrates automatically.',
-    });
   }
 
   const update = getUpdateState();
@@ -138,7 +138,7 @@ export function computeStateHealth(): StateHealth {
     },
     kb: {
       configured,
-      backend: configured ? (config.kb?.store_backend ?? "json") : null,
+      backend: configured ? "sqlite" : null,
       encryption: getKbEncryptionState(),
       supports_claims: kbSupportsClaims(),
       supports_report_receipts: kbSupportsReportReceipts(),

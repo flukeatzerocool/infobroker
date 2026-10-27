@@ -2,7 +2,7 @@
 // Test/gate isolation helper. Server-spawning checks inherit `process.env` by
 // default; without this they can open (and migrate) the real user knowledge
 // base. The helper writes a temp config whose storage path is a fresh temp
-// directory, pins the JSON backend, and redirects HOME/XDG/TMPDIR.
+// directory and redirects HOME/XDG/TMPDIR.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,7 +31,6 @@ export function makeIsolatedConfig(base: NodeJS.ProcessEnv = process.env): Isola
   shipped.kb = {
     ...(shipped.kb ?? {}),
     storage_path: storagePath,
-    store_backend: "json",
     auto_index: false,
   };
   const configPath = join(root, "config.json");

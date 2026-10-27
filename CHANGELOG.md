@@ -28,6 +28,20 @@
   through the real reconciliation path and scores precision, recall, MRR, and
   nDCG against a recorded baseline, separately from the confidence-calibration
   gold set. (REQ-130)
+- Knowledge-base search gained an in-memory, capacity-bounded prefilter over
+  stored lexical embeddings. It is sound for the signed-hash model, needs no
+  data migration, works on encrypted stores, and cut production search latency
+  from 2.7 s to 0.28 s plaintext (10×) and 3.7 s to 0.35 s encrypted (11×).
+  A read-only `benchmark-kb` script records the measurement. (REQ-108, REQ-060a)
+- Removed the legacy JSON knowledge-base backend and the `kb.store_backend`
+  option. A legacy `vector-store.json` still migrates automatically on first
+  open; the config key is dropped by an explicit layer migration with a
+  notice. There is no backend rollback; recover with a key backup or rekey.
+  (REQ-105, REQ-109, REQ-060h)
+- Fixed encrypted first-open migration deleting its own legacy source before
+  the archive rename. The migration source is now protected until the database
+  commit, encrypted opens sweep leftover plaintext archives, and the reported
+  event matches what happened. (REQ-084, REQ-085)
 
 ## 2026.10.26 — Corroboration trust: source families, snapshots, calibration
 

@@ -7,7 +7,7 @@
 // "unversioned" rather than zero, so a user who never sets it is not nagged
 // about a migration it does not need.
 
-export const CURRENT_CONFIG_VERSION = 1;
+export const CURRENT_CONFIG_VERSION = 2;
 
 export interface RenameMigration {
   from: string;
@@ -17,6 +17,12 @@ export interface RenameMigration {
 export interface DeprecatedKey {
   path: string;
   replacement: string;
+}
+
+/** Obsolete user-layer keys removed by a schema change. */
+export interface RemovalMigration {
+  path: string;
+  reason: string;
 }
 
 // Registered key relocations applied to the user layer. Empty until a release
@@ -31,12 +37,22 @@ export const DEPRECATED_KEYS: readonly DeprecatedKey[] = [
   { path: "kb.expiry", replacement: "kb.freshness tiers (per-tier decay and expiry)" },
 ];
 
+// Keys whose option no longer exists. The key is dropped on an explicit
+// migration; the affected content migrates automatically on next open.
+export const REMOVE_MIGRATIONS: readonly RemovalMigration[] = [
+  {
+    path: "kb.store_backend",
+    reason: "the legacy JSON backend was removed; a legacy store migrates automatically",
+  },
+];
+
 export interface ConfigDrift {
   declaredVersion: number | null;
   currentVersion: number;
   outdatedVersion: boolean;
   renames: RenameMigration[];
   deprecated: DeprecatedKey[];
+  removals: RemovalMigration[];
   unrecognized: string[];
   hasDrift: boolean;
 }
@@ -86,13 +102,15 @@ function deletePath(obj: Record<string, unknown>, path: string): void {
 export function detectConfigDrift(
   userLayer: Record<string, unknown>,
   shippedTopLevel: readonly string[],
-  migrations: readonly RenameMigration[] = RENAME_MIGRATIONS
+  migrations: readonly RenameMigration[] = RENAME_MIGRATIONS,
+  removals: readonly RemovalMigration[] = REMOVE_MIGRATIONS
 ): ConfigDrift {
   const declared =
     typeof userLayer["config_version"] === "number" ? (userLayer["config_version"] as number) : null;
 
   const renames = migrations.filter((m) => getPath(userLayer, m.from) !== undefined);
   const deprecated = DEPRECATED_KEYS.filter((d) => getPath(userLayer, d.path) !== undefined);
+  const obsolete = removals.filter((m) => getPath(userLayer, m.path) !== undefined);
 
   const known = new Set(shippedTopLevel);
   known.add("config_version");
@@ -100,7 +118,7 @@ export function detectConfigDrift(
 
   const outdatedVersion = declared !== null && declared < CURRENT_CONFIG_VERSION;
   const hasDrift =
-    renames.length > 0 || deprecated.length > 0 || unrecognized.length > 0 || outdatedVersion;
+    renames.length > 0 || deprecated.length > 0 || obsolete.length > 0 || unrecognized.length > 0 || outdatedVersion;
 
   return {
     declaredVersion: declared,
@@ -108,6 +126,7 @@ export function detectConfigDrift(
     outdatedVersion,
     renames,
     deprecated,
+    removals: obsolete,
     unrecognized,
     hasDrift,
   };
@@ -126,6 +145,12 @@ export function applyConfigMigrations(
 ): { layer: Record<string, unknown>; changes: string[] } {
   const layer: Record<string, unknown> = JSON.parse(JSON.stringify(userLayer));
   const changes: string[] = [];
+
+  for (const removal of drift.removals) {
+    if (getPath(layer, removal.path) === undefined) continue;
+    deletePath(layer, removal.path);
+    changes.push(`removed obsolete "${removal.path}" (${removal.reason})`);
+  }
 
   for (const rename of drift.renames) {
     const value = getPath(layer, rename.from);

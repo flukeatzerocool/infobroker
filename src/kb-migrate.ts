@@ -147,6 +147,7 @@ export function migrateLegacyJson(opts: {
       journalMode: "DELETE",
       encryptionEnabled: opts.encryptionEnabled,
       secret,
+      protectedLegacyPath: jsonPath,
     });
     store.init();
     for (let i = 0; i < legacy.chunks.length; i += 500) {
@@ -169,10 +170,11 @@ export function migrateLegacyJson(opts: {
 
     const migratedPath = join(opts.storagePath, `vector-store.json.migrated-${Date.now()}`);
     renameSync(jsonPath, migratedPath);
-    return {
-      status: "migrated",
-      event: `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${new Date().toISOString()}; prior store preserved as ${migratedPath}`,
-    };
+    if (opts.encryptionEnabled) unlinkSync(migratedPath);
+    const event = opts.encryptionEnabled
+      ? `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${new Date().toISOString()}; plaintext prior store removed because at-rest encryption is enabled`
+      : `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${new Date().toISOString()}; prior store preserved as ${migratedPath}`;
+    return { status: "migrated", event };
   } catch (e) {
     store?.close();
     for (const path of [tempPath, `${tempPath}-wal`, `${tempPath}-shm`, `${tempPath}-journal`]) {

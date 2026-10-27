@@ -2,6 +2,66 @@
 
 ## Active Decisions
 
+### D-068: Encrypted-Compatible Knowledge Base Prefilter (REQ-108, REQ-060a; 2026.10.27)
+
+The roadmap deferred a prefilter until SQLite search latency on the production
+corpus exceeded 2× the legacy backend. `scripts/benchmark-kb-store.ts` measured
+copies of the deployed corpus (50,806 chunks, 445 MB legacy JSON seed) with the
+same chunk set in both backends. Median per-query p50 before the change:
+JSON 367 ms, SQLite plaintext 2,748 ms (7.5×), SQLite encrypted 3,695 ms (10.1×).
+The threshold was met, so the prefilter shipped: an in-process, capacity-bounded
+Bloom signature over the nonzero buckets of each stored lexical embedding.
+A shared bucket is necessary for a nonzero cosine dot, so a signature hit is a
+sound candidate test for `signed-hash-tfidf`; LSA stays a full scan because its
+vectors are dense. Signatures are never persisted, so encrypted stores need no
+migration and no plaintext index. The signature map is capped at 16 MiB and
+disables itself (full scan) above the cap.
+
+After: SQLite plaintext 280 ms (9.9× faster than before), encrypted 345 ms
+(10.8×), both below the legacy JSON p50 for the same queries, with identical
+top-5 source/score signatures. Alternatives rejected: a plaintext FTS5 index
+(leaks content at rest), persisted posting lists (data migration plus
+content-proportional residency), and deterministic-encryption indexes (new
+crypto construction and equality leakage). Verification:
+`scripts/benchmark-kb-store.ts`; `src/kb-prefilter.test.ts`;
+`src/kb-sqlite.test.ts`; `src/kb-encryption-sqlite.test.ts`.
+
+While benchmarking, encrypted first-open migration was found to delete its own
+legacy source before the archive rename: the temporary encrypted store removed
+plaintext archives in the shared directory, so migration returned an error,
+lost the recoverable archive, and reported "the legacy store is untouched."
+`SqliteStoreOptions.protectedLegacyPath` now shields the migration source, the
+migrated archive is removed explicitly once encryption is on, and encrypted
+opens sweep any leftover plaintext archive. Covered by `src/kb-migrate.test.ts`
+and `src/kb-sqlite.test.ts`.
+
+### D-069: Remove the Legacy JSON Knowledge Base Backend (REQ-105, REQ-109, REQ-060h; 2026.10.27)
+
+The one-release `kb.store_backend` escape hatch had served its purpose: the
+default had been SQLite since 2026.10.20 and legacy stores migrate on first
+open. Keeping the backend meant a second persistence path, a second encryption
+format, JSON-format tests, and an `unsupported_backend` surface for claims and
+receipts. The option, the in-memory store, the JSON read/write functions, and
+the backend-specific tests are removed; `kb-migrate.ts` and
+`scripts/migrate-kb.ts` stay so an existing `vector-store.json` still migrates
+non-destructively, and the artifact predicates stay so a legacy store is still
+recognized for the shipped-empty gate and for plaintext-archive cleanup.
+
+The user layer is migrated explicitly: a registered removal drops
+`kb.store_backend` with the usual backup, and state health reports
+`config_key_removed` until it is applied. `config_version` moves to 2. There is
+no backend rollback after this release: enabling encryption already removed
+plaintext archives, and now no JSON backend exists to roll back to. Recovery is
+the existing key backup, verify, and rekey path; a plaintext migration archive
+is preserved only while encryption has never been enabled.
+
+Alternatives rejected: keeping the JSON backend read-only (still two
+serialization paths and a rollback claim), leaving the option as a silent no-op
+(users would believe they were on JSON), and deleting the migration path (would
+strand every pre-SQLite deployment). Verification: `npm run check`;
+`src/kb-migrate.test.ts`, `src/kb-sqlite.test.ts`, `src/config-migrations.test.ts`,
+and the config/state-health suites.
+
 ### D-067: Retrieval Benchmark Replays Committed Results (REQ-130; 2026.10.26)
 
 The retrieval benchmark stores raw multi-provider results and grades, then runs

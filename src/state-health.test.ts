@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { injectNotices } from "./state-health.js";
 
 const BASE = {
-  config_version: 1,
+  config_version: 2,
   providers: {
     duckduckgo: {
       tier: "builtin",
@@ -121,6 +121,19 @@ describe("state health with a stale user layer (REQ-111)", () => {
     const codes = health.collectNotices().map((n) => n.code);
     expect(codes).toContain("config_migration_pending");
     expect(codes).toContain("config_key_unrecognized");
+  });
+
+  it("reports an obsolete kb.store_backend option", async () => {
+    writeFileSync(join(dir, "config.json"), JSON.stringify(BASE));
+    writeFileSync(join(dir, "config.local.json"), JSON.stringify({ kb: { store_backend: "json" } }));
+    process.env["INFOBROKER_CONFIG"] = join(dir, "config.json");
+    process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
+    vi.resetModules();
+    const config = await import("./config.js");
+    config.loadConfig();
+    const health = await import("./state-health.js");
+    const codes = health.collectNotices().map((n) => n.code);
+    expect(codes).toContain("config_key_removed");
   });
 
   it("surfaces a degraded startup through state health", async () => {

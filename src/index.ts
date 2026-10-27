@@ -1879,7 +1879,7 @@ instrumentTool(
           max_results: Number(params.max_results ?? 8),
         });
         if (!ledger) {
-          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "unsupported_backend", "The claim ledger requires the SQLite store", "Set kb.store_backend to \"sqlite\" and reload; the legacy JSON store does not persist claims"))}` }] };
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "config_error", "The knowledge base store is unavailable", "Check the store lock and encryption state, then reload"))}` }] };
         }
         return {
           content: [{

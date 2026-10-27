@@ -1,7 +1,7 @@
 // @implements REQ-055 REQ-108
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, statSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeIsolatedConfig } from "./lib/test-isolation.js";
@@ -20,21 +20,14 @@ describe("gate isolation (REQ-055)", () => {
   it("makes a server-spawning gate write only inside the temp store", () => {
     const iso = makeIsolatedConfig();
     try {
-      // The shipped config is temporarily switched to SQLite so the spawned
-      // server creates an observable artifact in the isolated directory.
-      const config = JSON.parse(readFileSync(iso.configPath, "utf-8")) as {
-        kb: Record<string, unknown>;
-      };
-      config.kb.store_backend = "sqlite";
-      writeFileSync(iso.configPath, JSON.stringify(config, null, 2));
-
+      // The helper's temp config already points at the isolated SQLite store.
       // Remove the outer helper's artifacts so anything found afterwards was
       // created by the spawned gate itself.
       rmSync(iso.configPath, { force: true });
       rmSync(iso.storagePath, { recursive: true, force: true });
 
       const canaryDir = mkdtempSync(join(tmpdir(), "infobroker-canary-"));
-      const canary = join(canaryDir, "vector-store.json");
+      const canary = join(canaryDir, "vector-store.sqlite");
       writeFileSync(canary, "canary");
       const before = statSync(canary).mtimeMs;
 

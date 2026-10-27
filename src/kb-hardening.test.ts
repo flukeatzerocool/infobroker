@@ -1,9 +1,9 @@
 // @implements REQ-060c REQ-066 REQ-100
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, statSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbStats, kbIngest, flushKbWrites } from "./kb.js";
+import { initKb, kbIngest } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const base = mkdtempSync(join(tmpdir(), "infobroker-kb-hardening-"));
@@ -11,7 +11,6 @@ const base = mkdtempSync(join(tmpdir(), "infobroker-kb-hardening-"));
 function makeConfig(storagePath: string, overrides: Partial<KbConfig> = {}): KbConfig {
   return {
     storage_path: storagePath,
-    store_backend: "json",
     embedding_model: "signed-hash-tfidf",
     chunk_size: 512,
     chunk_overlap: 64,
@@ -40,20 +39,6 @@ describe("KB store permissions (REQ-100)", () => {
     initKb(makeConfig(dir));
     const mode = statSync(dir).mode & 0o777;
     expect(mode).toBe(0o700);
-  });
-});
-
-describe("KB corruption recovery event (REQ-060c)", () => {
-  it("surfaces the recovery event in stats after a corrupt store is replaced", () => {
-    const dir = join(base, "corrupt-store");
-    initKb(makeConfig(dir));
-    flushKbWrites();
-    // Replace the store with unparseable content, then reload.
-    writeFileSync(join(dir, "vector-store.json"), "{ this is not valid json");
-    initKb(makeConfig(dir));
-    const events = kbStats().events ?? [];
-    expect(events.some((e) => e.includes("Storage corruption detected"))).toBe(true);
-    expect(readdirSync(dir).some((f) => f.startsWith("vector-store.corrupt-"))).toBe(true);
   });
 });
 

@@ -18,10 +18,5 @@ and ACLs; enterprise scheduling.
 
 ## Knowledge base
 
-- Remove the legacy JSON backend after the one-release `kb.store_backend: "json"`
-  escape hatch.
 - Streaming/out-of-core LSA: `LsaModel.fit` allocates O(n·v) and O(n·k) matrices,
   so fitted-model reconciliation remains memory-bound by design.
-- Encrypted-compatible KB prefilter: add only if measured SQLite search latency
-  on the production corpus exceeds 2× the legacy backend. A plaintext FTS5 index
-  is not acceptable for encrypted stores.
