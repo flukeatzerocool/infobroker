@@ -150,6 +150,17 @@ processing.
 ## Quick Start
 
 ```sh
+npx -y infobroker
+```
+
+The npm package ships its default configuration. The server resolves it from
+the installed package, so no environment variable is required. Your own
+overrides live at `~/.config/infobroker/config.local.json`, or at a path set
+by `INFOBROKER_CONFIG_LOCAL`.
+
+To run from a clone instead:
+
+```sh
 cd Infobroker && npm install && npm run start
 ```
 
@@ -179,9 +190,13 @@ Add this to your OpenCode config (`~/.config/opencode/opencode.json`):
 }
 ```
 
+For an npm install, point `instructions` and `skills.paths` at
+`node_modules/infobroker/...` and use `["npx", "-y", "infobroker"]` as the
+command. On Windows, quote paths containing backslashes.
+
 The `mcp` block starts the server; the `instructions` and `skills` blocks
 are what activate the bundled client skills. Without them the skills ship
-in the repository but stay inert.
+with the package but stay inert.
 
 Free providers work immediately. API-keyed providers — Brave, Exa,
 Tavily, Yep — unlock higher throughput and specialized search; self-hosted
@@ -465,25 +480,26 @@ SearXNG instance sees your queries.
 
 ## Configuration
 
-Four environment variables tune a deployment. `INFOBROKER_CONFIG` points
-at a different config file (default `./config.json`),
-`INFOBROKER_CONFIG_LOCAL` at a user config layer (default
-`config.local.json`), `INFOBROKER_<NAME>_API_KEY` supplies a keyed
-provider's credential, and `INFOBROKER_<NAME>_URL` points at a self-hosted
-provider.
+Four environment variables tune a deployment. `INFOBROKER_CONFIG` overrides
+the shipped default config (resolved from the installed package when unset),
+`INFOBROKER_CONFIG_LOCAL` points at a user config layer,
+`INFOBROKER_<NAME>_API_KEY` supplies a keyed provider's credential, and
+`INFOBROKER_<NAME>_URL` points at a self-hosted provider.
 
-`config.json` ships with the repository and holds the defaults: which
-providers are enabled, their priority in fallback chains, rate limits,
-corroboration parameters, and the task-to-provider dispatch table.
-Hot-reloadable via `reload_config` — edit the file and call the tool, or
-pass a `patch` to merge configuration programmatically; changes take
+`config.json` ships with the package and the repository and holds the
+defaults: which providers are enabled, their priority in fallback chains,
+rate limits, corroboration parameters, and the task-to-provider dispatch
+table. Hot-reloadable via `reload_config` — edit the file and call the tool,
+or pass a `patch` to merge configuration programmatically; changes take
 effect without a restart.
 
-Your own overrides live in a separate user layer — `config.local.json`
-in the project directory (or a path you set via `INFOBROKER_CONFIG_LOCAL`).
-This file is git-ignored, so pulling updates from the repository never
-overwrites your settings. Values in the user layer take precedence over
-the shipped defaults; anything left out falls back to `config.json`.
+Your own overrides live in a separate user layer —
+`~/.config/infobroker/config.local.json` by default, or a path you set via
+`INFOBROKER_CONFIG_LOCAL`. An existing `config.local.json` beside the
+resolved config still wins, so clone deployments keep their current layout.
+The layer is preserved across updates. Values in the user layer take
+precedence over the shipped defaults; anything left out falls back to
+`config.json`.
 
 `config.json` carries a schema stamp (`config_version`). If your user layer
 was written for an older schema, or holds a key the current schema no longer

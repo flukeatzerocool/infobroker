@@ -25,6 +25,7 @@ afterEach(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
   dirs = [];
   delete process.env["INFOBROKER_CONFIG"];
+  delete process.env["INFOBROKER_CONFIG_LOCAL"];
   vi.resetModules();
 });
 
@@ -38,6 +39,7 @@ async function loadAudit(auditLogPath: string): Promise<typeof import("./audit-l
   const basePath = join(dir, "config.json");
   writeFileSync(basePath, JSON.stringify(cfg));
   process.env["INFOBROKER_CONFIG"] = basePath;
+  process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
   vi.resetModules();
   return await import("./audit-log.js");
 }

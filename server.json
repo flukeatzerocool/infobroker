@@ -1,7 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.flukeatzerocool/infobroker",
+  "title": "Infobroker",
   "description": "Multi-provider research MCP server: unified web search, fact-checking, personal knowledge base.",
+  "websiteUrl": "https://github.com/flukeatzerocool/infobroker#readme",
   "repository": {
     "url": "https://github.com/flukeatzerocool/infobroker",
     "source": "github"
@@ -15,7 +17,38 @@
       "version": "2026.10.26",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "INFOBROKER_BRAVE_API_KEY",
+          "description": "Brave Search API key for the keyed Brave provider",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "INFOBROKER_EXA_API_KEY",
+          "description": "Exa API key for the keyed Exa provider",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "INFOBROKER_TAVILY_API_KEY",
+          "description": "Tavily API key for the keyed Tavily provider",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "INFOBROKER_YEP_API_KEY",
+          "description": "Yep API key for the keyed Yep provider",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "INFOBROKER_SEARXNG_URL",
+          "description": "Base URL of a self-hosted SearXNG instance",
+          "isRequired": false
+        }
+      ]
     }
   ]
 }

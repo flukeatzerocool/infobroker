@@ -2,6 +2,15 @@
 
 ## 2026.10.26 — Wave 3: analysis aids, multilingual collection, privacy posture, retrieval benchmark
 
+- The npm package now ships `config.json`, `skills/`, and `instructions/`, and
+  resolves its default configuration relative to the installed package, so
+  `npx infobroker` starts without a config path. User overrides resolve from
+  `INFOBROKER_CONFIG_LOCAL`, an existing sibling layer, or
+  `$XDG_CONFIG_HOME/infobroker/config.local.json`. (REQ-010)
+- `server.json` declares the keyed and self-hosted provider environment
+  variables for registry clients, and a new `check-pack` gate packs the
+  tarball and runs an MCP handshake from an empty directory. (REQ-011)
+
 - `search_web (analyze)` now attaches in-process topics, entity mentions,
   semantic clusters, and a dated timeline derived from the returned results,
   with no extra outbound request. Empty result sets omit analysis rather than

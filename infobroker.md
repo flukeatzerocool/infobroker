@@ -210,7 +210,7 @@ The server SHALL support a configurable output verbosity that applies to all too
 ### 4.2 Provider Configuration
 
 **REQ-010 — Config File**
-Provider configuration SHALL reside in a JSON file at a path specified by the `INFOBROKER_CONFIG` environment variable. The configuration SHALL be composed of a shipped default configuration and a user configuration layer. Values in the user layer SHALL take precedence over values in the shipped default. The user configuration layer SHALL be preserved when the software is updated. The config declares each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section supplying values inherited by providers that do not override them. _Check:_ G1.
+Provider configuration SHALL reside in a JSON file. When `INFOBROKER_CONFIG` is unset, the server SHALL resolve the shipped default configuration relative to its installed package; the variable SHALL override that location when set. The configuration SHALL be composed of the shipped default and a user configuration layer resolved from `INFOBROKER_CONFIG_LOCAL` when set, otherwise from an existing layer beside the resolved default, otherwise from the user configuration directory. Values in the user layer SHALL take precedence over the shipped default, and the layer SHALL be preserved when the software is updated. The config declares each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section inherited by providers that do not override them. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
 API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`; for URL-based providers the endpoint SHALL be accepted via `INFOBROKER_<PROVIDER>_URL`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
@@ -1272,11 +1272,13 @@ infobroker/
 User-owned (NOT in the repository; preserved across updates per REQ-043):
 
 ```
-config.local.json                          # User configuration layer (REQ-010)
-~/.local/share/infobroker/knowledge-base/  # Vector store: vector-store.sqlite (+ -wal/-shm),
-                                           #   legacy vector-store.json, .migrated-* backups
-$TMPDIR/infobroker/quota.json              # Persistent quota counters (REQ-033)
-$TMPDIR/infobroker/trunc-*.txt             # Full content of truncated responses
+$XDG_CONFIG_HOME/infobroker/config.local.json  # User configuration layer (REQ-010);
+                                               #   ~/.config when XDG_CONFIG_HOME is unset
+config.local.json                              # Legacy sibling layer beside the resolved default
+~/.local/share/infobroker/knowledge-base/      # Vector store: vector-store.sqlite (+ -wal/-shm),
+                                               #   legacy vector-store.json, .migrated-* backups
+$TMPDIR/infobroker/quota.json                  # Persistent quota counters (REQ-033)
+$TMPDIR/infobroker/trunc-*.txt                 # Full content of truncated responses
 ```
 
 Component names above are the reference layout; the user configuration
@@ -1313,6 +1315,30 @@ separately from the shipped default and survives updates.
 
 The `INFOBROKER_CONFIG` path points to the shipped default; the user
 configuration layer is merged over it by the server (REQ-010).
+
+An installed package resolves its shipped `config.json` without any
+environment variable, so the npm entry point needs no config path:
+
+```json
+// opencode.json additions for an npm install
+{
+  "instructions": [
+    "<path-to-node_modules>/infobroker/instructions/search-preferences.md"
+  ],
+  "skills": {
+    "paths": ["<path-to-node_modules>/infobroker/skills"]
+  },
+  "mcp": {
+    "infobroker": {
+      "type": "local",
+      "command": ["npx", "-y", "infobroker"]
+    }
+  }
+}
+```
+
+`INFOBROKER_CONFIG` remains the override when a deployment needs a
+different shipped default (REQ-010).
 
 ### 10.3 What Replaces What
 

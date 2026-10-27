@@ -125,7 +125,7 @@ exits 0).
 
 ## State Model
 
-- **Config**: `config.json` (shipped default) — provider config, dispatch tables, limits, hot-reloadable. A user layer at `config.local.json` (or `INFOBROKER_CONFIG_LOCAL`) is merged over the shipped default; user values take precedence and survive updates (REQ-010, REQ-042, REQ-043). `config.local.json` is git-ignored.
+- **Config**: `config.json` (shipped default) — provider config, dispatch tables, limits, hot-reloadable. The shipped default resolves relative to the installed package when `INFOBROKER_CONFIG` is unset. A user layer at `$XDG_CONFIG_HOME/infobroker/config.local.json` (or an existing sibling `config.local.json`, or `INFOBROKER_CONFIG_LOCAL`) is merged over the shipped default; user values take precedence and survive updates (REQ-010, REQ-042, REQ-043). `config.local.json` is git-ignored.
 - **KB**: the repository ships an **empty** knowledge base. The vector store
   lives at the user-scoped `storage_path` (`~/.local/share/infobroker/knowledge-base`
   by default), outside the repo tree, and is never committed. Personal KB
@@ -176,7 +176,7 @@ has no non-whitespace diff, the pipeline fails (spec→README binding).
 
 | Variable | Purpose |
 |----------|---------|
-| `INFOBROKER_CONFIG` | Path to config.json (default: `./config.json`) |
+| `INFOBROKER_CONFIG` | Path to config.json (default: package-relative `config.json`) |
 | `INFOBROKER_<PROVIDER>_API_KEY` | API key for keyed providers |
 | `INFOBROKER_<PROVIDER>_URL` | URL for self-hosted providers (SearXNG) |
 
@@ -253,6 +253,7 @@ This runs:
 | `npm run check-skill-harness` | Skill-check and event-stream evaluators: advisory exclusion, gating, intermediate-message tokens |
 | `npm run check-harness-expectations` | Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators |
 | `npm run check-gate-coverage` | Every G1 REQ is backed by a test citation or a recorded exemption (REQ-055) |
+| `npm run check-pack` | Published tarball allowlist/denylist and an MCP handshake from an empty config-less directory |
 | `npm run test`       | Vitest unit and integration tests                  |
 | `npm run test-debate-club` | debate-club Arena: deterministic, offline tool-contract suite (typecheck + fixture replay) |
 | `npm run audit`      | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |

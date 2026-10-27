@@ -55,6 +55,7 @@ async function loadPolicy(
   const basePath = join(dir, "config.json");
   writeFileSync(basePath, JSON.stringify(cfg));
   process.env["INFOBROKER_CONFIG"] = basePath;
+  process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
   vi.resetModules();
   return await import("./content-policy.js");
 }

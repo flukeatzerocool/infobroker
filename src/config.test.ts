@@ -114,6 +114,7 @@ describe("configuration overlay", () => {
     const basePath = join(dir, "config.json");
     writeFileSync(basePath, JSON.stringify(BASE));
     process.env["INFOBROKER_CONFIG"] = basePath;
+    process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
     vi.resetModules();
     const mod = await import("./config.js");
     const cfg = mod.loadConfig();

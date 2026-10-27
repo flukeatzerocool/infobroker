@@ -101,6 +101,7 @@ describe("state health with a stale user layer (REQ-111)", () => {
   it("emits no notices for a clean configuration", async () => {
     writeFileSync(join(dir, "config.json"), JSON.stringify(BASE));
     process.env["INFOBROKER_CONFIG"] = join(dir, "config.json");
+    process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
     vi.resetModules();
     const config = await import("./config.js");
     config.loadConfig();

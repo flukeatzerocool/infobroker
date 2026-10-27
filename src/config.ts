@@ -1,6 +1,7 @@
 // @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084 REQ-105 REQ-113
 import { readFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { join, dirname } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
 import {
   detectConfigDrift,
@@ -42,15 +43,36 @@ export function getStartupMigration(): StartupMigration | null {
   return startupMigration;
 }
 
+function packageRoot(): string {
+  // Resolves to the repository root when running src/ under tsx and to the
+  // installed package root when running the compiled dist/ entry point.
+  return join(import.meta.dirname, "..");
+}
+
+function userConfigDir(): string {
+  if (process.platform === "win32") {
+    return process.env["APPDATA"] || join(homedir(), "AppData", "Roaming");
+  }
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support");
+  }
+  return process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config");
+}
+
 export function getConfigPath(): string {
   if (!configPath) {
-    configPath = process.env["INFOBROKER_CONFIG"] || "./config.json";
+    configPath = process.env["INFOBROKER_CONFIG"] || join(packageRoot(), "config.json");
   }
   return configPath;
 }
 
 export function getUserConfigPath(): string | undefined {
-  return process.env["INFOBROKER_CONFIG_LOCAL"] || join(dirname(getConfigPath()), "config.local.json");
+  const explicit = process.env["INFOBROKER_CONFIG_LOCAL"];
+  if (explicit) return explicit;
+  // Preserve an existing clone-side layer so upgrades do not silently ignore it.
+  const legacy = join(dirname(getConfigPath()), "config.local.json");
+  if (existsSync(legacy)) return legacy;
+  return join(userConfigDir(), "infobroker", "config.local.json");
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
