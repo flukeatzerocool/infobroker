@@ -64,11 +64,10 @@ function collect(bound: number): ToolNotice[] {
 
   const drift = getUserConfigDrift();
   if (drift) {
-    if (drift.renames.length > 0 || drift.removals.length > 0 || drift.outdatedVersion) {
+    if (drift.renames.length > 0 || drift.outdatedVersion) {
       const pieces: string[] = [];
       if (drift.outdatedVersion) pieces.push(`schema v${drift.declaredVersion} → v${drift.currentVersion}`);
       if (drift.renames.length > 0) pieces.push(summarize(drift.renames.map((r) => `${r.from} → ${r.to}`)));
-      if (drift.removals.length > 0) pieces.push(summarize(drift.removals.map((r) => r.path)));
       notices.push({
         code: "config_migration_pending",
         severity: "action_required",
@@ -86,9 +85,11 @@ function collect(bound: number): ToolNotice[] {
       });
     }
     if (drift.removals.length > 0) {
+      // One notice per obsolete key: dropping the key needs operator action,
+      // so this is action_required rather than an informational duplicate.
       notices.push({
         code: "config_key_removed",
-        severity: "info",
+        severity: "action_required",
         message: `Obsolete user config key: ${summarize(drift.removals.map((r) => r.path))}.`,
         remediation:
           "Run infobroker_reload_config with migrate: true to drop it; a legacy vector-store.json migrates automatically.",

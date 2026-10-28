@@ -309,14 +309,13 @@ tells you how sure it is.
 > "Search what you already found about the Rebel Alliance fleet."
 > "Ingest this article so it's cached for next time."
 
-Every search, fetch, and corroboration run is cached in a local knowledge
-base. `manage_kb` checks the cache before hitting external providers, falling
-back to the network only when the cached results aren't fresh enough
-or relevant enough. Its actions ingest text or a URL by hand, report
+Every search, fetch, and corroboration run is cached locally. `manage_kb`
+checks the cache before hitting external providers, falling back to the
+network only when the cached results aren't fresh enough or relevant enough. Its actions ingest text or a URL by hand, report
 what's cached, and remove content. Content is age-scored, expired on a
 freshness schedule, and deduplicated by source. Retrieval runs on your
-machine with a configurable in-process embedding model — your content is
-never sent to a third party to be embedded. Beyond
+machine with a configurable embedding model; your content is never sent to a
+third party. Beyond
 the cache, `manage_kb` archives the reports you generate: ingest with
 `source_type: "report"`
 (and default to the knowledge base) and revisit them with `manage_kb` list and
@@ -327,8 +326,9 @@ stores one ledger entry per finding, linked to the sources that supported it
 with the time each source was retrieved, and re-verifying a claim updates that
 entry in place instead of adding a duplicate. Cited sources are copied into
 the knowledge base as retrievable, hashed snapshots, so a report can be
-rechecked after the live page changes. Read them with
-`manage_kb` action=claims, optionally filtered by `query` (claim text) or
+rechecked after the live page changes. Each snapshot reports its basis —
+fetched document or supplied snippet — and whether it was truncated. Read them
+with `manage_kb` action=claims, optionally filtered by `query` (claim text) or
 `source_url`, newest first and capped by `max_results` (default 8, max 50).
 The ledger is sealed at rest when encryption is on.
 
@@ -712,7 +712,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-10-26.
+Last updated: 2026-10-28.
 
 ## Contribute
 
@@ -742,7 +742,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.10.26), which defines every requirement and the gates that verify it.
+(v2026.10.28), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers. The routing gate resolves every cited tool and

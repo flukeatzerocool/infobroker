@@ -94,6 +94,67 @@ describe("step_should_run", () => {
   });
 });
 
+describe("staging safety", () => {
+  it("denies secret-bearing and config paths", () => {
+    for (const path of [
+      "config.local.json",
+      "nested/config.local.json",
+      ".env",
+      ".env.local",
+      "certs/server.key",
+      "certs/server.pem",
+      "keys/store.p12",
+      "id_rsa",
+      ".infobroker/state.json",
+      "vector-store.sqlite-wal",
+    ]) {
+      expect(runLib(`stage_path_denied "$1" && echo denied || echo allowed`, [path]).trim()).toBe("denied");
+    }
+    for (const path of ["src/index.ts", "README.md", "docs/key-rotation.md", "instructions/search-preferences.md"]) {
+      expect(runLib(`stage_path_denied "$1" && echo denied || echo allowed`, [path]).trim()).toBe("allowed");
+    }
+  });
+
+  it("resolves the version from the project dir, not the caller cwd", () => {
+    const res = spawnSync("bash", ["-c", `source ${join(ROOT, LIB)}; pipeline_version "$1"`, "_", ROOT], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+    });
+    expect(res.status).toBe(0);
+    expect(res.stdout.trim()).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
+  });
+});
+
+describe("should_skip_step", () => {
+  function decision(stateFile: string, resumeActive: string, step: string, start = "", end = ""): string {
+    return runLib(
+      `if should_skip_step "$1" "$2" "$3" "$4" "$5" "$6"; then echo skip; else echo run; fi`,
+      [stateFile, resumeActive, step, ORDER, start, end],
+    ).trim();
+  }
+
+  it("skips a journaled step when the run is resuming", () => {
+    const stateFile = join(tempDir("pipe-state-"), "state.json");
+    writeFileSync(stateFile, JSON.stringify({ readthrough: true }));
+    expect(decision(stateFile, "true", "readthrough")).toBe("skip");
+    expect(decision(stateFile, "true", "sync")).toBe("run");
+  });
+
+  it("does not consult the journal when the run is not resuming", () => {
+    const stateFile = join(tempDir("pipe-state-"), "state.json");
+    writeFileSync(stateFile, JSON.stringify({ readthrough: true }));
+    expect(decision(stateFile, "false", "readthrough")).toBe("run");
+  });
+
+  it("still honors --from/--to on a resumed run", () => {
+    const stateFile = join(tempDir("pipe-state-"), "state.json");
+    writeFileSync(stateFile, JSON.stringify({ readthrough: true }));
+    expect(decision(stateFile, "true", "readthrough", "sync")).toBe("skip");
+    expect(decision(stateFile, "true", "sync", "", "changelog")).toBe("run");
+    expect(decision(stateFile, "false", "scan", "", "changelog")).toBe("skip");
+  });
+});
+
 describe("findings_count", () => {
   it("accepts an integer", () => {
     const file = join(tempDir("pipe-find-int-"), "s.json");

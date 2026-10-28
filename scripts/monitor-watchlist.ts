@@ -35,7 +35,7 @@ interface RunRecord {
   ran_at: string;
   status: "ok" | "error";
   claims: string[];
-  delta: { new: string[]; changed: string[]; removed: string[] };
+  delta: { new: string[]; removed: string[] };
   error?: string;
 }
 
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
         ran_at: new Date().toISOString(),
         status: "ok",
         claims: [],
-        delta: { new: [], changed: [], removed: [] },
+        delta: { new: [], removed: [] },
       };
       try {
         const result = await client.callTool({

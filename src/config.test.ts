@@ -367,6 +367,13 @@ describe("configuration overlay", () => {
     warn.mockRestore();
   });
 
+  it("names an obsolete user-layer key in the startup warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await loadWithOverlay(BASE, { kb: { store_backend: "json" } });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('obsolete key "kb.store_backend"'));
+    warn.mockRestore();
+  });
+
   it("migrates an outdated user layer to the current schema with a recoverable backup", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ib-cfg-"));
     const basePath = join(dir, "config.json");

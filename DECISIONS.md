@@ -157,6 +157,17 @@ snippet it already holds; deep reading snapshots the page it already fetched.
 This avoids adding an outbound request during corroboration and keeps the
 tool's HTTP-call budget and offline contract fixtures intact.
 
+Amendment 2026-10-28 (review remediation): the two snapshot kinds are kept
+distinguishable rather than merged. A verification snippet is stored as
+`source_type: "snippet_snapshot"` under the identity `<url>#snippet`, reports
+`snapshot_basis: "snippet"`, and is gated by the content policy before storage;
+a fetched document keeps the live URL, `source_type: "snapshot"`, and
+`snapshot_basis: "document"`. `cachedDocument` ignores snippet snapshots so a
+report receipt cannot upgrade an excerpt to document-grade verification. The
+no-outbound-during-corroboration rule is unchanged: wiring a page fetch into
+`verify_claims` was rejected as contradicting it. Snapshots are bounded by
+UTF-8 bytes and report `snapshot_truncated` when clipped.
+
 ### D-060: State-Health Notices, Safe Startup, and Opt-In Update Discovery (REQ-079, REQ-105, REQ-111, REQ-112, REQ-113; 2026.10.22)
 
 A stale user configuration was visible only on stderr at startup and in a

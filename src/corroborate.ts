@@ -10,6 +10,7 @@ import { pairwiseSimilarity } from "./embed.js";
 import { assignSourceFamilies, familyCount } from "./source-family.js";
 import { capConfidence, type CalibrationOptions } from "./calibration.js";
 import { sha256Text, snapshotSource } from "./preservation.js";
+import { checkContent, disposition } from "./content-policy.js";
 import { getDomain } from "tldts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -757,6 +758,9 @@ export async function corroborate(
           url: s.url,
           retrieved_at: s.retrieved_at,
           content_sha256: s.content_sha256,
+          snapshot_basis: s.snapshot_basis,
+          snapshot_url: s.snapshot_url,
+          snapshot_truncated: s.snapshot_truncated,
           source_family: s.source_family,
           provider: s.provider,
         })),
@@ -791,16 +795,25 @@ async function snapshotCondensedSources(
           // Fetch failed — keep the snippet as the citation basis.
         }
       }
+      // REQ-122: flagged content is never stored. Policy assessment runs on the
+      // exact text that would be snapshotted; a refusal leaves the source
+      // without a hash, which receipts report as snippet-grade/unverifiable.
+      const policy = await checkContent(text, source.url);
+      if (disposition(policy.flagged) !== "store") continue;
       const snap = snapshotSource({
         url: source.url,
         title: source.title || source.url,
         text,
         provider: source.provider,
         maxBytes,
+        basis: fetchSource ? "document" : "snippet",
       });
       if (snap) {
         source.content_sha256 = snap.snapshot_sha256;
         source.snapshot_tier = snap.snapshot_tier;
+        source.snapshot_basis = snap.hash_basis;
+        source.snapshot_url = snap.snapshot_url;
+        source.snapshot_truncated = snap.truncated;
       }
     }
   }

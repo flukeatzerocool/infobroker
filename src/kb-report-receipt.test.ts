@@ -25,6 +25,7 @@ import {
 } from "./kb.js";
 import { canonicalJson, receiptDigest, normalizeReceiptInput, verifyReceipt, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { SqliteStore } from "./kb-sqlite.js";
+import { SNIPPET_SOURCE_TYPE } from "./kb-store.js";
 import type { KbConfig, ReportReceiptInput } from "./types.js";
 
 const REPORT_TITLE = "Receipt verification report";
@@ -203,6 +204,35 @@ describe("report receipt storage (REQ-110)", () => {
     const reread = kbGetReportReceipt(reportId);
     expect(reread?.manifest.digest_sha256).toBe(record.manifest.digest_sha256);
     expect(verify(reportId).state).toBe("verified");
+  });
+
+  it("does not treat a snippet snapshot as a cached document (REQ-122)", () => {
+    const seeded = seedReport();
+    const url = seeded.sourceUrl;
+    // Replace the document at the live URL with a snippet snapshot, as a
+    // corroboration run does; the receipt must not call it document-grade.
+    kbIngest(
+      "The bridge inspection found the structure sound.",
+      "Bridge inspection",
+      url,
+      "corroborate",
+      "sources",
+      SNIPPET_SOURCE_TYPE,
+      "evergreen",
+    );
+    const stored = kbPutReportReceipt(seeded.reportId, {
+      claims: [
+        {
+          claim: "the bridge inspection found the structure sound",
+          sources: [{ url, title: "Bridge inspection", snippet: "The bridge inspection found the structure sound." }],
+        },
+      ],
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.record.manifest.claims[0]!.sources[0]!.hash_basis).toBe("snippet");
+    const result = verify(seeded.reportId);
+    expect(result.sources.unverifiable).toBe(1);
   });
 
   it("preserves the receipt when the report is re-ingested without one (drift)", () => {

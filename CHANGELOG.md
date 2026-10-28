@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.10.28 — Review remediation
+
+- Citation snapshots now report their basis: a `verify_claims` excerpt is
+  stored as a snippet snapshot under `<url>#snippet` with
+  `snapshot_basis: "snippet"`, while a fetched document keeps the live URL and
+  document basis. Report receipts no longer treat a snippet as a cached
+  document, and snapshot text is policy-gated before storage and bounded by
+  UTF-8 bytes with a `snapshot_truncated` flag. (REQ-122)
+- `--run-id` and a caller-supplied `PIPELINE_RUN_DIR` now resume from their
+  journal exactly like `--resume`; previously they re-ran completed steps
+  against an already-dirty tree.
+- A dry run no longer prunes prior run logs, the readiness report reports the
+  current commit only when this run committed, and the pipeline version is
+  resolved from the project directory rather than the caller's working
+  directory.
+- Whole-tree staging gains a deny-list backstop for `config.local.json`,
+  environment files, and key material.
+- Obsolete user-config keys raise one `action_required` notice instead of two,
+  and the startup drift warning now names them.
+- A transient update-check failure is cached for one hour instead of a day.
+- The watchlist runner rejects ids that could escape its output directory and
+  drops the never-populated `changed` delta field.
+- `markdownlint-cli` is bumped to 0.50.0, removing the moderate `smol-toml`
+  advisories; four low-severity `katex` advisories remain below the audit gate.
+
 ## 2026.10.26 — Repository hygiene
 
 - Ignore rules now cover build artifacts (`*.tsbuildinfo`, `coverage/`,

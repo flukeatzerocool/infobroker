@@ -191,6 +191,7 @@ function warnOnConfigDrift(): void {
     notes.push(`written for schema v${drift.declaredVersion}, current is v${drift.currentVersion}`);
   }
   for (const r of drift.renames) notes.push(`legacy key "${r.from}" → "${r.to}"`);
+  for (const r of drift.removals) notes.push(`obsolete key "${r.path}" — ${r.reason}`);
   for (const d of drift.deprecated) notes.push(`deprecated "${d.path}" — use ${d.replacement}`);
   for (const u of drift.unrecognized) notes.push(`unrecognized key "${u}"`);
   console.warn(

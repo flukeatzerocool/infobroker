@@ -1,6 +1,6 @@
 // @implements REQ-112
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -65,6 +65,31 @@ describe("update availability check (REQ-112)", () => {
     const state = configureUpdateCheck(false, "2026.10.22", cachePath, fetcher as unknown as typeof fetch);
     expect(state.status).toBe("disabled");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("reuses a recent unavailable cache but retries an old one", () => {
+    const writeNegative = (ageMs: number) => {
+      writeFileSync(
+        cachePath,
+        JSON.stringify({
+          checked_at: new Date(Date.now() - ageMs).toISOString(),
+          latest_version: "",
+          status: "unavailable",
+        }),
+      );
+    };
+
+    writeNegative(30 * 60 * 1000);
+    const cachedFetch = vi.fn();
+    expect(configureUpdateCheck(true, "2026.10.26", cachePath, cachedFetch as unknown as typeof fetch).status).toBe(
+      "unavailable",
+    );
+    expect(cachedFetch).not.toHaveBeenCalled();
+
+    writeNegative(2 * 60 * 60 * 1000);
+    const retryFetch = vi.fn(async () => jsonResponse({ version: "2026.10.26" }));
+    configureUpdateCheck(true, "2026.10.26", cachePath, retryFetch as unknown as typeof fetch);
+    expect(retryFetch).toHaveBeenCalledTimes(1);
   });
 
   it("uses a fresh cache without a request", async () => {

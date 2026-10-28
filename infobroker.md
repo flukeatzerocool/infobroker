@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.10.26
+**Spec version:** 2026.10.28
 
 ## Contents
 
@@ -317,7 +317,7 @@ WHEN `verify_claims` reconciles claims, sources whose claims express the same pr
 Confidence counting for `verify_claims` SHALL count independent source families rather than registrable domains alone. Sources that share a canonical URL or republish substantially the same text SHALL be counted as one family, and sources on the same registrable domain SHALL remain one family. Each finding SHALL report its family count, and the family similarity threshold SHALL be configurable. _Check:_ G1.
 
 **REQ-122 — Citation-grade source snapshots**
-WHEN source preservation is enabled, `verify_claims` and deep reading SHALL store a retrievable snapshot of each cited source and report the snapshot hash and freshness tier alongside the live URL. Snapshots SHALL be bounded per finding and per source, SHALL use the knowledge base's storage and encryption guarantees, and SHALL NOT alter confidence, verdict, or the response when storage fails. Content rejected by the content policy SHALL NOT be stored. _Check:_ G1.
+WHEN source preservation is enabled, `verify_claims` and deep reading SHALL store a retrievable snapshot of each cited source and report the snapshot hash and freshness tier alongside the live URL. Snapshots SHALL be bounded per finding and per source, SHALL use the knowledge base's storage and encryption guarantees, and SHALL NOT alter confidence, verdict, or the response when storage fails. Content rejected by the content policy SHALL NOT be stored. The reported snapshot SHALL identify whether its hash covers the retrieved document or only a supplied snippet, and SHALL report when the stored copy is truncated. _Check:_ G1.
 
 **REQ-123 — Confidence calibration**
 `verify_claims` SHALL expose a configurable calibration correction that caps confidence when every supporting source is secondary or aggregated. The server SHALL support measuring confidence calibration against a deterministic gold set, reporting a Brier score and a reliability curve. The correction SHALL be disableable without changing the underlying confidence ladder. _Check:_ G1.

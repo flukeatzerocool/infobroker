@@ -9,6 +9,8 @@ import { atomicWriteFile } from "./lib/atomic-write.js";
 
 const REGISTRY_URL = "https://registry.npmjs.org/infobroker/latest";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// A transient network failure should not suppress the opt-in check for a day.
+const NEGATIVE_TTL_MS = 60 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 export interface UpdateState {
@@ -55,7 +57,8 @@ function readCache(cachePath: string): CacheFile | null {
     if (!existsSync(cachePath)) return null;
     const parsed = JSON.parse(readFileSync(cachePath, "utf-8"));
     if (!isCacheFile(parsed)) return null;
-    if (Date.now() - Date.parse(parsed.checked_at) > CACHE_TTL_MS) return null;
+    const ttl = parsed.status === "unavailable" ? NEGATIVE_TTL_MS : CACHE_TTL_MS;
+    if (Date.now() - Date.parse(parsed.checked_at) > ttl) return null;
     return parsed;
   } catch {
     // A missing or malformed cache is equivalent to no cache.

@@ -132,8 +132,13 @@ describe("state health with a stale user layer (REQ-111)", () => {
     const config = await import("./config.js");
     config.loadConfig();
     const health = await import("./state-health.js");
-    const codes = health.collectNotices().map((n) => n.code);
+    const notices = health.collectNotices();
+    const codes = notices.map((n) => n.code);
     expect(codes).toContain("config_key_removed");
+    // The obsolete key must not also raise a pending-migration notice.
+    expect(codes.filter((code) => code === "config_key_removed")).toHaveLength(1);
+    expect(codes).not.toContain("config_migration_pending");
+    expect(notices.find((n) => n.code === "config_key_removed")?.severity).toBe("action_required");
   });
 
   it("surfaces a degraded startup through state health", async () => {

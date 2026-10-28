@@ -17,7 +17,8 @@
 #                              [--scan-ai] [--force-tag]
 #                              [--force-push] [--allow-secrets] [--help]
 #   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
-#                    steps, no commit. Leaves the working tree clean.
+#                    steps, no commit, no run-log pruning. The working tree
+#                    stays clean; run logs still land under TMPDIR.
 #   --yes (-y)       Approve the final push without prompting (unattended/CI).
 #   --no-push        Commit but skip push, tag, and mirror sync.
 #   --no-commit      Run all steps (including AI edits) but stop before staging;
@@ -63,7 +64,8 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
                                   [--allow-secrets] [--help]
 
   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
-                   steps, no commit. Leaves the working tree clean.
+                   steps, no commit, no run-log pruning. Working tree stays
+                   clean; run logs still land under TMPDIR.
   --yes (-y)       Approve the final push without prompting (unattended/CI).
   --no-push        Commit but skip push, tag, and mirror sync.
   --no-commit      Run all steps (including AI edits) but stop before staging.
@@ -195,12 +197,15 @@ PIPELINE_LIGHT_MODEL="${PIPELINE_LIGHT_MODEL:-${PIPELINE_MODEL:-}}"
 PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
-VERSION=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || echo "unknown")
+VERSION=$(pipeline_version "$PROJECT_DIR")
 # Bounded auto-repair budget per failure class. Exhaustion is a human call.
 PIPELINE_FIX_ATTEMPTS="${PIPELINE_FIX_ATTEMPTS:-2}"
 declare -A STEP_STATUS=()
 declare -A REPAIR_ATTEMPTS=()
 status_set() { STEP_STATUS["$1"]="$2"; }
+# Declared before any readiness report so the --no-commit exit path is safe
+# under `set -u`; set true only after a commit actually lands.
+COMMITTED=false
 
 if ! $RESUMED; then
   : > "$PIPELINE_LOG_FILE"
@@ -216,7 +221,8 @@ log_line "branch: $BRANCH  head: $(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/n
 mkdir -p "$PIPELINE_RUN_DIR/timings"
 
 # ── State journal ────────────────────────────────────────────────────────────
-state_done() { [[ "$(json_from_file "$STATE_FILE" "$1")" == "true" ]]; }
+# --run-id and a caller-supplied PIPELINE_RUN_DIR resume from the journal just
+# like --resume; RESUMED is the resolved fact, RESUME only selects the dir.
 state_mark() {
   local key="$1"
   node -e '
@@ -244,8 +250,7 @@ if [[ -n "$START_STEP" && -n "$END_STEP" ]]; then
   [[ " $BEFORE_START " == *" $END_STEP "* ]] && die "--from=$START_STEP is after --to=$END_STEP."
 fi
 step_skip() {
-  [[ "$RESUME" == "true" ]] && state_done "$1" && return 0
-  ! step_should_run "$STEP_ORDER" "$1" "$START_STEP" "$END_STEP"
+  should_skip_step "$STATE_FILE" "$RESUMED" "$1" "$STEP_ORDER" "$START_STEP" "$END_STEP"
 }
 
 # scan_findings — sum findings across every scan summary. Prints "?" when no
@@ -269,8 +274,11 @@ scan_findings() {
 print_readiness_report() {
   local step sha stat
   sha=$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo "none")
-  stat=$(git -C "$PROJECT_DIR" diff --shortstat HEAD~1..HEAD 2>/dev/null || true)
-  [[ -z "$stat" ]] && stat="no file changes in HEAD"
+  stat="no commit from this run"
+  if $COMMITTED; then
+    stat=$(git -C "$PROJECT_DIR" diff --shortstat HEAD~1..HEAD 2>/dev/null || true)
+    [[ -z "$stat" ]] && stat="no file changes in HEAD"
+  fi
   info "═══════════════════════════════════════════════"
   info "Readiness report"
   info "═══════════════════════════════════════════════"
@@ -333,7 +341,10 @@ else
   }
   info "Working tree: clean"
 fi
-$RESUMED || prune_runs "$PIPELINE_LOG_DIR" "${PIPELINE_KEEP_RUNS:-10}"
+# A dry run must not delete prior run logs; it may still write its own.
+if ! $DRY_RUN && ! $RESUMED; then
+  prune_runs "$PIPELINE_LOG_DIR" "${PIPELINE_KEEP_RUNS:-10}"
+fi
 echo ""
 
 # ── step 1: spec audit ──────────────────────────────────────────────────────
@@ -837,10 +848,9 @@ git -C "$PROJECT_DIR" add -A -- .
 # Deny-list: artifacts that must never be committed even if a bad .gitignore
 # or a force-add tries to include them.
 STAGED_FILES=$(git -C "$PROJECT_DIR" diff --cached --name-only 2>/dev/null || true)
-DENY_RE='^(node_modules/|dist/|knowledge-base/|\.infobroker/|\.env($|\.)|.*\.(sqlite|sqlite-wal|sqlite-shm)$|.*vector-store.*\.json$)'
-if [[ -n "$STAGED_FILES" ]] && grep -qE "$DENY_RE" <<<"$STAGED_FILES"; then
+if [[ -n "$STAGED_FILES" ]] && grep -qE "$STAGE_DENY_RE" <<<"$STAGED_FILES"; then
   error "Denied artifact staged — refusing to commit:"
-  grep -E "$DENY_RE" <<<"$STAGED_FILES" | head -20
+  grep -E "$STAGE_DENY_RE" <<<"$STAGED_FILES" | head -20
   exit 1
 fi
 
@@ -883,7 +893,6 @@ grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && COMMIT_SUMMARY="${C
 [[ -n "$SCAN_FINDINGS" && "$SCAN_FINDINGS" != "?" ]] && COMMIT_SUMMARY="${COMMIT_SUMMARY}Dead-code scan: ${SCAN_FINDINGS} findings. "
 COMMIT_SUMMARY="${COMMIT_SUMMARY}Spec audited, README and references refreshed."
 
-COMMITTED=false
 if git -C "$PROJECT_DIR" diff --staged --quiet 2>/dev/null; then
   warn "No changes to commit."
 else

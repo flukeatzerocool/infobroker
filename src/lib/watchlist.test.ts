@@ -9,6 +9,13 @@ describe("watchlist (REQ-125)", () => {
     expect(() => parseWatchlist({ topics: [{ id: "a", query: "q", interval_hours: 0 }] })).toThrow();
   });
 
+  it("rejects ids that could escape the output directory", () => {
+    expect(() => parseWatchlist({ topics: [{ id: "../escape", query: "q", interval_hours: 1 }] })).toThrow();
+    expect(() => parseWatchlist({ topics: [{ id: "a/b", query: "q", interval_hours: 1 }] })).toThrow();
+    expect(() => parseWatchlist({ topics: [{ id: "..", query: "q", interval_hours: 1 }] })).toThrow();
+    expect(() => parseWatchlist({ topics: [{ id: "safe.id_1-2", query: "q", interval_hours: 1 }] })).not.toThrow();
+  });
+
   it("selects due topics by interval", () => {
     const list = parseWatchlist({
       topics: [
@@ -24,6 +31,6 @@ describe("watchlist (REQ-125)", () => {
   });
 
   it("diffs claim lists", () => {
-    expect(diffClaims(["a", "b"], ["b", "c"])).toEqual({ new: ["c"], changed: [], removed: ["a"] });
+    expect(diffClaims(["a", "b"], ["b", "c"])).toEqual({ new: ["c"], removed: ["a"] });
   });
 });

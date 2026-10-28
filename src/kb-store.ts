@@ -15,6 +15,12 @@ import type {
 export const LIVE_SQLITE_STORE = "vector-store.sqlite";
 export const LEGACY_JSON_STORE = "vector-store.json";
 
+// REQ-122: document snapshots and snippet snapshots share the KB but must stay
+// distinguishable, so a receipt never treats an excerpt as document-grade.
+export const SNAPSHOT_COLLECTION = "sources";
+export const SNAPSHOT_SOURCE_TYPE = "snapshot";
+export const SNIPPET_SOURCE_TYPE = "snippet_snapshot";
+
 export interface KbMeta {
   idf: Record<string, number>;
   docCount: number;

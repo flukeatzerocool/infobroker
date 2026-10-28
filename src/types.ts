@@ -193,6 +193,12 @@ export interface CorroborationSource {
   content_sha256?: string;
   /** Freshness tier used for the snapshot (REQ-122). */
   snapshot_tier?: string;
+  /** Whether the hash covers the document or only a supplied snippet (REQ-122). */
+  snapshot_basis?: "document" | "snippet";
+  /** KB identity of the stored snapshot; snippet copies are distinct. */
+  snapshot_url?: string;
+  /** True when the stored snapshot was clipped at the byte bound (REQ-122). */
+  snapshot_truncated?: boolean;
 }
 
 export interface CorroborationFinding {

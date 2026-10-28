@@ -57,6 +57,7 @@ import {
 } from "./embed.js";
 import { SqliteStore, sqliteStoreFormat } from "./kb-sqlite.js";
 import { migrateLegacyJson } from "./kb-migrate.js";
+import { SNIPPET_SOURCE_TYPE } from "./kb-store.js";
 import { KbPrefilter } from "./kb-prefilter.js";
 
 let sqliteStore: SqliteStore | null = null;
@@ -799,7 +800,10 @@ export function kbSupportsReportReceipts(): boolean {
 /** Read the cached document text for one identity, or null when absent. */
 function cachedDocument(url: string): { text: string; title: string } | null {
   const doc = url === "" ? null : kbGet(url);
-  return doc === null ? null : { text: doc.text, title: doc.title };
+  // REQ-122: a snippet snapshot is an excerpt, not a document. Treating it as
+  // a cached document would let a receipt report document-grade verification.
+  if (doc === null || doc.source_type === SNIPPET_SOURCE_TYPE) return null;
+  return { text: doc.text, title: doc.title };
 }
 
 /**

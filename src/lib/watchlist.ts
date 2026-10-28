@@ -24,6 +24,11 @@ export function parseWatchlist(raw: unknown): Watchlist {
   }
   const topics = (raw as Watchlist).topics.map((topic, index) => {
     if (typeof topic.id !== "string" || topic.id.trim() === "") throw new Error(`topics[${index}].id must be a non-empty string`);
+    // The id names the run record file, so it must never escape the output
+    // directory (no separators, no "." / "..").
+    if (!/^[A-Za-z0-9._-]+$/.test(topic.id) || topic.id === "." || topic.id === "..") {
+      throw new Error(`topics[${index}].id must contain only letters, digits, dot, underscore, or hyphen`);
+    }
     if (typeof topic.query !== "string" || topic.query.trim() === "") throw new Error(`topics[${index}].query must be a non-empty string`);
     if (typeof topic.interval_hours !== "number" || topic.interval_hours <= 0) throw new Error(`topics[${index}].interval_hours must be a positive number`);
     return topic;
@@ -42,7 +47,6 @@ export function dueTopics(watchlist: Watchlist, now: Date = new Date()): DueTopi
 
 export interface RunDelta {
   new: string[];
-  changed: string[];
   removed: string[];
 }
 
@@ -51,7 +55,6 @@ export function diffClaims(previous: string[], current: string[]): RunDelta {
   const after = new Set(current);
   return {
     new: current.filter((claim) => !before.has(claim)),
-    changed: [],
     removed: previous.filter((claim) => !after.has(claim)),
   };
 }

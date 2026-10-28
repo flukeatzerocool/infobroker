@@ -1,4 +1,4 @@
-# AGENTS.md — Infobroker MCP Server (v2026.10.26)
+# AGENTS.md — Infobroker MCP Server (v2026.10.28)
 
 ## Layer Map
 
@@ -86,8 +86,10 @@ step list (an unknown step is rejected before any work runs); a bounded range
 never commits or pushes. `--resume` continues the newest run recorded for the
 current repo and branch and accepts the dirty tree an interrupted run left
 behind, refusing only if HEAD or the branch moved. `--run-id=<id>` (or a
-`PIPELINE_RUN_DIR` override) pins a specific run directory. `--dry-run` is
-non-mutating (spec audit + deterministic scans only, working tree left clean);
+`PIPELINE_RUN_DIR` override) pins a specific run directory and resumes from
+its journal when one exists, exactly like `--resume`. `--dry-run` is
+non-mutating (spec audit + deterministic scans only, working tree left clean;
+run logs still land under TMPDIR);
 `--no-commit` runs all steps including AI edits but stops before staging,
 leaving the tree dirty for inspection. Staging is whole-tree with a deny-list
 and a fail-closed leftover check, so tracked paths the old allowlist omitted

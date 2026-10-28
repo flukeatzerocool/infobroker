@@ -88,6 +88,26 @@ scan_staged_for_secrets() {
     || true
 }
 
+# pipeline_version <project-dir> — the package version, resolved from the
+# project path so the caller's cwd cannot change (or hide) it.
+pipeline_version() {
+  node -e '
+    try { console.log(require(process.argv[1]).version); }
+    catch { process.exit(1); }
+  ' "$1/package.json" 2>/dev/null || echo "unknown"
+}
+
+# ── Staging deny-list ────────────────────────────────────────────────────────
+# Paths that must never be committed even under whole-tree staging. The
+# .gitignore covers most of these, but a force-add or a local ignore change
+# must not bypass the pipeline's own backstop.
+STAGE_DENY_RE='^(node_modules/|dist/|knowledge-base/|\.infobroker/|(.*/)?config\.local\.json$|(.*/)?\.env($|\.)|.*\.(sqlite|sqlite-wal|sqlite-shm|key|pem|p12|pfx)$|(.*/)?id_rsa(\.pub)?$|.*vector-store.*\.json$)'
+
+# stage_path_denied <path> — 0 when the staged path is on the deny-list.
+stage_path_denied() {
+  [[ "$1" =~ $STAGE_DENY_RE ]]
+}
+
 # ── git identity guard ───────────────────────────────────────────────────────
 require_git_identity() {
   local name email
@@ -176,6 +196,19 @@ step_should_run() {
     fi
   fi
   return 0
+}
+
+# should_skip_step <state-file> <resume-active> <step> <order> <start> <end>
+# 0 when a resumed run already recorded <step> done, or <step> is outside the
+# requested range. <resume-active> must be the resolved run-journal state, so
+# --run-id/PIPELINE_RUN_DIR resume the same way --resume does.
+should_skip_step() {
+  local state_file="$1" resume_active="$2" step="$3" order="$4" start="$5" end="$6"
+  if [[ "$resume_active" == "true" ]] \
+      && [[ "$(json_from_file "$state_file" "$step")" == "true" ]]; then
+    return 0
+  fi
+  ! step_should_run "$order" "$step" "$start" "$end"
 }
 
 # ── opencode session helpers ─────────────────────────────────────────────────
