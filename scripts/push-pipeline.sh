@@ -855,8 +855,11 @@ if [[ -n "$STAGED_FILES" ]] && grep -qE "$STAGE_DENY_RE" <<<"$STAGED_FILES"; the
 fi
 
 # Nothing may remain unstaged/untracked after the add; a leftover means the
-# commit would silently under-ship the run.
-LEFTOVERS=$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null || true)
+# commit would silently under-ship the run. A fully staged entry has its index
+# status letter followed by a space (`M  path`); an unstaged, untracked, or
+# conflicted entry carries a non-space second column (` M`, `??`, `UU`), so
+# filter the staged lines out rather than treating them as leftovers.
+LEFTOVERS=$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null | grep -vE '^[A-Z] ' || true)
 if [[ -n "$LEFTOVERS" ]]; then
   error "Staging incomplete — these paths would not be committed:"
   printf '%s\n' "$LEFTOVERS"

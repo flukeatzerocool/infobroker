@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.10.28 — Search contract pinned, config obligations stated
+
+- The `search_web` parameter contract is now verified against the live tool
+  schema, so a parameter or default that drifts from the specification fails
+  the test suite instead of shipping unnoticed. The contract also names the
+  `analyze` mode — already implemented, but missing from the specification's
+  list of parameters, the same gap that previously let `expand`, `deep`, and
+  `fresh` fall out of sync. (REQ-020)
+- Provider configuration is now stated as an obligation throughout: the
+  sentence covering each provider's tier, auth, rate limits, and priority uses
+  the same normative language as its neighbours instead of an implied
+  statement. (REQ-010)
+- Specification prose swept for grammar, consistency, and traceability: one
+  agreement error fixed in the terminology table, two requirement titles
+  normalised to the title-case convention used elsewhere, and a stale
+  parameter list brought back in line with the tool it describes.
+
 ## 2026.10.28 — Review remediation
 
 - Citation snapshots now report their basis: a `verify_claims` excerpt is

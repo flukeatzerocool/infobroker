@@ -230,8 +230,8 @@ them, a preferred language is honored where a provider allows it, and anything
 the serving provider drops is reported rather than hidden. Pass an array of
 queries to batch several searches in one call. Ask for a deep read and it
 fetches the top results, then ranks each page's passages against your query,
-so you get the specific text that answers the question instead of links. Ask
-for analysis and the same response carries topic terms, entity mentions,
+so you get the specific text that answers the question instead of links. Pass
+`analyze: true` and the same response carries topic terms, entity mentions,
 semantic clusters, and a dated timeline derived from those results — computed
 in-process, with no extra request.
 Failed providers fall back silently through a configurable chain so you get

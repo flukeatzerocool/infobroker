@@ -23,7 +23,11 @@ interface ToolAnnotations {
 interface ToolDef {
   name: string;
   description?: string;
-  inputSchema?: { type?: string; properties?: Record<string, { description?: string }> };
+  inputSchema?: {
+    type?: string;
+    properties?: Record<string, { description?: string; default?: unknown }>;
+    required?: string[];
+  };
   annotations?: ToolAnnotations;
 }
 
@@ -171,4 +175,46 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
       expect(def?.description, `${tool.name}.${param} missing description`).toBeTruthy();
     }
   }
+}, 30000);
+
+// @implements REQ-020
+test("search_web advertises the REQ-020 parameter contract and defaults", async () => {
+  const { tools } = await listTools();
+  const tool = tools.find((t) => t.name === "infobroker_search_web");
+  expect(tool, "search_web is not registered").toBeDefined();
+
+  const props = tool!.inputSchema?.properties ?? {};
+
+  // REQ-020: parameters whose declared default is part of the external contract.
+  const declaredDefaults: Record<string, unknown> = {
+    max_results: 8,
+    safe_search: "on",
+    page: 1,
+    content_type: "all",
+    suggest: false,
+    expand: false,
+    research: false,
+    fresh: false,
+    deep: false,
+    analyze: false,
+  };
+  for (const [param, expected] of Object.entries(declaredDefaults)) {
+    expect(props[param], `search_web.${param} is missing from the advertised schema`).toBeDefined();
+    expect(props[param]?.default, `search_web.${param} default drifted from REQ-020`).toBe(expected);
+  }
+
+  // REQ-020: optional parameters that carry no declared default.
+  const noDefault = ["provider", "time_range", "priority", "region", "language"];
+  for (const param of noDefault) {
+    expect(props[param], `search_web.${param} is missing from the advertised schema`).toBeDefined();
+  }
+
+  // REQ-020: the contract is exhaustive — a parameter the REQ does not declare
+  // cannot appear in the advertised schema without an accompanying REQ update.
+  expect(Object.keys(props).sort()).toEqual(
+    ["query", ...Object.keys(declaredDefaults), ...noDefault].sort()
+  );
+
+  // REQ-020: only `query` is required.
+  expect(tool!.inputSchema?.required).toEqual(["query"]);
 }, 30000);

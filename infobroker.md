@@ -164,7 +164,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
 | **Report** | A delivered research artifact that carries the shared skeleton, a report manifest, and a Source Register, produced by a bundled writing skill. |
-| **Report quality standard** | The bundled confidence, likelihood, verdict, audience, shape, and handling definitions that report artifacts and their gate cite rather than restate (REQ-114, REQ-115, REQ-118, REQ-119). |
+| **Report quality standard** | The bundled confidence, likelihood, verdict, audience, shape, and handling definitions that report artifacts and their gate cites rather than restates (REQ-114, REQ-115, REQ-118, REQ-119). |
 | **Handling classification** | A report-level access marking (for example a TLP marking) recorded when the report's access is restricted. |
 | **Durable citation identifier** | A persistent source identifier such as a DOI, ISBN, or archival permalink, recorded when the source provides one. |
 | **Client routing surface** | The instruction file and skill reference files that map user intent to Infobroker tools: `instructions/search-preferences.md`, `SKILL.md`, and the skill reference tables (REQ-050, REQ-053, REQ-107). |
@@ -210,7 +210,7 @@ The server SHALL support a configurable output verbosity that applies to all too
 ### 4.2 Provider Configuration
 
 **REQ-010 — Config File**
-Provider configuration SHALL reside in a JSON file. When `INFOBROKER_CONFIG` is unset, the server SHALL resolve the shipped default configuration relative to its installed package; the variable SHALL override that location when set. The configuration SHALL be composed of the shipped default and a user configuration layer resolved from `INFOBROKER_CONFIG_LOCAL` when set, otherwise from an existing layer beside the resolved default, otherwise from the user configuration directory. Values in the user layer SHALL take precedence over the shipped default, and the layer SHALL be preserved when the software is updated. The config declares each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section inherited by providers that do not override them. _Check:_ G1.
+Provider configuration SHALL reside in a JSON file. When `INFOBROKER_CONFIG` is unset, the server SHALL resolve the shipped default configuration relative to its installed package; the variable SHALL override that location when set. The configuration SHALL be composed of the shipped default and a user configuration layer resolved from `INFOBROKER_CONFIG_LOCAL` when set, otherwise from an existing layer beside the resolved default, otherwise from the user configuration directory. Values in the user layer SHALL take precedence over the shipped default, and the layer SHALL be preserved when the software is updated. The configuration SHALL declare each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section inherited by providers that do not override them. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
 API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`; for URL-based providers the endpoint SHALL be accepted via `INFOBROKER_<PROVIDER>_URL`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
@@ -224,7 +224,7 @@ The server SHALL support a provider tier whose search behavior is defined by con
 **REQ-015 — Provider Removal by Disable**
 A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appear in fallback chains or provider recommendations, and it SHALL be skipped by all provider-selection logic. Disabling a provider SHALL require only a configuration change in the user configuration layer, SHALL NOT remove its configuration entry or backend module, and SHALL NOT require source-code changes. The disabled state SHALL be preserved across software updates. _Check:_ G1.
 
-**REQ-129 — Provider privacy posture**
+**REQ-129 — Provider Privacy Posture**
 Every configured provider SHALL have a documented privacy posture stating whether its queries are forwarded to a third party, whether it retains queries, whether it requires an account or key, and whether it resells results. The posture SHALL be derived from provider configuration with explicit per-provider overrides taking precedence. `inspect_providers` SHALL report the posture for each provider it lists. The documentation SHALL be generated from configuration and a gate SHALL fail when the committed document is stale. A provider lacking an explicit posture SHALL be reported as unknown rather than assumed private. _Check:_ G1, G3.
 
 **REQ-104 — Key-Pool Rotation**
@@ -233,7 +233,7 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
-`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `suggest` (default false), `expand` (default false), `content_type` (default all), `region`, `language`, `research` (default false), `fresh` (default false), and `deep` (default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `content_type` (default all), `region`, `language`, and the boolean flags `suggest`, `expand`, `research`, `fresh`, `deep`, and `analyze` (each default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
 **REQ-020a — `search_web` auto-selection**
 WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
@@ -458,7 +458,7 @@ A monitoring run SHALL baseline the current report with a verification receipt a
 **REQ-116 — Report Quality Gate**
 A report SHALL carry the shared skeleton and a Source Register that resolves every `[S#]` citation to a row with a URL. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A gate SHALL fail when a required skeleton section is absent, a Key Findings item lacks a citation, a citation is unresolved, or a Source Register row lacks a URL. _Check:_ G3.
 
-**REQ-125 — Watchlist monitoring runner**
+**REQ-125 — Watchlist Monitoring Runner**
 The server SHALL provide a watchlist runner that reads topics, a query, and an interval; selects the topics that are due; and records each run with the claims found and a delta against the prior run. Scheduling SHALL remain external to the server. A due topic whose run fails SHALL be recorded as an error without aborting the remaining topics. The runner SHALL support a dry-run that selects due topics without contacting providers. _Check:_ G1, G3.
 
 **REQ-118 — Report Provenance and Grading**
@@ -1101,7 +1101,7 @@ verdict is preserved (REQ-026f).
 | REQ-013 | Provider Discovery | 4.2 | G1 |
 | REQ-014 | Generic HTTP Provider Tier | 4.2 | G1 |
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
-| REQ-129 | Provider privacy posture | 4.2 | G1, G3 |
+| REQ-129 | Provider Privacy Posture | 4.2 | G1, G3 |
 | REQ-020 | `search_web` | 4.3 | G0, G1 |
 | REQ-020a | `search_web` auto-selection | 4.3 | G1 |
 | REQ-020b | `search_web` suggestion mode | 4.3 | G0, G1 |
@@ -1167,7 +1167,7 @@ verdict is preserved (REQ-026f).
 | REQ-115 | Confidence Model | 4.7 | G3 |
 | REQ-116 | Report Quality Gate | 4.7 | G3 |
 | REQ-117 | Monitoring Baseline and Delta Contract | 4.7 | G3 |
-| REQ-125 | Watchlist monitoring runner | 4.7 | G1, G3 |
+| REQ-125 | Watchlist Monitoring Runner | 4.7 | G1, G3 |
 | REQ-118 | Report Provenance and Grading | 4.7 | G3 |
 | REQ-119 | Shape-Aware Report Contract | 4.7 | G3 |
 | REQ-120 | Report Delivery Verification | 4.7 | G3 |
