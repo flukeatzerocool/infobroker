@@ -1,31 +1,30 @@
 // @implements REQ-033 REQ-100
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readFileSync, writeFileSync, existsSync, rmSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadQuotaState, getOrCreateCounter, checkQuota } from "./quota.js";
 
-const QUOTA_FILE = join(tmpdir(), "infobroker", "quota.json");
-
-let saved: string | null = null;
+// Quota state is resolved lazily, so the test seam can be set before the first
+// load. Each run gets its own directory: the suite never reads or writes the
+// real user quota file at $TMPDIR/infobroker/quota.json.
+let stateDir: string;
+let quotaFile: string;
 
 beforeAll(() => {
-  if (existsSync(QUOTA_FILE)) saved = readFileSync(QUOTA_FILE, "utf-8");
+  stateDir = mkdtempSync(join(tmpdir(), "ib-quota-"));
+  quotaFile = join(stateDir, "quota.json");
+  process.env["INFOBROKER_QUOTA_STATE"] = quotaFile;
 });
 
 afterAll(() => {
-  if (saved === null) {
-    rmSync(QUOTA_FILE, { force: true });
-  } else {
-    writeFileSync(QUOTA_FILE, saved);
-  }
-  loadQuotaState();
+  rmSync(stateDir, { recursive: true, force: true });
+  delete process.env["INFOBROKER_QUOTA_STATE"];
 });
 
 describe("quota state hardening (REQ-100)", () => {
   it("resets poisoned state instead of trusting negative or NaN counts", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ib-quota-"));
-    writeFileSync(QUOTA_FILE, JSON.stringify({
+    writeFileSync(quotaFile, JSON.stringify({
       providers: {
         ddg: {
           daily: { count: -5, resetAt: "2099-01-01T00:00:00.000Z" },
@@ -37,11 +36,10 @@ describe("quota state hardening (REQ-100)", () => {
     const report = checkQuota("ddg", { per_day: 100 });
     expect(report.daily.used).toBe(0);
     expect(report.daily.remaining).toBe(100);
-    rmSync(dir, { recursive: true, force: true });
   });
 
   it("drops counters with malformed structure", () => {
-    writeFileSync(QUOTA_FILE, JSON.stringify({
+    writeFileSync(quotaFile, JSON.stringify({
       providers: {
         broken: { daily: "nope" },
         ok: {
@@ -56,7 +54,7 @@ describe("quota state hardening (REQ-100)", () => {
   });
 
   it("preserves valid persisted counters", () => {
-    writeFileSync(QUOTA_FILE, JSON.stringify({
+    writeFileSync(quotaFile, JSON.stringify({
       providers: {
         wikipedia: {
           daily: { count: 7, resetAt: "2099-01-01T00:00:00.000Z" },

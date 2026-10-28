@@ -1236,6 +1236,12 @@ UTC for daily, month boundary for monthly. The 80% warning threshold
 and 100% exhaustion are computed per-provider. Counters without explicit
 limits (Infinity) never trigger warnings.
 
+The state path is resolved lazily and honours `INFOBROKER_QUOTA_STATE`, a
+test seam mirroring `INFOBROKER_KEYPOOL_STATE`. The quota test points it at a
+per-run temporary directory, so it never depends on — or writes — the real
+user state at `$TMPDIR/infobroker/quota.json`, and it does not rely on another
+test having created that directory first.
+
 ### D-013: Corroboration Reconciliation Approach (2026.08.10)
 
 Claim reconciliation in `corroborate` uses token-based Jaccard similarity

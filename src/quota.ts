@@ -1,6 +1,6 @@
 // @implements REQ-033 REQ-034 REQ-100
 import { chmodSync, mkdirSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { audit } from "./audit-log.js";
 
@@ -13,8 +13,19 @@ interface QuotaState {
   providers: Record<string, QuotaCounter>;
 }
 
-const QUOTA_DIR = join(tmpdir(), "infobroker");
-const QUOTA_FILE = join(QUOTA_DIR, "quota.json");
+const DEFAULT_QUOTA_FILE = join(tmpdir(), "infobroker", "quota.json");
+
+let quotaPath: string | null = null;
+
+// INFOBROKER_QUOTA_STATE is a test seam (mirrors INFOBROKER_KEYPOOL_STATE in
+// key-pool.ts): it points the quota store at an isolated file so tests never
+// depend on — or modify — the real user state.
+function resolveQuotaPath(): string {
+  if (!quotaPath) {
+    quotaPath = process.env["INFOBROKER_QUOTA_STATE"] || DEFAULT_QUOTA_FILE;
+  }
+  return quotaPath;
+}
 
 let quotaState: QuotaState = { providers: {} };
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -23,13 +34,14 @@ const WRITE_INTERVAL_MS = 30_000;
 // REQ-100: the state directory is owner-only, and the server refuses to
 // operate on a directory it does not own (pre-creation/symlink hardening).
 function ensureDir(): void {
-  if (!existsSync(QUOTA_DIR)) {
-    mkdirSync(QUOTA_DIR, { recursive: true, mode: 0o700 });
+  const dir = dirname(resolveQuotaPath());
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   if (typeof process.getuid === "function") {
-    const st = statSync(QUOTA_DIR);
+    const st = statSync(dir);
     if (st.uid !== process.getuid()) {
-      throw new Error(`Refusing to use quota directory "${QUOTA_DIR}" — not owned by this user`);
+      throw new Error(`Refusing to use quota directory "${dir}" — not owned by this user`);
     }
   }
 }
@@ -111,8 +123,8 @@ export function loadQuotaState(): void {
     return;
   }
   try {
-    if (existsSync(QUOTA_FILE)) {
-      const raw = readFileSync(QUOTA_FILE, "utf-8");
+    if (existsSync(resolveQuotaPath())) {
+      const raw = readFileSync(resolveQuotaPath(), "utf-8");
       const parsed = JSON.parse(raw) as unknown;
       const cleaned = sanitizeQuotaState(parsed);
       if (stableStringify(cleaned) !== stableStringify(parsed)) {
@@ -128,9 +140,9 @@ export function loadQuotaState(): void {
 function saveQuotaState(): void {
   try {
     ensureDir();
-    writeFileSync(QUOTA_FILE, JSON.stringify(quotaState, null, 2), { mode: 0o600 });
+    writeFileSync(resolveQuotaPath(), JSON.stringify(quotaState, null, 2), { mode: 0o600 });
     try {
-      chmodSync(QUOTA_FILE, 0o600);
+      chmodSync(resolveQuotaPath(), 0o600);
     } catch {
       // best effort
     }
@@ -212,5 +224,5 @@ export function checkQuota(
 }
 
 export function getQuotaStatePath(): string {
-  return QUOTA_FILE;
+  return resolveQuotaPath();
 }

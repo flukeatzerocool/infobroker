@@ -16,6 +16,12 @@
   agreement error fixed in the terminology table, two requirement titles
   normalised to the title-case convention used elsewhere, and a stale
   parameter list brought back in line with the tool it describes.
+- Quota-state tests now run against an isolated temporary file selected by
+  `INFOBROKER_QUOTA_STATE`, the seam key-pool state already uses. The suite
+  previously wrote to the fixed `$TMPDIR/infobroker/quota.json` without
+  creating its directory, so it passed only when another test happened to
+  create that directory first and failed on a clean CI runner. The state path
+  is now resolved lazily and its directory is created on first use.
 
 ## 2026.10.28 — Review remediation
 
