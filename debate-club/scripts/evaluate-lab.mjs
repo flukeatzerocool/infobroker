@@ -12,7 +12,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { extractAssistantText, extractToolOrder } from "../../scripts/lib/event-stream.mjs";
+import { extractAssistantText, extractMcpToolCalls, extractToolOrder } from "../../scripts/lib/event-stream.mjs";
 
 const [scenarioPath, transcriptPath, outDir] = process.argv.slice(2);
 if (!scenarioPath || !transcriptPath || !outDir) {
@@ -25,12 +25,11 @@ const text = extractAssistantText(raw);
 const toolOrder = extractToolOrder(raw);
 writeFileSync(join(outDir, "final.txt"), text.trim().slice(-4000), "utf8");
 
-// Canonical Infobroker tool names for coverage rollup: the MCP server is keyed
-// `infobroker`, so its calls surface as `infobroker_infobroker_<tool>`.
-const INFOBROKER_CALL = /^infobroker_infobroker_/;
-const tools = [
-  ...new Set(toolOrder.filter((t) => INFOBROKER_CALL.test(t)).map((t) => t.replace(INFOBROKER_CALL, "infobroker_"))),
-].sort();
+// Canonical Infobroker tool calls for coverage rollup. Code Mode invokes MCP
+// tools inside `execute` code (`tools.infobroker.<tool>`), so the old
+// direct-tool naming match alone would report zero calls for a run that used
+// the server heavily. extractMcpToolCalls reads both shapes.
+const tools = extractMcpToolCalls(raw, "infobroker");
 
 const missing = [];
 let lastIdx = -1;
@@ -49,8 +48,8 @@ const missingSections = (scenario.sections ?? []).filter(
 
 const ta = scenario.tool_audit ?? {};
 const audit = {};
-if (ta.verify_claims) audit.verify_claims = toolOrder.some((t) => t.includes("verify_claims"));
-if (ta.uses_infobroker) audit.uses_infobroker = toolOrder.some((t) => t.startsWith("infobroker_infobroker_"));
+if (ta.verify_claims) audit.verify_claims = tools.includes("infobroker_verify_claims") || toolOrder.some((t) => t.includes("verify_claims"));
+if (ta.uses_infobroker) audit.uses_infobroker = tools.length > 0;
 const hardAudit = ["uses_infobroker"];
 const auditFails = Object.entries(audit).filter(([k, v]) => v === false && hardAudit.includes(k)).map(([k]) => k);
 

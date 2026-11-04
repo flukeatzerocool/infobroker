@@ -112,7 +112,30 @@ trap cleanup EXIT SIGINT SIGTERM
 # Record which MCP target the Lab actually exposes, so a run's feedback is
 # interpretable — repo mode points at this working tree, ambient mode at the
 # configured deployment.
-( cd "$MCP_PROBE_DIR" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true
+#
+# `opencode mcp list` is not usable here: it is daemon-backed and reports
+# "No MCP servers configured" even for a directory whose runs do receive the
+# server's tools. `opencode debug config` reads the config chain from the cwd
+# deterministically, so repo mode parses the layer the Lab generated.
+if [[ "$MCP_MODE" == "repo" ]]; then
+  ( cd "$MCP_PROBE_DIR" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" || true
+  node -e '
+    const fs = require("fs");
+    const [file, want] = process.argv.slice(1);
+    let layers = [];
+    try { layers = JSON.parse(fs.readFileSync(file, "utf8")); } catch { layers = []; }
+    const lines = [];
+    for (const layer of Array.isArray(layers) ? layers : []) {
+      if (layer.type !== "document" || (layer.path ?? layer.source) !== want) continue;
+      for (const [name, server] of Object.entries(layer.info?.mcp?.servers ?? {})) {
+        lines.push(`repo:${name}: ${(server.command ?? []).join(" ")}`.trimEnd());
+      }
+    }
+    console.log(lines.length ? lines.join("\n") : "no project MCP config resolved");
+  ' "$RUN_DIR/debug-config.json" "$MCP_PROJECT/opencode.json" > "$RUN_DIR/mcp-target.txt" 2>> "$RUN_DIR/openruns.log" || true
+else
+  ( cd "$MCP_PROBE_DIR" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true
+fi
 info "Lab MCP target(s) recorded in $RUN_DIR/mcp-target.txt"
 
 # Provenance: a run is self-describing — repo version/HEAD and the MCP target
@@ -181,6 +204,27 @@ for id in $IDS; do
 
   node "$EVALUATOR" "$sc" "$work/turn0.txt" "$work" >> "$RUN_DIR/results.ndjson"
 done
+
+# Infrastructure guard: in repo mode the run is only meaningful if the agent
+# actually reached this working tree's MCP. A zero-call run means the server
+# never loaded (config, startup, or environment) — that is not a scenario
+# failure, so say so instead of recording misleading feedback.
+if [[ "$MCP_MODE" == "repo" ]]; then
+  MCP_CALLS=$(node -e '
+    const fs = require("fs");
+    const lines = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").filter(Boolean);
+    let n = 0;
+    for (const l of lines) { let o; try { o = JSON.parse(l); } catch { continue; } n += (o.tools || []).length; }
+    process.stdout.write(String(n));
+  ' "$RUN_DIR/results.ndjson" 2>/dev/null || echo 0)
+  if [[ "${MCP_CALLS:-0}" -eq 0 ]]; then
+    error "MCP did not load: no Infobroker tool calls observed in repo mode."
+    error "Target recorded in $RUN_DIR/mcp-target.txt; see $RUN_DIR/openruns.log."
+    error "This is an infrastructure failure, not a scenario result."
+    exit 1
+  fi
+  info "MCP calls observed: ${MCP_CALLS}"
+fi
 
 node -e '
   const fs = require("fs");

@@ -99,6 +99,37 @@ export function extractToolOrder(raw) {
   return tools;
 }
 
+// Canonical MCP tool invocations from the event stream, for a named server.
+//
+// A direct-tool run surfaces MCP calls as tool events named
+// `<server>_<tool>` (the MCP tool name already carries the server prefix).
+// Under Code Mode, MCP tools are NOT direct events: the agent discovers them
+// with `search` and invokes them inside an `execute` code string as
+// `tools.<server>.<tool>(...)`. Both shapes normalize to `<tool>`, so coverage
+// rollups and tool-usage audits read the same either way.
+//
+// Only tool INPUT is scanned — a call the model actually wrote — never
+// assistant text, so merely naming a tool in prose cannot satisfy an audit.
+export function extractMcpToolCalls(raw, server) {
+  if (!server) throw new Error("extractMcpToolCalls requires a server name");
+  const direct = new RegExp(`^${server}_([A-Za-z0-9_]+)$`);
+  const embedded = new RegExp(`tools\\.${server}\\.([A-Za-z0-9_]+)`, "g");
+  const found = new Set();
+  for (const line of raw.split("\n")) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    const part = ev?.part ?? ev;
+    const tool = part?.tool ?? ev?.tool;
+    if (typeof tool !== "string") continue;
+    const m = tool.match(direct);
+    if (m) found.add(m[1]);
+    if (tool !== "execute") continue;
+    const input = JSON.stringify(part?.state?.input ?? "");
+    for (const hit of input.matchAll(embedded)) found.add(hit[1]);
+  }
+  return [...found].sort();
+}
+
 // Extract a bounded digest of the tools a run called — name, truncated input,
 // truncated output — for feeding an evidence-aware critic/rubric without the
 // full transcript. Caps keep the prompt small and deterministic in shape.

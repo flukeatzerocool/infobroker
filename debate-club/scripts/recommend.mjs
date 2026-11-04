@@ -43,8 +43,16 @@ for (const [tool, s] of Object.entries(report.tools)) {
 }
 for (const [scenario, s] of Object.entries(report.scenarios)) {
   if (s.unexpected > 0) {
-    add("P1", `scenario/${scenario}`, `Scenario had ${s.unexpected} unexpected error call(s).`,
-      { tools: s.tools }, "Reproduce with `run.sh arena` and inspect the transcript.", "open");
+    // In a Lab report `unexpected` counts failed scenarios, not runtime error
+    // envelopes — call it what it is, and name the failing hard gate.
+    if (report.schema === "debate-club/lab-report@1") {
+      const audit = (s.audit_fails ?? []).length ? ` (audit: ${s.audit_fails.join(", ")})` : "";
+      add("P1", `scenario/${scenario}`, `Scenario failed its hard gates${audit}.`,
+        { tools: s.tools, audit_fails: s.audit_fails }, "Inspect the transcript and the scenario's tokens/sections.", "open");
+    } else {
+      add("P1", `scenario/${scenario}`, `Scenario had ${s.unexpected} unexpected error call(s).`,
+        { tools: s.tools }, "Reproduce with `run.sh arena` and inspect the transcript.", "open");
+    }
   }
 }
 
