@@ -2,13 +2,17 @@
 // check-script-discipline.ts — gate: enforce script-discipline conventions across
 // `scripts/` (shebang + header, exit-code contract, `import.meta.dirname`, no
 // empty catch) and shell-syntax-check the repo's shell entry points with
-// `bash -n` (`scripts/**/*.sh`, `.githooks/*`). Wired into `npm run check`.
+// `bash -n` (`scripts/**/*.sh`, `debate-club/scripts/*.sh`, `.githooks/*`).
+// Also rejects CLI flags that a tool release removed (currently opencode v2's
+// `--attach`) in those shell entry points and in `scripts/**/*.mjs`, so a
+// harness cannot silently rot after a CLI upgrade. Wired into `npm run check`.
 //
 // Exit codes: 0 = all scripts conform; 1 = violations found.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { findRemovedFlags } from "./lib/cli-flags.js";
 
 const SCRIPTS_DIR = import.meta.dirname;
 const ROOT = join(SCRIPTS_DIR, "..");
@@ -101,6 +105,10 @@ function collectShell(dir: string, out: string[]): void {
 
 const shellFiles: string[] = [];
 collectShell(SCRIPTS_DIR, shellFiles);
+// debate-club entry points are invoked by `run.sh` exactly like the scripts/
+// harnesses, so they carry the same discipline (syntax + removed-flag) checks.
+const debateScripts = join(ROOT, "debate-club", "scripts");
+if (existsSync(debateScripts)) collectShell(debateScripts, shellFiles);
 const githooksDir = join(ROOT, ".githooks");
 if (existsSync(githooksDir)) {
   for (const entry of readdirSync(githooksDir)) {
@@ -118,6 +126,30 @@ for (const file of shellFiles) {
     const lastLine = stderr.trim().split("\n").pop() ?? "syntax error";
     violations.push({ file: rel, line: 1, message: `bash -n failed: ${lastLine}` });
   }
+}
+
+// Removed CLI flags: harnesses pin flags that a tool release can rename or
+// drop. Scan the shell entry points plus the `.mjs` evaluators they invoke, so
+// an invocation that no longer parses fails here instead of at run time.
+const flagScanFiles: string[] = [...shellFiles];
+function collectMjs(dir: string, out: string[]): void {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (SKIP_DIRS.has(entry)) continue;
+    const st = statSync(full);
+    if (st.isDirectory()) collectMjs(full, out);
+    else if (entry.endsWith(".mjs")) out.push(full);
+  }
+}
+collectMjs(SCRIPTS_DIR, flagScanFiles);
+if (existsSync(debateScripts)) collectMjs(debateScripts, flagScanFiles);
+for (const v of findRemovedFlags(
+  flagScanFiles.map((file) => ({
+    file: file.startsWith(ROOT) ? file.slice(ROOT.length + 1) : file,
+    content: readFileSync(file, "utf-8"),
+  })),
+)) {
+  violations.push(v);
 }
 
 if (violations.length > 0) {

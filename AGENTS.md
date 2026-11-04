@@ -123,6 +123,10 @@ exits 0).
   unexpected error. No other exit codes.
 - Path resolution: use `import.meta.dirname` to derive repo-root paths;
   no `fileURLToPath(import.meta.url)` boilerplate.
+- No invocation of a CLI flag a tool release removed. The check scans shell
+  entry points (`scripts/**/*.sh`, `debate-club/scripts/*.sh`, `.githooks/*`)
+  and `scripts/**/*.mjs` for `opencode run --attach`, which opencode v2
+  replaced with `--server`.
 - Empty `catch {}` blocks carry a comment explaining why the error is
   safely ignored.
 
@@ -139,7 +143,9 @@ exits 0).
   behavioral change to a gate requires a CHANGELOG entry and a re-run of
   the gates it feeds.
 - Shell discipline: `set -euo pipefail`, a case-based flag parser, `--help`,
-  color only on a TTY. Shell scripts are gate-checked with `bash -n`.
+  color only on a TTY. Shell scripts are gate-checked with `bash -n`
+  (`scripts/**/*.sh`, `debate-club/scripts/*.sh`, `.githooks/*`) and for
+  removed CLI flags.
 
 ## State Model
 
@@ -265,7 +271,7 @@ This runs:
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-report-fixtures` | Report contract fixtures: skeleton, manifest, citations, Source Register (REQ-116) |
-| `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax over shell entry points |
+| `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax and removed-flag (`--attach`) checks over shell entry points and `scripts/**/*.mjs` |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
 | `npm run check-intent-citations` | Routing citations resolve against the live tool schema; every registered tool and declared operation is cited (REQ-107) |
 | `npm run check-skill-harness` | Skill-check and event-stream evaluators: advisory exclusion, gating, intermediate-message tokens |

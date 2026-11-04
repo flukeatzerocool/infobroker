@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
+
+- The skill, research, and debate-club harnesses run on opencode v2 again. They
+  connect with `--server` (v2 removed `run --attach`), start a backend whose
+  password they generate and export, pick a free port per run, and only reuse
+  an existing server when `OPENCODE_REUSE_SERVE=1` names one they can
+  authenticate against. The skill evaluator no longer falls back to an
+  arbitrary local server when grading.
+- The Lab's tool-usage audit now sees Code Mode invocations: MCP calls made
+  inside `execute` as `tools.<server>.<tool>` count toward `uses_infobroker`
+  and coverage, so a run that used Infobroker no longer scores as untouched.
+  Repo-mode runs also fail as an infrastructure error, rather than a scenario
+  failure, when no Infobroker call was observed at all.
+- The Lab records its MCP target from `opencode debug config` instead of
+  `opencode mcp list`, which is daemon-backed and reported "No MCP servers
+  configured" for directories whose runs did receive the server's tools.
+- `check-script-discipline` rejects `opencode run --attach` in shell entry
+  points and `scripts/**/*.mjs`, and its `bash -n` sweep now covers
+  `debate-club/scripts/*.sh`. The rule is unit-tested rather than backed by a
+  permanently-broken fixture.
+
 ## 2026.10.28 — KB resilience: startup, encryption transitions, model reconciliation
 
 - A corrupt knowledge-base metadata value or an unusable storage path can no
