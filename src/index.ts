@@ -1598,7 +1598,7 @@ instrumentTool(
     inputSchema: {
       action: z.enum(["search", "ingest", "list", "get", "stats", "delete", "encryption", "claims", "verify_report"]).describe("Operation to perform"),
       operation: z.enum(["status", "generate_key", "verify", "backup", "rekey"]).optional().describe("Sub-operation for the 'encryption' action"),
-      key_file: z.string().optional().describe("Path to a key file (generate_key writes here; rekey reads the target key from here). Never pass the secret itself — only a file path."),
+      key_file: z.string().optional().describe("Path to a key file (generate_key writes here and refuses an existing path; rekey reads the target key from here). Never pass the secret itself — only a file path."),
       query: z.string().optional().describe("Search query (search action) or claim-text filter (claims action)"),
       text: z.string().optional().describe("Raw text to index (for ingest action)"),
       url: z.string().optional().describe("URL to fetch and index (for ingest action)"),
@@ -1687,6 +1687,16 @@ instrumentTool(
         if (op === "generate_key") {
           if (!keyFile) {
             return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", "key_file path is required for generate_key", "Provide a writeable key file path"))}` }] };
+          }
+          let existing = false;
+          try {
+            existing = existsSync(resolveKeyFile(keyFile));
+          } catch {
+            // An out-of-directory path is reported by generateKeyFile itself.
+            existing = false;
+          }
+          if (existing) {
+            return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "invalid_input", `A key file already exists at that path`, "Choose a new key path, or move the existing file after backing it up"))}` }] };
           }
           const path = generateKeyFile(keyFile);
           const msg = json({ status: "ok", provider: "knowledge_base", results: [{ title: "key generated", url: `file://${path}`, snippet: `Key written to ${path}. Back it up now — without it the store is unrecoverable.` }] });

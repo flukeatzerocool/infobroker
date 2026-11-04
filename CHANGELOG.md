@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026.10.28 — KB resilience: startup, encryption transitions, model reconciliation
+
+- A corrupt knowledge-base metadata value or an unusable storage path can no
+  longer crash the server at startup. `initKb` is an error boundary that reports
+  a lock error per REQ-085; a corrupt metadata index is preserved as a backup
+  (ciphertext for an encrypted store) and rebuilt from the stored chunks, with a
+  status event per REQ-108. (CR-1, CR-2)
+- Encryption enable/disable/rekey now decode every row before writing anything,
+  abort on an undecodable chunk instead of silently dropping it, restore the
+  in-memory key state when a transition fails, and self-verify the new key before
+  reporting success. (REQ-086, CR-5)
+- Restored load-time embedding-model reconciliation (DECISIONS.md D-031/D-033):
+  a store whose recorded model, vector width, or fitted basis does not match the
+  configured model is re-embedded at init and the reconciliation is recorded as a
+  status event. Re-embedding streams in bounded batches. (REQ-082, REQ-103, CR-3)
+- Report deduplication now collects stored report identities in one pass instead
+  of rescanning the whole store per report; a 2,000-chunk store's 60th report
+  ingest drops from ~4.3 s to well under a second. (REQ-072, CR-4)
+- Replacing a source URL now subtracts the removed chunks' contribution from the
+  fitted-model statistics, so `docCount`/`idf` no longer drift upward on every
+  re-ingest. (REQ-072, CR-7)
+- `generate_key` refuses an existing key-file path instead of overwriting the only
+  copy of a key, and the tool returns a structured `invalid_input` error. (REQ-060g,
+  CR-6)
+- Regression coverage: corrupt metadata/init recovery, reseal atomicity, model
+  reconciliation (both directions and a legacy store), one-pass dedupe, idf drift,
+  and key-file refusal.
+
 ## 2026.10.28 — Chunking and numeric config cannot crash the server
 
 - The knowledge-base chunker can no longer loop forever or drop documents when

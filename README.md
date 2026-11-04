@@ -562,6 +562,8 @@ newer store format is never overwritten.
 The `manage_kb` tool's `encryption` action is the day-to-day surface for this
 journey, and it never echoes secret material — `generate_key` and `backup`
 return file paths, and `rekey` reads a key file rather than a raw key.
+`generate_key` refuses a key-file path that already exists, so it can never
+overwrite the only copy of a key.
 
 **Enable** by generating a key, backing it up, adding the `kb.encryption`
 block, and reloading; the store is encrypted in place immediately.

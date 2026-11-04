@@ -316,6 +316,38 @@ describe("kb deduplication (REQ-072)", () => {
     const after = kbStats().chunk_count;
     expect(after).toBeLessThanOrEqual(before);
   });
+
+  it("collapses a near-duplicate report under a different title (REQ-072 near-duplicate)", () => {
+    const body =
+      "Solar flare activity increased sharply in the northern hemisphere during the observation window, " +
+      "with coronal mass ejections affecting radio communications across several regions.";
+    kbIngest(body, "Solar Flare Report", "report://solar-flare", "explicit", "reports", "report", "report");
+    const before = kbList("reports", "report").length;
+    kbIngest(body, "Solar Flare Activity Report", "report://solar-flare-activity", "explicit", "reports", "report", "report");
+    const after = kbList("reports", "report").length;
+    expect(after).toBe(before);
+    expect(kbGet("report://solar-flare-activity")).toBeNull();
+  });
+
+  it("keeps distinct reports distinct (REQ-072 distinct-documents)", () => {
+    const bodies = [
+      "Pottery kilns fired clay across Mesopotamian settlements for thousands of years.",
+      "Quantum tunnelling lets particles cross barriers that classical physics forbids.",
+      "Harvest yields collapsed after the drought reduced soil moisture across the valley.",
+      "The orchestra rehearsed Brahms beneath a vaulted ceiling of painted plaster.",
+      "Marine biologists tagged migrating whales near the continental shelf last spring.",
+      "Volcanic ash drifted over the airfield and grounded every departing flight.",
+      "Chess engines evaluate pawn structure before calculating tactical sacrifices.",
+      "Copper wiring corroded where salt spray reached the harbour warehouses.",
+      "Parliament debated tariff reform while dockworkers organised a general strike.",
+      "Glaciers retreated rapidly, exposing bedrock scraped smooth by ancient ice.",
+    ];
+    const before = kbList("reports", "report").length;
+    bodies.forEach((body, i) => {
+      kbIngest(body, `Distinct Report ${i}`, `report://distinct-${i}`, "explicit", "reports", "report", "report");
+    });
+    expect(kbList("reports", "report").length).toBe(before + bodies.length);
+  });
 });
 
 describe("freshness classification (REQ-074)", () => {

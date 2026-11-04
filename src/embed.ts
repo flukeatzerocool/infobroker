@@ -94,6 +94,8 @@ export interface EmbeddingModel {
   readonly name: ModelName;
   readonly dims: number;
   readonly requiresFit: boolean;
+  /** True when the model can embed today (a fitted model has a basis). */
+  readonly isFitted: boolean;
   fit(corpus: string[]): void;
   embed(text: string): number[];
   serialize(): Record<string, unknown>;
@@ -129,6 +131,7 @@ class HashTfidfModel implements EmbeddingModel {
   readonly name = "signed-hash-tfidf" as const;
   readonly dims = HASH_DIMS;
   readonly requiresFit = false;
+  readonly isFitted = true;
   private idf: Record<string, number> = {};
   private docCount = 0;
 
@@ -277,6 +280,10 @@ class LsaModel implements EmbeddingModel {
 
   get dims(): number {
     return this.k || LSA_DEFAULT_DIMS;
+  }
+
+  get isFitted(): boolean {
+    return this.basis.length > 0;
   }
 
   fit(corpus: string[]): void {

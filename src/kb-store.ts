@@ -41,11 +41,13 @@ export interface KbStore {
   /** Stream only the given chunk ids, in insertion order. */
   iterateChunksByIds(ids: Iterable<string>): Iterable<KbChunk>;
   insertChunks(chunks: readonly KbChunk[]): void;
-  /** Replace all chunks belonging to a source URL in one transaction. */
-  replaceChunks(sourceUrl: string, chunks: readonly KbChunk[]): void;
+  /** Replace all chunks belonging to a source URL in one transaction; returns the removed chunks. */
+  replaceChunks(sourceUrl: string, chunks: readonly KbChunk[]): KbChunk[];
   deleteWhere(predicate: (chunk: KbChunk) => boolean): number;
   /** Drop and rewrite every chunk (used by model reconciliation). */
   replaceAllChunks(chunks: readonly KbChunk[]): void;
+  /** Recompute and persist every chunk embedding in place (REQ-082). */
+  reembedChunks(embed: (chunk: KbChunk) => readonly number[]): number;
   meta(): KbMeta;
   setMeta(meta: KbMeta): void;
   appendEvent(message: string): void;

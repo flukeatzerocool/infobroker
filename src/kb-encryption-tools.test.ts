@@ -102,6 +102,20 @@ describe("KB encryption tool surface (REQ-084, REQ-086)", () => {
     }
   });
 
+  it("refuses to overwrite an existing key file (REQ-060g)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-tools-keygen-existing-"));
+    try {
+      initKb(makeConfig(dir, { enabled: false }));
+      const keyPath = join(dir, "kb.key");
+      generateKeyFile(keyPath);
+      const original = readKeyFile(keyPath);
+      expect(() => generateKeyFile(keyPath)).toThrow(/already exists/);
+      expect(readKeyFile(keyPath).equals(original)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("verifyStoreKey reports match/mismatch", () => {
     const dir = mkdtempSync(join(tmpdir(), "ibk-tools-verify-"));
     try {

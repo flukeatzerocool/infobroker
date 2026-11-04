@@ -136,26 +136,78 @@ function syncModelState(): void {
 }
 
 // Re-fit a fitted model (LSA) over all stored text and re-embed every chunk so
-// stored and query vectors share one basis. Stateless models no-op.
-function refitFittedModel(): void {
-  if (sqliteStore) {
-    if (!activeModel.requiresFit) return;
-    const chunks = [...sqliteStore.iterateChunks()];
-    if (chunks.length === 0) {
-      const meta = sqliteStore.meta();
-      meta.embed_state = undefined;
-      sqliteStore.setMeta(meta);
-      prefilter = null;
-      return;
-    }
-    activeModel.fit(chunks.map((c) => c.text));
-    sqliteStore.replaceAllChunks(
-      chunks.map((chunk) => ({ ...chunk, embedding: activeModel.embed(chunk.text) }))
-    );
+// stored and query vectors share one basis. Stateless models no-op. Returns the
+// number of chunks re-embedded.
+function refitFittedModel(): number {
+  if (!sqliteStore) return 0;
+  if (!activeModel.requiresFit) return 0;
+  const chunks = [...sqliteStore.iterateChunks()];
+  if (chunks.length === 0) {
     const meta = sqliteStore.meta();
-    meta.embed_state = activeModel.serialize();
+    meta.embed_state = undefined;
+    sqliteStore.setMeta(meta);
+    prefilter = null;
+    return 0;
+  }
+  activeModel.fit(chunks.map((c) => c.text));
+  sqliteStore.replaceAllChunks(
+    chunks.map((chunk) => ({ ...chunk, embedding: activeModel.embed(chunk.text) }))
+  );
+  const meta = sqliteStore.meta();
+  meta.embed_state = activeModel.serialize();
+  meta.model = activeModel.name;
+  sqliteStore.setMeta(meta);
+  prefilter = null;
+  return chunks.length;
+}
+
+/**
+ * REQ-082: stored chunks must remain comparable to queries after the embedding
+ * model changes. The recorded model name, the stored vector width, and a
+ * fitted-model basis all detect a mismatch; the store is then re-embedded and
+ * the reconciliation is reported as a status event. A failure is reported, not
+ * thrown, so startup always completes.
+ */
+function reconcileModel(): number {
+  if (!sqliteStore) return 0;
+  const meta = sqliteStore.meta();
+  let storedDims = 0;
+  for (const chunk of sqliteStore.iterateChunks()) {
+    storedDims = chunk.embedding.length;
+    break;
+  }
+  const needs =
+    (meta.model !== undefined && meta.model !== activeModel.name) ||
+    (storedDims > 0 && storedDims !== activeModel.dims) ||
+    (activeModel.requiresFit && !activeModel.isFitted);
+  if (!needs) return 0;
+  if (storedDims === 0) {
+    // Empty store: record the active model so the next open needs no repair.
     meta.model = activeModel.name;
     sqliteStore.setMeta(meta);
+    return 0;
+  }
+  const from = meta.model ?? "legacy";
+  try {
+    const count = activeModel.requiresFit
+      ? refitFittedModel()
+      : (() => {
+          const n = sqliteStore!.reembedChunks((chunk) => activeModel.embed(chunk.text));
+          const next = sqliteStore!.meta();
+          next.model = activeModel.name;
+          sqliteStore!.setMeta(next);
+          prefilter = null;
+          return n;
+        })();
+    sqliteStore.appendEvent(
+      `Embedding model reconciled from "${from}" to "${activeModel.name}" (${count} chunks) at ${new Date().toISOString()}`
+    );
+    return count;
+  } catch (e) {
+    sqliteStore.appendEvent(
+      `Embedding model reconciliation failed at ${new Date().toISOString()}: ${e instanceof Error ? e.message : String(e)}`
+    );
+    return 0;
   }
 }
 
@@ -286,92 +338,125 @@ export function initKb(config: KbConfig): void {
   storagePath = raw;
   resolvedKey = null;
   lockError = null;
-  if (!existsSync(raw)) mkdirSync(raw, { recursive: true, mode: 0o700 });
-
-  const keyResult = config.encryption?.key_file
-    ? safeResolveKeySource(config.encryption.key_file)
-    : { key: null, error: null };
-  let secret = keyResult.key;
-  if (!secret && config.encryption?.enabled) {
-    try {
-      secret = resolveKeySource(config.encryption.key_file);
-    } catch {
-      secret = null;
-    }
+  if (maintenanceTimer) {
+    clearInterval(maintenanceTimer);
+    maintenanceTimer = null;
   }
-  if (config.encryption?.enabled && !secret) {
-    lockError = {
-      code: "config_error",
-      message: "Knowledge base encryption is enabled but no key is available",
-      remediation: "Set INFOBROKER_KB_KEY / INFOBROKER_KB_PASSPHRASE or kb.encryption.key_file, then reload.",
-    };
-  } else {
-    const migration = migrateLegacyJson({
-      storagePath: raw,
-      encryptionEnabled: config.encryption?.enabled ?? false,
-      ...(config.encryption?.key_file ? { keyFile: config.encryption.key_file } : {}),
-    });
-    if (migration.status === "locked" || migration.status === "error") {
-      lockError = {
-        code: "config_error",
-        message: migration.message ?? "Knowledge base migration failed",
-        remediation: migration.remediation ?? "Fix the reported error and restart.",
-      };
-    } else if (!secret && sqliteStoreFormat(raw) === "encrypted") {
-      lockError = {
-        code: "config_error",
-        message: "Knowledge base is encrypted but no key is available",
-        remediation:
-          "Provide the key and reload. If the key is lost, restore it from your backup; without the key the store is unrecoverable by design.",
-      };
-    } else {
+
+  // REQ-085 / REQ-108: an unusable path or unreadable store must be reported
+  // as a lock error, never crash the server. Everything that touches the
+  // filesystem or the store lives inside this boundary.
+  try {
+    if (!existsSync(raw)) mkdirSync(raw, { recursive: true, mode: 0o700 });
+
+    const keyResult = config.encryption?.key_file
+      ? safeResolveKeySource(config.encryption.key_file)
+      : { key: null, error: null };
+    let secret = keyResult.key;
+    if (!secret && config.encryption?.enabled) {
       try {
-        sqliteStore = new SqliteStore(raw, {
-          secret,
-          encryptionEnabled: config.encryption?.enabled ?? false,
-        });
-        sqliteStore.init();
-        if (migration.event) sqliteStore.appendEvent(migration.event);
-        if (previousPath !== null && previousPath !== raw) {
-          const event =
-            `Storage path changed at ${new Date().toISOString()}: ${previousPath} → ${raw}. ` +
-            `Data at the previous path is not migrated; set kb.storage_path in config.local.json to restore it.`;
-          console.warn(`[infobroker] ${event}`);
-          sqliteStore.appendEvent(event);
-        }
-        if (!config.encryption?.enabled && sqliteStore.format() === "encrypted") {
-          if (!secret) {
-            lockError = {
-              code: "config_error",
-              message: "Knowledge base is encrypted but no key is available to disable encryption",
-              remediation: "Provide the key, then reload. The store is untouched.",
-            };
-          } else {
-            sqliteStore.disableEncryption(secret);
-          }
-        }
-        resolvedKey = secret;
-      } catch (e) {
-        lockError = {
-          code: "config_error",
-          message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
-          remediation: "Inspect the knowledge-base directory and its permissions, or provide the correct key.",
-        };
-        sqliteStore?.close();
-        sqliteStore = null;
+        secret = resolveKeySource(config.encryption.key_file);
+      } catch {
+        secret = null;
       }
     }
-  }
+    if (config.encryption?.enabled && !secret) {
+      lockError = {
+        code: "config_error",
+        message: "Knowledge base encryption is enabled but no key is available",
+        remediation: "Set INFOBROKER_KB_KEY / INFOBROKER_KB_PASSPHRASE or kb.encryption.key_file, then reload.",
+      };
+    } else {
+      const migration = migrateLegacyJson({
+        storagePath: raw,
+        encryptionEnabled: config.encryption?.enabled ?? false,
+        ...(config.encryption?.key_file ? { keyFile: config.encryption.key_file } : {}),
+      });
+      if (migration.status === "locked" || migration.status === "error") {
+        lockError = {
+          code: "config_error",
+          message: migration.message ?? "Knowledge base migration failed",
+          remediation: migration.remediation ?? "Fix the reported error and restart.",
+        };
+      } else if (!secret && sqliteStoreFormat(raw) === "encrypted") {
+        lockError = {
+          code: "config_error",
+          message: "Knowledge base is encrypted but no key is available",
+          remediation:
+            "Provide the key and reload. If the key is lost, restore it from your backup; without the key the store is unrecoverable by design.",
+        };
+      } else {
+        try {
+          sqliteStore = new SqliteStore(raw, {
+            secret,
+            encryptionEnabled: config.encryption?.enabled ?? false,
+          });
+          sqliteStore.init();
+          if (migration.event) sqliteStore.appendEvent(migration.event);
+          if (previousPath !== null && previousPath !== raw) {
+            const event =
+              `Storage path changed at ${new Date().toISOString()}: ${previousPath} → ${raw}. ` +
+              `Data at the previous path is not migrated; set kb.storage_path in config.local.json to restore it.`;
+            console.warn(`[infobroker] ${event}`);
+            sqliteStore.appendEvent(event);
+          }
+          if (!config.encryption?.enabled && sqliteStore.format() === "encrypted") {
+            if (!secret) {
+              lockError = {
+                code: "config_error",
+                message: "Knowledge base is encrypted but no key is available to disable encryption",
+                remediation: "Provide the key, then reload. The store is untouched.",
+              };
+            } else {
+              sqliteStore.disableEncryption(secret);
+            }
+          }
+          resolvedKey = secret;
+        } catch (e) {
+          lockError = {
+            code: "config_error",
+            message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
+            remediation: "Inspect the knowledge-base directory and its permissions, or provide the correct key.",
+          };
+          sqliteStore?.close();
+          sqliteStore = null;
+        }
+      }
+    }
 
-  configureModel(config.embedding_model);
-  runTruncSweep();
-  if (sqliteStore) syncModelState();
-  runMaintenance();
-  if (maintenanceTimer) clearInterval(maintenanceTimer);
-  // REQ-066: a non-positive interval disables periodic maintenance rather than
-  // scheduling a tight zero-delay loop.
-  if (config.maintenance_interval_minutes > 0) {
-    maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+    configureModel(config.embedding_model);
+    runTruncSweep();
+    if (sqliteStore) {
+      const repaired = sqliteStore.takeMetaCorruption();
+      if (repaired) {
+        rebuildIdf();
+        sqliteStore.appendEvent(
+          `Knowledge base metadata '${repaired.key}' was corrupt at ${new Date().toISOString()}; index rebuilt` +
+            (repaired.backup ? ` (backup: ${repaired.backup})` : "")
+        );
+      }
+      syncModelState();
+      reconcileModel();
+    }
+    runMaintenance();
+    // REQ-066: a non-positive interval disables periodic maintenance rather than
+    // scheduling a tight zero-delay loop.
+    if (config.maintenance_interval_minutes > 0) {
+      maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+    }
+  } catch (e) {
+    sqliteStore?.close();
+    sqliteStore = null;
+    prefilter = null;
+    if (maintenanceTimer) {
+      clearInterval(maintenanceTimer);
+      maintenanceTimer = null;
+    }
+    lockError = {
+      code: "config_error",
+      message: `Knowledge base could not be initialized: ${e instanceof Error ? e.message : String(e)}`,
+      remediation: `Check that the knowledge base storage path (${raw}) exists and is writable, then reload.`,
+    };
   }
 }
 
@@ -516,21 +601,16 @@ function sqliteIngest(
   const now = Date.now();
 
   if (sourceUrl && sourceUrl.startsWith("report://")) {
-    const existingIds = new Set<string>();
+    // REQ-072: one pass collects each stored report's identity and first chunk
+    // text. The previous nested scan re-read the whole store once per report.
+    const existing = new Map<string, string>();
     for (const chunk of sqliteStore.iterateChunks()) {
-      if (chunk.source_url.startsWith("report://")) existingIds.add(chunk.source_url);
+      if (!chunk.source_url.startsWith("report://")) continue;
+      if (!existing.has(chunk.source_url)) existing.set(chunk.source_url, chunk.text);
     }
     const incoming = `${title} ${text.slice(0, 500)}`;
-    for (const id of existingIds) {
+    for (const [id, existingText] of existing) {
       if (id === sourceUrl) continue;
-      let existingText = "";
-      for (const chunk of sqliteStore.iterateChunks()) {
-        if (chunk.source_url === id) {
-          existingText = chunk.text;
-          break;
-        }
-      }
-      if (!existingText) continue;
       const sim = pairwiseSimilarity([incoming, `${title} ${existingText.slice(0, 500)}`], "lsa")[0]?.[1] ?? 0;
       if (sim >= 0.92) {
         sourceUrl = id;
@@ -567,8 +647,9 @@ function sqliteIngest(
     ...(sourceUpdatedAt ? { source_updated_at: sourceUpdatedAt } : {}),
   }));
 
+  let removed: readonly KbChunk[] = [];
   if (sourceUrl) {
-    sqliteStore.replaceChunks(sourceUrl, newChunks);
+    removed = sqliteStore.replaceChunks(sourceUrl, newChunks);
     prefilter = null;
   } else {
     sqliteStore.insertChunks(newChunks);
@@ -576,7 +657,18 @@ function sqliteIngest(
     else if (prefilter) for (const chunk of newChunks) prefilter.add(chunk);
   }
 
+  // Keep the fitted-model statistics in step with the store: a replaced source
+  // removes its old chunks' contributions instead of only adding the new ones
+  // (otherwise docCount/idf drift upward on every re-ingest).
   const meta = sqliteStore.meta();
+  for (const chunk of removed) {
+    for (const term of new Set(tokenize(chunk.text))) {
+      const next = (meta.idf[term] ?? 0) - 1;
+      if (next > 0) meta.idf[term] = next;
+      else delete meta.idf[term];
+    }
+    meta.docCount = Math.max(0, meta.docCount - 1);
+  }
   for (const chunkBody of chunks) {
     const seen = new Set<string>();
     for (const term of tokenize(chunkBody)) {
@@ -586,6 +678,7 @@ function sqliteIngest(
     }
     meta.docCount++;
   }
+  meta.model = activeModel.name;
   sqliteStore.setMeta(meta);
   if (useFitted) refitFittedModel();
   return chunks.length;
@@ -1077,8 +1170,15 @@ export function rekeyStore(): string | null {
  * where the key lives and that it must be backed up.
  */
 export function generateKeyFile(path: string): string {
-  const key = randomBytes(32).toString("base64");
   const resolved = resolveKeyFile(path);
+  // REQ-060g: never overwrite key material. A generated key replaces the only
+  // copy that can open the store, so an existing target is refused outright.
+  if (existsSync(resolved)) {
+    throw new Error(
+      `Key file already exists at ${resolved}; choose a new path or move the existing file after backing it up`
+    );
+  }
+  const key = randomBytes(32).toString("base64");
   const dir = dirname(resolved);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   atomicWriteFile(resolved, Buffer.from(`${key}\n`, "utf-8"));

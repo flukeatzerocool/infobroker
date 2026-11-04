@@ -5,7 +5,7 @@
 // messages are sealed; the salt and encryption marker live in `meta`.
 import { DatabaseSync } from "node:sqlite";
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
   ClaimLedgerQuery,
@@ -93,6 +93,9 @@ export class SqliteStore implements KbStore {
   private rowKey: Buffer | null = null;
   private encrypted = false;
   private salt: Buffer | null = null;
+  /** Set when a metadata value cannot be parsed during `meta()` (REQ-108). */
+  private metaCorrupt: string | null = null;
+  private corruptionBackup: string | null = null;
 
   constructor(storagePath: string, opts: SqliteStoreOptions = {}) {
     this.path = join(storagePath, opts.fileName ?? LIVE_SQLITE_STORE);
@@ -126,7 +129,37 @@ export class SqliteStore implements KbStore {
       if (!this.opts.secret) throw new Error("encryption is enabled but no key is available");
       this.enableEncryption(this.opts.secret);
     }
+    // REQ-108: a metadata value that cannot be parsed must not be fatal. Force
+    // one parse so the guard runs, then preserve the pre-repair file before the
+    // caller rebuilds the index.
+    this.meta();
+    if (this.metaCorrupt) {
+      // An encrypted store's copy is ciphertext; use a non-archive suffix so the
+      // plaintext-archive sweep does not reap it on the next open (REQ-084).
+      const suffix = this.encrypted ? "sqlite.enc" : "sqlite";
+      const backup = join(dirname(this.path), `vector-store.corrupt-${Date.now()}.${suffix}`);
+      try {
+        this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      } catch {
+        // best effort: a busy checkpoint still leaves a usable main file
+      }
+      copyFileSync(this.path, backup);
+      chmodSync(backup, 0o600);
+      this.corruptionBackup = backup;
+    }
     this.hardenPermissions();
+  }
+
+  /**
+   * REQ-108: report and clear a corrupt-metadata flag discovered during
+   * `meta()`, together with the preserved backup path (null when none).
+   */
+  takeMetaCorruption(): { key: string; backup: string | null } | null {
+    if (!this.metaCorrupt) return null;
+    const result = { key: this.metaCorrupt, backup: this.corruptionBackup };
+    this.metaCorrupt = null;
+    this.corruptionBackup = null;
+    return result;
   }
 
   private hardenPermissions(): void {
@@ -227,17 +260,48 @@ export class SqliteStore implements KbStore {
     this.hardenPermissions();
   }
 
-  replaceChunks(sourceUrl: string, chunks: readonly KbChunk[]): void {
+  replaceChunks(sourceUrl: string, chunks: readonly KbChunk[]): KbChunk[] {
+    const removed: KbChunk[] = [];
     this.transaction(() => {
       const ids: string[] = [];
       for (const chunk of this.iterateChunks()) {
-        if (chunk.source_url === sourceUrl) ids.push(chunk.id);
+        if (chunk.source_url === sourceUrl) {
+          ids.push(chunk.id);
+          removed.push(chunk);
+        }
       }
       const del = this.db!.prepare("DELETE FROM chunks WHERE id = ?");
       for (const id of ids) del.run(id);
       for (const chunk of chunks) this.insertOne(chunk);
     });
     this.hardenPermissions();
+    return removed;
+  }
+
+  /**
+   * REQ-082: re-embed every stored chunk in place after a model change. Ids are
+   * collected up front (small), then rows are rewritten in bounded batches so
+   * the whole chunk payload is never resident (REQ-108).
+   */
+  reembedChunks(embed: (chunk: KbChunk) => readonly number[]): number {
+    if (!this.db) return 0;
+    const ids = (this.db.prepare("SELECT id FROM chunks ORDER BY ingested_at, rowid").all() as Array<{ id: string }>).map(
+      (row) => row.id
+    );
+    const batchSize = 100;
+    let updated = 0;
+    for (let start = 0; start < ids.length; start += batchSize) {
+      const batch = ids.slice(start, start + batchSize);
+      this.transaction(() => {
+        const update = this.db!.prepare("UPDATE chunks SET payload = ? WHERE id = ?");
+        for (const chunk of this.iterateChunksByIds(batch)) {
+          update.run(this.encodePayload({ ...chunk, embedding: [...embed(chunk)] }), chunk.id);
+          updated++;
+        }
+      });
+    }
+    this.hardenPermissions();
+    return updated;
   }
 
   deleteWhere(predicate: (chunk: KbChunk) => boolean): number {
@@ -279,11 +343,28 @@ export class SqliteStore implements KbStore {
     if (this.metaCache) return this.metaCache;
     const meta: KbMeta = { idf: {}, docCount: 0 };
     if (!this.db) return meta;
+    const parse = (key: string, value: string): unknown => {
+      try {
+        const parsed = JSON.parse(this.openMetaValue(value)) as unknown;
+        if (!parsed || typeof parsed !== "object") throw new Error("metadata is not an object");
+        return parsed;
+      } catch {
+        // REQ-108: a corrupt value must not crash the server. Flag it so init can
+        // preserve a backup and rebuild the index, and continue with defaults.
+        this.metaCorrupt = key;
+        return null;
+      }
+    };
     for (const row of this.db.prepare("SELECT key, value FROM meta").all() as Array<{ key: string; value: string }>) {
       if (row.key === "docCount") meta.docCount = Number(row.value) || 0;
       else if (row.key === "model") meta.model = row.value;
-      else if (row.key === "idf") meta.idf = JSON.parse(this.openMetaValue(row.value)) as Record<string, number>;
-      else if (row.key === "embed_state") meta.embed_state = JSON.parse(this.openMetaValue(row.value)) as Record<string, unknown>;
+      else if (row.key === "idf") {
+        const idf = parse(row.key, row.value);
+        meta.idf = (idf as Record<string, number> | null) ?? {};
+      } else if (row.key === "embed_state") {
+        const state = parse(row.key, row.value);
+        meta.embed_state = (state as Record<string, unknown> | null) ?? undefined;
+      }
     }
     this.metaCache = meta;
     return meta;
@@ -613,92 +694,126 @@ export class SqliteStore implements KbStore {
   /**
    * Re-seal every row under a new key. Used by enable, disable, and rekey.
    * The caller supplies the new secret; the old key opens the current rows.
+   *
+   * REQ-086: the transition is atomic and lossless. Every payload is decoded
+   * before the first write, any undecodable row aborts the transition, and the
+   * in-memory key state is restored if the transaction fails.
    */
-  private resealAll(next: { key: Buffer; encrypted: boolean }): void {
+  private resealAll(next: { key: Buffer; encrypted: boolean; salt: Buffer | null }): void {
     if (!this.db) throw new Error("knowledge base store is not open");
     const meta = this.metaCache ?? this.meta();
     const rows = this.db.prepare("SELECT id, payload FROM chunks").all() as Array<{ id: string; payload: Uint8Array }>;
     const decoded = rows.map((row) => ({ id: row.id, chunk: this.decodePayload(row.payload) }));
+    if (decoded.some((item) => item.chunk === null)) {
+      throw new Error("chunk row could not be decoded during reseal");
+    }
     // REQ-109: claim and edge payloads are sealed too. Decode them under the
     // current key before the switch, then re-encode under the next key.
     const claimRows = this.db
       .prepare("SELECT id, claim_key, payload FROM claims")
       .all() as Array<{ id: string; claim_key: string; payload: Uint8Array }>;
     const decodedClaims = claimRows.map((row) => ({ id: row.id, claim: this.decodeClaim(row.payload) }));
+    if (decodedClaims.some((item) => item.claim === null)) {
+      throw new Error("claim row could not be decoded during reseal");
+    }
     const edgeRows = this.db
       .prepare("SELECT claim_id, source_key, retrieved_at, payload FROM claim_sources")
       .all() as Array<{ claim_id: string; source_key: string; retrieved_at: string; payload: Uint8Array }>;
     const decodedEdges = edgeRows.map((row) => ({ claim_id: row.claim_id, edge: this.decodeEdge(row.payload) }));
+    if (decodedEdges.some((item) => item.edge === null)) {
+      throw new Error("claim source row could not be decoded during reseal");
+    }
     // REQ-110: receipt payloads are sealed too. Decode them under the current
     // key before the switch, then re-encode and re-key under the next key.
     const receiptRows = this.db
       .prepare("SELECT id, payload FROM report_receipts")
       .all() as Array<{ id: string; payload: Uint8Array }>;
     const decodedReceipts = receiptRows.map((row) => ({ id: row.id, body: this.decodeReceipt(row.payload) }));
+    if (decodedReceipts.some((item) => item.body === null)) {
+      throw new Error("report receipt row could not be decoded during reseal");
+    }
+
+    const previous = {
+      rowKey: this.rowKey,
+      encrypted: this.encrypted,
+      salt: this.salt,
+      metaCache: this.metaCache,
+    };
     this.rowKey = next.key;
     this.encrypted = next.encrypted;
-    this.transaction(() => {
-      const update = this.db!.prepare("UPDATE chunks SET encrypted = ?, payload = ? WHERE id = ?");
-      for (const item of decoded) {
-        if (!item.chunk) continue;
-        update.run(next.encrypted ? 1 : 0, this.encodePayload(item.chunk), item.id);
-      }
-      const updateClaim = this.db!.prepare(
-        "UPDATE claims SET claim_key = ?, encrypted = ?, payload = ? WHERE id = ?"
-      );
-      for (const item of decodedClaims) {
-        if (!item.claim) throw new Error("claim row could not be decoded during reseal");
-        updateClaim.run(
-          this.keyedHash(SqliteStore.normalizeClaim(item.claim.claim)),
-          next.encrypted ? 1 : 0,
-          this.encodeClaim(item.claim),
-          item.id
+    this.salt = next.salt;
+    try {
+      this.transaction(() => {
+        const update = this.db!.prepare("UPDATE chunks SET encrypted = ?, payload = ? WHERE id = ?");
+        for (const item of decoded) {
+          if (!item.chunk) continue; // unreachable: checked above
+          update.run(next.encrypted ? 1 : 0, this.encodePayload(item.chunk), item.id);
+        }
+        const updateClaim = this.db!.prepare(
+          "UPDATE claims SET claim_key = ?, encrypted = ?, payload = ? WHERE id = ?"
         );
-      }
-      const clearEdges = this.db!.prepare("DELETE FROM claim_sources");
-      const insertEdge = this.db!.prepare(
-        "INSERT INTO claim_sources (claim_id, source_key, retrieved_at, encrypted, payload) VALUES (?, ?, ?, ?, ?)"
-      );
-      // Source keys change with the key, so re-key by position: the decoded
-      // edges are in the same order as the rows they came from.
-      clearEdges.run();
-      decodedEdges.forEach((item, i) => {
-        const row = edgeRows[i];
-        if (!item.edge) throw new Error("claim source row could not be decoded during reseal");
-        insertEdge.run(
-          row.claim_id,
-          this.sourceKey(item.edge.url),
-          row.retrieved_at,
-          next.encrypted ? 1 : 0,
-          this.encodeEdge(item.edge)
+        for (const item of decodedClaims) {
+          if (!item.claim) continue; // unreachable: checked above
+          updateClaim.run(
+            this.keyedHash(SqliteStore.normalizeClaim(item.claim.claim)),
+            next.encrypted ? 1 : 0,
+            this.encodeClaim(item.claim),
+            item.id
+          );
+        }
+        const clearEdges = this.db!.prepare("DELETE FROM claim_sources");
+        const insertEdge = this.db!.prepare(
+          "INSERT INTO claim_sources (claim_id, source_key, retrieved_at, encrypted, payload) VALUES (?, ?, ?, ?, ?)"
         );
+        // Source keys change with the key, so re-key by position: the decoded
+        // edges are in the same order as the rows they came from.
+        clearEdges.run();
+        decodedEdges.forEach((item, i) => {
+          const row = edgeRows[i];
+          if (!item.edge) return; // unreachable: checked above
+          insertEdge.run(
+            row.claim_id,
+            this.sourceKey(item.edge.url),
+            row.retrieved_at,
+            next.encrypted ? 1 : 0,
+            this.encodeEdge(item.edge)
+          );
+        });
+        const updateReceipt = this.db!.prepare(
+          "UPDATE report_receipts SET report_key = ?, encrypted = ?, payload = ? WHERE id = ?"
+        );
+        for (const item of decodedReceipts) {
+          if (!item.body) continue; // unreachable: checked above
+          updateReceipt.run(
+            this.keyedHash(item.body.report_id),
+            next.encrypted ? 1 : 0,
+            this.encodeReceipt(item.body),
+            item.id
+          );
+        }
+        this.metaCache = null;
+        this.writeRawMeta("encryption", next.encrypted ? "1" : "0");
+        if (next.salt) this.writeRawMeta("salt", next.salt.toString("base64"));
+        this.writeRawMeta("idf", this.sealMetaValue(JSON.stringify(meta.idf)));
+        if (meta.embed_state) this.writeRawMeta("embed_state", this.sealMetaValue(JSON.stringify(meta.embed_state)));
+        this.writeRawMeta("check", this.sealMetaValue("ok"));
       });
-      const updateReceipt = this.db!.prepare(
-        "UPDATE report_receipts SET report_key = ?, encrypted = ?, payload = ? WHERE id = ?"
-      );
-      for (const item of decodedReceipts) {
-        if (!item.body) throw new Error("report receipt row could not be decoded during reseal");
-        updateReceipt.run(
-          this.keyedHash(item.body.report_id),
-          next.encrypted ? 1 : 0,
-          this.encodeReceipt(item.body),
-          item.id
-        );
-      }
-      this.metaCache = null;
-      this.writeRawMeta("encryption", next.encrypted ? "1" : "0");
-      if (this.salt) this.writeRawMeta("salt", this.salt.toString("base64"));
-      this.writeRawMeta("idf", this.sealMetaValue(JSON.stringify(meta.idf)));
-      if (meta.embed_state) this.writeRawMeta("embed_state", this.sealMetaValue(JSON.stringify(meta.embed_state)));
-      this.writeRawMeta("check", this.sealMetaValue("ok"));
-    });
+    } catch (e) {
+      this.rowKey = previous.rowKey;
+      this.encrypted = previous.encrypted;
+      this.salt = previous.salt;
+      this.metaCache = previous.metaCache;
+      throw e;
+    }
   }
 
   enableEncryption(secret: ResolvedKey): void {
     if (this.encrypted) return;
-    this.salt = newRowSalt();
-    const key = deriveRowKey(secret, this.salt);
-    this.resealAll({ key, encrypted: true });
+    const salt = newRowSalt();
+    this.resealAll({ key: deriveRowKey(secret, salt), encrypted: true, salt });
+    if (!this.verifyKey(secret)) {
+      throw new Error("knowledge base encryption self-verify failed");
+    }
     this.checkpoint();
     this.removePlaintextArchives();
   }
@@ -729,7 +844,7 @@ export class SqliteStore implements KbStore {
     if (!this.encrypted) return;
     if (!this.salt) throw new Error("encrypted store has no salt");
     this.rowKey = deriveRowKey(secret, this.salt);
-    this.resealAll({ key: Buffer.alloc(0), encrypted: false });
+    this.resealAll({ key: Buffer.alloc(0), encrypted: false, salt: null });
     this.salt = null;
     if (this.db) {
       this.db.prepare("DELETE FROM meta WHERE key IN ('salt','encryption','check')").run();
@@ -740,8 +855,11 @@ export class SqliteStore implements KbStore {
   rekey(secret: ResolvedKey, to: ResolvedKey): string | null {
     if (!this.encrypted || !this.salt) return null;
     this.rowKey = deriveRowKey(secret, this.salt);
-    this.salt = newRowSalt();
-    this.resealAll({ key: deriveRowKey(to, this.salt), encrypted: true });
+    const salt = newRowSalt();
+    this.resealAll({ key: deriveRowKey(to, salt), encrypted: true, salt });
+    if (!this.verifyKey(to)) {
+      throw new Error("knowledge base re-key self-verify failed");
+    }
     this.checkpoint();
     return "knowledge base re-keyed";
   }

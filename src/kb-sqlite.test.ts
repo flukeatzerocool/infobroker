@@ -1,10 +1,12 @@
-// @implements REQ-108 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-072 REQ-087
+// @implements REQ-108 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-072 REQ-087 REQ-086
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { SqliteStore } from "./kb-sqlite.js";
+import type { KbChunk } from "./types.js";
 import {
   initKb,
   kbIngest,
@@ -120,6 +122,89 @@ describe("SQLite knowledge base (REQ-108)", () => {
     initKb(cfg);
     expect(kbGet("https://example.com/pottery")).toBeNull();
     expect(kbSearch("quantum error correction", 5).length).toBeGreaterThan(0);
+  });
+});
+
+function fixtureChunk(id: string, text: string): KbChunk {
+  return {
+    id,
+    text,
+    embedding: [1, 0, 0],
+    source_url: `https://example.com/${id}`,
+    chunk_index: 0,
+    title: id,
+    provider: "test",
+    collection: "default",
+    source_type: "web_search",
+    freshness_tier: "stable",
+    ingested_at: Date.now(),
+  };
+}
+
+describe("Encryption transition atomicity (REQ-086)", () => {
+  it("aborts on an undecodable row and keeps the store unchanged", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-reseal-"));
+    try {
+      const seedStore = new SqliteStore(dir);
+      seedStore.init();
+      seedStore.insertChunks([fixtureChunk("c1", "content that must survive")]);
+      seedStore.close();
+
+      const path = join(dir, "vector-store.sqlite");
+      const db = new DatabaseSync(path);
+      db.prepare("UPDATE chunks SET payload = ? WHERE id = 'c1'").run(Buffer.from("not a sealed row", "utf-8"));
+      db.close();
+
+      const key = { kind: "raw" as const, dek: randomBytes(32) };
+      const opened = new SqliteStore(dir);
+      opened.init();
+      expect(() => opened.enableEncryption(key)).toThrow(/could not be decoded/);
+      expect(opened.format()).toBe("plaintext");
+      opened.close();
+
+      const check = new DatabaseSync(path, { readOnly: true });
+      try {
+        const row = check.prepare("SELECT COUNT(*) AS n FROM chunks").get() as { n: number };
+        expect(row.n).toBe(1);
+        const marker = check.prepare("SELECT value FROM meta WHERE key = 'encryption'").get() as
+          | { value: string }
+          | undefined;
+        expect(marker?.value ?? "0").toBe("0");
+      } finally {
+        check.close();
+      }
+
+      // The store still opens; no key state drifted.
+      const reopened = new SqliteStore(dir);
+      reopened.init();
+      expect(reopened.format()).toBe("plaintext");
+      reopened.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+});
+
+describe("Fitted-model statistics (REQ-072)", () => {
+  it("does not drift when a source URL is replaced", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-idf-"));
+    try {
+      initKb({ ...cfg, storage_path: dir });
+      kbIngest("alpha uniquetermone content", "drift", "https://example.com/drift", "test");
+      kbIngest("beta uniquetermtwo content", "drift", "https://example.com/drift", "test");
+      flushKbWrites();
+
+      const store = new SqliteStore(dir);
+      store.init();
+      const meta = store.meta();
+      expect(meta.docCount).toBe(1);
+      expect(meta.idf["alpha"]).toBeUndefined();
+      expect(meta.idf["beta"]).toBe(1);
+      store.close();
+    } finally {
+      initKb(cfg);
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
   });
 });
 

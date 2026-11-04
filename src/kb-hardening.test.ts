@@ -1,9 +1,10 @@
-// @implements REQ-060c REQ-066 REQ-100 REQ-067
+// @implements REQ-060c REQ-066 REQ-100 REQ-067 REQ-085 REQ-108
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, chunkText } from "./kb.js";
+import { DatabaseSync } from "node:sqlite";
+import { initKb, kbIngest, kbSearch, kbStats, chunkText, flushKbWrites, getKbLockError } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const base = mkdtempSync(join(tmpdir(), "infobroker-kb-hardening-"));
@@ -48,6 +49,34 @@ describe("KB maintenance interval (REQ-066)", () => {
     initKb(makeConfig(dir, { maintenance_interval_minutes: 0 }));
     const count = kbIngest("maintenance disabled still indexes content", "t", "https://example.com/m", "test");
     expect(count).toBeGreaterThan(0);
+  });
+});
+
+describe("Startup resilience (REQ-085, REQ-108)", () => {
+  it("recovers from a corrupt metadata index instead of throwing (REQ-108 corrupt-metadata)", () => {
+    const dir = join(base, "corrupt-meta-store");
+    initKb(makeConfig(dir));
+    kbIngest("a recoverable document about basalt columns", "recover", "https://example.com/recover", "test");
+    flushKbWrites();
+
+    const db = new DatabaseSync(join(dir, "vector-store.sqlite"));
+    db.prepare("UPDATE meta SET value = ? WHERE key = 'idf'").run('{"basalt":1,"columns"');
+    db.close();
+
+    expect(() => initKb(makeConfig(dir))).not.toThrow();
+    expect(getKbLockError()).toBeNull();
+    expect(kbSearch("basalt columns", 5).length).toBeGreaterThan(0);
+    expect(readdirSync(dir).some((name) => name.startsWith("vector-store.corrupt-"))).toBe(true);
+    expect(kbStats().events.some((event) => event.includes("was corrupt"))).toBe(true);
+  });
+
+  it("reports an unusable storage path as a lock error instead of throwing (REQ-085 unreadable-store)", () => {
+    const notADir = join(base, "not-a-directory");
+    writeFileSync(notADir, "x");
+    expect(() => initKb(makeConfig(join(notADir, "sub")))).not.toThrow();
+    const lock = getKbLockError();
+    expect(lock?.code).toBe("config_error");
+    expect(lock?.remediation).toContain("storage path");
   });
 });
 
