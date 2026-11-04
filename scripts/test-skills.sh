@@ -105,7 +105,7 @@ trap cleanup EXIT SIGINT SIGTERM
 # ── Build prompt + run ──
 run_skill() {
   local manifest="$1" workdir="$2" prompt_file="$3" out_file="$4"
-  local args=(run --attach "$SERVER_URL" --title "skill-test" --agent build --auto --format json)
+  local args=(run --server "$SERVER_URL" --title "skill-test" --agent build --auto --format json)
   [[ -n "$MODEL" ]] && args+=(--model "$MODEL")
   local cmd=(opencode)
   local opc_timeout="${OPC_TIMEOUT:-1800}"

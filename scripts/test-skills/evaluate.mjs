@@ -104,9 +104,13 @@ if (grade && manifest.rubric?.length) {
       : `${text.slice(0, 12000)}\n\n[... middle omitted ...]\n\n${text.slice(-4000)}`;
   const prompt = `You are grading a skill test. The skill "${skill}" was run with this task output:\n\n---OUTPUT---\n${gradeText}\n---END OUTPUT---\n\nGrade each of the following rubric criteria as yes or no, then output a single line in the exact form: GRADE <n>/<total> pass|fail.\n\nRubric:\n- ${rubric}`;
   const modelFlag = gradeModel ? ` --model ${JSON.stringify(gradeModel)}` : "";
+  const serverUrl = process.env.SKILL_TEST_SERVER_URL;
   try {
+    // No fallback URL: grading against an arbitrary local server would score the
+    // output against a different model deployment than the one under test.
+    if (!serverUrl) throw new Error("SKILL_TEST_SERVER_URL is not set");
     const out = execSync(
-      `opencode run --attach ${process.env.SKILL_TEST_SERVER_URL ?? "http://localhost:4096"} --title "skill-grade" --agent build --auto --format json${modelFlag} ${JSON.stringify(prompt)}`,
+      `opencode run --server ${serverUrl} --title "skill-grade" --agent build --auto --format json${modelFlag} ${JSON.stringify(prompt)}`,
       { timeout: 300000, encoding: "utf8" }
     );
     const m = out.match(/GRADE\s+(\d+)\/(\d+)\s+(pass|fail)/);

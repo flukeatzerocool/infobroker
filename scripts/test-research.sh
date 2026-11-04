@@ -75,7 +75,7 @@ trap cleanup EXIT SIGINT SIGTERM
 
 run_turn() {
   local id="$1" titlearg="$2" workdir="$3" promptfile="$4" outfile="$5" session="$6"
-  local args=(run --attach "$SERVER_URL" --agent build --auto --format json)
+  local args=(run --server "$SERVER_URL" --agent build --auto --format json)
   local cmd=(opencode)
   local opc_timeout="${OPC_TIMEOUT:-1800}"
   [[ "$opc_timeout" -gt 0 ]] && command -v timeout >/dev/null 2>&1 && cmd=(timeout "$opc_timeout" opencode)

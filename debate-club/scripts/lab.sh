@@ -100,22 +100,9 @@ if [[ "$MCP_MODE" == "repo" ]]; then
   ' "$REPO" "$MCP_PROJECT"
   MCP_PROBE_DIR="$MCP_PROJECT"
   LAB_PORT="${DEBATE_LAB_PORT:-4097}"
-  SERVER_URL="http://localhost:$LAB_PORT"
-  started=false
-  if curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; then
-    warn "Reusing an existing opencode serve at $SERVER_URL (repo-scoped target not guaranteed)."
-  else
-    info "Starting repo-scoped opencode serve on port $LAB_PORT..."
-    ( cd "$MCP_PROJECT" && opencode serve --port "$LAB_PORT" ) > "$RUN_DIR/opencode-serve.log" 2>&1 &
-    OPC_SERVE_PID=$!
-    i=0
-    until curl -s -o /dev/null "$SERVER_URL" 2>/dev/null; do
-      i=$((i + 1))
-      [[ $i -gt 60 ]] && die "repo-scoped opencode serve did not come up (see $RUN_DIR/opencode-serve.log)"
-      sleep 1
-    done
-    started=true
-  fi
+  # Repo-scoped server: the cwd is what makes the MCP config in MCP_PROJECT
+  # authoritative. Password handling is shared with the other harnesses.
+  ensure_opencode_serve_at "$RUN_DIR" "opencode-serve.log" "$LAB_PORT" "$MCP_PROJECT"
 else
   ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
 fi
@@ -167,7 +154,7 @@ for id in $IDS; do
   mkdir -p "$work"
   info "════ Running lab scenario $id ════"
   node -e 'console.log(require(process.argv[1]).utterance)' "$sc" > "$work/prompt.md"
-  opencode run --attach "$SERVER_URL" --agent build --auto --format json \
+  opencode run --server "$SERVER_URL" --agent build --auto --format json \
     "$(cat "$work/prompt.md")" > "$work/turn0.txt" 2>> "$RUN_DIR/openruns.log" || true
   node -e 'import(process.argv[1]).then(m=>{const fs=require("fs");const t=m.extractAssistantText(fs.readFileSync(process.argv[2],"utf8"));fs.writeFileSync(process.argv[3],t.trim().slice(-4000))})' \
     "$REPO/scripts/lib/event-stream.mjs" "$work/turn0.txt" "$work/final.txt" 2>> "$RUN_DIR/openruns.log" || true
@@ -186,7 +173,7 @@ for id in $IDS; do
     printf '\n--- FINAL ANSWER ---\n\n%s\n' "$(cat "$work/final.txt")"
   } > "$work/critic-input.md"
   : > "$work/critic.err"
-  if ! opencode run --attach "$SERVER_URL" --agent plan --auto \
+  if ! opencode run --server "$SERVER_URL" --agent plan --auto \
         "$(cat "$work/critic-input.md")" \
         > "$work/critic.txt" 2>> "$RUN_DIR/openruns.log"; then
     echo "critic command exited non-zero" >> "$work/critic.err"
