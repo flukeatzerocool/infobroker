@@ -3,9 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Config } from "./types.js";
 import { injectNotices } from "./state-health.js";
 
-const BASE = {
+const BASE: Config = {
   config_version: 2,
   providers: {
     duckduckgo: {

@@ -7,11 +7,18 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Config } from "./types.js";
 
-const BASE = {
+const BASE: Config = {
   config_version: 1,
   providers: {
-    duckduckgo: { tier: "builtin", capabilities: ["web_search"], enabled: true, priority: 10 },
+    duckduckgo: {
+      tier: "builtin",
+      capabilities: ["web_search"],
+      rate_limit: { per_second: 0.33 },
+      enabled: true,
+      priority: 10,
+    },
   },
   dispatch: { general_web: ["duckduckgo"] },
   corroboration: {

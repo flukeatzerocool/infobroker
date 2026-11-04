@@ -1482,6 +1482,13 @@ plain English. REQ bodies use "SHALL" for all obligations; "MUST" is reserved
 for security-critical obligations (API key handling, secret leakage). An
 imperative "must" in prose is advisory, not normative.
 
+**Configurable numeric values.** A requirement that declares a numeric value
+configurable does not license non-finite input. JSON can express `Infinity`
+through an overflowing literal such as `1e999`, and `NaN` passes lower-bound
+comparisons, so implementations validate a numeric configuration value as a
+finite number, with timer-derived values additionally bounded by the platform
+delay ceiling. "Configurable" is satisfied by a bounded range.
+
 **EARS notation.** REQ authors are encouraged — but not required — to structure
 requirement bodies using the Easy Approach to Requirements Syntax (EARS), which
 makes trigger, condition, and response explicit in machine-parseable clauses.

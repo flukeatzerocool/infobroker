@@ -16,6 +16,13 @@ and ACLs; enterprise scheduling.
   Update this file when planning a release.
 -->
 
+## Dependency advisories
+
+- `npm audit` reports 3 high advisories in the `markdownlint` devDependency
+  chain (`re2js`) plus moderate advisories (`@hono/node-server`, katex,
+  minimatch). The fix is a breaking `markdownlint-cli` upgrade; `npm run check`
+  cannot pass until it ships.
+
 ## Knowledge base
 
 - Streaming/out-of-core LSA: `LsaModel.fit` allocates O(n·v) and O(n·k) matrices,
