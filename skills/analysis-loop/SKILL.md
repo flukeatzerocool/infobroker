@@ -101,7 +101,7 @@ you still run the collection tools for that scope before analyzing.
    different angles. A question about Rust kernel adoption should also be
    searched as "Rust kernel limitations challenges" (critical angle).
 
-2. **Fetch full pages.** Use `infobroker_infobroker_fetch_page` for promising
+2. **Fetch full pages.** Use `infobroker_fetch_page` for promising
    results. Do not rely on snippets — they lack the evidence needed for
    confidence scoring.
 

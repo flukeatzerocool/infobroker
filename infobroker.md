@@ -90,7 +90,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Quota state persists.** Quota counters survive restarts via a JSON state file.
 - **SR-008 Corroboration is bounded.** `verify_claims` has a hard max on iterations (default 5) and total HTTP calls per invocation (default 30).
-- **SR-009 Determinism not required.** Web search results are inherently non-deterministic. Only deterministic behavior is tool schemas and error contracts.
+- **SR-009 Determinism not required.** Web search results are inherently non-deterministic. The only deterministic behavior is in tool schemas and error contracts.
 - **SR-010 All tool input is validated server-side before any outbound call.** Validation includes structural checks (type, range, format, URL well-formedness) on every input field; no outbound request is dispatched until all validation passes.
 
 - **SR-011 Contracts, not implementations.** Requirements state what the server
@@ -650,7 +650,7 @@ Tool error responses SHALL NOT expose stack traces, internal file paths, or envi
 ### 5.1 Language and Runtime
 
 - Language: TypeScript (Node.js 24+)
-- MCP SDK: `@modelcontextprotocol/sdk` (stdlib transport)
+- MCP SDK: `@modelcontextprotocol/sdk` (stdio transport)
 - Validation: `zod` (peer dependency of MCP SDK)
 - HTTP: `undici` (built into Node.js 20+)
 - HTML parsing: `cheerio` (for DuckDuckGo scraping)
@@ -742,7 +742,7 @@ responses. The corroboration loop validates against:
 All tools use `snake_case`. Tool names are domain terminology: `search_web`,
 `fetch_page`, `verify_claims`, `get_citations`, `inspect_providers`, `manage_kb`, `reload_config`. These logical
 names are registered with the MCP client under an `infobroker_` prefix
-(e.g., `infobroker_search_web`).
+(e.g. `infobroker_search_web`).
 
 ### 6.2 Output Format
 
@@ -958,7 +958,7 @@ backed only by generic web pages scores below one backed by scholarly or
 encyclopedia sources at the same source count.
 
 Independence: Two sources are independent if they have different registrable
-domains (e.g., wikipedia.org and britannica.com are independent; two pages on
+domains (e.g. wikipedia.org and britannica.com are independent; two pages on
 wikipedia.org, or two subdomains of the same registrable domain, are not).
 The similarity threshold at which claims are grouped into an agreement cluster
 is configurable via `corroboration.similarity_threshold`. Agreement grouping is
@@ -989,7 +989,7 @@ verdict is preserved (REQ-026f).
 - `tools/list` returns all registered tools with correct `inputSchema`
 - `tools/call` with valid params returns a non-error response (smoke test with mocked providers)
 - Invalid params produce `isError: true` with error taxonomy compliant message
-- `server/discover` advertises correct protocol version
+- `initialize` negotiates a protocol version from the SDK's supported set
 
 ### 9.2 G1 — Integration Tests
 
@@ -1238,6 +1238,7 @@ infobroker/
 │   ├── infobroker/
 │   │   ├── SKILL.md                       # Orchestrator: routes intent → workflow, chains search → skills
 │   │   └── references/
+│   │       ├── confidence.md              # Shared confidence, likelihood, and source-grade scale
 │   │       ├── config-tune.md             # Configuration tuning reference
 │   │       ├── corroboration.md           # Corroboration-loop reference
 │   │       ├── decision-tree.md           # Ordered disambiguation questions
@@ -1246,6 +1247,7 @@ infobroker/
 │   │       ├── pipeline-map.md            # Skill pipeline diagram (Mermaid)
 │   │       ├── provider-auth.md           # Generated provider auth mapping (from config.json)
 │   │       ├── provider-map.md            # Task → provider dispatch reference
+│   │       ├── provider-privacy.md        # Generated provider privacy posture (from config.json)
 │   │       ├── report-template.md         # Report skeletons
 │   │       ├── skill-authoring.md         # How to add a workflow shape
 │   │       ├── troubleshooting.md         # Symptom → cause → fix entries

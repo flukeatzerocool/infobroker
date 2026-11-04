@@ -479,7 +479,7 @@ SearXNG instance sees your queries.
 
 ## Configuration
 
-Four environment variables tune a deployment. `INFOBROKER_CONFIG` overrides
+Environment variables tune a deployment. `INFOBROKER_CONFIG` overrides
 the shipped default config (resolved from the installed package when unset),
 `INFOBROKER_CONFIG_LOCAL` points at a user config layer,
 `INFOBROKER_<NAME>_API_KEY` supplies a keyed provider's credential, and
