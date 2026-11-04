@@ -347,6 +347,22 @@ if ! $DRY_RUN && ! $RESUMED; then
 fi
 echo ""
 
+# ── start persistent backend ────────────────────────────────────────────────
+# All AI steps run against one `opencode serve` instance in a shared session.
+# The backend starts before step 1 because the spec-audit gate has a repair
+# path: if the first `npm run check` fails, repair_loop drives an AI turn, and
+# run_pipeline_step needs PIPELINE_SERVER_URL/PIPELINE_SESSION_ID bound.
+# A dry run performs no AI steps, so it starts no backend.
+if $DRY_RUN; then
+  info "Dry run: skipping the opencode backend and all AI steps."
+  echo ""
+else
+  ensure_server
+  ensure_session
+  info "Driving AI steps through shared session '${PIPELINE_SESSION_ID}'"
+  echo ""
+fi
+
 # ── step 1: spec audit ──────────────────────────────────────────────────────
 info "═══════════════════════════════════════════════"
 info "Step 1: Spec audit"
@@ -369,6 +385,10 @@ if ! run_gate "Spec audit" "$PIPELINE_RUN_DIR/check.txt" npm run check; then
     die "Spec audit FAILED for an environmental reason (network/registry) — not auto-repairing. See $PIPELINE_RUN_DIR/check.txt."
   fi
   warn "Spec audit failed — attempting bounded repair..."
+  # A dry run is non-mutating and has no backend; never launch an AI repair.
+  if $DRY_RUN; then
+    die "Spec audit FAILED (dry run: no repair). See $PIPELINE_RUN_DIR/check.txt."
+  fi
   repair_loop "Spec audit" "npm run check" "$PROMPT_DIR/fix-gate.md" \
     "$PIPELINE_FIX_ATTEMPTS" "$PIPELINE_RUN_DIR/check.txt" "$PIPELINE_RUN_DIR/check-fix.txt" \
     || die "Spec audit FAILED after ${PIPELINE_FIX_ATTEMPTS} repair attempt(s)."
@@ -377,19 +397,6 @@ status_set audit "passed"
 echo ""
 info "Spec audit: PASSED"
 echo ""
-
-# ── start persistent backend ────────────────────────────────────────────────
-# All AI steps run against one `opencode serve` instance in a shared session.
-# A dry run performs no AI steps, so it starts no backend.
-if $DRY_RUN; then
-  info "Dry run: skipping the opencode backend and all AI steps."
-  echo ""
-else
-  ensure_server
-  ensure_session
-  info "Driving AI steps through shared session '${PIPELINE_SESSION_ID}'"
-  echo ""
-fi
 
 # ── step 2: full spec read-through ──────────────────────────────────────────
 info "═══════════════════════════════════════════════"

@@ -353,6 +353,12 @@ run_pipeline_step() {
   local prompt
   prompt=$(<"$prompt_file")
 
+  # Fail loudly instead of tripping `set -u` on an unbound variable: a caller
+  # that reaches this point before ensure_server/ensure_session has a bug.
+  if [[ -z "${PIPELINE_SERVER_URL:-}" || -z "${PIPELINE_SESSION_ID:-}" ]]; then
+    die "run_pipeline_step: pipeline backend not initialized (call ensure_server and ensure_session first)."
+  fi
+
   local timeout_cmd=(opencode)
   if [[ "${OPC_TIMEOUT:-1800}" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
     timeout_cmd=(timeout "$OPC_TIMEOUT" opencode)
