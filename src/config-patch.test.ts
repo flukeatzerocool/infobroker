@@ -14,7 +14,15 @@ const BASE = {
     duckduckgo: { tier: "builtin", capabilities: ["web_search"], enabled: true, priority: 10 },
   },
   dispatch: { general_web: ["duckduckgo"] },
-  output: { fallback_depth: 3, max_redirect_hops: 5 },
+  corroboration: {
+    max_iterations: 5,
+    max_http_calls: 30,
+    confidence_threshold: 0.8,
+    first_pass_max_results: 10,
+    first_pass_max_providers: 5,
+    similarity_threshold: 0.3,
+  },
+  output: { max_chars: 50000, latency_window_size: 100, fallback_depth: 3, max_redirect_hops: 5 },
 };
 
 describe("patchUserConfigLayer (REQ-040)", () => {

@@ -11,6 +11,22 @@ import {
 } from "./config-migrations.js";
 import { atomicWriteFile, backupFile } from "./lib/atomic-write.js";
 
+/**
+ * Numeric configuration must be finite: JSON can express `Infinity` through an
+ * overflowing literal such as `1e999`, and `typeof NaN === "number"` with
+ * `NaN < N` false would otherwise pass every lower-bound check.
+ */
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** Largest delay Node accepts without emitting a 1 ms timer-overflow clamp. */
+const MAX_TIMER_MS = 2_147_483_647;
+/** Base backoff ceiling; with retry_count <= 10 the exponential stays below MAX_TIMER_MS. */
+const MAX_RETRY_BACKOFF_MS = 60_000;
+const MAX_RETRY_COUNT = 10;
+const MAX_MAINTENANCE_MINUTES = Math.floor(MAX_TIMER_MS / 60_000);
+
 let configPath: string;
 let cachedConfig: Config | null = null;
 // The parsed user configuration layer and the shipped top-level key set, kept
@@ -282,7 +298,7 @@ function applyDefaults(config: Config): Config {
   return config;
 }
 
-function validateConfig(config: Config): void {
+export function validateConfig(config: Config): void {
   const errors: string[] = [];
 
   if (config.config_version !== undefined) {
@@ -319,7 +335,7 @@ function validateConfig(config: Config): void {
     if (typeof provider.enabled !== "boolean") {
       errors.push(`Provider "${slug}": missing or invalid "enabled"`);
     }
-    if (typeof provider.priority !== "number") {
+    if (!isFiniteNumber(provider.priority)) {
       errors.push(`Provider "${slug}": missing or invalid "priority"`);
     }
     if (provider.rate_limit !== undefined) {
@@ -327,16 +343,28 @@ function validateConfig(config: Config): void {
         errors.push(`Provider "${slug}": rate_limit must be an object`);
       } else {
         for (const [key, value] of Object.entries(provider.rate_limit)) {
-          if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+          if (!isFiniteNumber(value) || value < 0) {
             errors.push(`Provider "${slug}": rate_limit.${key} must be a non-negative finite number`);
           }
         }
       }
     }
-    if (provider.timeout !== undefined && (typeof provider.timeout !== "number" || provider.timeout < 0)) {
-      errors.push(`Provider "${slug}": timeout must be a non-negative number`);
+    if (provider.timeout !== undefined && (!isFiniteNumber(provider.timeout) || provider.timeout < 0 || provider.timeout > MAX_TIMER_MS)) {
+      errors.push(`Provider "${slug}": timeout must be a non-negative number no greater than ${MAX_TIMER_MS}`);
     }
-    if (provider.degraded_latency_ms !== undefined && (typeof provider.degraded_latency_ms !== "number" || provider.degraded_latency_ms < 0)) {
+    if (
+      provider.retry_count !== undefined &&
+      (!isFiniteNumber(provider.retry_count) || !Number.isInteger(provider.retry_count) || provider.retry_count < 0 || provider.retry_count > MAX_RETRY_COUNT)
+    ) {
+      errors.push(`Provider "${slug}": retry_count must be an integer between 0 and ${MAX_RETRY_COUNT}`);
+    }
+    if (
+      provider.retry_backoff_ms !== undefined &&
+      (!isFiniteNumber(provider.retry_backoff_ms) || provider.retry_backoff_ms < 0 || provider.retry_backoff_ms > MAX_RETRY_BACKOFF_MS)
+    ) {
+      errors.push(`Provider "${slug}": retry_backoff_ms must be a non-negative number no greater than ${MAX_RETRY_BACKOFF_MS}`);
+    }
+    if (provider.degraded_latency_ms !== undefined && (!isFiniteNumber(provider.degraded_latency_ms) || provider.degraded_latency_ms < 0)) {
       errors.push(`Provider "${slug}": degraded_latency_ms must be a non-negative number`);
     }
     if (provider.resells !== undefined && typeof provider.resells !== "boolean") {
@@ -400,6 +428,29 @@ function validateConfig(config: Config): void {
     }
   }
 
+  if (config.defaults !== undefined) {
+    if (typeof config.defaults !== "object" || config.defaults === null || Array.isArray(config.defaults)) {
+      errors.push("defaults must be an object");
+    } else {
+      const defaults = config.defaults;
+      if (defaults.timeout !== undefined && (!isFiniteNumber(defaults.timeout) || defaults.timeout < 0 || defaults.timeout > MAX_TIMER_MS)) {
+        errors.push(`defaults.timeout must be a non-negative number no greater than ${MAX_TIMER_MS}`);
+      }
+      if (
+        defaults.retry_count !== undefined &&
+        (!isFiniteNumber(defaults.retry_count) || !Number.isInteger(defaults.retry_count) || defaults.retry_count < 0 || defaults.retry_count > MAX_RETRY_COUNT)
+      ) {
+        errors.push(`defaults.retry_count must be an integer between 0 and ${MAX_RETRY_COUNT}`);
+      }
+      if (
+        defaults.retry_backoff_ms !== undefined &&
+        (!isFiniteNumber(defaults.retry_backoff_ms) || defaults.retry_backoff_ms < 0 || defaults.retry_backoff_ms > MAX_RETRY_BACKOFF_MS)
+      ) {
+        errors.push(`defaults.retry_backoff_ms must be a non-negative number no greater than ${MAX_RETRY_BACKOFF_MS}`);
+      }
+    }
+  }
+
   for (const [taskType, chain] of Object.entries(config.dispatch)) {
     for (const slug of chain) {
       if (!config.providers[slug]) {
@@ -410,7 +461,7 @@ function validateConfig(config: Config): void {
 
   if (config.corroboration?.authority_weights) {
     for (const [sourceType, weight] of Object.entries(config.corroboration.authority_weights)) {
-      if (typeof weight !== "number" || weight < 0) {
+      if (!isFiniteNumber(weight) || weight < 0) {
         errors.push(`corroboration.authority_weights.${sourceType} must be a non-negative number`);
       }
     }
@@ -418,9 +469,23 @@ function validateConfig(config: Config): void {
   if (config.corroboration?.kb_recall !== undefined && typeof config.corroboration.kb_recall !== "boolean") {
     errors.push("corroboration.kb_recall must be a boolean");
   }
+  if (config.corroboration) {
+    const corr = config.corroboration;
+    for (const key of ["max_iterations", "max_http_calls", "first_pass_max_results"] as const) {
+      if (!isFiniteNumber(corr[key]) || !Number.isInteger(corr[key]) || corr[key] < 1) {
+        errors.push(`corroboration.${key} must be a positive integer`);
+      }
+    }
+    for (const key of ["confidence_threshold", "similarity_threshold"] as const) {
+      const value = corr[key];
+      if (!isFiniteNumber(value) || value < 0 || value > 1) {
+        errors.push(`corroboration.${key} must be a number between 0 and 1`);
+      }
+    }
+  }
   if (
     config.corroboration?.family_similarity_threshold !== undefined &&
-    (typeof config.corroboration.family_similarity_threshold !== "number" ||
+    (!isFiniteNumber(config.corroboration.family_similarity_threshold) ||
       config.corroboration.family_similarity_threshold < 0 ||
       config.corroboration.family_similarity_threshold > 1)
   ) {
@@ -433,7 +498,7 @@ function validateConfig(config: Config): void {
     }
     if (
       cal.secondary_only_cap !== undefined &&
-      (typeof cal.secondary_only_cap !== "number" || cal.secondary_only_cap < 0 || cal.secondary_only_cap > 1)
+      (!isFiniteNumber(cal.secondary_only_cap) || cal.secondary_only_cap < 0 || cal.secondary_only_cap > 1)
     ) {
       errors.push("corroboration.calibration.secondary_only_cap must be a number between 0 and 1");
     }
@@ -445,48 +510,67 @@ function validateConfig(config: Config): void {
     }
     if (
       preservation.max_sources_per_finding !== undefined &&
-      (typeof preservation.max_sources_per_finding !== "number" || preservation.max_sources_per_finding < 0)
+      (!isFiniteNumber(preservation.max_sources_per_finding) || preservation.max_sources_per_finding < 0)
     ) {
       errors.push("preservation.max_sources_per_finding must be a non-negative number");
     }
     if (
       preservation.max_bytes !== undefined &&
-      (typeof preservation.max_bytes !== "number" || preservation.max_bytes < 1)
+      (!isFiniteNumber(preservation.max_bytes) || preservation.max_bytes < 1)
     ) {
       errors.push("preservation.max_bytes must be a positive number");
     }
   }
   if (
     config.corroboration?.first_pass_max_providers !== undefined &&
-    (typeof config.corroboration.first_pass_max_providers !== "number" ||
+    (!isFiniteNumber(config.corroboration.first_pass_max_providers) ||
       config.corroboration.first_pass_max_providers < 1)
   ) {
     errors.push("corroboration.first_pass_max_providers must be a positive number");
   }
 
-  if (typeof config.output.fallback_depth !== "number" || config.output.fallback_depth < 1) {
+  if (!isFiniteNumber(config.output.fallback_depth) || config.output.fallback_depth < 1) {
     errors.push("output.fallback_depth must be a positive number");
   }
-  if (typeof config.output.max_redirect_hops !== "number" || config.output.max_redirect_hops < 1) {
+  if (!isFiniteNumber(config.output.max_redirect_hops) || config.output.max_redirect_hops < 1) {
     errors.push("output.max_redirect_hops must be a positive number");
   }
-  if (config.output.degraded_latency_ms !== undefined && (typeof config.output.degraded_latency_ms !== "number" || config.output.degraded_latency_ms < 0)) {
+  if (!isFiniteNumber(config.output.max_chars) || !Number.isInteger(config.output.max_chars) || config.output.max_chars < 1) {
+    errors.push("output.max_chars must be a positive integer");
+  }
+  if (!isFiniteNumber(config.output.latency_window_size) || !Number.isInteger(config.output.latency_window_size) || config.output.latency_window_size < 1) {
+    errors.push("output.latency_window_size must be a positive integer");
+  }
+  if (config.output.degraded_latency_ms !== undefined && (!isFiniteNumber(config.output.degraded_latency_ms) || config.output.degraded_latency_ms < 0)) {
     errors.push("output.degraded_latency_ms must be a non-negative number");
   }
   if (config.output.hedge_enabled !== undefined && typeof config.output.hedge_enabled !== "boolean") {
     errors.push("output.hedge_enabled must be a boolean");
   }
-  if (config.output.hedge_min_delay_ms !== undefined && (typeof config.output.hedge_min_delay_ms !== "number" || config.output.hedge_min_delay_ms < 0)) {
-    errors.push("output.hedge_min_delay_ms must be a non-negative number");
+  if (
+    config.output.hedge_min_delay_ms !== undefined &&
+    (!isFiniteNumber(config.output.hedge_min_delay_ms) || config.output.hedge_min_delay_ms < 0 || config.output.hedge_min_delay_ms > MAX_TIMER_MS)
+  ) {
+    errors.push(`output.hedge_min_delay_ms must be a non-negative number no greater than ${MAX_TIMER_MS}`);
   }
-  if (config.output.hedge_max_delay_ms !== undefined && (typeof config.output.hedge_max_delay_ms !== "number" || config.output.hedge_max_delay_ms < config.output.hedge_min_delay_ms!)) {
-    errors.push("output.hedge_max_delay_ms must be a number no less than hedge_min_delay_ms");
+  if (config.output.hedge_max_delay_ms !== undefined) {
+    if (!isFiniteNumber(config.output.hedge_max_delay_ms) || config.output.hedge_max_delay_ms > MAX_TIMER_MS) {
+      errors.push(`output.hedge_max_delay_ms must be a number no greater than ${MAX_TIMER_MS}`);
+    } else if (isFiniteNumber(config.output.hedge_min_delay_ms) && config.output.hedge_max_delay_ms < config.output.hedge_min_delay_ms) {
+      errors.push("output.hedge_max_delay_ms must be a number no less than hedge_min_delay_ms");
+    }
   }
-  if (config.output.hedge_grace_ms !== undefined && (typeof config.output.hedge_grace_ms !== "number" || config.output.hedge_grace_ms < 0)) {
-    errors.push("output.hedge_grace_ms must be a non-negative number");
+  if (
+    config.output.hedge_grace_ms !== undefined &&
+    (!isFiniteNumber(config.output.hedge_grace_ms) || config.output.hedge_grace_ms < 0 || config.output.hedge_grace_ms > MAX_TIMER_MS)
+  ) {
+    errors.push(`output.hedge_grace_ms must be a non-negative number no greater than ${MAX_TIMER_MS}`);
   }
-  if (config.output.rate_limit_cooldown_ms !== undefined && (typeof config.output.rate_limit_cooldown_ms !== "number" || config.output.rate_limit_cooldown_ms < 0)) {
-    errors.push("output.rate_limit_cooldown_ms must be a non-negative number");
+  if (
+    config.output.rate_limit_cooldown_ms !== undefined &&
+    (!isFiniteNumber(config.output.rate_limit_cooldown_ms) || config.output.rate_limit_cooldown_ms < 0 || config.output.rate_limit_cooldown_ms > MAX_TIMER_MS)
+  ) {
+    errors.push(`output.rate_limit_cooldown_ms must be a non-negative number no greater than ${MAX_TIMER_MS}`);
   }
   if (config.output.audit_log_path !== undefined && typeof config.output.audit_log_path !== "string") {
     errors.push("output.audit_log_path must be a string");
@@ -497,7 +581,7 @@ function validateConfig(config: Config): void {
     if (!["off", "flag", "block"].includes(cp.mode)) {
       errors.push("content_policy.mode must be one of: off, flag, block");
     }
-    if (cp.threshold !== undefined && (typeof cp.threshold !== "number" || cp.threshold < 0 || cp.threshold > 1)) {
+    if (cp.threshold !== undefined && (!isFiniteNumber(cp.threshold) || cp.threshold < 0 || cp.threshold > 1)) {
       errors.push("content_policy.threshold must be a number between 0 and 1");
     }
     if (cp.external_url_env !== undefined && typeof cp.external_url_env !== "string") {
@@ -520,53 +604,66 @@ function validateConfig(config: Config): void {
   }
 
   if (config.fetch) {
-    if (config.fetch.passage_size !== undefined && (typeof config.fetch.passage_size !== "number" || config.fetch.passage_size < 1)) {
+    if (config.fetch.passage_size !== undefined && (!isFiniteNumber(config.fetch.passage_size) || config.fetch.passage_size < 1)) {
       errors.push("fetch.passage_size must be a positive number");
     }
-    if (config.fetch.max_passages !== undefined && (typeof config.fetch.max_passages !== "number" || config.fetch.max_passages < 1 || config.fetch.max_passages > 20)) {
+    if (config.fetch.max_passages !== undefined && (!isFiniteNumber(config.fetch.max_passages) || config.fetch.max_passages < 1 || config.fetch.max_passages > 20)) {
       errors.push("fetch.max_passages must be a number between 1 and 20");
     }
     if (config.fetch.detect_date !== undefined && typeof config.fetch.detect_date !== "boolean") {
       errors.push("fetch.detect_date must be a boolean");
     }
-    if (config.fetch.crawl_max_pages !== undefined && (typeof config.fetch.crawl_max_pages !== "number" || config.fetch.crawl_max_pages < 1)) {
+    if (config.fetch.crawl_max_pages !== undefined && (!isFiniteNumber(config.fetch.crawl_max_pages) || config.fetch.crawl_max_pages < 1)) {
       errors.push("fetch.crawl_max_pages must be a positive number");
     }
-    if (config.fetch.crawl_max_depth !== undefined && (typeof config.fetch.crawl_max_depth !== "number" || config.fetch.crawl_max_depth < 0)) {
+    if (config.fetch.crawl_max_depth !== undefined && (!isFiniteNumber(config.fetch.crawl_max_depth) || config.fetch.crawl_max_depth < 0)) {
       errors.push("fetch.crawl_max_depth must be a non-negative number");
+    }
+    if (config.fetch.cache !== undefined) {
+      if (typeof config.fetch.cache !== "object" || config.fetch.cache === null || Array.isArray(config.fetch.cache)) {
+        errors.push("fetch.cache must be an object");
+      } else if (
+        config.fetch.cache.kb_max_age_hours !== undefined &&
+        (!isFiniteNumber(config.fetch.cache.kb_max_age_hours) || config.fetch.cache.kb_max_age_hours < 0)
+      ) {
+        errors.push("fetch.cache.kb_max_age_hours must be a non-negative number");
+      }
     }
   }
 
   if (config.expand) {
-    if (config.expand.max_expansions !== undefined && (typeof config.expand.max_expansions !== "number" || config.expand.max_expansions < 1)) {
+    if (config.expand.max_expansions !== undefined && (!isFiniteNumber(config.expand.max_expansions) || config.expand.max_expansions < 1)) {
       errors.push("expand.max_expansions must be a positive number");
     }
   }
 
   if (config.research) {
-    if (config.research.max_variants !== undefined && (typeof config.research.max_variants !== "number" || config.research.max_variants < 1)) {
+    if (config.research.max_variants !== undefined && (!isFiniteNumber(config.research.max_variants) || config.research.max_variants < 1)) {
       errors.push("research.max_variants must be a positive number");
     }
-    if (config.research.max_pages_per_variant !== undefined && (typeof config.research.max_pages_per_variant !== "number" || config.research.max_pages_per_variant < 1)) {
+    if (config.research.max_pages_per_variant !== undefined && (!isFiniteNumber(config.research.max_pages_per_variant) || config.research.max_pages_per_variant < 1)) {
       errors.push("research.max_pages_per_variant must be a positive number");
     }
   }
 
   if (config.deep) {
-    if (config.deep.max_pages !== undefined && (typeof config.deep.max_pages !== "number" || config.deep.max_pages < 1)) {
+    if (config.deep.max_pages !== undefined && (!isFiniteNumber(config.deep.max_pages) || config.deep.max_pages < 1)) {
       errors.push("deep.max_pages must be a positive number");
     }
-    if (config.deep.max_total_pages !== undefined && (typeof config.deep.max_total_pages !== "number" || config.deep.max_total_pages < 1)) {
+    if (config.deep.max_total_pages !== undefined && (!isFiniteNumber(config.deep.max_total_pages) || config.deep.max_total_pages < 1)) {
       errors.push("deep.max_total_pages must be a positive number");
     }
-    if (config.deep.concurrency !== undefined && (typeof config.deep.concurrency !== "number" || config.deep.concurrency < 1)) {
+    if (config.deep.concurrency !== undefined && (!isFiniteNumber(config.deep.concurrency) || config.deep.concurrency < 1)) {
       errors.push("deep.concurrency must be a positive number");
     }
-    if (config.deep.early_exit_score !== undefined && (typeof config.deep.early_exit_score !== "number" || config.deep.early_exit_score < 0 || config.deep.early_exit_score > 1)) {
+    if (config.deep.early_exit_score !== undefined && (!isFiniteNumber(config.deep.early_exit_score) || config.deep.early_exit_score < 0 || config.deep.early_exit_score > 1)) {
       errors.push("deep.early_exit_score must be a number between 0 and 1");
     }
-    if (config.deep.max_ms !== undefined && (typeof config.deep.max_ms !== "number" || config.deep.max_ms < 1)) {
-      errors.push("deep.max_ms must be a positive number");
+    if (
+      config.deep.max_ms !== undefined &&
+      (!isFiniteNumber(config.deep.max_ms) || config.deep.max_ms < 1 || config.deep.max_ms > MAX_TIMER_MS)
+    ) {
+      errors.push(`deep.max_ms must be a positive number no greater than ${MAX_TIMER_MS}`);
     }
     if (config.deep.detect_date !== undefined && typeof config.deep.detect_date !== "boolean") {
       errors.push("deep.detect_date must be a boolean");
@@ -576,14 +673,14 @@ function validateConfig(config: Config): void {
   if (config.analysis) {
     const analysis = config.analysis;
     for (const key of ["max_topics", "max_entities"] as const) {
-      if (analysis[key] !== undefined && (typeof analysis[key] !== "number" || analysis[key] < 1)) {
+      if (analysis[key] !== undefined && (!isFiniteNumber(analysis[key]) || analysis[key] < 1)) {
         errors.push(`analysis.${key} must be a positive number`);
       }
     }
-    if (analysis.cluster_threshold !== undefined && (typeof analysis.cluster_threshold !== "number" || analysis.cluster_threshold < 0 || analysis.cluster_threshold > 1)) {
+    if (analysis.cluster_threshold !== undefined && (!isFiniteNumber(analysis.cluster_threshold) || analysis.cluster_threshold < 0 || analysis.cluster_threshold > 1)) {
       errors.push("analysis.cluster_threshold must be a number between 0 and 1");
     }
-    if (analysis.min_cluster_size !== undefined && (typeof analysis.min_cluster_size !== "number" || analysis.min_cluster_size < 2)) {
+    if (analysis.min_cluster_size !== undefined && (!isFiniteNumber(analysis.min_cluster_size) || analysis.min_cluster_size < 2)) {
       errors.push("analysis.min_cluster_size must be a number of at least 2");
     }
     for (const key of ["enabled", "timeline"] as const) {
@@ -595,17 +692,22 @@ function validateConfig(config: Config): void {
 
   if (config.kb) {
     const kb = config.kb;
-    if (typeof kb.chunk_size !== "number" || kb.chunk_size < 1) {
+    if (!isFiniteNumber(kb.chunk_size) || kb.chunk_size < 1) {
       errors.push("kb.chunk_size must be a positive number");
     }
-    if (typeof kb.chunk_overlap !== "number" || kb.chunk_overlap < 0) {
+    if (!isFiniteNumber(kb.chunk_overlap) || kb.chunk_overlap < 0) {
       errors.push("kb.chunk_overlap must be a non-negative number");
+    } else if (isFiniteNumber(kb.chunk_size) && kb.chunk_size >= 1 && kb.chunk_overlap * 2 >= kb.chunk_size) {
+      const maxOverlap = Math.ceil(kb.chunk_size / 2) - 1;
+      errors.push(
+        `kb.chunk_overlap must be less than half of kb.chunk_size (got ${kb.chunk_overlap} with chunk_size ${kb.chunk_size}; set kb.chunk_overlap to ${maxOverlap} or less)`
+      );
     }
-    if (typeof kb.max_results !== "number" || kb.max_results < 1) {
+    if (!isFiniteNumber(kb.max_results) || kb.max_results < 1) {
       errors.push("kb.max_results must be a positive number");
     }
-    if (typeof kb.maintenance_interval_minutes !== "number" || kb.maintenance_interval_minutes < 0) {
-      errors.push("kb.maintenance_interval_minutes must be a non-negative number");
+    if (!isFiniteNumber(kb.maintenance_interval_minutes) || kb.maintenance_interval_minutes < 0 || kb.maintenance_interval_minutes > MAX_MAINTENANCE_MINUTES) {
+      errors.push(`kb.maintenance_interval_minutes must be a non-negative number no greater than ${MAX_MAINTENANCE_MINUTES}`);
     }
     if (typeof kb.auto_index !== "boolean") {
       errors.push("kb.auto_index must be a boolean");
@@ -619,6 +721,17 @@ function validateConfig(config: Config): void {
     if (kb.expiry && !kb.freshness) {
       console.error("[infobroker] kb.expiry is deprecated — migrate to kb.freshness tiers");
     }
+    if (kb.expiry !== undefined) {
+      if (typeof kb.expiry !== "object" || kb.expiry === null || Array.isArray(kb.expiry)) {
+        errors.push("kb.expiry must be an object");
+      } else {
+        for (const [tier, hours] of Object.entries(kb.expiry)) {
+          if (!isFiniteNumber(hours) || hours < 0) {
+            errors.push(`kb.expiry.${tier} must be a non-negative number`);
+          }
+        }
+      }
+    }
     if (!kb.freshness && !kb.expiry) {
       errors.push("kb must define freshness or expiry");
     }
@@ -627,10 +740,10 @@ function validateConfig(config: Config): void {
         errors.push("kb.freshness.tiers must be an object");
       } else {
         for (const [tier, def] of Object.entries(kb.freshness.tiers)) {
-          if (typeof (def as Record<string, unknown>).decay_hours !== "number" || (def as Record<string, unknown>).decay_hours === undefined) {
+          if (!isFiniteNumber((def as Record<string, unknown>).decay_hours) || (def as Record<string, unknown>).decay_hours === undefined) {
             errors.push(`kb.freshness.tiers.${tier}.decay_hours must be a number`);
           }
-          if (typeof (def as Record<string, unknown>).expiry_hours !== "number" || (def as Record<string, unknown>).expiry_hours === undefined) {
+          if (!isFiniteNumber((def as Record<string, unknown>).expiry_hours) || (def as Record<string, unknown>).expiry_hours === undefined) {
             errors.push(`kb.freshness.tiers.${tier}.expiry_hours must be a number`);
           }
         }
@@ -642,10 +755,10 @@ function validateConfig(config: Config): void {
         errors.push("kb.freshness.default_tier must be a string");
       }
     }
-    if (kb.kb_first_relevance_threshold !== undefined && typeof kb.kb_first_relevance_threshold !== "number") {
+    if (kb.kb_first_relevance_threshold !== undefined && !isFiniteNumber(kb.kb_first_relevance_threshold)) {
       errors.push("kb.kb_first_relevance_threshold must be a number");
     }
-    if (kb.kb_first_confidence_threshold !== undefined && typeof kb.kb_first_confidence_threshold !== "number") {
+    if (kb.kb_first_confidence_threshold !== undefined && !isFiniteNumber(kb.kb_first_confidence_threshold)) {
       errors.push("kb.kb_first_confidence_threshold must be a number");
     }
     if (kb.keys_dir !== undefined && (typeof kb.keys_dir !== "string" || kb.keys_dir.length === 0)) {
@@ -685,7 +798,7 @@ export function loadConfig(): Config {
       startupConfigIssue = {
         code: "invalid_merged_user_layer",
         message: `User configuration is invalid: ${e instanceof Error ? e.message : String(e)}`,
-        remediation: "The server is running on shipped defaults and has not modified config.local.json. Fix the reported values, then run reload_config.",
+        remediation: `Fix the reported values in ${getUserConfigPath() ?? "the user configuration layer"}, then run reload_config. The server is running on shipped defaults and has not modified the config file.`,
       };
     }
     console.warn(

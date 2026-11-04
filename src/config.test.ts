@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "no
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./types.js";
+import { validateConfig } from "./config.js";
 
 const BASE: Config = {
   providers: {
@@ -446,6 +447,19 @@ describe("startup config recovery and automatic migration (REQ-105, REQ-113)", (
     expect(() => mod.reloadConfig()).toThrow(/update_check/);
   });
 
+  it("falls back on an oversized chunk_overlap and names the file in remediation", async () => {
+    const overlay = JSON.stringify({ kb: { chunk_size: 1000, chunk_overlap: 600 } });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    const cfg = mod.loadConfig();
+    expect(cfg.kb?.chunk_overlap).toBe(64);
+    const issue = mod.getStartupConfigIssue();
+    expect(issue?.code).toBe("invalid_merged_user_layer");
+    expect(issue?.message).toMatch(new RegExp("chunk_overlap"));
+    expect(issue?.remediation).toContain(overlayPath);
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+
   it("auto-migrates the user layer when enabled", async () => {
     writeFileSync(overlayPath, JSON.stringify({ config_version: 0, state: { auto_migrate_config: true } }));
     const mod = await import("./config.js");
@@ -467,5 +481,142 @@ describe("startup config recovery and automatic migration (REQ-105, REQ-113)", (
     expect(mod.getStartupMigration()).toBeNull();
     expect(mod.getStartupConfigIssue()?.code).toBe("auto_migration_invalid");
     expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+});
+
+function setAt(target: unknown, path: string, value: unknown): void {
+  const parts = path.split(".");
+  let cur = target as Record<string, unknown>;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const next = cur[parts[i]];
+    if (typeof next !== "object" || next === null || Array.isArray(next)) {
+      cur[parts[i]] = {};
+    }
+    cur = cur[parts[i]] as Record<string, unknown>;
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+
+// One path per numeric validation branch. Adding a numeric config field without
+// a row here leaves a non-finite hole the validator cannot catch.
+const NUMERIC_BRANCHES = [
+  "providers.duckduckgo.priority",
+  "providers.duckduckgo.rate_limit.per_second",
+  "providers.duckduckgo.timeout",
+  "providers.duckduckgo.retry_count",
+  "providers.duckduckgo.retry_backoff_ms",
+  "providers.duckduckgo.degraded_latency_ms",
+  "defaults.timeout",
+  "defaults.retry_count",
+  "defaults.retry_backoff_ms",
+  "corroboration.max_iterations",
+  "corroboration.max_http_calls",
+  "corroboration.confidence_threshold",
+  "corroboration.first_pass_max_results",
+  "corroboration.first_pass_max_providers",
+  "corroboration.similarity_threshold",
+  "corroboration.family_similarity_threshold",
+  "corroboration.calibration.secondary_only_cap",
+  "corroboration.authority_weights.wikipedia",
+  "preservation.max_sources_per_finding",
+  "preservation.max_bytes",
+  "output.max_chars",
+  "output.latency_window_size",
+  "output.fallback_depth",
+  "output.max_redirect_hops",
+  "output.degraded_latency_ms",
+  "output.hedge_min_delay_ms",
+  "output.hedge_max_delay_ms",
+  "output.hedge_grace_ms",
+  "output.rate_limit_cooldown_ms",
+  "content_policy.threshold",
+  "fetch.passage_size",
+  "fetch.max_passages",
+  "fetch.crawl_max_pages",
+  "fetch.crawl_max_depth",
+  "fetch.cache.kb_max_age_hours",
+  "expand.max_expansions",
+  "research.max_variants",
+  "research.max_pages_per_variant",
+  "deep.max_pages",
+  "deep.max_total_pages",
+  "deep.concurrency",
+  "deep.early_exit_score",
+  "deep.max_ms",
+  "analysis.max_topics",
+  "analysis.max_entities",
+  "analysis.cluster_threshold",
+  "analysis.min_cluster_size",
+  "kb.chunk_size",
+  "kb.chunk_overlap",
+  "kb.max_results",
+  "kb.maintenance_interval_minutes",
+  "kb.freshness.tiers.stable.decay_hours",
+  "kb.freshness.tiers.stable.expiry_hours",
+  "kb.kb_first_relevance_threshold",
+  "kb.kb_first_confidence_threshold",
+  "kb.expiry.stable",
+] as const;
+
+function configWith(path: string, value: unknown): Config {
+  const cfg = structuredClone(BASE);
+  setAt(cfg, "content_policy.mode", "off");
+  setAt(cfg, path, value);
+  return cfg;
+}
+
+describe("numeric config hardening (REQ-067, REQ-010)", () => {
+  beforeEach(() => {
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+  });
+
+  it("rejects a chunk_overlap at or above half the chunk_size", async () => {
+    await expect(
+      loadWithOverlay(BASE, { kb: { chunk_size: 1000, chunk_overlap: 600 } })
+    ).rejects.toThrow(new RegExp("chunk_overlap"));
+  });
+
+  it("accepts a chunk_overlap below half the chunk_size", async () => {
+    const cfg = await loadWithOverlay(BASE, { kb: { chunk_size: 1000, chunk_overlap: 499 } });
+    expect(cfg.kb?.chunk_size).toBe(1000);
+    expect(cfg.kb?.chunk_overlap).toBe(499);
+  });
+
+  it("rejects Infinity at every numeric validation branch", () => {
+    for (const path of NUMERIC_BRANCHES) {
+      const field = path.split(".").pop()!;
+      expect(() => validateConfig(configWith(path, Infinity)), `branch ${path}`).toThrow(new RegExp(field));
+    }
+  });
+
+  it("rejects NaN at representative numeric branches", () => {
+    for (const path of [
+      "providers.duckduckgo.timeout",
+      "defaults.retry_count",
+      "output.fallback_depth",
+      "kb.chunk_size",
+      "kb.freshness.tiers.stable.expiry_hours",
+    ]) {
+      const field = path.split(".").pop()!;
+      expect(() => validateConfig(configWith(path, NaN)), `branch ${path}`).toThrow(new RegExp(field));
+    }
+  });
+
+  it("rejects out-of-range and non-numeric retry fields", () => {
+    expect(() => validateConfig(configWith("defaults.retry_count", 11))).toThrow(new RegExp("retry_count"));
+    expect(() => validateConfig(configWith("defaults.retry_count", "2"))).toThrow(new RegExp("retry_count"));
+    expect(() => validateConfig(configWith("providers.duckduckgo.retry_backoff_ms", 60001))).toThrow(
+      new RegExp("retry_backoff_ms")
+    );
+    expect(() => validateConfig(configWith("providers.duckduckgo.timeout", "1000"))).toThrow(new RegExp("timeout"));
+  });
+
+  it("rejects finite values that would overflow the 32-bit timer", () => {
+    expect(() => validateConfig(configWith("providers.duckduckgo.timeout", 1e308))).toThrow(new RegExp("timeout"));
+    expect(() => validateConfig(configWith("kb.maintenance_interval_minutes", 1e308))).toThrow(
+      new RegExp("maintenance_interval_minutes")
+    );
+    expect(() => validateConfig(configWith("deep.max_ms", 1e308))).toThrow(new RegExp("max_ms"));
   });
 });

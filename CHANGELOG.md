@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.10.28 — Chunking and numeric config cannot crash the server
+
+- The knowledge-base chunker can no longer loop forever or drop documents when
+  `kb.chunk_overlap` is close to `kb.chunk_size`. The effective overlap is
+  capped at half a chunk, the window is forced to advance, a non-finite
+  `chunk_size` falls back to one full-document chunk, and configuration now
+  rejects an overlap at or above half the chunk size with the exact corrected
+  value in the message. (REQ-067, issue #1)
+- Numeric configuration is now required to be finite. JSON can express
+  `Infinity` through an overflowing literal such as `1e999`, and the previous
+  lower-bound checks let it through: `providers.<slug>.timeout` collapsed to a
+  1 ms timeout in Node, `retry_count` pre-allocated without bound, an unbounded
+  redirect count looped, and the maintenance interval churned every
+  millisecond. Timer-derived values also carry 32-bit-delay caps, and the
+  previously unvalidated retry, corroboration, output-size, cache-age, and
+  expiry fields are now validated. (REQ-010, REQ-067)
+- An invalid user configuration layer now reports the user file's path in the
+  REQ-113 startup remediation so the offending values can be fixed without
+  guessing which file to edit.
+
 ## 2026.10.28 — Search contract pinned, config obligations stated
 
 - The `search_web` parameter contract is now verified against the live tool

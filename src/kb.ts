@@ -205,10 +205,20 @@ function atomicWriteFile(fpath: string, bytes: Buffer): void {
   }
 }
 
-function chunkText(text: string, title: string): string[] {
+export function chunkText(text: string, title: string): string[] {
   if (!kbConfig) return [text];
-  const chunkSize = kbConfig.chunk_size;
-  const overlap = kbConfig.chunk_overlap;
+  // A non-finite or nonsensical size must not drop the document: fall through
+  // to one titled chunk covering the whole text.
+  const configuredSize = kbConfig.chunk_size;
+  const chunkSize =
+    Number.isFinite(configuredSize) && configuredSize >= 1 ? configuredSize : Math.max(text.length, 1);
+  // Cap the effective overlap at half a chunk so an invalid (or direct-initKb)
+  // configuration still advances by roughly half a chunk instead of one char.
+  const configuredOverlap = kbConfig.chunk_overlap;
+  const overlap =
+    Number.isFinite(configuredOverlap) && configuredOverlap > 0
+      ? Math.min(configuredOverlap, Math.floor((chunkSize - 1) / 2))
+      : 0;
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -227,7 +237,8 @@ function chunkText(text: string, title: string): string[] {
     }
     const c = text.slice(start, end).trim();
     if (c) chunks.push(title ? `${title}: ${c}` : c);
-    start = end - overlap;
+    // Final safety net: never let the window stall or move backwards.
+    start = Math.max(end - overlap, start + 1);
   }
   return chunks;
 }
