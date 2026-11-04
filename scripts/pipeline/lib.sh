@@ -212,7 +212,7 @@ should_skip_step() {
 }
 
 # ── opencode session helpers ─────────────────────────────────────────────────
-# opencode runs are attached to one persistent `opencode serve` instance and
+# opencode runs connect to one persistent `opencode serve` instance and
 # driven through a single continued session, so spec/code context is loaded
 # once and reused across steps (instead of cold-starting each step).
 
@@ -224,9 +224,18 @@ find_free_port() {
 }
 
 # Start the persistent backend. Sets PIPELINE_SERVER_URL.
+#
+# opencode v2 serves a password-protected API: `opencode serve` generates a
+# random password unless OPENCODE_PASSWORD is already set, and clients must
+# present it via the same variable. Setting it ourselves keeps the backend
+# deterministic and avoids scraping the generated secret out of the log.
 ensure_server() {
   if [[ -n "${PIPELINE_SERVER_URL:-}" ]]; then return 0; fi
   local port="${PIPELINE_PORT:-$(find_free_port)}"
+  if [[ -z "${OPENCODE_PASSWORD:-}" ]]; then
+    OPENCODE_PASSWORD=$(node -e 'process.stdout.write(require("crypto").randomBytes(24).toString("base64url"))')
+    export OPENCODE_PASSWORD
+  fi
   info "Starting opencode serve on port ${port}..."
   opencode serve --port "$port" > "$PIPELINE_LOG_DIR/opencode-serve.log" 2>&1 &
   OPC_SERVE_PID=$!
@@ -267,7 +276,7 @@ ensure_session() {
   local server="${PIPELINE_SERVER_URL:-http://localhost:${PIPELINE_PORT:-4096}}"
   local probe
   probe=$(
-    opencode run --attach "$server" --title "$title" --agent build --auto --format json \
+    opencode run --server "$server" --title "$title" --agent build --auto --format json \
       "Session bootstrap only — reply with the single word: ack" \
       2>>"$PIPELINE_LOG_FILE" \
     | grep -oE '"sessionID":"ses_[^"]+"' | head -1 \
@@ -361,11 +370,11 @@ run_pipeline_step() {
 
   local timeout_cmd=(opencode)
   if [[ "${OPC_TIMEOUT:-1800}" -gt 0 ]] && command -v timeout >/dev/null 2>&1; then
-    timeout_cmd=(timeout "$OPC_TIMEOUT" opencode)
+    timeout_cmd=(timeout "${OPC_TIMEOUT:-1800}" opencode)
   fi
 
   local args=()
-  args+=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --agent "$agent" --auto)
+  args+=(run --server "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --agent "$agent" --auto)
   [[ -n "$model" ]] && args+=(--model "$model")
 
   local start end
@@ -382,7 +391,7 @@ run_pipeline_step() {
   if [[ $OPC_RC -ne 0 ]] && $retry; then
     warn "Session step '${prompt_file}' failed (exit ${OPC_RC}) — retrying once in a forked session..."
     # Fork: use a fresh continuation to avoid a poisoned conversation state.
-    local retry_args=(run --attach "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --fork --agent "$agent" --auto)
+    local retry_args=(run --server "$PIPELINE_SERVER_URL" --session "$PIPELINE_SESSION_ID" --fork --agent "$agent" --auto)
     [[ -n "$model" ]] && retry_args+=(--model "$model")
     saved=$(trap -p ERR 2>/dev/null || true)
     trap - ERR
