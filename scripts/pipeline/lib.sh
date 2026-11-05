@@ -235,10 +235,16 @@ should_skip_step() {
 # once and reused across steps (instead of cold-starting each step).
 
 # find_free_port — ask the OS for an unused TCP port (node is a pre-flight
-# requirement). Falls back to PIPELINE_PORT or 4096 if node cannot be queried.
+# requirement). A fixed PIPELINE_PORT is honoured when set; otherwise a failed
+# probe is fatal rather than silently borrowing a port that may be in use.
 find_free_port() {
-  node -e 'const net=require("net");const s=net.createServer();s.listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close()})' 2>/dev/null \
-    || echo "${PIPELINE_PORT:-4096}"
+  if [[ -n "${PIPELINE_PORT:-}" ]]; then printf '%s\n' "$PIPELINE_PORT"; return 0; fi
+  local attempt port
+  for attempt in 1 2 3; do
+    port=$(node -e 'const net=require("net");const s=net.createServer();s.listen(0,"127.0.0.1",()=>{process.stdout.write(String(s.address().port));s.close()})' 2>/dev/null || true)
+    if [[ -n "$port" ]]; then printf '%s\n' "$port"; return 0; fi
+  done
+  return 1
 }
 
 # Start the persistent backend. Sets PIPELINE_SERVER_URL.
@@ -249,7 +255,10 @@ find_free_port() {
 # deterministic and avoids scraping the generated secret out of the log.
 ensure_server() {
   if [[ -n "${PIPELINE_SERVER_URL:-}" ]]; then return 0; fi
-  local port="${PIPELINE_PORT:-$(find_free_port)}"
+  local port="${PIPELINE_PORT:-}"
+  if [[ -z "$port" ]]; then
+    port=$(find_free_port) || die "Could not find a free port for opencode serve (set PIPELINE_PORT)."
+  fi
   if [[ -z "${OPENCODE_PASSWORD:-}" ]]; then
     OPENCODE_PASSWORD=$(node -e 'process.stdout.write(require("crypto").randomBytes(24).toString("base64url"))')
     export OPENCODE_PASSWORD

@@ -185,9 +185,16 @@ fi
 # ── Traps ──
 cleanup() {
   stop_server
-  local child_pids
-  child_pids=$(jobs -p 2>/dev/null || true)
-  [[ -n "$child_pids" ]] && { kill $child_pids 2>/dev/null; sleep 1; kill -9 $child_pids 2>/dev/null; } || true
+  # Kill only the processes this script started. `jobs -p` also names any job
+  # the invoking shell owns, which a pipeline must not touch.
+  local pids=()
+  [[ -n "${SCAN_PID:-}" ]] && pids+=("$SCAN_PID")
+  [[ -n "${SCAN_GIT_PID:-}" ]] && pids+=("$SCAN_GIT_PID")
+  if (( ${#pids[@]} > 0 )); then
+    kill "${pids[@]}" 2>/dev/null || true
+    sleep 1
+    kill -9 "${pids[@]}" 2>/dev/null || true
+  fi
 }
 on_err() {
   local rc=$?
@@ -1022,7 +1029,7 @@ SHIPPABLE=false
 if $COMMITTED; then SHIPPABLE=true; fi
 [[ "${AHEAD:-0}" -gt 0 ]] && SHIPPABLE=true
 # A moved local tag also needs publishing.
-if ! git -C "$PROJECT_DIR" tag -l "v${RELEASE_VERSION}" | grep -q "v${RELEASE_VERSION}"; then SHIPPABLE=true; fi
+if ! git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then SHIPPABLE=true; fi
 
 INTERACTIVE=false
 [[ -t 0 ]] && INTERACTIVE=true

@@ -49,6 +49,10 @@
   emit machine-readable dispositions and the follow-up review verifies only
   those findings rather than re-reading the whole specification; repair turns
   run on the light agent unless `PIPELINE_REPAIR_AGENT` overrides it.
+- `--from=<step> --commit` can publish a repaired run without re-running the
+  whole pipeline, while `--to` still never publishes. The pipeline's cleanup
+  no longer kills unrelated jobs of the invoking shell, and a failed free-port
+  probe is reported instead of silently borrowing port 4096.
 
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 
