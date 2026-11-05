@@ -29,17 +29,22 @@ cannot see: semantic staleness and prose quality.
 Auto-fix findings where safe: typo corrections, missing punctuation,
 whitespace normalization. Do NOT auto-fix: REQ body rewrites, structural
 changes, test ID assignments, or anything that changes semantic meaning.
+Claim an auto-fix only when an Edit or Write call for it succeeded — a
+correction you describe but never apply leaves the spec unfixed.
+
+When your analysis is final and the counts are settled, write the summary
+artifact as your last action. Do not write it earlier: the counts must match
+the analysis you just finished, and a stale summary fails the pipeline gate.
 
 Use the Write tool to create <SUMMARY_JSON> (an absolute path) with exactly
 the JSON shape {"status":"complete","critical":N,"high":N,"info":N}. Writing
-this file is part of the step, not a formality: the pipeline gate fails the
-run when the file is missing, unparseable, or its counts disagree with your
+this file is part of the step, not a formality: the pipeline fails the run
+when the file is missing, unparseable, or its counts disagree with your
 closing token. Do not state that you wrote it unless a Write tool call
-succeeded. Likewise, claim an auto-fix only when an Edit or Write call for
-it succeeded — a correction you describe but never apply leaves the spec
-unfixed.
+succeeded.
 
-End your reply with this line, verbatim, as the final line:
+Then end your reply with this line, verbatim, as the final line, copying the
+numbers from the JSON you just wrote — do not recompute them:
 
 READTHROUGH <crit> critical; <high> high; <info> info
 

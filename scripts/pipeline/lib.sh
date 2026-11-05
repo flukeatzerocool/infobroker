@@ -176,6 +176,22 @@ findings_count() {
   ' "$1" 2>/dev/null
 }
 
+# dispositions_valid <path> → 0 when the file is a JSON array of
+# {id: string, disposition: "fixed"|"rejected"} entries. A repair pass that
+# writes prose instead must not silently seed the re-review with nothing.
+dispositions_valid() {
+  node -e '
+    const fs = require("fs");
+    let j;
+    try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); }
+    catch { process.exit(1); }
+    const ok = Array.isArray(j) && j.length > 0 && j.every(
+      (e) => e && typeof e.id === "string" && (e.disposition === "fixed" || e.disposition === "rejected"),
+    );
+    process.exit(ok ? 0 : 1);
+  ' "$1" 2>/dev/null
+}
+
 # ── Step-range selection ─────────────────────────────────────────────────────
 # step_should_run <order> <step> <start> <end> → 0 when <step> is inside the
 # requested range, 1 when it should be skipped. Pure: depends only on its
@@ -516,7 +532,8 @@ repair_loop() {
         -e "s|<ATTEMPT>|$attempt|g" \
         -e "s|<MAX_ATTEMPTS>|$max|g" \
         "$prompt_template" > "$prompt_file"
-    run_pipeline_step "$prompt_file" "${out}.attempt-${attempt}" --model "$PIPELINE_MODEL" --retry
+    run_pipeline_step "$prompt_file" "${out}.attempt-${attempt}" \
+      --agent "${PIPELINE_REPAIR_AGENT:-build}" --model "$PIPELINE_MODEL" --retry
     if [[ $OPC_RC -ne 0 ]]; then
       warn "$label: repair turn failed (exit ${OPC_RC}); re-checking the gate."
     fi

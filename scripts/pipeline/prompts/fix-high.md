@@ -25,3 +25,12 @@ your edits caused.
 
 Write one disposition per high finding — `fixed` or `rejected`, each with a
 one-line reason — to <FIX_TXT>.
+
+Also write the same dispositions to <DISPOSITIONS_JSON> as a JSON array, one
+entry per high finding in the order they appear in <READTHROUGH_TXT>:
+
+[{"id":"H1","disposition":"fixed","evidence":"one line"},{"id":"H2","disposition":"rejected","evidence":"one line"}]
+
+`disposition` is exactly `fixed` or `rejected`. The next step verifies these
+entries, so an entry that overstates what changed sends the reviewer after a
+fix that is not there.

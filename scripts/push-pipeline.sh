@@ -198,6 +198,9 @@ PIPELINE_MODEL="${PIPELINE_MODEL:-}"
 PIPELINE_LIGHT_MODEL="${PIPELINE_LIGHT_MODEL:-${PIPELINE_MODEL:-}}"
 # Non-thinking agent for review-only steps (read-through, changelog, scan, README).
 PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
+# Repairs apply a written disposition list, so they run on the light agent too
+# unless a hard case overrides it.
+PIPELINE_REPAIR_AGENT="${PIPELINE_REPAIR_AGENT:-$PIPELINE_LIGHT_AGENT}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
 # Display-only snapshot, taken before any step runs. The sync step bumps the
@@ -447,7 +450,25 @@ run_readthrough_pass() {
   if [[ -n "$token_line" ]]; then
     read -r tok <<<"$(sed -E 's/READTHROUGH ([0-9]+) critical; ([0-9]+) high; ([0-9]+) info/\1 \2 \3/' <<<"$token_line")"
     if [[ "$tok" != "$RT_CRITICAL $RT_HIGH $RT_INFO" ]]; then
-      die "Read-through summary disagrees with its closing token (json ${RT_CRITICAL}/${RT_HIGH}/${RT_INFO}, token ${tok})."
+      # One bounded reconcile turn. The 2026-11-04 run died here after writing
+      # the summary before finalizing its counts, discarding ~20 minutes of
+      # work; rewriting the artifact is cheap, re-running the review is not.
+      warn "Read-through summary disagrees with its closing token (json ${RT_CRITICAL}/${RT_HIGH}/${RT_INFO}, token ${tok}) — one reconcile turn."
+      sed -e "s|<SUMMARY_JSON>|$summary|g" \
+          -e "s|<READTHROUGH_TXT>|$OUT_READTHROUGH|g" \
+          "$PROMPT_DIR/readthrough-reconcile.md" > "$PIPELINE_RUN_DIR/readthrough.reconcile.prompt.md"
+      run_pipeline_step "$PIPELINE_RUN_DIR/readthrough.reconcile.prompt.md" \
+        "$PIPELINE_RUN_DIR/readthrough.reconcile.txt" \
+        --agent "$PIPELINE_REPAIR_AGENT" --model "$PIPELINE_LIGHT_MODEL"
+      [[ $OPC_RC -ne 0 ]] && die "Read-through reconcile turn FAILED (exit ${OPC_RC}); summary and token still disagree."
+      if ! counts=$(summary_counts "$summary"); then
+        die "Read-through reconcile turn left ${summary} unparseable."
+      fi
+      read -r RT_CRITICAL RT_HIGH RT_INFO <<<"$counts"
+      read -r tok <<<"$(sed -E 's/READTHROUGH ([0-9]+) critical; ([0-9]+) high; ([0-9]+) info/\1 \2 \3/' <<<"$token_line")"
+      [[ "$tok" == "$RT_CRITICAL $RT_HIGH $RT_INFO" ]] \
+        || die "Read-through summary still disagrees after one reconcile turn (json ${RT_CRITICAL}/${RT_HIGH}/${RT_INFO}, token ${tok})."
+      info "Read-through: summary reconciled with its closing token."
     fi
   fi
 
@@ -491,25 +512,32 @@ else
     warn "Read-through: ${RT_HIGH} high-severity finding(s) — repair attempt ${RT_ATTEMPT}/${PIPELINE_FIX_ATTEMPTS}."
     rt_first="$PIPELINE_RUN_DIR/readthrough.attempt-${RT_ATTEMPT}.txt"
     rt_json="$PIPELINE_RUN_DIR/readthrough.attempt-${RT_ATTEMPT}.json"
+    rt_dispositions="$PIPELINE_RUN_DIR/readthrough.fix-${RT_ATTEMPT}.json"
     cp "$OUT_READTHROUGH" "$rt_first"
     cp "$PIPELINE_RUN_DIR/readthrough.json" "$rt_json"
     sed -e "s|<READTHROUGH_TXT>|$rt_first|g" \
         -e "s|<READTHROUGH_JSON>|$rt_json|g" \
+        -e "s|<DISPOSITIONS_JSON>|$rt_dispositions|g" \
         -e "s|<FIX_TXT>|$OUT_FIX|g" \
         "$PROMPT_DIR/fix-high.md" > "$PIPELINE_RUN_DIR/fix-high.prompt.md"
-    run_pipeline_step "$PIPELINE_RUN_DIR/fix-high.prompt.md" "$OUT_FIX" --model "$PIPELINE_MODEL" --retry
+    run_pipeline_step "$PIPELINE_RUN_DIR/fix-high.prompt.md" "$OUT_FIX" \
+      --agent "$PIPELINE_REPAIR_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
     FIX_RC=$OPC_RC
     [[ $FIX_RC -ne 0 ]] && die "High-finding repair FAILED. Check $OUT_FIX."
     run_fast_spec_gates "Post-repair spec checks" "$PIPELINE_RUN_DIR/check-post-fix-${RT_ATTEMPT}.txt" \
       || die "Spec checks FAILED after high-finding repair."
+    if ! dispositions_valid "$rt_dispositions"; then
+      warn "Repair wrote no valid dispositions file (${rt_dispositions}) — the re-review sees only the dispositions text."
+      printf '[]\n' > "$rt_dispositions"
+    fi
 
-    # Re-review with the repair dispositions in view: the reviewer must
-    # re-verify a rejected finding, not silently repeat it.
-    {
-      cat "$PIPELINE_RUN_DIR/readthrough.prompt.md"
-      printf '\n\nA prior repair pass recorded dispositions for the previous high findings at %s. Re-verify any high finding it rejected against the tree; do not repeat a rejected finding without new evidence.\n' "$OUT_FIX"
-    } > "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
-    warn "Re-reviewing after repair..."
+    # Targeted re-review: verify the dispositions against the tree instead of
+    # re-reading the whole spec, which the full read-through already did.
+    sed -e "s|<DISPOSITIONS_JSON>|$rt_dispositions|g" \
+        -e "s|<READTHROUGH_TXT>|$rt_first|g" \
+        -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" \
+        "$PROMPT_DIR/rereview.md" > "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
+    warn "Re-reviewing the repair dispositions..."
     run_readthrough_pass "$PIPELINE_RUN_DIR/readthrough.rereview.prompt.md"
   done
   if (( RT_ATTEMPT > 0 )); then

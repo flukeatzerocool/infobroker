@@ -43,6 +43,12 @@
 - The sync step runs its gate suite once instead of twice, and provider-auth
   regeneration is verified against the pre-read-through snapshot so the drift
   check can actually fire instead of always reporting "no drift".
+- The read-through writes its summary after the counts are final, and a
+  summary/token disagreement now gets one bounded reconcile turn instead of
+  discarding the step (the 2026-11-04 run lost ~20 minutes that way). Repairs
+  emit machine-readable dispositions and the follow-up review verifies only
+  those findings rather than re-reading the whole specification; repair turns
+  run on the light agent unless `PIPELINE_REPAIR_AGENT` overrides it.
 
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 
