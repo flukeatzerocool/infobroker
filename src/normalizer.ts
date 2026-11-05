@@ -86,6 +86,22 @@ function normalizeOne(
   if (abstract) result.abstract = abstract;
   if (citationCount !== undefined) result.citation_count = citationCount;
 
+  // REQ-021i: pass a provider-attached structured fact through unchanged. The
+  // fact is additive and never replaces the snippet.
+  const fact = raw.fact;
+  if (fact && typeof fact === "object" && !Array.isArray(fact)) {
+    const candidate = fact as Record<string, unknown>;
+    if (
+      typeof candidate.kind === "string" &&
+      (typeof candidate.value === "number" || typeof candidate.value === "string") &&
+      typeof candidate.display === "string" &&
+      typeof candidate.source === "string" &&
+      typeof candidate.url === "string"
+    ) {
+      result.fact = candidate as unknown as SearchResult["fact"];
+    }
+  }
+
   return result;
 }
 

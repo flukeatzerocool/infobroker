@@ -221,4 +221,57 @@ describe("zero-config financial/academic/news providers", () => {
     expect(url).toContain("rows=2");
     expect(url).toContain("select=");
   });
+
+  it("crossref resolves a DOI to a bibliographic record (REQ-021h)", async () => {
+    mockFetch.mockImplementation(async () =>
+      new Response(
+        JSON.stringify({
+          message: {
+            DOI: "10.1162/dram_c_00764",
+            title: ["Working Loose"],
+            "container-title": ["TDR/The Drama Review"],
+            issued: { "date-parts": [[2018, 6]] },
+            URL: "https://doi.org/10.1162/dram_c_00764",
+          },
+        }),
+        { status: 200 }
+      )
+    );
+    const record = await crossref.lookupDoi!("10.1162/dram_c_00764");
+    expect(record).toMatchObject({
+      doi: "10.1162/dram_c_00764",
+      title: "Working Loose",
+      venue: "TDR/The Drama Review",
+      year: "2018",
+    });
+    expect(String(mockFetch.mock.calls[0][0])).toContain("/works/10.1162%2Fdram_c_00764");
+  });
+
+  it("openalex resolves a DOI and exposes its open-access copy (REQ-021h)", async () => {
+    mockFetch.mockImplementation(async () =>
+      new Response(
+        JSON.stringify({
+          display_name: "Working Loose",
+          id: "https://openalex.org/W1",
+          publication_year: 2018,
+          open_access: {
+            is_oa: true,
+            oa_status: "bronze",
+            oa_url: "https://www.mitpressjournals.org/doi/pdf/10.1162/DRAM_c_00764",
+          },
+          best_oa_location: { pdf_url: "https://www.mitpressjournals.org/doi/pdf/10.1162/DRAM_c_00764" },
+          abstract_inverted_index: { Working: [0], Loose: [1] },
+        }),
+        { status: 200 }
+      )
+    );
+    const record = await openalex.lookupDoi!("10.1162/dram_c_00764");
+    expect(record).toMatchObject({
+      title: "Working Loose",
+      year: "2018",
+      oa_status: "bronze",
+      abstract: "Working Loose",
+    });
+    expect(record?.oa_url).toContain("mitpressjournals.org");
+  });
 });

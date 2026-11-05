@@ -50,6 +50,20 @@ describe("classifyTaskType (REQ-020a)", () => {
     expect(classifyTaskType("journal of machine learning research transformer scaling")).toBe("academic");
   });
 
+  // REQ-021i: an explicitly named measurable attribute is decisive even when a
+  // title-plus-year token would otherwise read as an author-year citation.
+  it("routes measurable-attribute queries to structured_fact", () => {
+    expect(classifyTaskType("Survivor Series 1997 attendance")).toBe("structured_fact");
+    expect(classifyTaskType("WrestleMania 23 attendance")).toBe("structured_fact");
+    expect(classifyTaskType("what percent of Americans trust news")).toBe("structured_fact");
+    expect(classifyTaskType("US trust in news percentage 2025")).toBe("structured_fact");
+    expect(classifyTaskType("what date did the Montreal Screwjob happen")).toBe("structured_fact");
+    // Guards: the decisive tokens do not disturb the existing routes.
+    expect(classifyTaskType("population of Austin")).toBe("structured_fact");
+    expect(classifyTaskType("Smith et al. 2020 attention mechanisms")).toBe("academic");
+    expect(classifyTaskType("capacity of the Suez Canal")).toBe("general_web");
+  });
+
   it("recognises biography queries", () => {
     expect(classifyTaskType("Ada Lovelace biography")).toBe("encyclopedia");
     expect(classifyTaskType("who was Marie Curie")).toBe("encyclopedia");

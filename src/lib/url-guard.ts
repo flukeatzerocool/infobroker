@@ -137,6 +137,41 @@ export async function assertPublicUrlResolved(
   }
 }
 
+// A non-2xx response from a renderer, carrying the status so the fetch layer
+// can distinguish a paywall (401/402/403/407/451) from a missing page or a
+// transient provider error. REQ-021h.
+export class HttpStatusError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HttpStatusError";
+    this.status = status;
+  }
+}
+
+// A non-http(s) scheme is a caller input error, not a network failure. The
+// fetch layer maps this to invalid_input and names the local-read alternative.
+export class UnsupportedProtocolError extends Error {
+  protocol: string;
+  constructor(protocol: string) {
+    super(`Unsupported protocol "${protocol}"`);
+    this.name = "UnsupportedProtocolError";
+    this.protocol = protocol;
+  }
+}
+
+export function assertHttpUrlProtocol(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return; // malformed URLs are reported by the normal URL guard
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new UnsupportedProtocolError(parsed.protocol);
+  }
+}
+
 export type FetchLike = (
   url: string,
   init?: { redirect?: "manual"; headers?: Record<string, string> },
@@ -164,13 +199,13 @@ export async function fetchFollowRedirects(
     });
     if (resp.status >= 300 && resp.status < 400) {
       const loc = resp.headers.get("location");
-      if (!loc) throw new Error(`HTTP ${resp.status} with no Location header`);
+      if (!loc) throw new HttpStatusError(`HTTP ${resp.status} with no Location header`, resp.status);
       current = new URL(loc, current).toString();
       // REQ-021a: re-apply the SSRF guard (including resolution) at each hop.
       await assertPublicUrlResolved(current, allowPrivate, resolver);
       continue;
     }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) throw new HttpStatusError(`HTTP ${resp.status}`, resp.status);
     return await resp.text();
   }
   throw new Error(`Too many redirects for ${url}`);

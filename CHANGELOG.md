@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026.11.05 — Structured facts and fetch fallbacks
+
+- Measurable-attribute queries (attendance, population, percentage, date) now
+  classify as `structured_fact` even when a title-plus-year token also reads as
+  an author–year citation, and `search_web` returns a sourced `facts` entry
+  resolved from a Wikidata claim, then a Wikipedia infobox or table, before
+  prose. A missing or ambiguous value is reported as such and is never
+  computed. (REQ-021i)
+- `fetch_page` classifies every renderer failure as a paywall, an anti-bot
+  gate, a missing page, a rate limit, or a network failure, and reports
+  `access_blocked` (with cause) or `network_error` instead of one generic
+  exhaustion error. (REQ-002, REQ-021h)
+- A failed page with a DOI falls back to Crossref metadata, then an open-access
+  copy, then an Internet Archive snapshot; a metadata-only result says so and
+  preserves the original URL. The response reports `meta.fallback_kind`.
+  (REQ-021h)
+- `fetch_page` on a `file://` or other non-http(s) URL now returns
+  `invalid_input` naming the read tool instead of suggesting that the caller
+  disable the private-network guard. (REQ-021h)
+- The ROADMAP "Structured facts and fetch fallbacks" item is complete and
+  removed.
+
 ## 2026.11.05 — Intent routing
 
 - `search_web` classification now matches whole words instead of substrings, so

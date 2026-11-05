@@ -26,7 +26,14 @@ const realFetch = globalThis.fetch;
 let index = null;
 if (MODE === "replay" && FIXTURES) {
   index = JSON.parse(readFileSync(FIXTURES, "utf8"));
-  index._compiled = (index.entries || []).map((e) => ({ ...e, re: new RegExp(e.path_regex) }));
+  index._compiled = (index.entries || []).map((e) => ({
+    ...e,
+    re: new RegExp(e.path_regex),
+    // Optional query-string discriminator: Wikidata and MediaWiki serve every
+    // action from one path, so path-only fixtures cannot tell wbsearchentities
+    // from wbgetclaims (or list=search from action=parse).
+    qre: e.query_regex ? new RegExp(e.query_regex) : null,
+  }));
 }
 
 function urlOf(input) {
@@ -43,6 +50,7 @@ function matchFixture(href, method) {
   for (const e of index._compiled) {
     if (e.host !== host) continue;
     if ((e.method || "GET").toUpperCase() !== m) continue;
+    if (e.qre && !e.qre.test(u.search)) continue;
     if (e.re.test(u.pathname)) return e;
   }
   return null;
@@ -54,6 +62,9 @@ if (MODE === "replay" && index) {
     const method = (init && init.method) || (input && input.method) || "GET";
     const entry = matchFixture(href, method);
     if (entry) {
+      // A fixture can model a transport failure (DNS, connection reset) so the
+      // fetch layer's network classification is exercised offline.
+      if (entry.error) throw new Error(entry.error);
       return new Response(entry.body ?? "", { status: entry.status ?? 200, headers: entry.headers || {} });
     }
     const host = new URL(href).hostname;

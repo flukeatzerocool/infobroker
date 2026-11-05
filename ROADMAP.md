@@ -44,15 +44,6 @@ and ACLs; enterprise scheduling.
 - Make batch items self-describing: provider, status, url, passages,
   truncated.
 
-## [P1] Structured facts and fetch fallbacks
-
-- Route attendance/date/percentage queries to Wikidata and extract Wikipedia
-  infobox/table data before falling back to prose (REQ-020a, REQ-021).
-- Add a Crossref/DOI resolver and repository/Internet Archive fallback for
-  paywalled academic URLs (REQ-021).
-- Fix the `file://` remediation to point at the `read` tool and distinguish
-  paywall/anti-bot from network failure.
-
 ## [P2] Knowledge-base memory
 
 - Make report ingest a required tail step for Deep-Dive and Research &

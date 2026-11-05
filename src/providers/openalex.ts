@@ -1,5 +1,5 @@
 // @implements REQ-020 REQ-070 REQ-071
-import type { SearchResult, Provider, SearchOptions } from "../types.js";
+import type { SearchResult, Provider, SearchOptions, DoiRecord } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
@@ -69,6 +69,51 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   return normalize(raw, "openalex");
 }
 
+interface OpenAlexWork {
+  display_name?: string;
+  id?: string;
+  publication_year?: number;
+  doi?: string;
+  cited_by_count?: number;
+  authorships?: Array<{ author?: { display_name?: string } }>;
+  primary_location?: { source?: { display_name?: string }; landing_page_url?: string; pdf_url?: string };
+  best_oa_location?: { landing_page_url?: string; pdf_url?: string };
+  open_access?: { is_oa?: boolean; oa_status?: string; oa_url?: string };
+  abstract_inverted_index?: Record<string, number[]>;
+}
+
+// REQ-021h: resolve a DOI to its bibliographic record and open-access copy.
+// The open-access URL is what lets a paywalled publisher page fall through to
+// a repository copy instead of an error.
+async function lookupDoi(doi: string): Promise<DoiRecord | null> {
+  const resp = await infobrokerFetch(`${OPENALEX_API}/https://doi.org/${doi}`, {
+    providerSlug: "openalex",
+  });
+  if (!resp.ok) return null;
+  const item = (await resp.json()) as OpenAlexWork;
+  if (!item || (!item.display_name && !item.id)) return null;
+  const abstract = reconstructAbstract(item.abstract_inverted_index)?.slice(0, 2000);
+  const venue = item.primary_location?.source?.display_name;
+  const authors = (item.authorships || []).map((a) => a.author?.display_name || "").filter(Boolean);
+  const oaUrl =
+    item.open_access?.oa_url ||
+    item.best_oa_location?.pdf_url ||
+    item.best_oa_location?.landing_page_url ||
+    item.primary_location?.pdf_url;
+  return {
+    doi,
+    title: item.display_name || "(untitled)",
+    url: item.id || `https://doi.org/${doi}`,
+    ...(authors.length > 0 ? { authors } : {}),
+    ...(venue ? { venue } : {}),
+    ...(item.publication_year ? { year: String(item.publication_year) } : {}),
+    ...(abstract ? { abstract } : {}),
+    ...(typeof item.cited_by_count === "number" ? { citation_count: item.cited_by_count } : {}),
+    ...(oaUrl ? { oa_url: oaUrl } : {}),
+    ...(item.open_access?.oa_status ? { oa_status: item.open_access.oa_status } : {}),
+  };
+}
+
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {
   const start = Date.now();
   try {
@@ -86,5 +131,6 @@ export const provider: Provider = {
   tier: "free_http",
   capabilities: ["academic"],
   search,
+  lookupDoi,
   health,
 };

@@ -1,8 +1,33 @@
 // @implements REQ-001 REQ-003 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-084 REQ-085 REQ-110 REQ-060i REQ-111
+export type StructuredFactKind =
+  | "attendance"
+  | "population"
+  | "area"
+  | "elevation"
+  | "percentage"
+  | "date";
+
+// REQ-021i: a sourced, machine-readable answer to a measurable-attribute
+// query. `value` is the typed value when the source supplies one; `display`
+// preserves the source's formatting. No value is ever computed client-side.
+export interface StructuredFact {
+  kind: StructuredFactKind;
+  value: number | string;
+  display: string;
+  unit?: string;
+  property?: string;
+  key?: string;
+  as_of?: string;
+  source: string;
+  url: string;
+}
+
 export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+  /** Structured fact attached to this result (REQ-021i). */
+  fact?: StructuredFact;
   published_date?: string;
   source_type?: string;
   original_source?: string;
@@ -421,6 +446,21 @@ export interface CorroborationProvenance {
   }>;
 }
 
+// REQ-021h: a bibliographic record resolved by DOI, used when the publisher
+// page itself cannot be fetched (paywall, anti-bot, or network failure).
+export interface DoiRecord {
+  doi: string;
+  title: string;
+  url: string;
+  authors?: string[];
+  venue?: string;
+  year?: string;
+  abstract?: string;
+  citation_count?: number;
+  oa_url?: string;
+  oa_status?: string;
+}
+
 export interface Provider {
   slug: string;
   tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http" | "generic_http";
@@ -429,6 +469,7 @@ export interface Provider {
   search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
   fetchPage?(url: string): Promise<string>;
   suggest?(query: string): Promise<string[]>;
+  lookupDoi?(doi: string): Promise<DoiRecord | null>;
 }
 
 export interface SearchOptions {

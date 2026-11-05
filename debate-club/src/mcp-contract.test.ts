@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-021 REQ-021a REQ-021h REQ-021i REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -464,4 +464,93 @@ test("reload_config applies a patch without erroring", async () => {
 
 test("no fixture-host request went unmatched during the run", () => {
   expect(server.unmatched()).toEqual([]);
+});
+
+test("search_web resolves a measurable attribute from the Wikipedia infobox (REQ-021i)", async () => {
+  scenario = "structured-fact-infobox";
+  const out = await call("infobroker_search_web", {
+    query: "Survivor Series 1997 attendance",
+    max_results: 3,
+  });
+  const body = expectOk(out.text);
+  const meta = body.meta as Record<string, unknown>;
+  expect(meta.task_type).toBe("structured_fact");
+  expect(meta.fact_status).toBe("resolved");
+  const facts = body.facts as Array<Record<string, unknown>>;
+  expect(Array.isArray(facts)).toBe(true);
+  expect(facts[0]).toMatchObject({
+    kind: "attendance",
+    value: 20593,
+    display: "20,593",
+    source: "wikipedia",
+  });
+  // The fact is placed before the prose results.
+  const first = (body.results as Array<Record<string, unknown>>)[0];
+  expect(first.source_type).toBe("structured_fact");
+});
+
+test("fetch_page falls back to Crossref metadata for a paywalled DOI (REQ-021h)", async () => {
+  scenario = "fetch-doi-metadata";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://doi.org/10.1162/dram_c_00764",
+    detect_date: false,
+  });
+  const body = expectOk(out.text);
+  const meta = body.meta as Record<string, unknown>;
+  expect(meta.fallback_used).toBe(true);
+  expect(meta.fallback_kind).toBe("metadata");
+  expect(body.extraction_mode).toBe("metadata");
+  const first = (body.results as Array<Record<string, unknown>>)[0];
+  expect(first.doi).toBe("10.1162/dram_c_00764");
+  expect(String(first.title)).toContain("Working Loose");
+});
+
+test("fetch_page falls back to an Internet Archive snapshot (REQ-021h)", async () => {
+  scenario = "fetch-wayback";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://example.com/paywalled",
+    renderer: "jina",
+    detect_date: false,
+  });
+  const body = expectOk(out.text);
+  const meta = body.meta as Record<string, unknown>;
+  expect(meta.fallback_used, out.text).toBe(true);
+  expect(meta.fallback_kind).toBe("wayback");
+  expect(providerOf(body)).toBe("internet_archive");
+  expect(out.text).toContain("archived copy of the paywalled article");
+});
+
+test("fetch_page reports a paywall as access_blocked (REQ-021h)", async () => {
+  scenario = "fetch-access-blocked";
+  expectedError = "access_blocked";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://example.com/blocked",
+    renderer: "jina",
+    detect_date: false,
+  });
+  expect(out.text).toContain("[ERROR]");
+  const body = expectError(out.text, "access_blocked");
+  const details = (body.error as Record<string, unknown>).details as Record<string, unknown>;
+  expect(details.cause).toBe("paywall");
+});
+
+test("fetch_page reports a transport failure as network_error (REQ-021h)", async () => {
+  scenario = "fetch-network-error";
+  expectedError = "network_error";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://example.com/network",
+    renderer: "jina",
+    detect_date: false,
+  });
+  expect(out.text).toContain("[ERROR]");
+  const body = expectError(out.text, "network_error");
+  expect(String((body.error as Record<string, unknown>).remediation)).toMatch(/connectivity/i);
+});
+
+test("fetch_page sends a non-http URL to the read tool (REQ-021h)", async () => {
+  scenario = "fetch-file-protocol";
+  expectedError = "invalid_input";
+  const out = await call("infobroker_fetch_page", { url: "file:///tmp/notes.md" });
+  const body = expectError(out.text, "invalid_input");
+  expect(String((body.error as Record<string, unknown>).remediation)).toMatch(/read tool/);
 });

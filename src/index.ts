@@ -16,7 +16,7 @@ import { snapshotSource } from "./preservation.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
 import { ignoredOperators, parseQuery } from "./query.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
-import { assertPublicUrl, assertPublicUrlResolved, fetchFollowRedirects, SsrRefusalError, type FetchLike } from "./lib/url-guard.js";
+import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
@@ -26,7 +26,7 @@ import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
-import { capInputs, coerceStringArray, mergeItems } from "./batch.js";
+import { capInputs, coerceStringArray, mergeItems, parseEnvelope } from "./batch.js";
 import { reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
 import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
@@ -48,6 +48,8 @@ import { shouldUseKbCache } from "./fetch-cache.js";
 import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
+import { enrichStructuredFacts } from "./structured-fact.js";
+import { classifyFailure, failureTaxonomy, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
 import { collectNotices, computeStateHealth, injectNotices } from "./state-health.js";
 import { configureUpdateCheck } from "./update-check.js";
 
@@ -732,6 +734,7 @@ async function fetchPageContent(
   maxChars: number,
   allowPrivate: boolean,
   cleanHtml = false,
+  onFailure?: (failure: FetchFailure) => void,
 ): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
   const config = getConfig();
   const attempt = async (slug: string) => {
@@ -770,6 +773,9 @@ async function fetchPageContent(
       // target page is treated as failed, so the chain falls through to the
       // next renderer instead of serving the verification page as content.
       if (isBotChallenge(raw)) {
+        // REQ-021h: keep the challenge distinct from a provider failure so the
+        // caller can report access_blocked with cause anti_bot.
+        onFailure?.({ renderer: slug, kind: "anti_bot", message: "anti-bot challenge" });
         return null;
       }
 
@@ -786,6 +792,9 @@ async function fetchPageContent(
       // REQ-021a: a safety refusal must surface with its distinct code, not
       // as a generic provider failure.
       if (e instanceof SsrRefusalError) throw e;
+      // REQ-021h: keep each renderer's failure reason so the caller can
+      // distinguish a paywall from an anti-bot gate from a network failure.
+      onFailure?.(classifyFailure(e, slug));
       providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
@@ -887,6 +896,18 @@ async function doFetchPage(
     );
     const merged = mergeItems(urls.map((u, i) => ({ query: u, envelope: envelopes[i] })));
     return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
+  }
+
+  // REQ-021h: a non-http(s) scheme is caller input, not a network-target
+  // refusal. Name the local-read alternative instead of suggesting that the
+  // caller relax the private-network guard.
+  try {
+    assertHttpUrlProtocol(url);
+  } catch (e) {
+    if (e instanceof UnsupportedProtocolError) {
+      return `[ERROR] ${json(err("none", "invalid_input", `fetch_page only fetches http(s) URLs (received "${e.protocol}")`, "For a local file, use the read tool; fetch_page is for web pages only."))}`;
+    }
+    throw e;
   }
 
   const config = getConfig();
@@ -1043,8 +1064,11 @@ async function doFetchPage(
   }
 
   let fetched;
+  const failures: FetchFailure[] = [];
   try {
-    fetched = await fetchPageContent(url, renderersForUrl(url, renderers), effectiveMax, allowPrivate, true);
+    fetched = await fetchPageContent(url, renderersForUrl(url, renderers), effectiveMax, allowPrivate, true, (failure) =>
+      failures.push(failure)
+    );
   } catch (e) {
     if (e instanceof SsrRefusalError) {
       audit("network_target_refused", url);
@@ -1053,7 +1077,130 @@ async function doFetchPage(
     throw e;
   }
   if (fetched === null) {
-    return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
+    // REQ-021h: a DOI/snapshot fallback is only meaningful for the ordinary
+    // page/question path; crawl and structured-extraction keep their contract.
+    const fallback =
+      crawl || extract
+        ? null
+        : await resolveFetchFallback(url, (target, targetRenderers) =>
+            fetchPageContent(target, targetRenderers, effectiveMax, allowPrivate, true, (failure) =>
+              failures.push(failure)
+            )
+          );
+
+    if (fallback?.kind === "metadata") {
+      const record = fallback.record;
+      return `[OK] ${json({
+        status: "ok",
+        provider: "crossref",
+        url,
+        extraction_mode: "metadata",
+        results: [
+          {
+            title: record.title,
+            url,
+            snippet:
+              record.abstract ||
+              [record.venue, record.year].filter(Boolean).join(" · ") ||
+              record.doi,
+            ...(record.authors ? { authors: record.authors } : {}),
+            ...(record.venue ? { venue: record.venue } : {}),
+            ...(record.year ? { published_date: record.year } : {}),
+            doi: record.doi,
+            ...(record.abstract ? { abstract: record.abstract } : {}),
+          },
+        ],
+        note: "Full text unavailable (paywalled or access-restricted); returning bibliographic metadata.",
+        meta: {
+          fallback_used: true,
+          fallback_kind: "metadata",
+          doi: record.doi,
+          ...(record.oa_url ? { oa_url: record.oa_url } : {}),
+          ...(record.oa_status ? { oa_status: record.oa_status } : {}),
+        },
+      })}`;
+    }
+
+    if (fallback?.kind === "content") {
+      const fallbackContent = fallback.fetched.content;
+      // REQ-097: fallback content still passes the content policy.
+      const fallbackPolicy = await checkContent(fallbackContent, url);
+      const fallbackDisp = disposition(fallbackPolicy.flagged);
+      if (fallbackDisp === "refuse") {
+        return `[ERROR] ${json(err("none", "content_policy_flagged", `Content at ${url} was refused by the content policy (${fallbackPolicy.reason})`, "Configure the content policy or retry with a different source"))}`;
+      }
+      if (fallbackDisp === "store") {
+        autoIndex(
+          [{ title: new URL(url).hostname, url, snippet: fallbackContent }],
+          fallback.fetched.slug,
+          undefined,
+          "fetch_page"
+        );
+      }
+      if (question) {
+        const passages = rankPassages(
+          fallbackContent,
+          question,
+          effectivePassageSize ?? 100,
+          effectiveMaxPassages ?? 1
+        );
+        if (passages.length > 0) {
+          return `[OK] ${json({
+            status: "ok",
+            provider: fallback.fetched.slug,
+            url,
+            question,
+            extraction_mode: "content",
+            results: [
+              {
+                title: new URL(url).hostname,
+                url,
+                snippet: passages[0].text,
+              },
+            ],
+            snippets: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
+            top_score: passages[0].score,
+            meta: {
+              query_time_ms: fallback.fetched.elapsed,
+              fallback_used: true,
+              fallback_kind: fallback.fallback_kind,
+              fallback_url: fallback.fetched_url,
+              ...(policyMeta(fallbackPolicy.flagged ? 1 : 0, policyMode()) ?? {}),
+            },
+          })}`;
+        }
+      }
+      const truncatedFallback = maybeTruncate(fallbackContent, effectiveMax);
+      return `[OK] ${json({
+        status: "ok",
+        provider: fallback.fetched.slug,
+        url,
+        results: [{ title: new URL(url).hostname, url, snippet: truncatedFallback.text }],
+        meta: {
+          query_time_ms: fallback.fetched.elapsed,
+          fallback_used: true,
+          fallback_kind: fallback.fallback_kind,
+          fallback_url: fallback.fetched_url,
+          ...(policyMeta(fallbackPolicy.flagged ? 1 : 0, policyMode()) ?? {}),
+        },
+        ...(truncatedFallback.truncated
+          ? {
+              truncated: true,
+              output_path: truncatedFallback.outputPath,
+              truncation_hint:
+                "Call fetch_page again with `question` to get the relevant passages instead of reading output_path.",
+            }
+          : {}),
+      })}`;
+    }
+
+    const taxonomy = failureTaxonomy(failures);
+    return `[ERROR] ${json(
+      err("none", taxonomy.code, `${taxonomy.message}: ${url}`, taxonomy.remediation, {
+        failures,
+        ...(taxonomy.cause ? { cause: taxonomy.cause } : {}),
+      })
+    )}`;
   }
   const { slug, content, truncated, elapsed } = fetched;
 
@@ -1376,6 +1523,49 @@ const server = new McpServer({
     : {}),
 });
 
+// REQ-021i: enrich a structured-fact search response with a sourced fact.
+// Only a single-query, successful, structured_fact envelope is eligible; a
+// batch keeps its per-query shape, and any lookup failure degrades to prose
+// with fact_status rather than failing the search.
+async function withStructuredFacts(content: string, query: string | string[]): Promise<string> {
+  if (Array.isArray(query)) return content;
+  let payload: Record<string, unknown>;
+  try {
+    const envelope = parseEnvelope(content);
+    if (envelope.status !== "ok") return content;
+    payload = envelope as unknown as Record<string, unknown>;
+  } catch {
+    return content;
+  }
+  const meta = (payload.meta ?? {}) as Record<string, unknown>;
+  if (meta.task_type !== "structured_fact") return content;
+
+  const enrichment = await enrichStructuredFacts(query, {
+    results: Array.isArray(payload.results) ? (payload.results as SearchResult[]) : [],
+  });
+  if (!enrichment) return content;
+
+  const facts = enrichment.facts;
+  const factResults = facts.map((fact) => ({
+    title: `${fact.kind} — ${fact.source}`,
+    url: fact.url,
+    snippet: fact.display,
+    source_type: "structured_fact",
+    fact,
+  }));
+  const next: Record<string, unknown> = {
+    ...payload,
+    results: [...factResults, ...(Array.isArray(payload.results) ? payload.results : [])],
+    facts,
+    meta: {
+      ...meta,
+      fact_status: enrichment.fact_status,
+      ...(enrichment.source ? { fact_source: enrichment.source } : {}),
+    },
+  };
+  return `[OK] ${json(next)}`;
+}
+
 // --- search_web ---
 const instrumentTool = (name: string, config: any, handler: any) =>
   server.registerTool(name, config, async (...args: any[]) => {
@@ -1394,7 +1584,7 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: true` skips KB recall and searches external providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: true` skips KB recall and searches external providers. A measurable attribute (attendance, population, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -1442,7 +1632,9 @@ instrumentTool(
       undefined,
       params.task_type as string | undefined
     );
-    return { content: [{ type: "text" as const, text: content }] };
+    // REQ-021i: a structured-fact query gets a sourced fact before prose.
+    const text = await withStructuredFacts(content, params.query);
+    return { content: [{ type: "text" as const, text }] };
   }
 );
 
@@ -1451,7 +1643,7 @@ instrumentTool(
   "infobroker_fetch_page",
   {
     title: "Fetch Page Content",
-    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange alternatives). Use when you have a URL and need readable text, passages ranked against a question, or the page's last-updated date. Do NOT use for topic search (use infobroker_search_web) or cross-source claim verification (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` bounds the same-origin crawl to config caps; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` selects the backend, and native_fetch is the keyless fallback when Jina is throttled or anti-bot challenged. `max_length` truncates the returned text only; a truncated page is written in full to a temp file. Makes external HTTP calls and needs no API key. A fresh knowledge-base copy is returned before an outbound fetch when available. Fetched pages auto-index into the knowledge base unless the content policy flags them (see infobroker_manage_kb): flag mode returns without storage, block mode refuses. Unreachable URLs return an [ERROR] envelope with remediation; success returns an [OK] envelope with status, provider, results, and meta.",
+    description: "Fetch a URL and extract clean content via a renderer (Jina Reader by default; native-HTTP, Wikipedia, Internet Archive, arXiv, and Stack Exchange alternatives). Use when you have a URL and need readable text, passages ranked against a question, or the page's last-updated date. Do NOT use for topic search (use infobroker_search_web) or cross-source claim verification (use infobroker_verify_claims). `question` returns passages ranked against it, sized by `passage_size` and capped by `max_passages`; `crawl` bounds the same-origin crawl to config caps; `extract` adds JSON-LD, OpenGraph, and microdata; `renderer` selects the backend, and native_fetch is the keyless fallback when Jina is throttled or anti-bot challenged. `max_length` truncates the returned text only; a truncated page is written in full to a temp file. Makes external HTTP calls and needs no API key. A fresh knowledge-base copy is returned before an outbound fetch when available. Fetched pages auto-index into the knowledge base unless the content policy flags them (see infobroker_manage_kb): flag mode returns without storage, block mode refuses. Unreachable URLs return an [ERROR] envelope with remediation; when a DOI resolves, a blocked page falls back to Crossref metadata or an open-access copy, then to an Internet Archive snapshot, and reports `meta.fallback_kind`. Paywalls and anti-bot blocks return `access_blocked`; connectivity failures return `network_error`; a non-http(s) URL returns `invalid_input` naming the read tool. Success returns an [OK] envelope with status, provider, results, and meta.",
     inputSchema: {
       url: z.union([z.string().describe("URL to fetch"), z.array(z.string()).max(5).describe("Multiple URLs to fetch in parallel (max 5)")]).describe("URL to fetch: a single URL, or up to five URLs fetched in parallel"),
       renderer: z.enum(["jina", "native_fetch", "wikipedia", "internet_archive", "arxiv", "stack_exchange"]).optional().describe("Renderer: jina (default), native_fetch, wikipedia, internet_archive, arxiv, or stack_exchange"),

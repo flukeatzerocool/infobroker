@@ -1,6 +1,6 @@
 // @implements REQ-021a resolved-address
 import { describe, it, expect } from "vitest";
-import { assertPublicUrl, assertPublicUrlResolved, isPrivateHostname, fetchFollowRedirects, SsrRefusalError } from "./url-guard.js";
+import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, isPrivateHostname, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError } from "./url-guard.js";
 
 const stubResolver = async (host: string) => {
   if (host === "private.example") return [{ address: "10.0.0.5", family: 4 }];
@@ -194,5 +194,16 @@ describe("fetchFollowRedirects", () => {
       fetchFollowRedirects("http://[::ffff:127.0.0.1]:8080/", false, fetchImpl as never, 5, "Infobroker/1.0", stubResolver)
     ).rejects.toThrow(/private\/internal/);
     expect(called).toBe(false);
+  });
+
+  it("flags a non-http(s) scheme as an unsupported protocol", () => {
+    expect(() => assertHttpUrlProtocol("file:///etc/passwd")).toThrow(UnsupportedProtocolError);
+    expect(() => assertHttpUrlProtocol("ftp://example.com/x")).toThrow(UnsupportedProtocolError);
+    expect(() => assertHttpUrlProtocol("https://example.com/x")).not.toThrow();
+  });
+
+  it("carries the HTTP status on a renderer failure", async () => {
+    const fetchImpl = async () => resp(403);
+    await expect(guard(fetchImpl as never)).rejects.toMatchObject({ status: 403 });
   });
 });

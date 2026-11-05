@@ -53,7 +53,9 @@ async function health(): Promise<{ status: string; avgLatencyMs: number }> {
 export const provider: Provider = {
   slug: "wikidata",
   tier: "free_http",
-  capabilities: ["encyclopedia"],
+  // The shipped config dispatches wikidata only for structured_fact; keep the
+  // exported capability aligned so inspection matches routing.
+  capabilities: ["structured_fact"],
   search,
   health,
 };

@@ -7,9 +7,24 @@
     "api.semanticscholar.org",
     "api.openalex.org",
     "www.ebi.ac.uk",
-    "api.crossref.org"
+    "api.crossref.org",
+    "www.wikidata.org",
+    "doi.org",
+    "archive.org",
+    "web.archive.org"
   ],
   "entries": [
+    {
+      "host": "en.wikipedia.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]srsearch=Survivor\\+Series\\+1997",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"query\": {\"search\": [{\"title\": \"Survivor Series (1997)\", \"snippet\": \"<span class=\\\"searchmatch\\\">Survivor Series</span> (1997) was a professional wrestling pay-per-view event.\", \"timestamp\": \"2026-01-02T00:00:00Z\"}]}}"
+    },
     {
       "host": "en.wikipedia.org",
       "method": "GET",
@@ -18,7 +33,8 @@
       "headers": {
         "content-type": "application/json"
       },
-      "body": "{\"query\":{\"search\":[{\"title\":\"Retrieval-augmented generation\",\"snippet\":\"<span class=\\\"searchmatch\\\">RAG</span> combines retrieval with generation for knowledge-intensive tasks.\",\"timestamp\":\"2026-01-02T00:00:00Z\"},{\"title\":\"Information retrieval\",\"snippet\":\"Information retrieval is the process of obtaining information resources relevant to an information need.\",\"timestamp\":\"2025-11-10T00:00:00Z\"}]}}"
+      "body": "{\"query\":{\"search\":[{\"title\":\"Retrieval-augmented generation\",\"snippet\":\"<span class=\\\"searchmatch\\\">RAG</span> combines retrieval with generation for knowledge-intensive tasks.\",\"timestamp\":\"2026-01-02T00:00:00Z\"},{\"title\":\"Information retrieval\",\"snippet\":\"Information retrieval is the process of obtaining information resources relevant to an information need.\",\"timestamp\":\"2025-11-10T00:00:00Z\"}]}}",
+      "query_regex": "[?&]list=search"
     },
     {
       "host": "export.arxiv.org",
@@ -33,7 +49,7 @@
     {
       "host": "r.jina.ai",
       "method": "GET",
-      "path_regex": "^/https://example\\.com",
+      "path_regex": "^/https://example\\.com/doc$",
       "status": 200,
       "headers": {
         "content-type": "text/plain; charset=utf-8"
@@ -63,7 +79,7 @@
     {
       "host": "api.openalex.org",
       "method": "GET",
-      "path_regex": "^/works",
+      "path_regex": "^/works$",
       "status": 200,
       "headers": {
         "content-type": "application/json"
@@ -83,12 +99,219 @@
     {
       "host": "api.crossref.org",
       "method": "GET",
-      "path_regex": "^/works",
+      "path_regex": "^/works$",
       "status": 200,
       "headers": {
         "content-type": "application/json"
       },
       "body": "{\"status\":\"ok\",\"message\":{\"items\":[{\"DOI\":\"10.5555/rag.2024\",\"title\":[\"Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks\"],\"author\":[{\"given\":\"Ada\",\"family\":\"Lovelace\"}],\"issued\":{\"date-parts\":[[2024]]},\"container-title\":[\"Journal of RAG\"],\"abstract\":\"<jats:p>Retrieval augmented generation.</jats:p>\",\"is-referenced-by-count\":42,\"URL\":\"https://doi.org/10.5555/rag.2024\"}]}}"
+    },
+    {
+      "host": "www.wikidata.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]action=wbsearchentities&[^&]*search=Survivor\\+Series\\+1997\\+attendance",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"searchinfo\": {\"search\": \"Survivor Series 1997 attendance\"}, \"search\": [], \"success\": 1}"
+    },
+    {
+      "host": "www.wikidata.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]action=wbsearchentities&[^&]*search=Survivor\\+Series\\+1997(?:&|$)",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"searchinfo\": {\"search\": \"Survivor Series 1997\"}, \"search\": [{\"id\": \"Q80695\", \"title\": \"Q80695\", \"label\": \"Survivor Series\", \"description\": \"WWF's 1997 Survivor Series pay-per-view\"}], \"success\": 1}"
+    },
+    {
+      "host": "www.wikidata.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]action=wbgetclaims",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"claims\": {}}"
+    },
+    {
+      "host": "en.wikipedia.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]action=parse",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"parse\": {\"text\": {\"*\": \"<table class=\\\"infobox\\\"><tbody>\\n<tr><th colspan=\\\"2\\\" class=\\\"infobox-above\\\">Survivor Series</th></tr>\\n<tr><th>Promotion</th><td>World Wrestling Federation</td></tr>\\n<tr><th>Date</th><td>November 9, 1997</td></tr>\\n<tr><th>Attendance</th><td>20,593</td></tr>\\n<tr><th>Venue</th><td>Molson Centre</td></tr>\\n</tbody></table><p>Survivor Series was a professional wrestling pay-per-view event.</p>\"}}}"
+    },
+    {
+      "host": "r.jina.ai",
+      "method": "GET",
+      "path_regex": "^/https://doi\\.org/10\\.1162/dram_c_00764",
+      "status": 403,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "paywall"
+    },
+    {
+      "host": "doi.org",
+      "method": "GET",
+      "path_regex": "^/10\\.1162/dram_c_00764$",
+      "status": 403,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<html><title>Access denied</title></html>"
+    },
+    {
+      "host": "api.crossref.org",
+      "method": "GET",
+      "path_regex": "^/works/10\\.1162%2Fdram_c_00764$",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"message\": {\"DOI\": \"10.1162/dram_c_00764\", \"title\": [\"Working Loose: A Response to Donald Trump Shoots the Match\"], \"author\": [{\"given\": \"Sharon\", \"family\": \"Mazer\"}], \"issued\": {\"date-parts\": [[2018, 6]]}, \"container-title\": [\"TDR/The Drama Review\"], \"URL\": \"https://doi.org/10.1162/dram_c_00764\"}}"
+    },
+    {
+      "host": "api.openalex.org",
+      "method": "GET",
+      "path_regex": "^/works/https://doi\\.org/10\\.1162/dram_c_00764$",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"display_name\": \"Working Loose\", \"id\": \"https://openalex.org/W1\", \"publication_year\": 2018, \"primary_location\": {\"source\": {\"display_name\": \"TDR/The Drama Review\"}}}"
+    },
+    {
+      "host": "r.jina.ai",
+      "method": "GET",
+      "path_regex": "^/https://example\\.com/paywalled$",
+      "status": 403,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "paywall"
+    },
+    {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/paywalled$",
+      "status": 403,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<html><title>Subscribe</title></html>"
+    },
+    {
+      "host": "archive.org",
+      "method": "GET",
+      "path_regex": "^/wayback/available$",
+      "query_regex": "url=https%3A%2F%2Fexample\\.com%2Fpaywalled",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"archived_snapshots\": {\"closest\": {\"timestamp\": \"20260101000000\", \"url\": \"https://web.archive.org/web/20260101000000/https://example.com/paywalled\"}}}"
+    },
+    {
+      "host": "web.archive.org",
+      "method": "GET",
+      "path_regex": "^/web/20260101000000/https://example\\.com/paywalled$",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<html><body><p>archived copy of the paywalled article</p></body></html>"
+    },
+    {
+      "host": "r.jina.ai",
+      "method": "GET",
+      "path_regex": "^/https://example\\.com/blocked$",
+      "status": 403,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "blocked"
+    },
+    {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/blocked$",
+      "status": 403,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<html><title>Access denied</title></html>"
+    },
+    {
+      "host": "archive.org",
+      "method": "GET",
+      "path_regex": "^/wayback/available$",
+      "query_regex": "url=https%3A%2F%2Fexample\\.com%2Fblocked",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"archived_snapshots\": {}}"
+    },
+    {
+      "host": "r.jina.ai",
+      "method": "GET",
+      "path_regex": "^/https://example\\.com/network$",
+      "error": "getaddrinfo ENOTFOUND r.jina.ai"
+    },
+    {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/network$",
+      "error": "getaddrinfo ENOTFOUND example.com"
+    },
+    {
+      "host": "archive.org",
+      "method": "GET",
+      "path_regex": "^/wayback/available$",
+      "query_regex": "url=https%3A%2F%2Fexample\\.com%2Fnetwork",
+      "error": "getaddrinfo ENOTFOUND archive.org"
+    },
+    {
+      "host": "www.wikidata.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]search=test(?:&|$)",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"searchinfo\": {\"search\": \"test\"}, \"search\": [], \"success\": 1}"
+    },
+    {
+      "host": "archive.org",
+      "method": "GET",
+      "path_regex": "^/wayback/available$",
+      "query_regex": "url=(?:https?%3A%2F%2F|https?://)example\\.com$",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"archived_snapshots\": {}}"
+    },
+    {
+      "host": "r.jina.ai",
+      "method": "GET",
+      "path_regex": "^/https://example\\.com$",
+      "status": 200,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "Title: Example Domain\n\nThis is a deterministic fixture document served by debate-club."
     }
   ]
 }

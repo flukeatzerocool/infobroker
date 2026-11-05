@@ -81,6 +81,17 @@ export const TASK_TYPE_SIGNALS: Record<SearchableTaskType, Signal[]> = {
     { keyword: "birth", weight: 1 },
     { keyword: "death", weight: 1 },
     { keyword: "how many", weight: 1 },
+    // REQ-021i: a measurable attribute names the fact the caller wants, so it
+    // must outweigh the author-year academic signal on title-plus-year queries
+    // ("Survivor Series 1997 attendance"). These are distinctive enough to be
+    // decisive on their own.
+    { keyword: "attendance", weight: 4 },
+    { keyword: "percentage", weight: 4 },
+    { keyword: "percent", weight: 4 },
+    { keyword: "share of", weight: 3 },
+    { keyword: "how much", weight: 2 },
+    { keyword: "what date", weight: 2 },
+    { keyword: "when did", weight: 2 },
   ],
   financial: [
     { keyword: "sec filing", weight: 2 },

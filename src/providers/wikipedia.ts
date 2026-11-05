@@ -1,9 +1,11 @@
-// @implements REQ-020 REQ-021
+// @implements REQ-020 REQ-021 REQ-021i wikipedia-infobox
+import * as cheerio from "cheerio";
 import type { SearchResult, SearchOptions, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 import { stripHtml } from "../lib/html.js";
+import { collectInfoboxRows, MAX_INFOBOX_ROWS } from "../lib/infobox.js";
 
 const DEFAULT_LANG = "en";
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
@@ -43,7 +45,9 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   return normalize(raw, "wikipedia");
 }
 
-async function fetchPage(url: string): Promise<string> {
+// The raw parse HTML is shared by the renderer and the structured-fact
+// extractor, so the infobox is available before the page is flattened to prose.
+export async function fetchParseHtml(url: string): Promise<string> {
   const title = extractTitle(url);
   const params = new URLSearchParams({
     action: "parse",
@@ -63,7 +67,24 @@ async function fetchPage(url: string): Promise<string> {
     parse?: { text?: { "*"?: string } };
   };
 
-  return stripHtml(data.parse?.text?.["*"] || "(no content)");
+  return data.parse?.text?.["*"] ?? "";
+}
+
+async function fetchPage(url: string): Promise<string> {
+  const html = await fetchParseHtml(url);
+  if (!html) return "(no content)";
+
+  // REQ-021i: keep the infobox as key/value lines ahead of the article text so
+  // question ranking can select a fact ("attendance: 20,593") that stripHtml
+  // would otherwise bury in prose. The table is removed from the body to avoid
+  // returning every value twice.
+  const $ = cheerio.load(html);
+  const rows = collectInfoboxRows($);
+  $("table.infobox").remove();
+  const body = stripHtml($.html() || html);
+  if (rows.length === 0) return body;
+  const block = ["Infobox:", ...rows.slice(0, MAX_INFOBOX_ROWS).map((row) => `${row.key}: ${row.value}`)].join("\n");
+  return `${block}\n\n${body}`;
 }
 
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {

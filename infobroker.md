@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021i`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -195,7 +195,7 @@ REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 01
 Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
-Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). A failure attributable to rate limiting — including a provider skipped for cooling down — SHALL be reported as `rate_limited` in preference to a generic provider-unavailable error. Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
+Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `access_blocked`, `network_error`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). A failure attributable to rate limiting — including a provider skipped for cooling down — SHALL be reported as `rate_limited` in preference to a generic provider-unavailable error. A fetch blocked by a paywall or anti-bot gate SHALL be reported as `access_blocked` with a cause, and a connectivity failure SHALL be reported as `network_error`. Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
 All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, `source_type`, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. Scholarly results SHALL additionally carry the DOI, author list, venue, abstract, and citation count when the provider supplies them. _Check:_ G1.
@@ -281,6 +281,12 @@ WHEN a `fetch_page` renderer returns content that indicates an anti-bot challeng
 
 **REQ-021g — `fetch_page` knowledge-base cache**
 WHEN a fresh knowledge-base copy of the requested URL exists, the tool SHALL return that copy before making an outbound request, SHALL report the cache hit in the response metadata, and SHALL fall through to the network when the copy is stale. The maximum cache age SHALL be configurable. _Check:_ G1.
+
+**REQ-021h — `fetch_page` source fallback**
+WHEN the `fetch_page` renderer chain cannot return content, the tool SHALL classify each failure as access-blocked, network, not-found, or unknown and SHALL report that classification instead of a generic provider error. WHEN the URL identifies a DOI, the tool SHALL attempt Crossref metadata, then an open-access copy, before failing. WHEN no DOI resolves and the page failed, the tool SHALL attempt an Internet Archive snapshot. A successful fallback SHALL identify itself while preserving the original URL. A metadata-only fallback SHALL return the bibliographic record and a note that full text was unavailable. An unsupported protocol SHALL NOT be remedied by permitting private targets. _Check:_ G1.
+
+**REQ-021i — structured-fact extraction**
+WHEN a query names a measurable attribute such as attendance, population, area, elevation, percentage, or date, the tool SHALL classify it as a structured-fact query and SHALL return a fact object with the value, unit when applicable, source, and originating property or infobox key. Facts SHALL resolve from a Wikidata claim first, then a Wikipedia infobox or table, then prose. The response SHALL report a fact status of resolved, not found, ambiguous, or unavailable, and SHALL place resolved facts before prose results. WHEN no source yields a value, the tool SHALL NOT compute or infer one. A fact SHALL carry the source's as-of date when supplied. _Check:_ G1.
 
 **REQ-024 — `inspect_providers`**
 `inspect_providers` reports provider operational state. Parameters: `action` (required: list, health, spec), `provider` (optional slug; required when action is health), and `status` (optional; list action filter selecting only active providers). Each action SHALL behave per its sub-REQ. Responses SHALL follow the REQ-001 envelope. _Check:_ G0, G1.
@@ -821,7 +827,7 @@ when Jina returns 429 or an error.
 | `small_web` | Non-commercial, blogs, personal sites | Unique content |
 | `encyclopedia` | Factual, encyclopedic information | Authoritativeness |
 | `definition` | Word definitions, etymology, translations | Structure |
-| `structured_fact` | Dates, statistics, identifiers | Precision |
+| `structured_fact` | Dates, statistics, identifiers; a measurable attribute such as attendance or a percentage | Precision |
 | `financial` | Filings, market data, economic indicators | Currency, filing precision |
 | `location` | Geocoding, place lookup | Accuracy |
 | `academic` | Papers, citations, authors | Scholarly authority |
@@ -1138,6 +1144,8 @@ verdict is preserved (REQ-026f).
 | REQ-021e | `fetch_page` structured extraction | 4.3 | G1 |
 | REQ-021f | `fetch_page` anti-bot challenge fall-through | 4.3 | G1 |
 | REQ-021g | `fetch_page` knowledge-base cache | 4.3 | G1 |
+| REQ-021h | `fetch_page` source fallback | 4.3 | G1 |
+| REQ-021i | structured-fact extraction | 4.3 | G1 |
 | REQ-024 | `inspect_providers` | 4.3 | G0, G1 |
 | REQ-024a | `inspect_providers` list action | 4.3 | G0, G1 |
 | REQ-024b | `inspect_providers` health action | 4.3 | G0, G1 |
@@ -1720,7 +1728,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
