@@ -409,13 +409,14 @@ function buildAgreementMap(
 // Parity with getDispatchChain: skip enabled providers whose required env is
 // absent, so corroborate does not waste calls on keyed/self-hosted backends
 // that cannot authenticate this session.
-function providerOperational(
+export function providerOperational(
   slug: string,
   config: ReturnType<typeof getConfig>,
 ): boolean {
   const p = config.providers[slug];
   if (!p) return false;
-  if (p.auth_env) {
+  // REQ-011: a provider whose key is optional stays operational without one.
+  if (!p.auth_optional && p.auth_env) {
     const many = p.auth_env.replace(/_API_KEY$/, "_API_KEYS");
     if (!process.env[p.auth_env] && !process.env[many]) return false;
   }

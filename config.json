@@ -76,6 +76,7 @@
       "capabilities": ["academic"],
       "rate_limit": { "per_second": 1 },
       "auth_env": "INFOBROKER_SEMANTIC_SCHOLAR_API_KEY",
+      "auth_optional": true,
       "enabled": true,
       "priority": 25
     },

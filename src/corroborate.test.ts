@@ -1,5 +1,5 @@
-// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f REQ-109
-import { describe, it, expect, vi, beforeEach } from "vitest";
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f REQ-109 REQ-011
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { SearchResult } from "../src/types.js";
 
 vi.mock("../src/config.js", () => ({
@@ -48,6 +48,7 @@ import {
   computeConfidence,
   corroborate,
   applyPriority,
+  providerOperational,
 } from "../src/corroborate.js";
 import type { CorroborationFinding as CF } from "../src/types.js";
 
@@ -969,6 +970,75 @@ describe("corroborate", () => {
     });
 
     expect(calls).toEqual(["wikipedia", "wikidata", "arxiv", "openalex"]);
+  });
+});
+
+describe("providerOperational optional keys (REQ-011)", () => {
+  type Config = ReturnType<typeof getConfig>;
+
+  const ENV_KEYS = [
+    "INFOBROKER_SEMANTIC_SCHOLAR_API_KEY",
+    "INFOBROKER_CORE_API_KEY",
+    "INFOBROKER_SEARXNG_URL",
+  ];
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+  });
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (savedEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedEnv[key];
+    }
+  });
+
+  function configWith(providers: Record<string, unknown>): Config {
+    return { providers } as unknown as Config;
+  }
+
+  it("keeps an optional-key provider operational without its key", () => {
+    delete process.env["INFOBROKER_SEMANTIC_SCHOLAR_API_KEY"];
+    const config = configWith({
+      semantic_scholar: {
+        enabled: true,
+        tier: "free_http",
+        auth_env: "INFOBROKER_SEMANTIC_SCHOLAR_API_KEY",
+        auth_optional: true,
+      },
+    });
+    expect(providerOperational("semantic_scholar", config)).toBe(true);
+  });
+
+  it("skips a required-key provider without its key", () => {
+    delete process.env["INFOBROKER_CORE_API_KEY"];
+    const config = configWith({
+      core: { enabled: true, tier: "free_http", auth_env: "INFOBROKER_CORE_API_KEY" },
+    });
+    expect(providerOperational("core", config)).toBe(false);
+  });
+
+  it("keeps a required-key provider operational when its key is present", () => {
+    process.env["INFOBROKER_CORE_API_KEY"] = "test-key";
+    const config = configWith({
+      core: { enabled: true, tier: "free_http", auth_env: "INFOBROKER_CORE_API_KEY" },
+    });
+    expect(providerOperational("core", config)).toBe(true);
+    delete process.env["INFOBROKER_CORE_API_KEY"];
+  });
+
+  it("still requires a self-hosted URL even when the key is optional", () => {
+    delete process.env["INFOBROKER_SEARXNG_URL"];
+    const config = configWith({
+      searxng: {
+        enabled: true,
+        tier: "self_hosted_http",
+        url_env: "INFOBROKER_SEARXNG_URL",
+        auth_optional: true,
+      },
+    });
+    expect(providerOperational("searxng", config)).toBe(false);
   });
 });
 

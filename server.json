@@ -8,13 +8,13 @@
     "url": "https://github.com/flukeatzerocool/infobroker",
     "source": "github"
   },
-  "version": "2026.10.28",
+  "version": "2026.11.4",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "infobroker",
-      "version": "2026.10.28",
+      "version": "2026.11.4",
       "transport": {
         "type": "stdio"
       },

@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.10.28
+**Spec version:** 2026.11.04
 
 ## Contents
 
@@ -85,7 +85,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
 - **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `inspect_providers` health responses.
-- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek, Wiby (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, CORE, OpenAlex, Europe PMC, Hacker News, GDELT, SEC EDGAR, World Bank (all free HTTP, no API key required) provide a functional default.
+- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek, Wiby (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, OpenAlex, Europe PMC, Hacker News, GDELT, SEC EDGAR, World Bank (free HTTP, no API key required), with CORE on a free API key, provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Quota state persists.** Quota counters survive restarts via a JSON state file.
@@ -102,13 +102,15 @@ route to Infobroker first, falling back to built-ins only on error.
 
   **Before adding a requirement, apply these tests:**
   (a) Does this REQ state *what* the server must do, or *how* to implement it?
-  If it names a parameter type, default value, sort order, or algorithm — it's
+  If it names a parameter type, default value, or algorithm — it's
   an implementation detail. Cut it. Exception: tool signatures in §4.3 define
   the server's external contract. Parameter names, required/optional status,
   and default values are part of *what* the tool must accept — an alternate
   implementation must accept the same parameters with the same defaults.
-  Algorithm descriptions, sort orders, and internal state mechanics remain
-  prohibited.
+  Algorithm descriptions, internal sort orders, and internal state mechanics
+  remain prohibited. Ordering the caller observes in a response — result
+  ranking, recency order — is part of what the tool returns, not an internal
+  sort order.
   (b) Can a verification gate (G0, G1, G2) catch a deviation from this REQ?
   If not, the REQ is either too vague or too prescriptive. Tighten or loosen
   accordingly.
@@ -138,7 +140,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | Term | Definition |
 |------|-----------|
 | **Provider** | A search or content-extraction backend (DuckDuckGo, Wikipedia, Brave, etc.) |
-| **Provider tier** | Built-in (in-process, zero config) / Free HTTP (no auth) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
+| **Provider tier** | Built-in (in-process, zero config) / Free HTTP (keyless or free registration) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
 | **Fallback chain** | The ordered provider list for a task type (§7.2) as exercised on failure: the first entry is primary and remaining entries are tried in sequence per REQ-031. The same object as the dispatch chain. |
 | **Content renderer** | A backend that fetches and formats a URL's content (Jina Reader, native HTTP). A renderer is a provider (e.g. Jina, Wikipedia) or an inline tool-handler fallback (`native_fetch`, §5.2), and is not necessarily a standalone provider module. A `renderer` parameter value resolves to the provider with that slug when it implements content fetching, or to the inline fallback. Task type for dispatch: `content_fetch`. |
 | **Task type** | A category of search task (general web, encyclopedia, academic, code, etc.) used by `search_web` auto-selection |
@@ -159,12 +161,12 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Throttling** | The per-provider minimum interval between requests (REQ-030); distinct from quota. |
 | **Finding** | A corroboration output: a claim with a verdict, confidence, and corroborating sources (§8.1). |
 | **Claim** | A statement attributed to one or more corroborating sources (§8.1). |
-| **Verdict** | A finding's agreement outcome — `confirmed`, `contested`, or a gap (§8.1). |
+| **Verdict** | A finding's agreement outcome — `unverified` (no agreeing source yet), `confirmed`, `contested`, or a gap (§8.1). |
 | **Agreement map** | The corroboration summary grouping findings as `green` (agreed), `yellow` (contested), or `red` (gaps) (§8.2). |
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
 | **Report** | A delivered research artifact that carries the shared skeleton, a report manifest, and a Source Register, produced by a bundled writing skill. |
-| **Report quality standard** | The bundled confidence, likelihood, verdict, audience, shape, and handling definitions that report artifacts and their gate cites rather than restates (REQ-114, REQ-115, REQ-118, REQ-119). |
+| **Report quality standard** | The bundled confidence, likelihood, verdict, audience, shape, and handling definitions that report artifacts and their gates cite rather than restate (REQ-114, REQ-115, REQ-118, REQ-119). |
 | **Handling classification** | A report-level access marking (for example a TLP marking) recorded when the report's access is restricted. |
 | **Durable citation identifier** | A persistent source identifier such as a DOI, ISBN, or archival permalink, recorded when the source provides one. |
 | **Client routing surface** | The instruction file and skill reference files that map user intent to Infobroker tools: `instructions/search-preferences.md`, `SKILL.md`, and the skill reference tables (REQ-050, REQ-053, REQ-107). |
@@ -213,7 +215,7 @@ The server SHALL support a configurable output verbosity that applies to all too
 Provider configuration SHALL reside in a JSON file. When `INFOBROKER_CONFIG` is unset, the server SHALL resolve the shipped default configuration relative to its installed package; the variable SHALL override that location when set. The configuration SHALL be composed of the shipped default and a user configuration layer resolved from `INFOBROKER_CONFIG_LOCAL` when set, otherwise from an existing layer beside the resolved default, otherwise from the user configuration directory. Values in the user layer SHALL take precedence over the shipped default, and the layer SHALL be preserved when the software is updated. The configuration SHALL declare each provider's tier, auth, rate limits, and priority, and SHALL support a defaults section inherited by providers that do not override them. _Check:_ G1.
 
 **REQ-011 — API Key Safety**
-API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`; for URL-based providers the endpoint SHALL be accepted via `INFOBROKER_<PROVIDER>_URL`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a key is missing, the provider is marked `inactive` with reason "no_api_key". _Check:_ G1.
+API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API_KEY`; for URL-based providers the endpoint SHALL be accepted via `INFOBROKER_<PROVIDER>_URL`. Keys SHALL NOT appear in config file values, tool output, error messages, logs, or `inspect_providers` health responses. If a required key is missing, the provider is marked `inactive` with reason "no_api_key"; a provider whose key is optional remains operable without one. _Check:_ G1.
 
 **REQ-013 — Provider Discovery**
 The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
@@ -329,10 +331,10 @@ The server SHALL support measuring retrieval quality against a committed benchma
 The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
 
 **REQ-124 — `search_web` query operators and language**
-`search_web` SHALL accept common query operators (`site:`, `filetype:`, quoted phrases, exclusions) and a preferred result language. Operators SHALL be passed to providers that support them; when the serving provider cannot honor an operator or the language, the response SHALL report it in the ignored-parameter metadata rather than silently dropping it. An unrecognized operator SHALL remain ordinary query text. _Check:_ G1.
+`search_web` SHALL accept common query operators (`site:`, `filetype:`, quoted phrases, exclusions) and a preferred result language. Operators SHALL be passed to providers that support them; when the serving provider cannot honor an operator, the response SHALL report it in the ignored-parameter metadata rather than silently dropping it. Language routing and ignored-language reporting SHALL follow REQ-128. An unrecognized operator SHALL remain ordinary query text. _Check:_ G1.
 
 **REQ-128 — Multilingual text handling and collection**
-Text vectorization SHALL tokenize every Unicode script rather than dropping non-Latin characters, and SHALL preserve existing tokenization for Latin-script text so stored vectors remain comparable. Scripts without word separators SHALL be segmented into bounded character n-grams. `search_web` SHALL route a language-restricted query to providers that honor that language and SHALL report providers that cannot. The language-capable collection SHALL include the language editions of the encyclopedia and dictionary providers and any news or self-hosted provider that accepts a language. WHEN no eligible provider supports the requested language, the tool SHALL fall back to the default chain and SHALL report the ignored language. _Check:_ G1.
+Text vectorization SHALL tokenize every Unicode script rather than dropping non-Latin characters, and SHALL preserve existing tokenization for Latin-script text so stored vectors remain comparable. Scripts without word separators SHALL be segmented into bounded character n-grams. `search_web` SHALL route a language-restricted query to providers that honor that language and SHALL report providers that cannot. The set of language-capable providers SHALL include the language editions of the encyclopedia and dictionary providers and any news or self-hosted provider that accepts a language. WHEN no eligible provider supports the requested language, the tool SHALL fall back to the default chain and SHALL report the ignored language. _Check:_ G1.
 
 **REQ-127 — `search_web` analysis aids**
 WHEN `search_web` receives an analysis request, the tool SHALL return topics, entity mentions, result clusters, and a dated timeline derived from the results. Topics and entities SHALL be bounded by configuration and ordered by relevance. Clusters SHALL group results that express the same topic without removing any result from the primary list. The timeline SHALL order dated results chronologically and SHALL report undated results separately rather than guessing a date. Analysis SHALL be computed in-process and SHALL NOT require an additional outbound request. WHEN no results are available, analysis SHALL be omitted rather than fabricated. _Check:_ G0, G1.
@@ -347,7 +349,7 @@ Every advertised tool definition SHALL state the tool's purpose, when to use it,
 Tool names SHALL follow a verb-noun pattern: a verb naming the operation followed by the noun naming the resource the operation acts on. A tool's name SHALL allow an agent to infer the operation and resource without reading the description. _Check:_ G0, G1.
 
 **REQ-092 — Tool-definition quality bar**
-The advertised tool surface SHALL satisfy every dimension of the tool-definition quality bar: each tool SHALL state its purpose, when to use it, when not to use it, the alternative tools a caller could choose instead, and the behavioral consequences of calling it. Each tool SHALL state its response contract and any non-obvious parameter couplings. Each tool SHALL declare annotations for read-only, destructive, idempotent, and open-world behavior. Tool names SHALL follow the verb-noun pattern. The bar SHALL be enforced by a conformance gate over the live tool schema. _Check:_ G1, G3.
+The advertised tool surface SHALL satisfy the tool-definition quality bar (REQ-089) and the tool naming convention (REQ-090). A conformance gate over the live tool schema SHALL enforce that bar and SHALL fail when a tool definition departs from it. _Check:_ G1, G3.
 
 **REQ-106 — Tool-definition quality score conformance**
 The advertised tool surface SHALL conform to the deterministic layer of TDQS 1.2, the tool-definition quality standard published at tdqs.dev/spec. For every tool definition that layer SHALL be satisfied: a non-empty description distinct from the tool name and title; a description for every input parameter; all four behavioral annotations declared; and a description that does not contradict those annotations. The server SHALL report each tool's parameter counts, schema description coverage, invocation cost, and definition size. A conformance gate SHALL fail when any tool definition violates the standard and SHALL report any shadow-candidate pairs. _Check:_ G1, G3.
@@ -355,7 +357,7 @@ The advertised tool surface SHALL conform to the deterministic layer of TDQS 1.2
 ### 4.4 Rate Limiting and Resilience
 
 Rate limiting (REQ-030) and quota tracking (REQ-033, REQ-034) use separate
-fields from the provider's rate_limit configuration. Throttling is governed by
+fields from the provider's `rate_limit` configuration. Throttling is governed by
 `per_second`; quota is governed by `per_day` and `per_month`. These systems
 operate independently.
 
@@ -470,10 +472,10 @@ A report SHALL carry the output block defined for its declared workflow shape in
 **REQ-120 — Report Delivery Verification**
 The orchestrator skill and its reference files SHALL define one pipeline order. The report pipeline SHALL re-verify each drafted claim against the collected evidence before the report quality gate. A claim introduced during drafting that the evidence does not support SHALL be removed or marked unverified. The report quality gate SHALL run on the final artifact after language polish and after translation. A translated report SHALL retain the canonical section headings and record its language in the manifest. _Check:_ G3.
 
-### 4.8 Spec Integrity
-
 **REQ-126 — Report artifact export**
 The report tooling SHALL export a validated report as JSON and CSV in addition to HTML. The JSON export SHALL carry the report manifest, section list, sources, and claims; CSV exports SHALL carry the Source Register and the claims table. Export SHALL be deterministic and SHALL validate the report before writing unless the caller explicitly skips validation. _Check:_ G3.
+
+### 4.8 Spec Integrity
 
 **REQ-055 — Spec-Code Traceability**
 Every source file in `src/` SHALL cite in a header comment each REQ it
@@ -540,13 +542,13 @@ WHEN action is `verify_report`, the tool SHALL revalidate a stored report receip
 Search results from `search_web`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
-A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. If no specifier is set at any level, the collection SHALL be the literal string `"default"`. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
+A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
 
 **REQ-066 — Content Expiry**
 Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its `source_type`. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
 
 **REQ-067 — Knowledge Base Configuration**
-The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, storage backend selection, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
+The knowledge base configuration SHALL reside within the server's main configuration file. The configuration SHALL specify: storage location, embedding model reference, chunking parameters, auto-indexing toggle, default collection name, freshness tier definitions including decay rates and expiry intervals, auto-classification strategy, KB-first sufficiency thresholds, maximum results per query, an optional report storage directory, and an optional default save destination. The report storage directory, when set, SHALL resolve outside the repository tree. If the knowledge base configuration section is absent or invalid, all knowledge base tools SHALL return an error with remediation. Config reload SHALL apply knowledge base configuration changes per REQ-040. _Check:_ G1.
 
 **REQ-072 — Knowledge Base Deduplication**
 Content ingested into the knowledge base SHALL be deduplicated by source URL. Ingesting a URL that has already been indexed SHALL replace or update the existing chunks rather than creating duplicates. Reports ingested without a source URL SHALL be assigned a stable identifier derived from their title so that re-ingesting the same report updates it in place. Content whose meaning substantially matches an already-indexed document SHALL be recognized as the same document even when its title or source URL differs. The chunk count reported by the `manage_kb` stats action SHALL NOT increase when re-ingesting a previously indexed URL. _Check:_ G1.
@@ -714,7 +716,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 
 1. **MCP Skeleton**: stdio transport, tool registration, config loader, env var reader.
 2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
-3. **Free HTTP & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free unauth tiers; see §A.3); Brave, Exa, Tavily, Yep (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
+3. **Free HTTP & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free tiers; see §A.3); Brave, Exa, Tavily, Yep (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Corroboration Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
@@ -783,7 +785,7 @@ Tool responses are JSON with this envelope:
 | Exa | `https://api.exa.ai/search` | 1,000/mo free tier, neural search |
 | Tavily | `https://api.tavily.com/search` | 1,000/mo free credits |
 | Yep | `https://platform.yep.com/api/search` | 1,000 free requests, Ahrefs first-party index |
-| CORE | `https://api.core.ac.uk/v3/search/works` | Open access research |
+| CORE | `https://api.core.ac.uk/v3/search/works` | Free API key; open access research |
 | OpenAlex | `https://api.openalex.org/works` | Keyless academic, 250M+ works |
 | Europe PMC | `https://www.ebi.ac.uk/europepmc/webservices/rest/search` | Biomedical literature |
 | Hacker News | `https://hn.algolia.com/api/v1/` | Story search via Algolia |
@@ -795,7 +797,7 @@ Tool responses are JSON with this envelope:
 Append the target URL to `https://r.jina.ai/`. Example:
 `https://r.jina.ai/https://example.com/article`. Jina returns the page content
 rendered as Markdown. Falls back to native HTTP GET + HTML-to-text extraction
-when Jina returns 429 or error.
+when Jina returns 429 or an error.
 
 ---
 
@@ -948,14 +950,16 @@ function corroborate(query, max_iterations=5, confidence_threshold=0.8, provider
 | 1 | 0.3 | Single source |
 | 2 (independent) | 0.7 | Corroborated |
 | 3+ (independent) | 0.9 | Well-corroborated |
-| 5+ including 1 primary | 1.0 | Established |
+| 5+ (independent) | 1.0 | Established |
 
 The default `confidence_threshold` of 0.8 therefore gates `green` on the 0.9
 tier (three or more independent sources); the 0.7 tier (two independent
 sources) reports as `yellow`. Source authority (REQ-026a) scales the
 independence-based confidence above by a per-source-type weight, so a finding
 backed only by generic web pages scores below one backed by scholarly or
-encyclopedia sources at the same source count.
+encyclopedia sources at the same source count. A finding carries the
+`unverified` verdict at the 0.1 placeholder from its seeding (§8.1) until
+sources are attributed; the ladder above applies once they are.
 
 Independence: Two sources are independent if they have different registrable
 domains (e.g. wikipedia.org and britannica.com are independent; two pages on
@@ -1402,7 +1406,7 @@ different shipped default (REQ-010).
 
 **GitHub** — `https://api.github.com/search/code?q={query}`. 60 req/hour baseline, 5,000/hr with token. Can search code, repos, issues.
 
-**CORE** — `https://api.core.ac.uk/v3/search/works?q={query}`. Open access research papers.
+**CORE** — `https://api.core.ac.uk/v3/search/works?q={query}`. Free API key; open access research papers.
 
 ### A.4 Keyed HTTP (Free Tier)
 
@@ -1534,7 +1538,7 @@ reference tables).
 
 **REQ Authoring Checklist** (apply before committing any new or modified REQ):
 
-- [ ] States *what*, not *how* — no parameter types, sort orders, or algorithms (SR-011a)
+- [ ] States *what*, not *how* — no parameter types, internal sort orders, or algorithms (SR-011a)
 - [ ] Tool-signature exception used only where the REQ declares a tool's
       external parameter contract
 - [ ] No "Default:" clause (SR-011d) — defaults live in config.json
@@ -1571,8 +1575,9 @@ Provenance for deleted REQs is maintained by the CHANGELOG.
 
 - Parameter shapes and tool signatures → tool registration in `src/index.ts`
   (`zod` schemas are the live contracts)
-- Sort orders, algorithms, and scraping heuristics → builder's implementation
-  judgment; verified by G1 integration tests
+- Internal sort orders, algorithms, and scraping heuristics → builder's
+  implementation judgment; verified by G1 integration tests. Ordering the
+  caller observes in a tool response is a contract and stays in the REQ.
 - Default starting values → `config.json` is the canonical source (REQ-010)
 - Tool name lists and output format catalogs → `tools/list` is the live
   registry; the REQ states the category

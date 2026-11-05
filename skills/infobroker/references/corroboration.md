@@ -37,7 +37,7 @@ secondary or aggregated sources is capped at the configured
 | 1 | 0.3 |
 | 2 | 0.7 |
 | 3+ | 0.9 |
-| 5+ incl. a primary source | 1.0 |
+| 5+ | 1.0 |
 
 Authority weights (`corroboration.authority_weights`) scale this up or down:
 `academic`, `encyclopedia`, `archive`, `structured_fact`, `definition`,

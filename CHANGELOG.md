@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.11.04 — Optional keys and single-source contracts
+
+- Providers with optional keys — Semantic Scholar, Stack Exchange, and GitHub —
+  can be used without an API key and now stay in the claim-verification pool
+  when no key is set; previously the corroboration loop dropped them silently
+  while search still used them. CORE is documented as needing a free key rather
+  than none, so setup instructions match what the server asks for. (REQ-011)
+- Language-restricted searches route and report through one contract: operators
+  are reported as ignored when unsupported, while language routing and its
+  ignored-language notice are owned by the multilingual requirement, so the two
+  behaviors cannot drift or double-report. (REQ-124, REQ-128)
+- Knowledge-base collection scoping resolves from the tool argument, then the
+  environment, then the configured default, with no separate literal fallback
+  promised; the knowledge-base configuration contract also no longer asks for a
+  storage-backend selector the server does not expose. (REQ-065, REQ-067)
+- The corroboration confidence ladder now documents its top tier as five or more
+  independent sources — what `verify_claims` computes — instead of adding a
+  primary-source condition the server never tested. (REQ-026)
+- Tool-definition quality requirements reference the single quality and naming
+  contracts rather than restating them, so the bar and the naming rule cannot
+  drift apart. (REQ-092)
+- Report export (JSON and CSV alongside HTML) is listed with the other
+  client-artifact requirements, so its documentation and verification gate
+  agree. (REQ-126)
+
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 
 - The skill, research, and debate-club harnesses run on opencode v2 again. They

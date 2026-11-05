@@ -455,9 +455,10 @@ D-049 (content never leaves the process).
 
 REQ-103 formalizes that knowledge-base and passage retrieval use an embedding
 model that executes inside the server process, with content never transmitted
-to a third party for embedding. The capability is specified now and
-implemented later; the requirement is recorded as intentionally unimplemented
-(see `## Spec Waivers`).
+to a third party for embedding. The capability is now implemented: the
+configured `embedding_model` selects the in-process model at knowledge-base
+initialization, and an unavailable model reports degraded availability with a
+remediation message (REQ-103).
 
 A hosted embedding API was rejected: it would send knowledge-base content
 off-box, contradicting the "privacy always" principle and the at-rest
@@ -465,12 +466,12 @@ encryption guarantee (REQ-084). The model posture is an English-first shipped
 default with a configurable multilingual swap; the concrete model name is an
 implementation detail recorded here rather than in REQ prose (SR-011).
 
-This decision also records a gap REQ-103 makes explicit: `embedding_model`
-exists in the configuration schema but no runtime code reads it, so D-023's
-pluggable `EmbeddingModel` seam is defined but never wired to configuration.
-Until REQ-103 is implemented, F9's model-unavailable branch is likewise
-unreachable (`modelAvailable` is a constant). Implementing REQ-103 makes both
-paths real and the configuration reference meaningful.
+This decision also recorded a gap that REQ-103 makes explicit: `embedding_model`
+existed in the configuration schema without runtime wiring, and F9's
+model-unavailable branch was unreachable (`modelAvailable` was a constant).
+Both paths are now live: the knowledge base configures the model from
+`embedding_model` at init, and model availability is tracked at runtime so the
+F9 degraded branch fires.
 
 ### D-048: TDQS 5/5 Completion Pass (2026.09.11)
 

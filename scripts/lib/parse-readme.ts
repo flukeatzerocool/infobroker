@@ -69,8 +69,14 @@ export function deriveSurfaceCounts(): SurfaceCounts {
       for (const slug of slugs) {
         const p = config.providers?.[slug];
         if (!p) continue;
-        if (ZERO_CONFIG_TIERS.has(p.tier) && p.enabled) zeroConfig++;
-        if (PAID_TIERS.has(p.tier)) keyedOrSelfHosted++;
+        // "Zero-config" means usable with no key. A free_http provider that
+        // requires an API key is not zero-config, and counts as an extra
+        // provider that needs a key instead.
+        const requiresKey = Boolean(p.auth_env) && !p.auth_optional;
+        if (ZERO_CONFIG_TIERS.has(p.tier) && p.enabled && !requiresKey) zeroConfig++;
+        if (PAID_TIERS.has(p.tier) || (ZERO_CONFIG_TIERS.has(p.tier) && p.enabled && requiresKey)) {
+          keyedOrSelfHosted++;
+        }
       }
     } catch {
       // Malformed config — the validator's surface reconciliation reports it elsewhere.
