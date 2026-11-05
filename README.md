@@ -118,7 +118,7 @@ README DESIGN:
 
 Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
-behind a single tool surface. Twenty zero-config providers ship in the
+behind a single tool surface. Twenty-one zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
 configure. Six more providers unlock with an API key or self-hosting.
 A built-in corroboration engine cross-references independent sources to
@@ -211,7 +211,7 @@ Requirements: Node.js 24+.
 
 ## MCP Server
 
-Your research backend. Seven tools, twenty-six providers, one
+Your research backend. Seven tools, twenty-seven providers, one
 corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
@@ -420,7 +420,7 @@ documented answers.
 
 ## Providers
 
-Twenty-six providers. Twenty work with zero configuration.
+Twenty-seven providers. Twenty-one work with zero configuration.
 
 | Provider | Tier | Type | Key Required |
 |----------|------|------|-------------|
@@ -438,6 +438,7 @@ Twenty-six providers. Twenty work with zero configuration.
 | CORE | Free HTTP | Open access | Required (free) |
 | OpenAlex | Free HTTP | Academic | No |
 | Europe PMC | Free HTTP | Academic | No |
+| Crossref | Free HTTP | Academic | No |
 | Hacker News | Free HTTP | News | No |
 | GDELT | Free HTTP | News | No |
 | SEC EDGAR | Free HTTP | Financial filings | No |

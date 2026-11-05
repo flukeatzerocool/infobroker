@@ -55,6 +55,18 @@ function normalizeOne(
   const publishedDate = pickString(raw, "published_date", "date", "created", "publishedAt", "timestamp");
   const sourceType = pickString(raw, "source_type", "type", "category");
   const originalSource = pickString(raw, "original_source", "origin", "source");
+  // REQ-003: scholarly metadata is additive — copy it only when the provider
+  // supplied it so non-academic results keep their existing shape.
+  const doi = pickString(raw, "doi", "DOI");
+  const venue = pickString(raw, "venue", "journal", "container_title");
+  const abstract = pickString(raw, "abstract", "abstract_text");
+  const authors = Array.isArray(raw.authors)
+    ? raw.authors.filter((a): a is string => typeof a === "string" && a.trim().length > 0)
+    : undefined;
+  const citationCount =
+    typeof raw.citation_count === "number" && Number.isFinite(raw.citation_count)
+      ? raw.citation_count
+      : undefined;
 
   const url = rawUrl ? normalizeUrl(rawUrl) : null;
   if (!url) return null;
@@ -68,6 +80,11 @@ function normalizeOne(
   if (publishedDate) result.published_date = publishedDate;
   if (sourceType) result.source_type = sourceType;
   if (originalSource) result.original_source = originalSource;
+  if (doi) result.doi = doi;
+  if (authors && authors.length > 0) result.authors = authors;
+  if (venue) result.venue = venue;
+  if (abstract) result.abstract = abstract;
+  if (citationCount !== undefined) result.citation_count = citationCount;
 
   return result;
 }

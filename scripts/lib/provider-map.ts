@@ -51,6 +51,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   wiby: "Wiby",
   openalex: "OpenAlex",
   europe_pmc: "Europe PMC",
+  crossref: "Crossref",
   hacker_news: "Hacker News",
   gdelt: "GDELT",
   sec_edgar: "SEC EDGAR",

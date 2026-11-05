@@ -22,6 +22,7 @@ Generated from `config.json`. Do not edit manually.
 | core | free_http | API key | `INFOBROKER_CORE_API_KEY` |
 | openalex | free_http | None | — |
 | europe_pmc | free_http | None | — |
+| crossref | free_http | None | — |
 | hacker_news | free_http | None | — |
 | gdelt | free_http | None | — |
 | sec_edgar | free_http | None | — |

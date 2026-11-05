@@ -1,17 +1,17 @@
 // @implements REQ-020 REQ-070 REQ-071
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const EPMC_API = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     query,
     format: "json",
     resultType: "lite",
-    pageSize: "10",
+    pageSize: String(options?.max_results ?? 10),
   });
 
   const resp = await infobrokerFetch(`${EPMC_API}?${params.toString()}`, {
@@ -29,18 +29,27 @@ async function search(query: string): Promise<SearchResult[]> {
         id?: string;
         authorString?: string;
         pubYear?: string;
+        journalTitle?: string;
+        doi?: string;
       }>;
     };
   };
 
   const raw = (data.resultList?.result || []).map((item) => {
     const articleId = item.source && item.id ? `https://europepmc.org/article/${item.source}/${item.id}` : "";
+    const authors = (item.authorString || "")
+      .split(",")
+      .map((a) => a.trim())
+      .filter(Boolean);
     return {
       title: item.title || "(untitled)",
       url: item.pmid ? `https://europepmc.org/article/MED/${item.pmid}` : articleId,
       snippet: [item.authorString, item.pubYear].filter(Boolean).join(", "),
       published_date: item.pubYear,
       source_type: "academic",
+      ...(authors.length > 0 ? { authors } : {}),
+      ...(item.journalTitle ? { venue: item.journalTitle } : {}),
+      ...(item.doi ? { doi: item.doi } : {}),
     };
   });
 

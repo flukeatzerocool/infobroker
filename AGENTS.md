@@ -38,6 +38,7 @@ Knowledge base: src/kb.ts (tool logic) → src/kb-store.ts (seam + artifact pred
 | CORE | `src/providers/core.ts` | free_http |
 | OpenAlex | `src/providers/openalex.ts` | free_http |
 | Europe PMC | `src/providers/europe_pmc.ts` | free_http |
+| Crossref | `src/providers/crossref.ts` | free_http |
 | Hacker News | `src/providers/hacker_news.ts` | free_http |
 | GDELT | `src/providers/gdelt.ts` | free_http |
 | SEC EDGAR | `src/providers/sec_edgar.ts` | free_http |

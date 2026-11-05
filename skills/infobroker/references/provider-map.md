@@ -14,7 +14,7 @@ dispatch chain, falling back in order.
 | Word definition / etymology | Wiktionary | DuckDuckGo | — |
 | Structured fact (dates, stats) | Wikidata | Wikipedia | DuckDuckGo |
 | Location / place lookup | OpenStreetMap | Wikipedia | DuckDuckGo |
-| Academic paper search | Semantic Scholar | arXiv | OpenAlex, Europe PMC |
+| Academic paper search | Semantic Scholar | arXiv | OpenAlex, Europe PMC, Crossref |
 | Code / technical Q&A | Stack Exchange | GitHub | DuckDuckGo |
 | Recent news | Brave (if keyed) | DuckDuckGo | GDELT, Hacker News |
 | Financial filings / economic data | SEC EDGAR | World Bank | DuckDuckGo |
@@ -45,6 +45,7 @@ dispatch chain, falling back in order.
 | Wiby | Yes | — | — | — | — | — | — | No |
 | OpenAlex | — | Yes | — | — | — | — | — | No |
 | Europe PMC | — | Yes | — | — | — | — | — | No |
+| Crossref | — | Yes | — | — | — | — | — | No |
 | Hacker News | — | — | — | — | Yes | — | — | No |
 | GDELT | — | — | — | — | Yes | — | — | No |
 | SEC EDGAR | — | — | — | — | — | — | — | No |

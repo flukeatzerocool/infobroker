@@ -2,6 +2,35 @@
 
 ## Active Decisions
 
+### D-072: Citation Aggregation Through the Provider Layer (2026.11.05)
+
+`get_citations` had always called two bespoke clients (arXiv and Semantic
+Scholar) and returned a bare array, so a failed chain looked identical to a
+genuine zero-result answer and the scholarly providers already configured for
+`search_web` were invisible to citations. The tool now walks the `academic`
+dispatch chain and calls each provider's own `search()` implementation,
+converting normalized results into citations. This keeps one HTTP/parse path
+per provider, makes the OpenAlex enrichment required by the same roadmap item
+shared by both tools, and produces per-provider status naturally.
+
+Crossref was added as a keyless `free_http` academic provider at the tail of
+the chain rather than as a citations-only fetch, because the roadmap named it
+in the academic chain and `search_web` should answer scholarly queries without
+a second direct call. The response envelope keeps `provider: "academic"` (a
+chain, not a slug) and moves the real detail into `meta.providers`; the Arena
+and existing clients already treat `"academic"` as the serving identity of an
+aggregate. References dedupe by DOI (title plus year when absent), merging
+missing fields onto the first, highest-priority provider's record.
+
+Alternatives rejected: keeping bespoke per-source clients (duplicate parsers
+that drift from the provider modules); stopping at the first provider with
+enough references (defeats dedupe and cross-provider coverage); a
+citations-only Crossref adapter (invisible to `search_web`, duplicate HTTP
+path); changing `provider` to the first serving slug (breaks the published
+contract and hides aggregation). Known limits: a work carrying a DOI on one
+provider and no DOI on another dedupes only by title, and BibTeX keys can
+still collide for distinct works sharing a first author and year.
+
 ### D-070: Push Requires Post-Commit Human Approval (2026.10.26)
 
 The pipeline used to ask "Commit, push, and tag?" *before* any of those

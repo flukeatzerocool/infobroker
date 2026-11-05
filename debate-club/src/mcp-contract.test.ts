@@ -205,6 +205,14 @@ test("get_citations returns BibTeX-bearing academic references", async () => {
   const first = (body.results as Array<Record<string, unknown>>)[0];
   expect(typeof first.bibtex).toBe("string");
   expect(first.bibtex).toContain("@");
+  // REQ-027a: the response reports per-provider status and dedupes by DOI.
+  const meta = body.meta as Record<string, unknown>;
+  const providers = meta.providers as Array<Record<string, unknown>>;
+  expect(Array.isArray(providers)).toBe(true);
+  expect(providers.some((p) => p.slug === "openalex" && p.status === "ok")).toBe(true);
+  expect(providers.some((p) => p.slug === "crossref" && p.status === "ok")).toBe(true);
+  expect(Number(meta.deduped)).toBeGreaterThanOrEqual(1);
+  expect((body.results as Array<Record<string, unknown>>).some((r) => typeof r.doi === "string")).toBe(true);
 });
 
 test("verify_claims conforms to the REQ-001 envelope", async () => {

@@ -21,6 +21,7 @@ import { provider as yep } from "./yep.js";
 import { provider as wiby } from "./wiby.js";
 import { provider as openalex } from "./openalex.js";
 import { provider as europepmc } from "./europe_pmc.js";
+import { provider as crossref } from "./crossref.js";
 import { provider as hackernews } from "./hacker_news.js";
 import { provider as gdelt } from "./gdelt.js";
 import { provider as sec_edgar } from "./sec_edgar.js";
@@ -52,6 +53,7 @@ export const PROVIDERS: Record<string, Provider> = {
   wiby,
   openalex,
   europe_pmc: europepmc,
+  crossref,
   hacker_news: hackernews,
   gdelt,
   sec_edgar,

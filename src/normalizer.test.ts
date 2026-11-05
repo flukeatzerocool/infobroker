@@ -46,4 +46,36 @@ describe("normalize minimum viable result (REQ-073)", () => {
     expect(normalizeUrl("file:///etc/passwd")).toBeNull();
     expect(normalizeUrl("not a url")).toBeNull();
   });
+
+  it("passes scholarly metadata through when supplied (REQ-003)", () => {
+    const out = normalize(
+      [
+        {
+          title: "A Paper",
+          url: "https://example.com/paper",
+          snippet: "abstract text",
+          doi: "10.1234/ABC",
+          authors: ["Ada Lovelace", "", 7],
+          venue: "Journal of Things",
+          abstract: "abstract text",
+          citation_count: 42,
+        },
+      ],
+      "openalex"
+    );
+    expect(out[0].doi).toBe("10.1234/ABC");
+    expect(out[0].authors).toEqual(["Ada Lovelace"]);
+    expect(out[0].venue).toBe("Journal of Things");
+    expect(out[0].abstract).toBe("abstract text");
+    expect(out[0].citation_count).toBe(42);
+  });
+
+  it("omits absent scholarly metadata instead of adding empty fields (REQ-003)", () => {
+    const out = normalize([{ title: "T", url: "https://example.com/x", snippet: "s" }], "duckduckgo");
+    expect(out[0]).not.toHaveProperty("doi");
+    expect(out[0]).not.toHaveProperty("authors");
+    expect(out[0]).not.toHaveProperty("venue");
+    expect(out[0]).not.toHaveProperty("abstract");
+    expect(out[0]).not.toHaveProperty("citation_count");
+  });
 });

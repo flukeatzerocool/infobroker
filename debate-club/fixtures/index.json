@@ -3,7 +3,11 @@
     "en.wikipedia.org",
     "export.arxiv.org",
     "r.jina.ai",
-    "example.com"
+    "example.com",
+    "api.semanticscholar.org",
+    "api.openalex.org",
+    "www.ebi.ac.uk",
+    "api.crossref.org"
   ],
   "entries": [
     {
@@ -45,6 +49,46 @@
         "content-type": "text/html; charset=utf-8"
       },
       "body": "<!DOCTYPE html><html><head><style>.x{color:red}</style><script>var x=1;</script></head><body><article><h1>Fixture Article</h1><p>The native renderer must return readable text.</p></article></body></html>"
+    },
+    {
+      "host": "api.semanticscholar.org",
+      "method": "GET",
+      "path_regex": "^/graph/v1/paper/search",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"data\":[]}"
+    },
+    {
+      "host": "api.openalex.org",
+      "method": "GET",
+      "path_regex": "^/works",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"results\":[{\"display_name\":\"Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks\",\"id\":\"https://openalex.org/W1\",\"publication_year\":2024,\"doi\":\"https://doi.org/10.5555/rag.2024\",\"cited_by_count\":42,\"authorships\":[{\"author\":{\"display_name\":\"Ada Lovelace\"}}],\"primary_location\":{\"source\":{\"display_name\":\"Journal of RAG\"}},\"abstract_inverted_index\":{\"Retrieval\":[0],\"augmented\":[1],\"generation\":[2]}},{\"display_name\":\"A Survey of Retrieval Augmented Generation\",\"id\":\"https://openalex.org/W2\",\"publication_year\":2024}]}"
+    },
+    {
+      "host": "www.ebi.ac.uk",
+      "method": "GET",
+      "path_regex": "^/europepmc/webservices/rest/search",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"resultList\":{\"result\":[{\"title\":\"Biomedical Retrieval Augmented Generation\",\"pmid\":\"999\",\"source\":\"MED\",\"id\":\"999\",\"authorString\":\"Doe J, Roe R.\",\"pubYear\":\"2023\",\"journalTitle\":\"BMJ\",\"doi\":\"10.5555/bio.2023\"}]}}"
+    },
+    {
+      "host": "api.crossref.org",
+      "method": "GET",
+      "path_regex": "^/works",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"status\":\"ok\",\"message\":{\"items\":[{\"DOI\":\"10.5555/rag.2024\",\"title\":[\"Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks\"],\"author\":[{\"given\":\"Ada\",\"family\":\"Lovelace\"}],\"issued\":{\"date-parts\":[[2024]]},\"container-title\":[\"Journal of RAG\"],\"abstract\":\"<jats:p>Retrieval augmented generation.</jats:p>\",\"is-referenced-by-count\":42,\"URL\":\"https://doi.org/10.5555/rag.2024\"}]}}"
     }
   ]
 }

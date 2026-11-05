@@ -1,15 +1,15 @@
 // @implements REQ-020 REQ-021
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const ARXIV_API = "https://export.arxiv.org/api/query";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     search_query: query,
-    max_results: "10",
+    max_results: String(options?.max_results ?? 10),
   });
 
   const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv" });
@@ -26,6 +26,11 @@ async function search(query: string): Promise<SearchResult[]> {
     const id = tagContent(entryXml, "id");
     const summary = tagContent(entryXml, "summary");
     const published = tagContent(entryXml, "published");
+    const authors = [...entryXml.matchAll(/<author\b[^>]*>([\s\S]*?)<\/author>/g)]
+      .map((a) => tagContent(a[1], "name"))
+      .filter(Boolean);
+    const doiMatch = entryXml.match(/<arxiv:doi[^>]*>([\s\S]*?)<\/arxiv:doi>/i);
+    const doi = doiMatch ? doiMatch[1].trim() : undefined;
     if (title && id) {
       raw.push({
         title: title.replace(/\s+/g, " ").trim(),
@@ -33,6 +38,8 @@ async function search(query: string): Promise<SearchResult[]> {
         snippet: summary.replace(/\s+/g, " ").trim().slice(0, 500),
         published_date: published,
         source_type: "academic",
+        authors,
+        ...(doi ? { doi } : {}),
       });
     }
   }

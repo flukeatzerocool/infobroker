@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -198,7 +198,7 @@ Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or 
 Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). A failure attributable to rate limiting — including a provider skipped for cooling down — SHALL be reported as `rate_limited` in preference to a generic provider-unavailable error. Errors that do not match a defined code SHALL use `internal_error`. _Check:_ G0.
 
 **REQ-003 — Result Format Normalization**
-All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, `source_type`, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. _Check:_ G1.
+All providers SHALL return results in a common shape that includes a title, URL, and snippet, with optional fields for publication date, `source_type`, and the original source when the serving provider or its configuration declares the result is aggregated or resold. Provider-specific response formats SHALL be mapped to the common shape. Scholarly results SHALL additionally carry the DOI, author list, venue, abstract, and citation count when the provider supplies them. _Check:_ G1.
 
 **REQ-004 — Truncation**
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at the truncation location defined in §10.1. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
@@ -329,6 +329,9 @@ The server SHALL support measuring retrieval quality against a committed benchma
 
 **REQ-027 — `get_citations`**
 The `get_citations` tool returns academic references for a query. Parameters: `query` (required), `max_results` (default 8, max 30). It SHALL return each reference with a formatted BibTeX citation and the fields needed to render it: title, authors, year, venue, and URL. It SHALL operate without an API key when at least one scholarly source is reachable. A reference without author data SHALL be formatted as a non-article entry rather than omitted. _Check:_ G0, G1.
+
+**REQ-027a — `get_citations` source aggregation**
+`get_citations` SHALL aggregate references from every eligible provider in the `academic` dispatch chain rather than a fixed pair of sources. The response SHALL report per-provider status: each provider attempted, whether it returned references, and the failure reason when it did not. References SHALL be deduplicated by DOI where present and by title where absent. WHEN providers answer but return no reference, the tool SHALL return a successful zero-result response naming the providers attempted; WHEN every attempted provider fails, it SHALL return an `all_providers_exhausted` error carrying per-provider detail. _Check:_ G1.
 
 **REQ-124 — `search_web` query operators and language**
 `search_web` SHALL accept common query operators (`site:`, `filetype:`, quoted phrases, exclusions) and a preferred result language. Operators SHALL be passed to providers that support them; when the serving provider cannot honor an operator, the response SHALL report it in the ignored-parameter metadata rather than silently dropping it. Language routing and ignored-language reporting SHALL follow REQ-128. An unrecognized operator SHALL remain ordinary query text. _Check:_ G1.
@@ -788,6 +791,7 @@ Tool responses are JSON with this envelope:
 | CORE | `https://api.core.ac.uk/v3/search/works` | Free API key; open access research |
 | OpenAlex | `https://api.openalex.org/works` | Keyless academic, 250M+ works |
 | Europe PMC | `https://www.ebi.ac.uk/europepmc/webservices/rest/search` | Biomedical literature |
+| Crossref | `https://api.crossref.org/works` | Keyless DOI metadata and reference records |
 | Hacker News | `https://hn.algolia.com/api/v1/` | Story search via Algolia |
 | GDELT | `https://api.gdeltproject.org/api/v2/doc/doc` | Global news, artlist mode |
 | SEC EDGAR | `https://efts.sec.gov/LATEST/search-index` | Full-text filings search |
@@ -836,7 +840,7 @@ Task-type classification MAY consider semantic similarity between the query and 
 | `structured_fact` | wikidata | wikipedia | duckduckgo | — | — |
 | `financial` | sec_edgar | world_bank | duckduckgo | — | — |
 | `location` | openstreetmap | wikipedia | duckduckgo | — | — |
-| `academic` | semantic_scholar | arxiv | openalex | europe_pmc | — |
+| `academic` | semantic_scholar | arxiv | openalex | europe_pmc | crossref |
 | `code` | stack_exchange | github | duckduckgo | — | — |
 | `news` | brave (if keyed) | duckduckgo | gdelt | hacker_news | — |
 | `archive` | internet_archive | duckduckgo | — | — | — |
@@ -1138,6 +1142,7 @@ verdict is preserved (REQ-026f).
 | REQ-123 | Confidence calibration | 4.3 | G1 |
 | REQ-130 | Retrieval-quality benchmark | 4.3 | G1 |
 | REQ-027 | `get_citations` | 4.3 | G0, G1 |
+| REQ-027a | `get_citations` source aggregation | 4.3 | G1 |
 | REQ-028 | `search_web` deep reading | 4.3 | G1 |
 | REQ-127 | `search_web` analysis aids | 4.3 | G0, G1 |
 | REQ-124 | `search_web` query operators and language | 4.3 | G1 |
@@ -1701,7 +1706,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |

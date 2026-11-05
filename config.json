@@ -149,6 +149,14 @@
       "priority": 15,
       "timeout": 15000
     },
+    "crossref": {
+      "tier": "free_http",
+      "capabilities": ["academic"],
+      "rate_limit": { "per_second": 1 },
+      "enabled": true,
+      "priority": 15,
+      "timeout": 15000
+    },
     "hacker_news": {
       "tier": "free_http",
       "capabilities": ["news"],
@@ -250,7 +258,7 @@
     "definition": ["wiktionary", "duckduckgo"],
     "structured_fact": ["wikidata", "wikipedia", "duckduckgo"],
     "location": ["openstreetmap", "wikipedia", "duckduckgo"],
-    "academic": ["semantic_scholar", "arxiv", "openalex", "europe_pmc"],
+    "academic": ["semantic_scholar", "arxiv", "openalex", "europe_pmc", "crossref"],
     "code": ["stack_exchange", "github", "duckduckgo"],
     "news": ["brave", "duckduckgo", "gdelt", "hacker_news"],
     "financial": ["sec_edgar", "world_bank", "duckduckgo"],

@@ -14,6 +14,12 @@ export interface SearchResult {
   content_sha256?: string;
   /** ISO time the source was retrieved. */
   retrieved_at?: string;
+  /** Scholarly metadata when the provider supplies it (REQ-003). */
+  doi?: string;
+  authors?: string[];
+  venue?: string;
+  abstract?: string;
+  citation_count?: number;
 }
 
 export interface ProviderConfig {

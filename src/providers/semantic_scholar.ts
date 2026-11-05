@@ -1,5 +1,5 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
@@ -13,8 +13,12 @@ function ssApiKey(): string | undefined {
   return _ssApiKey;
 }
 
-async function search(query: string): Promise<SearchResult[]> {
-  const params = new URLSearchParams({ query, limit: "10" });
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+  const params = new URLSearchParams({
+    query,
+    limit: String(options?.max_results ?? 10),
+    fields: "title,authors,year,venue,externalIds,url,abstract,citationCount",
+  });
 
   const headers: Record<string, string> = {};
   const key = ssApiKey();
@@ -28,15 +32,30 @@ async function search(query: string): Promise<SearchResult[]> {
   if (!resp.ok) throw new RetryableError(`Semantic Scholar returned HTTP ${resp.status}`, resp.status);
 
   const data = (await resp.json()) as {
-    data?: Array<{ title: string; paperId: string; abstract?: string; year?: number }>;
+    data?: Array<{
+      title: string;
+      paperId: string;
+      abstract?: string;
+      year?: number;
+      venue?: string;
+      url?: string;
+      citationCount?: number;
+      authors?: Array<{ name?: string }>;
+      externalIds?: { DOI?: string };
+    }>;
   };
 
   const raw = (data.data || []).map((item) => ({
     title: item.title,
-    url: `https://api.semanticscholar.org/${item.paperId}`,
+    url: item.url || `https://api.semanticscholar.org/${item.paperId}`,
     snippet: item.abstract || "",
     published_date: item.year ? String(item.year) : undefined,
     source_type: "academic",
+    authors: (item.authors || []).map((a) => a.name || "").filter(Boolean),
+    ...(item.venue ? { venue: item.venue } : {}),
+    ...(item.externalIds?.DOI ? { doi: item.externalIds.DOI } : {}),
+    ...(item.abstract ? { abstract: item.abstract.slice(0, 500) } : {}),
+    ...(typeof item.citationCount === "number" ? { citation_count: item.citationCount } : {}),
   }));
 
   return normalize(raw, "semantic_scholar");

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.11.04 — Citation stack conformance
+
+- `get_citations` now walks the configured `academic` dispatch chain instead of
+  a hardcoded arXiv/Semantic Scholar pair, reports per-provider status in
+  `meta.providers`, dedupes references by DOI with a title fallback, and
+  returns `all_providers_exhausted` with per-provider detail (or a named
+  zero-result diagnostic when providers answered empty) rather than a silent
+  empty `[OK]`. (REQ-027, REQ-027a)
+- Crossref ships as a keyless `free_http` academic provider on the academic
+  chain, supplying DOI metadata and reference records for both citations and
+  `search_web`. (REQ-020)
+- Normalized scholarly results carry DOI, authors, venue, abstract, and
+  citation count when the serving provider supplies them; OpenAlex rebuilds
+  its inverted-index abstract and exposes citation counts, and Semantic
+  Scholar, Europe PMC, and arXiv map authors, venue, and DOI. (REQ-003)
+- The Arena now exercises the aggregated citation path with fixtures for
+  Semantic Scholar, OpenAlex, Europe PMC, and Crossref, including a
+  cross-provider DOI duplicate.
+
 ## 2026.11.04 — Optional keys and single-source contracts
 
 - Providers with optional keys — Semantic Scholar, Stack Exchange, and GitHub —

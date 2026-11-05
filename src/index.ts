@@ -2064,7 +2064,7 @@ instrumentTool(
   "infobroker_get_citations",
   {
     title: "Get Citations",
-    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use infobroker_search_web) or contested-claim verification (use infobroker_verify_claims). `query` is a natural-language topic; `max_results` sets the reference count, and larger values take longer and span more sources. Needs no API key when at least one scholarly source is reachable; if every source fails it returns an [ERROR] envelope with remediation, and queries respect per-provider rate limits. Returns an [OK] or [ERROR] JSON envelope.",
+    description: "Return academic references for a query as BibTeX citations with title, authors, year, venue, DOI, and URL. Use when scholarly writing needs a reference list. Do NOT use for general web search (use infobroker_search_web) or contested-claim verification (use infobroker_verify_claims). `query` is a natural-language topic; `max_results` sets the reference count, and larger values take longer and span more sources. References are gathered from every enabled academic provider, deduplicated by DOI (title when absent), and each provider's status is reported in `meta.providers`; a zero-result answer names the providers tried. Needs no API key when at least one scholarly source is reachable; if every source fails it returns an [ERROR] envelope with remediation, and queries respect per-provider rate limits. Returns an [OK] or [ERROR] JSON envelope.",
     inputSchema: {
       query: z.string().describe("Search query"),
       max_results: z.number().min(1).max(30).optional().default(8).describe("Maximum references to return (1-30, default 8)"),
@@ -2078,7 +2078,56 @@ instrumentTool(
   },
   async (params: any) => {
     try {
-      const citations = await searchCitations(String(params.query), Number(params.max_results));
+      const report = await searchCitations(String(params.query), Number(params.max_results));
+      const results = report.citations.map((c) => ({
+        title: c.title,
+        url: c.url,
+        ...(c.doi ? { doi: c.doi } : {}),
+        year: c.year,
+        authors: c.authors,
+        venue: c.venue,
+        bibtex: c.bibtex,
+      }));
+      // REQ-027a: an exhausted chain is an error, while providers that answered
+      // empty are a legitimate zero-result answer carrying a diagnostic.
+      if (report.citations.length === 0 && report.allFailed) {
+        const attempted = report.providers.map((p) => p.slug);
+        const summary = report.providers
+          .map((p) => `${p.slug} (${p.reason ?? p.status})`)
+          .join(", ");
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `[ERROR] ${json(
+                err(
+                  "academic",
+                  "all_providers_exhausted",
+                  `Citation chain exhausted: ${summary}`,
+                  "Retry later or check provider configuration; inspect_providers reports per-provider state",
+                  { providers: report.providers, exhausted_chain: attempted }
+                )
+              )}`,
+            },
+          ],
+        };
+      }
+      const compact = compactMode(getConfig());
+      const meta = compact
+        ? undefined
+        : {
+            query_time_ms: report.elapsedMs,
+            deduped: report.deduped,
+            providers: report.providers,
+            ...(report.citations.length === 0
+              ? {
+                  no_results: true,
+                  diagnostic: `No references matched: ${report.providers
+                    .map((p) => `${p.slug}=${p.status}`)
+                    .join(", ")}`,
+                }
+              : {}),
+          };
       return {
         content: [
           {
@@ -2086,14 +2135,8 @@ instrumentTool(
             text: `[OK] ${json({
               status: "ok",
               provider: "academic",
-              results: citations.map((c) => ({
-                title: c.title,
-                url: c.url,
-                year: c.year,
-                authors: c.authors,
-                venue: c.venue,
-                bibtex: c.bibtex,
-              })),
+              results,
+              ...(meta ? { meta } : {}),
             })}`,
           },
         ],
@@ -2103,7 +2146,7 @@ instrumentTool(
         content: [
           {
             type: "text" as const,
-            text: `[ERROR] ${json(err("academic", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later"))}`,
+            text: `[ERROR] ${json(err("academic", "provider_unavailable", e instanceof Error ? e.message : String(e), "Retry later; inspect_providers reports per-provider state"))}`,
           },
         ],
       };
