@@ -82,10 +82,10 @@ and ACLs; enterprise scheduling.
 
 ## Dependency advisories
 
-- `npm audit` reports 3 high advisories in the `markdownlint` devDependency
-  chain (`re2js`) plus moderate advisories (`@hono/node-server`, katex,
-  minimatch). The fix is a breaking `markdownlint-cli` upgrade; `npm run check`
-  cannot pass until it ships.
+- `npm audit` reports 5 low/moderate advisories (`@hono/node-server`
+  `serveStatic` double-decode, a `katex` range). The audit gate fails only on
+  high/critical, so `npm run check` is green; upgrade when a compatible
+  release ships. `markdownlint-cli` is now `^0.50.0` and no longer flagged.
 
 ## Knowledge base
 

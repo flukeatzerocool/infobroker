@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-127 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -156,6 +156,52 @@ test("search_web rejects an unknown provider with invalid_input", async () => {
   const out = await call("infobroker_search_web", { query: "x", provider: "does-not-exist" });
   expect(out.status).toBe("error");
   expectError(out.text, "invalid_input");
+});
+
+// REQ-020a: the response reports the selected task type, an automatic
+// classifier hit and a caller override are both observable, and the override
+// serves from the named chain rather than the automatically classified one.
+test("search_web reports the selected task type and honors the override", async () => {
+  const academicChain = [
+    "semantic_scholar",
+    "arxiv",
+    "openalex",
+    "europe_pmc",
+    "crossref",
+  ];
+
+  // Auto: the whole-word "wikipedia" signal selects the encyclopedia chain.
+  scenario = "search-task-type-auto";
+  const auto = await call("infobroker_search_web", {
+    query: "retrieval augmented generation wikipedia",
+    max_results: 2,
+  });
+  const autoBody = expectOk(auto.text);
+  expect((autoBody.meta as Record<string, unknown>).task_type).toBe("encyclopedia");
+  expect(providerOf(autoBody)).toBe("wikipedia");
+
+  // Override: the same query is served from the academic chain without
+  // reclassifying, and meta reports the forced type.
+  scenario = "search-task-type-override";
+  const forced = await call("infobroker_search_web", {
+    query: "retrieval augmented generation wikipedia",
+    task_type: "academic",
+    max_results: 2,
+  });
+  const forcedBody = expectOk(forced.text);
+  expect((forcedBody.meta as Record<string, unknown>).task_type).toBe("academic");
+  expect(academicChain).toContain(providerOf(forcedBody));
+
+  // Automatic scholarly routing: a bare DOI classifies academic with no
+  // provider hint. This is the classifier regression guard.
+  scenario = "search-task-type-doi";
+  const doi = await call("infobroker_search_web", {
+    query: "10.1038/nature12373",
+    max_results: 2,
+  });
+  const doiBody = expectOk(doi.text);
+  expect((doiBody.meta as Record<string, unknown>).task_type).toBe("academic");
+  expect(academicChain).toContain(providerOf(doiBody));
 });
 
 test("fetch_page renders through the pinned renderer", async () => {
