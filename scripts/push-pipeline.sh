@@ -874,9 +874,10 @@ FIXTURE_STALE=$(grep -oE '[0-9]+ stale fixture' "$PIPELINE_RUN_DIR/fixture-fresh
 [[ -z "$FIXTURE_STALE" ]] && FIXTURE_STALE="?"
 
 # README-sync guard: a REQ-body change this run alters what the server does,
-# so the README must reflect it (AGENTS.md README governance). A REQ change
-# that leaves README.md untouched means the README step skipped its job.
-if spec_req_change; then
+# so the README must reflect it (AGENTS.md README governance). Only enforced
+# when the README step actually ran — a bounded run (`--to`) or a dry run
+# deliberately skips it, and failing there would make every rehearsal red.
+if [[ "${STEP_STATUS[readme]:-}" == "passed" ]] && spec_req_change; then
   if whitespace_only_diff README.md; then
     die "Spec REQ changed but README.md was not updated — README must reflect spec changes."
   fi
