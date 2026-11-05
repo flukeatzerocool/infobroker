@@ -40,6 +40,9 @@
   push per remote, and a full `npm run check` on the shipping tree lets the
   pre-push hook skip its duplicate run for that exact commit (`--no-mirror`
   opts out of the mirror deliberately).
+- The sync step runs its gate suite once instead of twice, and provider-auth
+  regeneration is verified against the pre-read-through snapshot so the drift
+  check can actually fire instead of always reporting "no drift".
 
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 

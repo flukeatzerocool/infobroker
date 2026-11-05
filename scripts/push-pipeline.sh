@@ -465,10 +465,13 @@ else
   sed "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
 
   # generate-auth mutates a tracked file; run it deterministically before the
-  # AI steps instead of racing an AI edit on the same working tree.
+  # AI steps instead of racing an AI edit on the same working tree. The output
+  # is snapshotted so step 4 can report drift introduced by later steps.
   if ! step_skip auth; then
     warn "Generating provider-auth.md from config.json (before read-through)..."
     npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
+    PROVIDER_AUTH_FILE="skills/infobroker/references/provider-auth.md"
+    cp "$PROJECT_DIR/$PROVIDER_AUTH_FILE" "$PIPELINE_RUN_DIR/provider-auth.pre-readthrough.md" 2>/dev/null || true
   fi
 
   warn "Launching read-through session..."
@@ -570,14 +573,18 @@ if $DRY_RUN || step_skip auth; then
   info "Provider auth sync: SKIPPED (dry run / state journal)"
   status_set auth "skipped"
 else
-  warn "Generating provider-auth.md from config.json..."
+  # Generation already ran before the read-through. Regenerating here would
+  # only ever report "no drift"; diffing against the pre-read-through snapshot
+  # makes the branch meaningful: it fires when a later AI step edited the file.
+  PROVIDER_AUTH_FILE="skills/infobroker/references/provider-auth.md"
+  PROVIDER_AUTH_SNAPSHOT="$PIPELINE_RUN_DIR/provider-auth.pre-readthrough.md"
+  warn "Regenerating provider-auth.md to verify it still matches config.json..."
   npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
-  info "generate-auth: OK"
-
-  if git -C "$PROJECT_DIR" diff --quiet skills/infobroker/references/provider-auth.md 2>/dev/null; then
+  if [[ -f "$PROVIDER_AUTH_SNAPSHOT" ]] \
+      && diff -q "$PROVIDER_AUTH_SNAPSHOT" "$PROJECT_DIR/$PROVIDER_AUTH_FILE" >/dev/null 2>&1; then
     info "Provider-auth.md: no drift from config.json"
   else
-    warn "Provider-auth.md regenerated — will be included in commit."
+    warn "Provider-auth.md changed after the pre-read-through generation — will be included in commit."
   fi
   state_mark auth
   status_set auth "passed"

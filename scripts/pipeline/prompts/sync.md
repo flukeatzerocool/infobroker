@@ -19,17 +19,19 @@ do NOT re-audit the whole REQ surface.
 3. Implement all gaps where disposition is 'implement'. Batch the edits.
 4. Load and apply the testing skill. Author or extend unit and integration
    tests for the changed REQs only — do not expand blanket coverage.
-5. After all edits, run once each: `npm run validate-spec`, `npm run
-   typecheck`, and `npm test`. Fix any failure.
+5. After all edits, run the gates once: `npm run validate-spec`, `npm run
+   typecheck`, and `npm test`. Fix any failure. Do not re-run them per edit —
+   the pipeline re-gates this tree afterwards and owns the final verdict.
 6. Run `npm run version-bump` to update the version in package.json and
    src/index.ts to today's date. Leave the `## <version> — ` header that
    version-bump seeds in CHANGELOG.md empty — do not add content to it (the
    changelog step owns CHANGELOG content).
 7. Review: load and apply the code-review skill against the sync diff
    (`git diff` plus untracked source files). Fix all critical and high
-   findings (auto-confirm — this is a trusted automated pipeline), then
-   re-run `npm run typecheck` and `npm test` once. If any critical finding
-   cannot be fixed, report it as a failure.
+   findings (auto-confirm — this is a trusted automated pipeline). Do not
+   re-run the gate suite: the single run from step 5 plus the pipeline's own
+   post-sync gate cover it. If any critical finding cannot be fixed, report it
+   as a failure.
 8. Smoke test: start the server and call `infobroker_inspect_providers`
    (action spec). Verify:
    - Tool count has not decreased from the baseline
