@@ -15,7 +15,8 @@
 #                              [--resume] [--run-id=<id>]
 #                              [--from=<step>] [--to=<step>]
 #                              [--scan-ai] [--force-tag]
-#                              [--force-push] [--allow-secrets] [--help]
+#                              [--force-push] [--no-mirror] [--allow-secrets]
+#                              [--commit] [--help]
 #   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
 #                    steps, no commit, no run-log pruning. The working tree
 #                    stays clean; run logs still land under TMPDIR.
@@ -23,13 +24,15 @@
 #   --no-push        Commit but skip push, tag, and mirror sync.
 #   --no-commit      Run all steps (including AI edits) but stop before staging;
 #                    leaves the working tree dirty for inspection.
+#   --commit         Allow commit and push with --from=<step>; a step range is a
+#                    testing run without it. Never combines with --to.
 #   --resume         Continue the newest recorded run for this repo/branch.
 #                    Permitted to start from the dirty tree an interrupted run
 #                    left behind; HEAD and branch must still match.
 #   --run-id=<id>    Attach this invocation to a specific run directory.
 #   --from=<step>    Start at a named step (readthrough|sync|auth|changelog|scan|readme).
-#   --to=<step>      Stop after a named step (inclusive). Bounded ranges never
-#                    commit or push — they are testing runs.
+#   --to=<step>      Stop after a named step (inclusive). A --to range never
+#                    commits or pushes; it is a testing run.
 #   --parallel       Deprecated no-op (auth now runs sequentially before
 #                    read-through to avoid a working-tree race).
 #   --scan-ai        Also run the AI scan prompts (default: deterministic scan only).
@@ -62,7 +65,8 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
                                   [--resume] [--run-id=<id>]
                                   [--from=<step>] [--to=<step>]
                                   [--scan-ai] [--force-tag] [--force-push]
-                                  [--allow-secrets] [--help]
+                                  [--no-mirror] [--allow-secrets] [--commit]
+                                  [--help]
 
   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
                    steps, no commit, no run-log pruning. Working tree stays
@@ -70,6 +74,8 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --yes (-y)       Approve the final push without prompting (unattended/CI).
   --no-push        Commit but skip push, tag, and mirror sync.
   --no-commit      Run all steps (including AI edits) but stop before staging.
+  --commit         Allow commit and push with --from=<step>; a step range is a
+                   testing run without it. Never combines with --to.
   --resume         Continue the newest recorded run for this repo/branch.
   --run-id=<id>    Attach this invocation to a specific run directory.
   --from=S         Start at step (readthrough|sync|auth|changelog|scan|readme).
@@ -87,7 +93,7 @@ EOF
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
-NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false
+NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false
 START_STEP=""; END_STEP=""; RUN_ID=""
 
 for arg in "$@"; do
@@ -104,6 +110,7 @@ for arg in "$@"; do
     --no-push) NO_PUSH=true ;;
     --no-mirror) NO_MIRROR=true ;;
     --no-commit) NO_COMMIT=true ;;
+    --commit) COMMIT=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --to=*) END_STEP="${arg#--to=}" ;;
     --help|-h) usage; exit 0 ;;
@@ -126,14 +133,26 @@ BRANCH="$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || print
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 PIPELINE_LOG_DIR="${TMPDIR:-/tmp}/infobroker/pipeline-logs"
 
-# Bounded ranges are testing runs: never commit or push a partial pipeline.
-if [[ -n "$START_STEP" || -n "$END_STEP" ]]; then
-  if ! $NO_COMMIT || ! $NO_PUSH; then
-    info "Bounded range: forcing --no-commit and --no-push (testing mode)."
-  fi
-  NO_COMMIT=true
-  NO_PUSH=true
+# A step range is a testing run unless --commit says otherwise. `--to` truncates
+# the pipeline, so it can never publish: the tree it leaves is not a release.
+# The rule lives in release-policy so it is unit-tested rather than re-derived
+# in shell.
+RUN_MODE=$(npx tsx "$SCRIPT_DIR/lib/release-policy.ts" run-mode \
+  --start "${START_STEP:--}" --end "${END_STEP:--}" \
+  --commit "$($COMMIT && echo 1 || echo 0)" \
+  --no-commit "$($NO_COMMIT && echo 1 || echo 0)" \
+  --no-push "$($NO_PUSH && echo 1 || echo 0)") \
+  || die "release-policy run-mode FAILED."
+if [[ "$RUN_MODE" == error\|* ]]; then
+  die "${RUN_MODE#error|}"
 fi
+MODE_NO_COMMIT="${RUN_MODE#ok|}"; MODE_NO_COMMIT="${MODE_NO_COMMIT%%|*}"
+MODE_NO_PUSH="${RUN_MODE##*|}"
+if [[ "$MODE_NO_COMMIT" == "true" && "$NO_COMMIT" == "false" ]]; then
+  [[ -n "$START_STEP$END_STEP" ]] && info "Step range: forcing --no-commit and --no-push (testing mode; pass --commit to publish)."
+fi
+NO_COMMIT="$MODE_NO_COMMIT"
+NO_PUSH="$MODE_NO_PUSH"
 
 RESUMED=false
 if [[ -n "$RUN_ID" ]]; then

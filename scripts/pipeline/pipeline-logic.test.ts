@@ -236,6 +236,8 @@ describe("CLI surface", () => {
     expect(res.stdout).toContain("--run-id=<id>");
     expect(res.stdout).toContain("--to=S");
     expect(res.stdout).toContain("--no-commit");
+    expect(res.stdout).toContain("--commit");
+    expect(res.stdout).toContain("--no-mirror");
   });
 
   it("rejects an unknown flag with the full usage", () => {

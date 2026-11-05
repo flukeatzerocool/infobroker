@@ -82,12 +82,14 @@ wall times are recorded under the run directory (`timings/`, one file per step,
 so concurrent scans cannot clobber each other) and printed at the end; the
 fixture-refresh cadence report is surfaced in the final summary. `--from=<step>`
 / `--to=<step>` run a bounded range for testing and are validated against the
-step list (an unknown step is rejected before any work runs); a bounded range
-never commits or pushes. `--resume` continues the newest run recorded for the
-current repo and branch and accepts the dirty tree an interrupted run left
-behind, refusing only if HEAD or the branch moved. `--run-id=<id>` (or a
-`PIPELINE_RUN_DIR` override) pins a specific run directory and resumes from
-its journal when one exists, exactly like `--resume`. `--dry-run` is
+step list (an unknown step is rejected before any work runs); a step range
+does not commit or push unless `--commit` is given, and `--to` never publishes
+because the tree it leaves is not a release. `--resume` continues the newest
+run recorded for the current repo and branch and accepts the dirty tree an
+interrupted run left behind, refusing only if HEAD or the branch moved.
+`--run-id=<id>` (or a `PIPELINE_RUN_DIR` override) pins a specific run
+directory and resumes from its journal when one exists, exactly like
+`--resume`. `--dry-run` is
 non-mutating (spec audit + deterministic scans only, working tree left clean;
 run logs still land under TMPDIR);
 `--no-commit` runs all steps including AI edits but stops before staging,
