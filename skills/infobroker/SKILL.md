@@ -81,9 +81,13 @@ SUMMARIZE    `summarization` skill — condense findings before writing
 WRITE        `technical-writing` skill — hand it the routed shape, audience, and
              target length; use the shared skeleton, the `report-manifest` block,
              and the shape's block in `references/report-template.md`
-REDRAFT-CHECK  extract every claim in the draft and re-check it against the
-             collected evidence and the manifest; remove or mark unverified any
-             claim the evidence does not support
+REDRAFT-CHECK  FACT-CHECK DRAFT: extract every claim in the draft and verify
+             them in one `verify_claims (claims: [...])` batch call; fix what
+             the evidence does not support (attribute it, soften it to the
+             source's `modality` — reported or speculative — or delete it),
+             then re-run the batch once to confirm. Carry each claim's
+             `modality` and `attribution` into the report manifest; never
+             upgrade a hedged source ("reportedly") to a flat assertion
 VALIDATE     `scripts/validate-report.ts --report <file>` — fix every error
              (missing section or shape block, uncited or unlabeled finding,
              unresolved [S#], register row missing a grade, date, or URL,
@@ -130,7 +134,10 @@ CROSS-CHECK  Infobroker `verify_claims` for multi-source verification
 VERDICT      assign True→Unverifiable + confidence + likelihood + justification
 SUMMARIZE    `summarization` skill — executive summary
 WRITE        `technical-writing` skill — the shared skeleton plus the Fact-Check verdict table
-REDRAFT-CHECK  re-check every verdict against the collected evidence
+REDRAFT-CHECK  FACT-CHECK DRAFT: extract the draft's claims and re-verify them
+             in one `verify_claims (claims: [...])` batch call; fix or delete
+             anything the evidence does not support and preserve each source's
+             `modality` and `attribution` in the manifest
 VALIDATE     run `scripts/validate-report.ts --report <file>` before delivery
 POLISH       `proofreading` skill
 TRANSLATE    `translation` skill when the user asked for a non-English output

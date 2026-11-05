@@ -38,10 +38,25 @@ machine-readable summary of the report and the receipt payload. Only `shape`,
       "confidence": "High",
       "likelihood": "likely",
       "sources": ["S1", "S2"]
+    },
+    {
+      "claim": "the exact proposition the report asserts",
+      "verdict": "Unverifiable",
+      "confidence": "Low",
+      "likelihood": "even chance",
+      "sources": ["S3"],
+      "modality": "reported",
+      "attribution": "reportedly"
     }
   ]
 }
 ```
+
+`modality` is `asserted` (default), `reported`, or `speculative`. A non-asserted
+claim MUST carry an `attribution` phrase — for example `reportedly`, or
+`according to S3` — and that phrase MUST appear in the report body. The
+validator rejects a declared attribution that is missing from the body, so a
+hedged source is never upgraded to a flat assertion (REQ-026h, REQ-116).
 
 When revising a delivered report, increment `revision` and set `supersedes`
 to the prior report identity. Archive the report with a receipt

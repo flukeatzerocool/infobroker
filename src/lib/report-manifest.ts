@@ -25,6 +25,14 @@ export interface ManifestClaim {
   confidence?: string;
   likelihood?: string;
   sources?: string[];
+  /**
+   * Modality of the supporting evidence (REQ-026h). `reported` and
+   * `speculative` claims must declare an `attribution` that appears in the
+   * body, so a hedged source is never rendered as a flat assertion.
+   */
+  modality?: "asserted" | "reported" | "speculative";
+  /** Attribution phrase for a non-asserted claim, e.g. "reportedly". */
+  attribution?: string;
 }
 
 export interface ReportManifest {
@@ -98,6 +106,9 @@ export const SHAPE_VALUES = [
   "Adversarial / Red-Team",
   "Vetting / Due-Diligence",
 ] as const;
+
+/** Allowed source-modality values for a manifest claim (REQ-026h). */
+export const MODALITY_VALUES = ["asserted", "reported", "speculative"] as const;
 
 export const AUDIENCE_VALUES = [
   "executive",
@@ -301,6 +312,43 @@ function validateManifest(manifest: ReportManifest): ReportFinding[] {
       if (claim.sources !== undefined && !stringArray(claim.sources)) {
         push("manifest-type", `report-manifest.claims[${index}].sources must be an array of source ids`);
       }
+      if (claim.modality !== undefined && !MODALITY_VALUES.includes(claim.modality as (typeof MODALITY_VALUES)[number])) {
+        push("manifest-modality", `report-manifest.claims[${index}].modality must be one of ${MODALITY_VALUES.join(", ")}`);
+      }
+      if (claim.attribution !== undefined && (typeof claim.attribution !== "string" || claim.attribution.trim() === "")) {
+        push("manifest-type", `report-manifest.claims[${index}].attribution must be a non-empty string`);
+      }
+    }
+  }
+  return findings;
+}
+
+/**
+ * REQ-026h: a claim whose evidence hedges must carry a matching attribution in
+ * the body. The rule is mechanical — it checks declared phrasing, never judges
+ * whether prose "reads flat" — so it cannot false-positive on a report that
+ * declares no modality.
+ */
+export function validateModality(text: string, manifest: ReportManifest): ReportFinding[] {
+  const findings: ReportFinding[] = [];
+  const body = text.replace(MANIFEST_FENCE, "");
+  for (const [index, claim] of (manifest.claims ?? []).entries()) {
+    if (claim.modality === undefined || claim.modality === "asserted") continue;
+    const attribution = claim.attribution?.trim();
+    if (attribution === undefined || attribution.length === 0) {
+      findings.push({
+        level: "error",
+        code: "manifest-modality-attribution",
+        message: `report-manifest.claims[${index}] is '${claim.modality}' and must declare an attribution phrase`,
+      });
+      continue;
+    }
+    if (!body.includes(attribution)) {
+      findings.push({
+        level: "error",
+        code: "modality-attribution-missing",
+        message: `report-manifest.claims[${index}] declares attribution '${attribution}', which does not appear in the report body`,
+      });
     }
   }
   return findings;
@@ -567,6 +615,7 @@ export function validateReport(text: string): ReportValidation {
   } else {
     manifest = manifestResult.value;
     findings.push(...validateManifest(manifest));
+    findings.push(...validateModality(text, manifest));
     findings.push(...shapeBlockFindings(manifest, sections));
   }
 

@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.11.04
+**Spec version:** 2026.11.05
 
 ## Contents
 
@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026f`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021g`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -295,7 +295,7 @@ WHEN action is health, the tool SHALL perform a live connectivity check against 
 WHEN action is spec, the tool SHALL report build identity, provider counts, uptime, cumulative request count, and paths to persistent state files; the provider counts SHALL distinguish configured providers, enabled providers, and providers whose assessed status is active, excluding inline renderer fallbacks. WHEN the knowledge base is configured, the report SHALL also include chunk count, per-collection counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
 **REQ-026 — `verify_claims`**
-Multi-pass truth-finding search. Parameters: `query` (required), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
+Multi-pass truth-finding search. Parameters: `query` or `claims` (exactly one is required; a claim list seeds each claim verbatim, a query is split heuristically), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
 **REQ-026a — corroboration source authority**
 When `verify_claims` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. A source's authority SHALL reflect its `source_type`: scholarly, encyclopedia, and primary sources SHALL contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
@@ -314,6 +314,12 @@ WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHA
 
 **REQ-026f — Semantic claim reconciliation**
 WHEN `verify_claims` reconciles claims, sources whose claims express the same proposition SHALL be grouped even when paraphrased, and sources whose claims conflict SHALL be reported as contested with their perspectives. Reconciliation SHALL distinguish agreement from contradiction rather than relying on textual overlap alone. A finding SHALL NOT be marked confirmed from sources that express conflicting propositions. _Check:_ G1.
+
+**REQ-026g — Batch claim verification**
+WHEN `verify_claims` receives a claim list, it SHALL verify each claim and return one finding per claim in the caller's order, each carrying the claim, its verdict, its confidence, and its corroborating sources. Identical claims SHALL be collapsed and the collapsed count reported. A claim with no attributed source SHALL be returned unverified rather than dropped. A claim that cannot be verified SHALL NOT fail the batch. The batch SHALL be bounded by configuration and SHALL share one iteration limit and one HTTP-call budget across all claims. Supplying both a single query and a claim list SHALL be rejected as invalid input. _Check:_ G1.
+
+**REQ-026h — Support span and source modality**
+Every corroborating source returned by `verify_claims` SHALL report the modality of the claim it supports: asserted, reported, or speculative. A source whose claim is attributed or hedged SHALL be reported as reported, and one that states a possibility SHALL be reported as speculative. WHEN the source text contains a sentence supporting the claim, the source SHALL report a span locating that sentence within the source text; WHEN no supporting sentence can be located, the span SHALL be omitted rather than fabricated. The reported modality SHALL NOT change confidence, verdict, or source-family count. A report that declares a non-asserted modality SHALL carry an attribution for that claim which appears in the report body. The marker lexicon SHALL be configurable. _Check:_ G1.
 
 **REQ-121 — Corroboration source families**
 Confidence counting for `verify_claims` SHALL count independent source families rather than registrable domains alone. Sources that share a canonical URL or republish substantially the same text SHALL be counted as one family, and sources on the same registrable domain SHALL remain one family. Each finding SHALL report its family count, and the family similarity threshold SHALL be configurable. _Check:_ G1.
@@ -461,7 +467,7 @@ Reports and gated analysis SHALL use one confidence scale with three labels, one
 A monitoring run SHALL baseline the current report with a verification receipt and SHALL revalidate that baseline with `verify_report` before comparing. The delta SHALL report new, changed, and removed claims or sources separately and SHALL surface source drift and unverifiable sources rather than treating them as unchanged. A new report revision SHALL increment the revision number and name the baseline report it supersedes. A delta SHALL NOT restate unchanged findings as new. _Check:_ G3.
 
 **REQ-116 — Report Quality Gate**
-A report SHALL carry the shared skeleton and a Source Register that resolves every `[S#]` citation to a row with a URL. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A gate SHALL fail when a required skeleton section is absent, a Key Findings item lacks a citation, a citation is unresolved, or a Source Register row lacks a URL. _Check:_ G3.
+A report SHALL carry the shared skeleton and a Source Register that resolves every `[S#]` citation to a row with a URL. Confidence SHALL be High, Medium, or Low; likelihood SHALL use the calibrated lexicon; verdicts SHALL use the fact-check taxonomy. A claim that declares a non-asserted modality SHALL carry an attribution that appears in the report body. A gate SHALL fail when a required skeleton section is absent, a Key Findings item lacks a citation, a citation is unresolved, an attribution is missing from the body, or a Source Register row lacks a URL. _Check:_ G3.
 
 **REQ-125 — Watchlist Monitoring Runner**
 The server SHALL provide a watchlist runner that reads topics, a query, and an interval; selects the topics that are due; and records each run with the claims found and a delta against the prior run. Scheduling SHALL remain external to the server. A due topic whose run fails SHALL be recorded as an error without aborting the remaining topics. The runner SHALL support a dry-run that selects due topics without contacting providers. _Check:_ G1, G3.
@@ -473,7 +479,7 @@ A report Source Register SHALL record each source's publication date when determ
 A report SHALL carry the output block defined for its declared workflow shape in addition to the shared skeleton. The report quality gate SHALL reject a report whose declared shape's block is absent, and SHALL reject a finding entry that lacks a confidence label or at least one resolved source citation. A shape that defines no additional block SHALL satisfy the shared skeleton alone. _Check:_ G3.
 
 **REQ-120 — Report Delivery Verification**
-The orchestrator skill and its reference files SHALL define one pipeline order. The report pipeline SHALL re-verify each drafted claim against the collected evidence before the report quality gate. A claim introduced during drafting that the evidence does not support SHALL be removed or marked unverified. The report quality gate SHALL run on the final artifact after language polish and after translation. A translated report SHALL retain the canonical section headings and record its language in the manifest. _Check:_ G3.
+The orchestrator skill and its reference files SHALL define one pipeline order. The report pipeline SHALL re-verify each drafted claim against the collected evidence before the report quality gate, using the batch claim input of REQ-026g where the draft has several claims. A claim introduced during drafting that the evidence does not support SHALL be removed or marked unverified. The re-verification SHALL preserve each source's modality so a hedged claim is not delivered as a flat assertion. The report quality gate SHALL run on the final artifact after language polish and after translation. A translated report SHALL retain the canonical section headings and record its language in the manifest. _Check:_ G3.
 
 **REQ-126 — Report artifact export**
 The report tooling SHALL export a validated report as JSON and CSV in addition to HTML. The JSON export SHALL carry the report manifest, section list, sources, and claims; CSV exports SHALL carry the Source Register and the claims table. Export SHALL be deterministic and SHALL validate the report before writing unless the caller explicitly skips validation. _Check:_ G3.
@@ -880,11 +886,13 @@ An explicit `provider` parameter takes precedence over priority routing.
 ### 8.1 Algorithm
 
 ```
-function corroborate(query, max_iterations=5, confidence_threshold=0.8, providers=[...], priority=None):
+function corroborate(query=None, claims=None, max_iterations=5, confidence_threshold=0.8, providers=[...], priority=None):
   findings = {}
-  // REQ-026: seed one finding per caller claim. Sources are attributed to
-  // these claims; page titles never become findings.
-  for claim in extract_claims(query):
+  // REQ-026 / REQ-026g: seed one finding per caller claim. A claim list is
+  // seeded verbatim (never split); a query is split heuristically. Sources are
+  // attributed to these claims; page titles never become findings.
+  caller_claims = claims if claims else extract_claims(query)
+  for claim in caller_claims:
     findings[claim] = { claim, topic: claim, confidence: 0.1,
                         verdict: "unverified", sources: [] }
   iteration = 0
@@ -902,6 +910,8 @@ function corroborate(query, max_iterations=5, confidence_threshold=0.8, provider
     first_pass_providers = top_n_by_priority(providers, first_pass_max_providers)
     raw_results = parallel_search(query, first_pass_providers)
     // Attribute each result to its closest seeded claim (claim_seeded=true).
+    // REQ-026h: every attributed source records a support span when one can be
+    // located and the source claim's modality; neither changes the score.
     reconcile_claims(findings, raw_results, claim_seeded=true)
 
     // Phase 2: Re-evaluate each claim's attributed sources for agreement.
@@ -1019,6 +1029,8 @@ verdict is preserved (REQ-026f).
 - Cross-task fallback: mock every provider in a non-`general_web` chain failing → verify the `general_web` chain serves, without re-trying an already-attempted provider (REQ-031a)
 - Normalizer: input from each provider format → verify common output shape
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
+- Batch claim verification: pass two independent claims → verify two findings in caller order with `claim_index`; pass a claim containing "and" → verify it is seeded verbatim; make one claim unsourced → verify it is returned `unverified` rather than dropped; pass duplicate claims → verify the collapsed count (REQ-026g)
+- Support span and modality: make a source snippet hedge ("reportedly") → verify the source reports `reported` with the marker, the span slices back to its text, and the verdict is unchanged (REQ-026h)
 - Semantic claim reconciliation: mock two providers with paraphrased agreeing claims → verify one confirmed finding; mock a claim with opposed polarity or a conflicting value → verify the `contested` verdict with perspectives is preserved (REQ-026f)
 - Cross-provider reconciliation: mock results where two providers return the same page at different URLs → verify the results collapse to one representative with provenance retained and distinct results preserved (REQ-020g)
 - Rate-limit error code: mock an explicitly requested provider returning HTTP 429 → verify the error code is `rate_limited`, not `provider_unavailable` (REQ-002)
@@ -1137,6 +1149,8 @@ verdict is preserved (REQ-026f).
 | REQ-026d | corroboration provenance record | 4.3 | G1 |
 | REQ-026e | corroboration knowledge-base recall | 4.3 | G1 |
 | REQ-026f | Semantic claim reconciliation | 4.3 | G1 |
+| REQ-026g | Batch claim verification | 4.3 | G1 |
+| REQ-026h | Support span and source modality | 4.3 | G1 |
 | REQ-121 | Corroboration source families | 4.3 | G1 |
 | REQ-122 | Citation-grade source snapshots | 4.3 | G1 |
 | REQ-123 | Confidence calibration | 4.3 | G1 |
@@ -1708,7 +1722,7 @@ secondary concerns rather than duplicating the REQ.
 |---|--------------|-------|--------------|------|
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
-| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-121, REQ-122, REQ-123 | G0, G1 |
+| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |

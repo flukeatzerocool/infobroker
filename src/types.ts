@@ -67,6 +67,16 @@ export interface Config {
   corroboration: {
     max_iterations: number;
     max_http_calls: number;
+    /**
+     * Cap on claims accepted in one batch `verify_claims` call (REQ-026g).
+     * Configuration validation clamps it; the tool rejects a larger request.
+     */
+    max_batch_claims?: number;
+    /** Override for the modality marker lexicon (REQ-026h). */
+    modality_markers?: {
+      reported?: string[];
+      speculative?: string[];
+    };
     confidence_threshold: number;
     first_pass_max_results: number;
     first_pass_max_providers: number;
@@ -186,6 +196,12 @@ export interface CorroborationSource {
   url: string;
   snippet: string;
   claim?: string;
+  /** Span of the supporting text inside `snippet` (REQ-026h). */
+  span?: { start: number; end: number; text: string };
+  /** Modality of this source's claim (REQ-026h); advisory only. */
+  modality?: "asserted" | "reported" | "speculative";
+  /** The marker that produced `modality`, for explainability. */
+  modality_marker?: string;
   source_type?: string;
   archived_url?: string;
   original_source?: string;
@@ -210,6 +226,8 @@ export interface CorroborationSource {
 export interface CorroborationFinding {
   topic: string;
   claim: string;
+  /** Position of this claim in the caller's batch list (REQ-026g). */
+  claim_index?: number;
   confidence: number;
   verdict: "confirmed" | "contested" | "unverified";
   sources: CorroborationSource[];
@@ -380,6 +398,10 @@ export interface CorroborationResult {
   providers_used: string[];
   total_sources: number;
   corroboration: "complete" | "partial";
+  /** True when the call supplied a claim list rather than one query string. */
+  batch?: boolean;
+  /** Identical claims collapsed during batch seeding (REQ-026g). */
+  duplicate_claims?: number;
   provenance?: CorroborationProvenance;
 }
 

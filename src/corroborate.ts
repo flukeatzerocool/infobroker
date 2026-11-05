@@ -1,4 +1,4 @@
-// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-121 REQ-122 REQ-123
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026g REQ-026h REQ-121 REQ-122 REQ-123
 import type { SearchResult, CorroborationResult, CorroborationFinding, CorroborationSource } from "./types.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
 import { getConfig, getActiveProviders, getDispatchChain } from "./config.js";
@@ -11,6 +11,8 @@ import { assignSourceFamilies, familyCount } from "./source-family.js";
 import { capConfidence, type CalibrationOptions } from "./calibration.js";
 import { sha256Text, snapshotSource } from "./preservation.js";
 import { checkContent, disposition } from "./content-policy.js";
+import { locateSupport } from "./span.js";
+import { readModality } from "./modality.js";
 import { getDomain } from "tldts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -171,12 +173,22 @@ type Source = CorroborationSource;
 function attributeSource(
   r: SearchResult,
   retrievedAt?: () => string,
+  supportClaim?: string,
 ): Source {
+  const snippet = r.snippet || "";
+  // `reconcileClaims` is also called directly by unit tests with no loaded
+  // config; the marker override is optional, so a missing config is safe.
+  const config = getConfig() as ReturnType<typeof getConfig> | undefined;
+  const reading = readModality(snippet || r.title, config?.corroboration?.modality_markers);
+  const span = supportClaim ? locateSupport(snippet, supportClaim) : null;
   return {
     title: r.title,
     url: r.url,
     snippet: r.snippet,
     claim: r.snippet || r.title,
+    ...(span ? { span } : {}),
+    modality: reading.modality,
+    ...(reading.marker ? { modality_marker: reading.marker } : {}),
     source_type: r.source_type,
     original_source: r.original_source,
     retrieved_at: retrievedAt ? retrievedAt() : new Date().toISOString(),
@@ -214,7 +226,7 @@ export function reconcileClaims(
       }
       if (!best || (bestScore <= 0 && findings.size > 1)) continue;
       if (!best.sources.some((s) => s.url === r.url)) {
-        best.sources.push(attributeSource(r, retrievedAt));
+        best.sources.push(attributeSource(r, retrievedAt, best.claim));
       }
       continue;
     }
@@ -229,12 +241,12 @@ export function reconcileClaims(
         claim: r.snippet,
         confidence: 0.3,
         verdict: "unverified",
-        sources: [attributeSource(r, retrievedAt)],
+        sources: [attributeSource(r, retrievedAt, r.snippet)],
       });
     } else {
       const alreadyHasSource = existing.sources.some((s) => s.url === r.url);
       if (!alreadyHasSource) {
-        existing.sources.push(attributeSource(r, retrievedAt));
+        existing.sources.push(attributeSource(r, retrievedAt, existing.claim));
       }
     }
   }
@@ -497,7 +509,7 @@ function pickGapProvider(
 }
 
 export async function corroborate(
-  query: string,
+  query: string | string[],
   options: {
     max_iterations?: number;
     confidence_threshold?: number;
@@ -509,6 +521,12 @@ export async function corroborate(
   } = {}
 ): Promise<CorroborationResult> {
   const config = getConfig();
+  // REQ-026g: a claim list is seeded verbatim; a query string keeps the
+  // heuristic split (extractClaims) for back-compatibility.
+  const isBatch = Array.isArray(query);
+  const callerClaims: string[] = isBatch
+    ? (query as string[]).map((claim) => claim.trim()).filter((claim) => claim.length > 0)
+    : extractClaims(query as string);
   const maxIterations = Math.min(
     options.max_iterations ?? config.corroboration.max_iterations,
     10
@@ -527,6 +545,19 @@ export async function corroborate(
     secondaryOnlyCap: config.corroboration.calibration?.secondary_only_cap ?? DEFAULT_SECONDARY_CAP,
   };
   const searchers = options.searchers ?? SEARCHERS;
+
+  if (callerClaims.length === 0) {
+    return {
+      findings: [],
+      agreement_map: { green: [], yellow: [], red: [] },
+      synthesis: "No claims were corroborated.",
+      iteration_count: 0,
+      providers_used: [],
+      total_sources: 0,
+      corroboration: "partial",
+      ...(isBatch ? { batch: true as const } : {}),
+    };
+  }
 
   // REQ-026: corroborate defaults to all active providers that expose a search
   // function — not merely the web_search-capable tier, so high-authority
@@ -554,15 +585,21 @@ export async function corroborate(
   }
 
   const findings = new Map<string, CorroborationFinding>();
+  let duplicateClaims = 0;
 
-  // REQ-026: seed one finding per caller claim. External sources are attributed
-  // to these claims; page titles never become findings.
-  const claims = extractClaims(query);
-  for (const claim of claims) {
-    if (findings.has(claim)) continue;
+  // REQ-026 / REQ-026g: seed one finding per caller claim. A batch claim is
+  // seeded verbatim (never split); a query string keeps the heuristic split.
+  // External sources are attributed to these claims; page titles never become
+  // findings in claim-seeded mode.
+  for (const [index, claim] of callerClaims.entries()) {
+    if (findings.has(claim)) {
+      duplicateClaims++;
+      continue;
+    }
     findings.set(claim, {
       topic: claim.length > 90 ? `${claim.slice(0, 87)}...` : claim,
       claim,
+      ...(isBatch ? { claim_index: index } : {}),
       confidence: 0.1,
       verdict: "unverified",
       sources: [],
@@ -571,18 +608,21 @@ export async function corroborate(
 
   // REQ-026e: prior KB findings participate as corroborating sources before
   // external search. KB recall is derivative (SR-001) and never blocks the
-  // external pass when absent, below threshold, or on error.
+  // external pass when absent, below threshold, or on error. REQ-026g recalls
+  // each batch claim separately (local store only, no HTTP).
   if (kbRecall && isKbConfigured()) {
-    try {
-      const recalled = kbSearch(query, firstPassMaxResults).map((r) => ({
-        title: r.title,
-        url: r.source_url,
-        snippet: r.snippet,
-        source_type: r.source_type,
-      }));
-      reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
-    } catch {
-      // KB unavailable — proceed to external providers.
+    for (const claim of callerClaims) {
+      try {
+        const recalled = kbSearch(claim, firstPassMaxResults).map((r) => ({
+          title: r.title,
+          url: r.source_url,
+          snippet: r.snippet,
+          source_type: r.source_type,
+        }));
+        reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
+      } catch {
+        // KB unavailable for this claim — the external pass still runs.
+      }
     }
   }
   let totalCalls = 0;
@@ -604,41 +644,48 @@ export async function corroborate(
         firstPassMaxProviders
       );
       const FIRST_PASS_CONCURRENCY = 4;
+      // REQ-026g: a batch searches each caller claim in order under one shared
+      // HTTP-call budget. A late claim may end up unverified rather than
+      // starving a sibling that was searched first.
+      const firstPassQueries = isBatch ? callerClaims : [query as string];
 
-      for (let i = 0; i < firstPassSlugs.length; i += FIRST_PASS_CONCURRENCY) {
-        const batch = firstPassSlugs.slice(i, i + FIRST_PASS_CONCURRENCY);
-        const searchPromises = batch.map(async (slug) => {
-          if (totalCalls >= maxCalls) return null;
-          const q = checkQuota(slug, config.providers[slug]?.rate_limit);
-          if (q.exhausted) return null;
-          try {
-            await throttle(slug);
-            const searcher = resolveSearcher(slug, searchers);
-            if (!searcher) return null;
-            const results = await retryWithBackoff(
-              timedSearch(searcher, query, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
-              config.providers[slug]
-            );
-            return { slug, results };
-          } catch {
-            return null;
-          }
-        });
+      for (const passQuery of firstPassQueries) {
+        if (totalCalls >= maxCalls) break;
+        for (let i = 0; i < firstPassSlugs.length; i += FIRST_PASS_CONCURRENCY) {
+          const batch = firstPassSlugs.slice(i, i + FIRST_PASS_CONCURRENCY);
+          const searchPromises = batch.map(async (slug) => {
+            if (totalCalls >= maxCalls) return null;
+            const q = checkQuota(slug, config.providers[slug]?.rate_limit);
+            if (q.exhausted) return null;
+            try {
+              await throttle(slug);
+              const searcher = resolveSearcher(slug, searchers);
+              if (!searcher) return null;
+              const results = await retryWithBackoff(
+                timedSearch(searcher, passQuery, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
+                config.providers[slug]
+              );
+              return { slug, results };
+            } catch {
+              return null;
+            }
+          });
 
-        const settled = await Promise.allSettled(searchPromises);
-        for (const result of settled) {
-          if (result.status === "fulfilled" && result.value) {
-            totalCalls++;
-            providersUsed.add(result.value.slug);
-            increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-            reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
+          const settled = await Promise.allSettled(searchPromises);
+          for (const result of settled) {
+            if (result.status === "fulfilled" && result.value) {
+              totalCalls++;
+              providersUsed.add(result.value.slug);
+              increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
+              reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
+            }
           }
+
+          const barMet =
+            findings.size > 0 &&
+            [...findings.values()].every((f) => f.confidence >= confidenceThreshold);
+          if (barMet) break;
         }
-
-        const barMet =
-          findings.size > 0 &&
-          [...findings.values()].every((f) => f.confidence >= confidenceThreshold);
-        if (barMet) break;
       }
     } else {
       const gaps = getGaps(findings, confidenceThreshold);
@@ -651,7 +698,7 @@ export async function corroborate(
       const gapTasks: Array<{ slug: string; refinedQuery: string }> = [];
       for (const gapTopic of gaps.slice(0, 3)) {
         if (gapTasks.length >= Math.max(0, maxCalls - totalCalls)) break;
-        const refinedQuery = deriveRefinedQuery(gapTopic, query);
+        const refinedQuery = isBatch ? gapTopic : deriveRefinedQuery(gapTopic, query as string);
         if (searchedQueries.has(refinedQuery)) continue;
         searchedQueries.add(refinedQuery);
 
@@ -696,10 +743,15 @@ export async function corroborate(
     iteration++;
   }
 
-  // A finding without a source is not evidence. Keep the seeded claims out of
-  // the response when no provider or KB result could be attributed to them.
-  const findingsArray = [...findings.values()].filter((f) => f.sources.length > 0);
-  const agreementMap = buildAgreementMap(findingsArray, confidenceThreshold);
+  // A finding without a source is not evidence. Single-query mode keeps the
+  // seeded claims out of the response when no provider or KB result could be
+  // attributed to them; a batch retains them as `unverified` so the caller
+  // sees one row per claim (REQ-026g).
+  const allFindings = [...findings.values()].sort((a, b) => {
+    if (a.claim_index === undefined || b.claim_index === undefined) return 0;
+    return a.claim_index - b.claim_index;
+  });
+  const findingsArray = allFindings.filter((f) => isBatch || f.sources.length > 0);
 
   const condensed = findingsArray.map((f) => {
     const perSourceTypes: Record<string, number> = {};
@@ -714,6 +766,13 @@ export async function corroborate(
       source_types: perSourceTypes,
     };
   });
+
+  // Only sourced findings participate in the agreement map: an unattributed
+  // claim is a gap, not a red corroboration result.
+  const agreementMap = buildAgreementMap(
+    condensed.filter((f) => f.sources.length > 0),
+    confidenceThreshold
+  );
 
   if (config.corroboration.archive_sources === true) {
     await archiveCondensedSources(condensed);
@@ -740,6 +799,7 @@ export async function corroborate(
     iteration_count: iteration,
     providers_used: [...providersUsed],
     total_sources: condensed.reduce((sum, f) => sum + f.sources.length, 0),
+    ...(isBatch ? { batch: true as const, duplicate_claims: duplicateClaims } : {}),
     corroboration:
       condensed.length > 0 && condensed.every((f) => f.confidence >= confidenceThreshold)
         ? "complete"

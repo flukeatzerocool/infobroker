@@ -25,15 +25,6 @@ and ACLs; enterprise scheduling.
 - Add regression tests for multi-URL question mode, partial failures, and
   truncated items.
 
-## [P0] Draft verification loop
-
-- `verify_claims` accepts one claim at a time; add a batch claim list
-  returning claim → verdict → confidence → source → span (REQ-026).
-- Add a FACT-CHECK DRAFT step to the Infobroker skill: extract claims,
-  verify, fix, re-check (REQ-050 family).
-- Preserve source modality ("reportedly") and flag upgrades to flat
-  assertion.
-
 ## [P0] Provider resilience
 
 - The live `general_web` chain is DuckDuckGo plus three small-web engines

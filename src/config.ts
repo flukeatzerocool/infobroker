@@ -469,6 +469,26 @@ export function validateConfig(config: Config): void {
   if (config.corroboration?.kb_recall !== undefined && typeof config.corroboration.kb_recall !== "boolean") {
     errors.push("corroboration.kb_recall must be a boolean");
   }
+  if (config.corroboration?.max_batch_claims !== undefined) {
+    const value = config.corroboration.max_batch_claims;
+    if (!isFiniteNumber(value) || !Number.isInteger(value) || value < 1 || value > 25) {
+      errors.push("corroboration.max_batch_claims must be an integer between 1 and 25");
+    }
+  }
+  if (config.corroboration?.modality_markers !== undefined) {
+    const markers = config.corroboration.modality_markers;
+    if (typeof markers !== "object" || markers === null || Array.isArray(markers)) {
+      errors.push("corroboration.modality_markers must be an object with reported and speculative arrays");
+    } else {
+      for (const key of ["reported", "speculative"] as const) {
+        const list = markers[key];
+        if (list === undefined) continue;
+        if (!Array.isArray(list) || list.some((marker) => typeof marker !== "string" || marker.trim().length === 0)) {
+          errors.push(`corroboration.modality_markers.${key} must be an array of non-empty strings`);
+        }
+      }
+    }
+  }
   if (config.corroboration) {
     const corr = config.corroboration;
     for (const key of ["max_iterations", "max_http_calls", "first_pass_max_results"] as const) {

@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-127 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-027 REQ-060 REQ-081 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-127 REQ-021 REQ-021a REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -235,6 +235,56 @@ test("verify_claims conforms to the REQ-001 envelope", async () => {
   expect(findings.length).toBe(1);
   expect(findings[0].claim).toBe("Does retrieval augmented generation reduce hallucination");
   expect((findings[0].sources as unknown[]).length).toBeGreaterThan(0);
+});
+
+test("verify_claims batch returns one finding per claim in order (REQ-026g)", async () => {
+  scenario = "verify-batch";
+  const claims = [
+    "retrieval augmented generation reduces hallucination",
+    "information retrieval finds relevant resources",
+  ];
+  const out = await call("infobroker_verify_claims", {
+    claims,
+    providers: ["wikipedia"],
+    max_iterations: 1,
+    confidence_threshold: 0.8,
+  });
+  const body = expectOk(out.text);
+  const batchFindings = body.findings as Array<Record<string, unknown>>;
+  expect(body.batch).toBe(true);
+  expect(batchFindings.length).toBe(2);
+  expect(batchFindings.map((f) => f.claim)).toEqual(claims);
+  expect(batchFindings.map((f) => f.claim_index)).toEqual([0, 1]);
+  // REQ-026h: each attributed source carries a span that indexes its snippet.
+  const firstSource = (batchFindings[0]!.sources as Array<Record<string, unknown>>)[0];
+  const span = firstSource?.span as Record<string, unknown> | undefined;
+  expect(typeof firstSource?.modality).toBe("string");
+  expect(typeof span?.start).toBe("number");
+  expect(typeof span?.end).toBe("number");
+  expect(String(firstSource?.snippet).slice(Number(span?.start), Number(span?.end))).toBe(span?.text);
+});
+
+test("verify_claims rejects a batch above the configured cap (REQ-026g)", async () => {
+  scenario = "verify-batch-cap";
+  expectedError = "invalid_input";
+  const out = await call("infobroker_verify_claims", {
+    claims: Array.from({ length: 11 }, (_, i) => `claim number ${i}`),
+    providers: ["wikipedia"],
+    max_iterations: 1,
+  });
+  const body = expectError(out.text, "invalid_input");
+  expect(String((body.error as Record<string, unknown>).remediation)).toContain("claims");
+});
+
+test("verify_claims rejects supplying both query and claims (REQ-026g)", async () => {
+  scenario = "verify-both-inputs";
+  expectedError = "invalid_input";
+  const out = await call("infobroker_verify_claims", {
+    query: "one claim",
+    claims: ["another claim"],
+    providers: ["wikipedia"],
+  });
+  expectError(out.text, "invalid_input");
 });
 
 test("inspect_providers list and spec report operational state", async () => {

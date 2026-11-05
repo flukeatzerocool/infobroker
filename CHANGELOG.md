@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.11.05 — Draft verification loop
+
+- `verify_claims` now accepts a `claims` list beside the single `query`, seeds
+  each claim verbatim (a claim containing "and" is no longer split), returns one
+  finding per claim in caller order with `claim_index`, keeps an unsourced
+  claim as an explicit `unverified` row instead of dropping it, collapses
+  duplicates with a count, and shares one iteration limit and one HTTP-call
+  budget across the batch, bounded by the new `corroboration.max_batch_claims`.
+  Supplying both inputs is rejected as invalid input. (REQ-026, REQ-026g)
+- Each corroborating source reports a `span` locating the sentence in its
+  snippet that supports the claim and an advisory `modality` — `asserted`,
+  `reported`, or `speculative` — with the matched marker. Modality never changes
+  confidence, verdict, or family count. (REQ-026h)
+- The report contract gains `modality` and `attribution` on a manifest claim;
+  `validate-report` fails when a non-asserted claim declares no attribution or
+  the attribution does not appear in the body, so a hedged source can no longer
+  be graded to a flat assertion. Two modality fixtures prove the gate. (REQ-116)
+- The skill's `REDRAFT-CHECK` phase is now the FACT-CHECK DRAFT step: extract
+  the draft's claims, verify them in one batch call, fix what the evidence does
+  not support, re-check once, and carry modality and attribution into the
+  manifest. The G3 artifact check asserts the wording. (REQ-120)
+- The ROADMAP "Draft verification loop" item is complete and removed.
+
 ## 2026.11.04 — Citation stack conformance
 
 - `get_citations` now walks the configured `academic` dispatch chain instead of

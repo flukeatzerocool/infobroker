@@ -73,3 +73,49 @@ Every finding carries up to three sources; each source binds to the specific
 claim it supports (REQ-026b). The response's `provenance` block names the
 server version, iteration limit, threshold, and per-source-type contribution,
 so a downstream citation can document the analytic tooling used.
+
+## Batch mode: fact-checking a draft
+
+Pass a claim list instead of a single query when a draft has several
+independent claims:
+
+```
+verify_claims (claims: ["the bridge inspection found the structure sound",
+                        "the deck was replaced in 2019"])
+```
+
+- One finding comes back per claim, in the order supplied, with `claim_index`
+  and `batch: true`. Identical claims collapse; `duplicate_claims` reports how
+  many were dropped.
+- A claim with no attributed source is returned `unverified` with
+  `sources: []` — it is not silently dropped, so every claim in the draft
+  gets a row.
+- The batch shares one HTTP-call budget and one iteration bound. A late claim
+  can end `unverified` because an earlier claim consumed the budget; that is a
+  gap to report, not a failure.
+- Supply either `query` or `claims`, never both.
+
+## Spans and modality
+
+Each source carries:
+
+- `span` — `{start, end, text}` locating the sentence in the source `snippet`
+  that supports the claim. `snippet.slice(span.start, span.end) === span.text`
+  always holds. The span is omitted when no sentence matches, so a missing
+  span means "not located", never "no evidence".
+- `modality` — `asserted`, `reported` (attribution or hedging: "reportedly",
+  "according to"), or `speculative` (possibility: "may", "appears to"), with
+  `modality_marker` naming the matched word. Modality is **advisory**: it never
+  changes confidence, verdict, or family count.
+
+Read the modality when writing. A `reported` source supports "reportedly …",
+not a flat assertion; a `speculative` source supports "may …". When a claim in
+a report is non-asserted, declare it in the manifest:
+
+```json
+{ "claim": "…", "modality": "reported", "attribution": "reportedly" }
+```
+
+The report validator fails when the attribution does not appear in the body, so
+a hedged source can never be upgraded to fact silently (REQ-026h, REQ-116).
+

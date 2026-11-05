@@ -44,9 +44,12 @@ rather than restating them.
   `report-template.md`; the orchestrator passes the shape, audience, and
   target length. Every shape uses the shared skeleton unless its block says
   "skeleton omitted".
-- **REDRAFT-CHECK** — extract every claim from the draft and re-check it
-  against the collected evidence and the manifest. Remove or mark unverified
-  any claim the evidence does not support.
+- **REDRAFT-CHECK** — the FACT-CHECK DRAFT step: extract every claim from the
+  draft and verify them in one `verify_claims (claims: [...])` batch call. Fix
+  what the evidence does not support (attribute, soften to the source's
+  `modality`, or delete), then re-run the batch once to confirm. Carry each
+  claim's `modality` and `attribution` into the manifest; never upgrade a
+  hedged source to a flat assertion.
 - **VALIDATE** — run `scripts/validate-report.ts --report <file>`; fix every
   error before delivering (missing section or shape block, uncited or
   unlabeled finding, unresolved `[S#]`, register row missing a grade, date, or

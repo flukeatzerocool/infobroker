@@ -1362,7 +1362,7 @@ if (startupNoticeList.length > 0) {
 }
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.11.04",
+  version: "2026.11.05",
   ...(startupNoticeList.length > 0
     ? { instructions: `Infobroker state needs attention: ${startupNoticeList.map((notice) => notice.message).join(" ")}` }
     : {}),
@@ -1516,9 +1516,10 @@ instrumentTool(
   "infobroker_verify_claims",
   {
     title: "Verify Claims",
-    description: "Verify a contested claim against independent sources and return confidence-scored findings. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores. Do NOT use for simple lookups or broad search (use infobroker_search_web) or citation formatting (use infobroker_get_citations). The loop recalls prior findings from the knowledge base, then searches providers and writes findings back; `max_iterations` bounds the refinement passes and per-provider rate limits apply. `query` states the claim plainly; `priority` routes the pool by intent (speed, quality, privacy, free_only); `providers` restricts the pool and omitting it uses the full dispatch chain; `confidence_threshold` sets the bar for confirmation, and findings below it are reported unverified. Returns an [OK] or [ERROR] envelope listing confirmed, contested, and unverified findings with per-source claims and confidence scores.",
+    description: "Verify one or more contested claims against independent sources and return confidence-scored findings. Use when a claim is high-stakes or contested and you need agreement, contradiction, and gaps surfaced with confidence scores, or when a finished draft needs a claim-by-claim fact-check in one call. Do NOT use for simple lookups or broad search (use infobroker_search_web) or citation formatting (use infobroker_get_citations). The loop recalls prior findings from the knowledge base, then searches providers and writes findings back; `max_iterations` bounds the refinement passes and per-provider rate limits apply, with one HTTP-call budget shared across a batch. Supply exactly one of `query` (one claim, or a string the server splits into up to five) or `claims` (a list of independent claims seeded verbatim); a batch returns one finding per claim in caller order and a claim with no attributed source is reported unverified rather than dropped. `priority` routes the pool by intent (speed, quality, privacy, free_only); `providers` restricts the pool and omitting it uses the full dispatch chain; `confidence_threshold` sets the bar for confirmation, and findings below it are reported unverified. Each source carries a `span` locating its supporting sentence and an advisory `modality` (asserted, reported, speculative) that never changes confidence. Returns an [OK] or [ERROR] envelope listing confirmed, contested, and unverified findings with per-source claims, spans, and confidence scores.",
     inputSchema: {
-      query: z.string().describe("Search query"),
+      query: z.string().optional().describe("One claim to verify; the server splits it into up to five sub-claims. Supply either query or claims, not both"),
+      claims: z.array(z.string()).optional().describe("Independent claims to verify as a batch (bounded by corroboration.max_batch_claims, default 10); seeded verbatim and returned one finding per claim in this order. Supply either query or claims, not both"),
       max_iterations: z.number().min(1).max(10).optional().default(5).describe("Maximum search-refinement passes (1-10, default 5)"),
       confidence_threshold: z.number().min(0).max(1).optional().default(0.8).describe("Minimum confidence to report a finding as confirmed (0-1, default 0.8)"),
       providers: z.array(z.string()).optional().describe("Optional array of provider slugs to limit the search to"),
@@ -1533,34 +1534,71 @@ instrumentTool(
   },
   async (params: any) => {
     try {
-      const result = await corroborate(String(params.query), {
+      // REQ-026g: exactly one of `query` or `claims` is accepted. The batch
+      // cap is configuration, and the tool rejects (not clamps) an over-cap
+      // request so a truncated batch can never look complete.
+      const queryText =
+        typeof params.query === "string" && params.query.trim().length > 0 ? params.query : undefined;
+      const claimList = Array.isArray(params.claims)
+        ? (params.claims as unknown[]).map((claim) => String(claim).trim())
+        : undefined;
+      const rawMaxBatch = Number(getConfig().corroboration.max_batch_claims ?? 10);
+      const maxBatch = Number.isFinite(rawMaxBatch)
+        ? Math.min(25, Math.max(1, Math.trunc(rawMaxBatch)))
+        : 10;
+      const invalidInput = (message: string) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: `[ERROR] ${json(err("none", "invalid_input", message, `Pass exactly one of query (string) or claims (array of up to ${maxBatch} strings) and retry`))}`,
+          },
+        ],
+      });
+      if (queryText !== undefined && claimList !== undefined) {
+        return invalidInput("Provide either query or claims, not both");
+      }
+      if (queryText === undefined && claimList === undefined) {
+        return invalidInput("Provide a query or a claims list");
+      }
+      if (claimList !== undefined) {
+        if (claimList.length === 0) return invalidInput("claims must contain at least one claim");
+        if (claimList.some((claim) => claim.length === 0)) {
+          return invalidInput("claims must not contain empty entries");
+        }
+        if (claimList.length > maxBatch) {
+          return invalidInput(`claims accepts at most ${maxBatch} entries`);
+        }
+      }
+      const input = claimList ?? queryText!;
+      const result = await corroborate(input, {
         max_iterations: Number(params.max_iterations),
         confidence_threshold: Number(params.confidence_threshold),
         providers: params.providers as string[] | undefined,
         priority: params.priority as "speed" | "quality" | "privacy" | "free_only" | undefined,
         latency: latency.avg,
       });
-      autoIndex(
-        result.findings.map((f) => ({ title: f.topic, url: f.sources[0]?.url || "", snippet: f.claim })),
-        "corroborate",
-        undefined,
-        "corroborate"
-      );
+      const indexable = result.findings
+        .filter((f) => Boolean(f.sources[0]?.url))
+        .map((f) => ({ title: f.topic, url: f.sources[0]!.url, snippet: f.claim }));
+      autoIndex(indexable, "corroborate", undefined, "corroborate");
       // REQ-109: persist the ledger best-effort. kbRecordClaims swallows every
-      // error, so a ledger failure cannot fail or alter this response.
+      // error, so a ledger failure cannot fail or alter this response. An
+      // unsourced batch claim has no source to link and is not persisted.
       kbRecordClaims(
-        result.findings.map((f) => ({
-          claim: f.claim || f.topic,
-          verdict: f.verdict,
-          confidence: f.confidence,
-          sources: f.sources
-            .filter((s) => Boolean(s.url))
-            .map((s) => ({
-              url: s.url,
-              title: s.title,
-              retrieved_at: s.retrieved_at ?? new Date().toISOString(),
-            })),
-        }))
+        result.findings
+          .filter((f) => f.sources.some((s) => Boolean(s.url)))
+          .map((f) => ({
+            claim: f.claim || f.topic,
+            verdict: f.verdict,
+            confidence: f.confidence,
+            sources: f.sources
+              .filter((s) => Boolean(s.url))
+              .map((s) => ({
+                url: s.url,
+                title: s.title,
+                retrieved_at: s.retrieved_at ?? new Date().toISOString(),
+              })),
+          }))
       );
       if (compactMode(getConfig())) {
         delete result.provenance;

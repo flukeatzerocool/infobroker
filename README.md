@@ -290,18 +290,23 @@ visibility into every backend.
 search across your highest-authority providers — search engines,
 encyclopedias, and scholarly indexes — then claim extraction,
 cross-source reconciliation, and targeted follow-up for gaps, dispatched
-in parallel and stopping early once the truth is pinned down. Claims
-corroborated across independent sources score high confidence, weighted
+in parallel and stopping early once the truth is pinned down. Hand it a draft
+and it takes a claim list, returning one finding per claim in your order —
+including an explicit `unverified` row for a claim nothing supports, rather
+than dropping it. Claims corroborated across independent sources score high
+confidence, weighted
 by each source's authority; every source is bound to the claim it
-supports. Republished wire copy and mirrors are collapsed into one source
+supports, with a span locating the supporting sentence and the claim's
+modality (`asserted`, `reported`, `speculative`) so a hedged source is never
+rendered as flat fact. Republished wire copy and mirrors are collapsed into one source
 family, so confidence counts origins, not hosts, and a secondary-only
 finding is capped rather than overstated. Contradictions are surfaced with
 all perspectives. Gaps trigger refined queries that broaden to the rest of
 your providers. It also remembers: prior findings in your knowledge base
 participate as corroborating sources before it queries the network. You get a
 structured report — confirmed, contested, and unverified findings — with
-source provenance, per-source claims, and confidence scores. Every other
-search tool returns a list of links; Infobroker finds the truth and
+source provenance, per-source claims and spans, and confidence scores. Every
+other search tool returns a list of links; Infobroker finds the truth and
 tells you how sure it is.
 
 ### Knowledge Base
@@ -715,7 +720,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-11-04.
+Last updated: 2026-11-05.
 
 ## Contribute
 
@@ -745,7 +750,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.11.04), which defines every requirement and the gates that verify it.
+(v2026.11.05), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers. The routing gate resolves every cited tool and

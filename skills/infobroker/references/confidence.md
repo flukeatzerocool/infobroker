@@ -35,6 +35,22 @@ the judged event is. You can hold High confidence that an event is unlikely.
 Use these terms verbatim; do not substitute "probably", "possibly", or
 "maybe". A report claim may carry both `confidence` and `likelihood`.
 
+## Modality (how a source states its claim)
+
+Separate from confidence and likelihood. A source's *modality* says how the
+evidence was stated, not how sure you are:
+
+| Modality | Meaning | Write it as |
+|----------|---------|-------------|
+| `asserted` | The source states the claim plainly | "X is…" |
+| `reported` | The source attributes or hedges it ("reportedly", "according to") | "X reportedly…" / "according to S#, X…" |
+| `speculative` | The source states a possibility ("may", "appears to") | "X may…" |
+
+`verify_claims` reports the modality on each source. Preserve it in the report:
+never upgrade `reported` or `speculative` to a flat assertion. A non-asserted
+manifest claim declares `modality` and an `attribution` phrase that must appear
+in the body (REQ-026h, REQ-116). Modality never changes a confidence score.
+
 ## Source grades (Admiralty / NATO code)
 
 Grade the source and the information independently. A single item carries two

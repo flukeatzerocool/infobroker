@@ -1057,3 +1057,160 @@ describe("applyPriority speed ordering (REQ-026)", () => {
     expect(applyPriority(["a", "b"], "quality")).toEqual(["a", "b"]);
   });
 });
+
+// @implements REQ-026g batch-order
+// @implements REQ-026g batch-unsourced
+// @implements REQ-026g batch-partial
+// @implements REQ-026g batch-budget
+// @implements REQ-026g batch-duplicate
+// @implements REQ-026h span-located
+// @implements REQ-026h modality-preserved
+describe("batch claim verification (REQ-026g, REQ-026h)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(throttle).mockResolvedValue(undefined);
+    vi.mocked(checkQuota).mockReturnValue(makeQuota());
+    vi.mocked(increment).mockReturnValue(makeQuota());
+    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => (fn as () => Promise<any>)());
+    vi.mocked(isKbConfigured).mockReturnValue(false);
+    vi.mocked(kbSearch).mockReturnValue([]);
+    vi.mocked(getDispatchChain).mockReturnValue([]);
+  });
+
+  function claimSearcher() {
+    return {
+      wikipedia: async (query: string) => [
+        makeResult(
+          `Source for ${query}`,
+          `https://wiki.example/${encodeURIComponent(query)}`,
+          `${query} is supported by independent evidence.`
+        ),
+      ],
+    };
+  }
+
+  it("returns one finding per claim in caller order with claim_index", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const claims = ["red teaming reduces model risk", "retrieval augments generation"];
+    const result = await corroborate(claims, {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers: claimSearcher(),
+    });
+    expect(result.batch).toBe(true);
+    expect(result.findings).toHaveLength(2);
+    expect(result.findings.map((f) => f.claim)).toEqual(claims);
+    expect(result.findings.map((f) => f.claim_index)).toEqual([0, 1]);
+  });
+
+  it("seeds a claim containing 'and' verbatim instead of splitting it", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const claims = ["Han and Greedo fired at the same time"];
+    const result = await corroborate(claims, {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers: claimSearcher(),
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.claim).toBe("Han and Greedo fired at the same time");
+  });
+
+  it("returns an unsourced claim as unverified without dropping its siblings", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const claims = ["red teaming reduces model risk", "zxqv plorb wint"];
+    const searchers = {
+      wikipedia: async (query: string) => [
+        makeResult(
+          "Only one relevant page",
+          `https://wiki.example/${encodeURIComponent(query)}`,
+          query.includes("zxqv")
+            ? "Completely unrelated words appear on this page."
+            : `${query} is supported by independent evidence.`
+        ),
+      ],
+    };
+    const result = await corroborate(claims, { max_iterations: 1, providers: ["wikipedia"], searchers });
+    expect(result.findings).toHaveLength(2);
+    const supported = result.findings.find((f) => f.claim === claims[0])!;
+    const unsourced = result.findings.find((f) => f.claim === claims[1])!;
+    expect(supported.sources.length).toBeGreaterThan(0);
+    expect(unsourced.sources).toEqual([]);
+    expect(unsourced.verdict).toBe("unverified");
+    // The unattributed claim is not a red corroboration result.
+    expect(result.agreement_map.red).not.toContain(unsourced.topic);
+  });
+
+  it("collapses duplicate claims and reports the count", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const result = await corroborate(["same claim twice", "same claim twice"], {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers: claimSearcher(),
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.duplicate_claims).toBe(1);
+  });
+
+  it("shares one HTTP-call budget across the batch", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 1, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    let calls = 0;
+    const searchers = {
+      wikipedia: async (query: string) => {
+        calls++;
+        return [
+          makeResult(
+            `Source for ${query}`,
+            `https://wiki.example/${encodeURIComponent(query)}`,
+            `${query} is supported by independent evidence.`
+          ),
+        ];
+      },
+    };
+    const result = await corroborate(["first claim here", "second claim here"], {
+      max_iterations: 2,
+      providers: ["wikipedia"],
+      searchers,
+    });
+    expect(calls).toBe(1);
+    expect(result.findings).toHaveLength(2);
+    expect(result.findings.filter((f) => f.sources.length > 0)).toHaveLength(1);
+    expect(result.corroboration).toBe("partial");
+  });
+
+  it("attaches a support span that slices back to its text (REQ-026h)", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const snippet = "Opening filler sentence. Red teaming reduces model risk in production. Closing remark.";
+    const searchers = {
+      wikipedia: async () => [makeResult("Risk page", "https://wiki.example/risk", snippet)],
+    };
+    const result = await corroborate(["red teaming reduces model risk"], {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers,
+    });
+    const source = result.findings[0]!.sources[0]!;
+    expect(source.span).toBeDefined();
+    expect(source.snippet.slice(source.span!.start, source.span!.end)).toBe(source.span!.text);
+    expect(source.span!.text).toContain("Red teaming reduces model risk");
+  });
+
+  it("reports source modality without changing the verdict (REQ-026h)", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const searchers = {
+      wikipedia: async () => [
+        makeResult("Policy page", "https://wiki.example/policy", "The policy reportedly reduced emissions last year."),
+      ],
+    };
+    const result = await corroborate(["the policy reduced emissions"], {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers,
+    });
+    const source = result.findings[0]!.sources[0]!;
+    expect(source.modality).toBe("reported");
+    expect(source.modality_marker).toBe("reportedly");
+    // Advisory only: the single-source finding stays unverified either way.
+    expect(result.findings[0]!.verdict).toBe("unverified");
+  });
+});
+

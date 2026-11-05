@@ -2,6 +2,46 @@
 
 ## Active Decisions
 
+### D-073: Batch Claim Verification with Advisory Modality (2026.11.05)
+
+`verify_claims` could only take one query string, which it split on
+"and"/"but" — so a caller with several independent claims either got corrupted
+claim text or had to make one call per claim, multiplying the per-invocation
+HTTP budget the spec caps. The tool now accepts `claims` as a list, seeded
+verbatim, and returns one finding per claim in caller order with `claim_index`.
+A batch is one corroboration run: searches, iterations, and the
+`max_http_calls` budget are shared, so per-invocation cost stays bounded.
+A claim with no attributed source is retained as `unverified` in batch mode
+(it is the row the draft checker needs) but still dropped in single-query mode,
+which preserves every existing caller's output. The batch "claim list" is the
+`findings` array itself rather than a second parallel structure: duplicating
+claim/verdict/confidence/sources would double the payload and let REQ-004
+truncation split a record.
+
+Each attributed source now carries a `span` (`{start,end,text}`) locating the
+sentence in the stored snippet that supports the claim, and an advisory
+`modality` (`asserted`/`reported`/`speculative`) read from a pure lexicon
+module. Modality is deliberately non-scoring: folding it into the confidence
+ladder would contradict REQ-026a's authority weighting and change every
+existing score. The report gate is mechanical instead of heuristic — a claim
+that declares a non-asserted modality must carry an `attribution` phrase that
+appears in the body, so a hedged source cannot be upgraded to flat assertion
+without a visible failure. Span and modality are not persisted in the claim
+ledger: they are derived, advisory data, and extending `ClaimSourceEdge` would
+force a migration of the sealed record for no analytic gain.
+
+The skill's existing `REDRAFT-CHECK` phase absorbed the FACT-CHECK DRAFT
+procedure rather than gaining a new phase, because the canonical pipeline
+order is order-enforced by `validate-spec` and REQ-120; a second phase would
+break both for no benefit.
+
+Alternatives rejected: one `corroborate()` call per claim (multiplies the
+SR-008 budget by the batch size); `query: string | string[]` (weak schema and
+a poor tool description for TDQS); always retaining unsourced claims (changes
+single-claim output); an LLM/heuristic "reads too flat" report check
+(false-positive prone, not verifiable as a G3 gate); persisting span/modality
+in the ledger (schema migration for advisory data).
+
 ### D-072: Citation Aggregation Through the Provider Layer (2026.11.05)
 
 `get_citations` had always called two bespoke clients (arXiv and Semantic

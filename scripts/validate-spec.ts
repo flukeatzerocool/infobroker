@@ -602,6 +602,25 @@ function checkArtifactContent(): void {
           error(`skills/infobroker/references/workflows.md: missing ${phase} phase (REQ-120)`);
         }
       }
+      // REQ-026g/REQ-026h: the redraft step names the batch call and modality.
+      if (!workflows.includes("FACT-CHECK DRAFT")) {
+        error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not name the FACT-CHECK DRAFT step (REQ-026g)");
+      }
+      if (!/modality/i.test(workflows)) {
+        error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
+      }
+    }
+    // REQ-026g/REQ-026h: the orchestrator's redraft step calls the batch tool
+    // and preserves modality rather than re-checking prose alone.
+    if (!/verify_claims \(claims:/.test(content)) {
+      error("skills/infobroker/SKILL.md: REDRAFT-CHECK does not call verify_claims with a claims list (REQ-026g)");
+    }
+    if (!/modality/i.test(content)) {
+      error("skills/infobroker/SKILL.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
+    }
+    const corroborationPath = join(ROOT, "skills", "infobroker", "references", "corroboration.md");
+    if (existsSync(corroborationPath) && !/\bspan\b/i.test(readFileSync(corroborationPath, "utf-8"))) {
+      error("skills/infobroker/references/corroboration.md: does not document the support span (REQ-026h)");
     }
     // REQ-052: the orchestrator references the four pipeline skills by name.
     for (const s of ["summarization", "technical-writing", "proofreading", "translation"]) {
