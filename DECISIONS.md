@@ -14,12 +14,33 @@ skipping the push. Auto-repair is bounded (`PIPELINE_FIX_ATTEMPTS`, default 2)
 because unbounded fixing can thrash the tree and would violate the review-loop
 termination rule. The loop never resolves secrets, destructive git operations,
 divergence forcing, or non-ancestor tags; those remain human decisions.
-Bounded `--from`/`--to` runs force both `--no-commit` and `--no-push` so a
-partial pipeline cannot publish. Alternatives rejected: keeping the
-pre-commit confirmation (too early to review the result), auto-pushing after
-a green run (no human gate on publication), and unbounded repair (no
-termination guarantee). Verification: `scripts/pipeline/pipeline-logic.test.ts`,
-`bash -n`, and the pipeline rehearsal in a scratch clone.
+Bounded `--to` runs force both `--no-commit` and `--no-push` so a truncated
+pipeline cannot publish; `--from` alone is also a testing run, and `--from`
+with `--commit` may publish (D-071 covers the tag side). Alternatives
+rejected: keeping the pre-commit confirmation (too early to review the
+result), auto-pushing after a green run (no human gate on publication), and
+unbounded repair (no termination guarantee). Verification:
+`scripts/pipeline/pipeline-logic.test.ts`, `bash -n`, and the pipeline
+rehearsal in a scratch clone.
+
+### D-071: A Release Tag Never Changes Version (2026.11.04)
+
+The 2026-11-04 release moved `v2026.10.28` onto a 2026.11.04 commit. The tag
+block read a version snapshot taken before step 1, while the sync step bumps
+the version mid-run, so the "stale tag" branch fired for a tag that belonged to
+a different release. Three rules now hold. The release version is read from
+`package.json` immediately before tagging, never from a start-of-run snapshot.
+A tag is moved only when its own `package.json` reports the version being
+released and it is an ancestor of HEAD; a tag carrying other code — or a tag
+whose version cannot be read — is refused, and `--force-tag` is the explicit
+human override. The tag's `package.json` is asserted against the release
+version after creation, so a mislabelled tag fails the run instead of shipping.
+Branch and tag travel in one push per remote. A mirror push failure is fatal
+because npm and the MCP Registry publish from the mirror's CI. The decision
+lives in `scripts/lib/release-policy.ts` so it is unit-tested; the pipeline
+rehearses it against a scratch repo. Alternatives rejected: never moving a tag
+(breaks same-CalVer multi-commit releases, where no version bump happens on a
+non-behavior run) and always forcing (the defect this replaces).
 
 ### D-068: Encrypted-Compatible Knowledge Base Prefilter (REQ-108, REQ-060a; 2026.10.27)
 
