@@ -35,14 +35,6 @@ and ACLs; enterprise scheduling.
 - Return partial batch results with per-query errors instead of one
   `[ERROR]` for the whole batch.
 
-## [P1] Intent routing
-
-- The keyword classifier sends a biography query to the location chain and
-  scholarly queries without "academic"/"journal" to general web; add
-  DOI/journal/author-year signals and a confidence floor (REQ-020a).
-- Add a `task_type` override to `search_web` (REQ-020).
-- Add the misrouted queries from the essay session as regression fixtures.
-
 ## [P1] Structured response contract
 
 - Add `structuredContent` and `outputSchema` to all seven tools so Code Mode

@@ -88,7 +88,8 @@ Record the total and the checked inputs in the report's methodology.
 |---------|--------|
 | `search_web` returns empty or slow | `inspect_providers (action: health)` → a provider may be exhausted or in cooldown; rephrase the query |
 | A provider is exhausted (quota 100%) | Let the fallback chain skip it; retry after reset, or `reload_config` to adjust limits |
-| A provider returns 429/anti-bot | The server holds it in cooldown (`output.rate_limit_cooldown_ms`); retry later or switch task type |
+| A provider returns 429/anti-bot | The server holds it in cooldown (`output.rate_limit_cooldown_ms`); retry later |
+| `search_web` routed to the wrong provider kind (e.g. a scholarly query on general web) | Override the chain instead of hard-coding a provider: `search_web (task_type: academic)`; `meta.task_type` reports what was selected |
 | Infobroker tool errors | Fall back to built-in `websearch`/`webfetch`, then report the degraded confidence |
 | `fetch_page` returns an anti-bot challenge | The chain falls through to the next renderer (REQ-021f); if all renderers are blocked, use `playwright-cli` for the page |
 | `fetch_page` returns an empty JS-rendered shell | Use `playwright-cli` (headless) → extract → `manage_kb (action: ingest)` |

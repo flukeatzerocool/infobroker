@@ -235,10 +235,10 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
-`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `content_type` (default all), `region`, `language`, and the boolean flags `suggest`, `expand`, `research`, `fresh`, `deep`, and `analyze` (each default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `task_type`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `content_type` (default all), `region`, `language`, and the boolean flags `suggest`, `expand`, `research`, `fresh`, `deep`, and `analyze` (each default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
-**REQ-020a — `search_web` auto-selection**
-WHEN `provider` is omitted, the tool SHALL select the serving provider by classifying the query into a task type (§7.1) and using that type's dispatch chain (§7.2). The selection SHALL exclude exhausted, disabled, or unauthenticated providers and SHALL demote providers at quota warning per REQ-034. The response SHALL identify the serving provider. _Check:_ G1.
+**REQ-020a — `search_web` task-type selection**
+WHEN `task_type` is supplied, the tool SHALL use that type's chain (§7.2) without reclassifying. WHEN `provider` is supplied, the tool SHALL serve from it, falling back through the selected type's chain. Otherwise the tool SHALL classify the query into a task type (§7.1), matching whole words, not substrings, and treating a DOI, an author–year citation, a journal phrase, or a cited work title as an `academic` signal. WHEN no type clears the confidence floor, the tool SHALL keep the `general_web` chain, and a semantic-only match SHALL NOT select a place, fact, filing, definition, or code chain. Selection SHALL exclude exhausted, disabled, or unauthenticated providers and demote those at quota warning per REQ-034. The response SHALL report the task type and serving provider. _Check:_ G1.
 
 **REQ-020b — `search_web` suggestion mode**
 WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. Suggestions SHALL be ordered by semantic relatedness to the query; when no embedding capability is available, provider order SHALL be preserved. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
@@ -833,7 +833,7 @@ when Jina returns 429 or an error.
 | `privacy_critical` | Must not leak query to third party | Data sovereignty |
 | `content_fetch` | Fetch and render a URL's content (renderer dispatch for `fetch_page`; not used by `search_web` auto-selection) | Fidelity |
 
-Task-type classification MAY consider semantic similarity between the query and each type's prototype, not only literal keyword presence (REQ-020a).
+Task-type classification MAY consider semantic similarity between the query and each type's prototype, not only literal keyword presence (REQ-020a). Classification SHALL keep the `general_web` chain when no type clears the confidence floor (REQ-020a).
 
 ### 7.2 Dispatch Table
 
@@ -1123,7 +1123,7 @@ verdict is preserved (REQ-026f).
 | REQ-015 | Provider Removal by Disable | 4.2 | G1 |
 | REQ-129 | Provider Privacy Posture | 4.2 | G1, G3 |
 | REQ-020 | `search_web` | 4.3 | G0, G1 |
-| REQ-020a | `search_web` auto-selection | 4.3 | G1 |
+| REQ-020a | `search_web` task-type selection | 4.3 | G1 |
 | REQ-020b | `search_web` suggestion mode | 4.3 | G0, G1 |
 | REQ-020c | `search_web` priority routing | 4.3 | G1 |
 | REQ-020d | `search_web` parameter transparency | 4.3 | G0, G1 |

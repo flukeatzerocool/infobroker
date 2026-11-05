@@ -273,7 +273,10 @@ to paste into a reference list.
 The server knows its own capabilities. `search_web` auto-selects the
 best backend for your task, weighing capability, quota, and latency —
 or routes by your intent when you ask for privacy, speed, or free-only
-sources. `inspect_providers` surfaces every configured source, reports its
+sources. When the automatic choice misses, pass `task_type` to force a
+dispatch chain (for example `academic`), and `meta.task_type` reports the
+chain that served the query. `inspect_providers` surfaces every configured
+source, reports its
 derived privacy posture, and drills into a single provider's uptime and error
 history. The generated `skills/infobroker/references/provider-privacy.md`
 documents query forwarding, retention, account requirements, and resale for

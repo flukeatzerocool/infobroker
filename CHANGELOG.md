@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.11.05 — Intent routing
+
+- `search_web` classification now matches whole words instead of substrings, so
+  `city`/`date`/`old` no longer fire inside unrelated words, and signals are
+  scored with specificity instead of first-match-wins ordering (`research`
+  inside "research paper" no longer shadows `academic`). (REQ-020a)
+- Scholarly signals: a DOI, an author–year citation, a journal phrase, or a
+  cited work title (a name followed by a multi-word quoted title) classify as
+  `academic`; a confidence floor keeps one generic token on the `general_web`
+  chain, and a semantic-only match can no longer select a place, fact, filing,
+  definition, or code chain. The "Promoter's Chair" session's biography query
+  that exhausted the location chain now routes `academic`. (REQ-020a)
+- New `task_type` parameter on `search_web` forces a dispatch chain without
+  reclassifying, and every success envelope reports `meta.task_type`. This
+  replaces hard-coding a provider slug to reach the scholarly corpus.
+  (REQ-020, REQ-020a)
+- The ROADMAP "Intent routing" item is complete and removed.
+
 ## 2026.11.05 — Draft verification loop
 
 - `verify_claims` now accepts a `claims` list beside the single `query`, seeds

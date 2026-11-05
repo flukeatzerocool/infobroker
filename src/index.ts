@@ -29,7 +29,7 @@ import { maybeTruncate } from "./truncate.js";
 import { capInputs, coerceStringArray, mergeItems } from "./batch.js";
 import { reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
-import { classifyTaskType } from "./task-type.js";
+import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
 import { createLatencyTracker } from "./latency.js";
 import { compactMode, compactResults } from "./verbosity.js";
 import { deriveResearchVariants, compileResearchGroups } from "./research.js";
@@ -229,7 +229,8 @@ async function doWebSearch(
   research = false,
   fresh = false,
   analyze = false,
-  deepBudget?: { remaining: number }
+  deepBudget?: { remaining: number },
+  taskTypeOverride?: string
 ): Promise<string> {
   // REQ-020: a union-typed input can arrive as a JSON-encoded array string.
   // Coerce before dispatch so a stringified batch is searched as a batch
@@ -250,7 +251,7 @@ async function doWebSearch(
     const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
     const envelopes = await Promise.all(
       queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget)
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride)
       )
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
@@ -320,7 +321,8 @@ async function doWebSearch(
       const budget = { remaining: perVariantPages };
       return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
-        priority, false, contentType, region, language, false, true, false, false, false, budget
+        priority, false, contentType, region, language, false, true, false, false, false, budget,
+        taskTypeOverride
       );
     });
     return `[OK] ${json({
@@ -375,7 +377,11 @@ async function doWebSearch(
     }
   }
 
-  const taskType = classifyTaskType(query);
+  const resolvedTaskType = resolveTaskType(query, taskTypeOverride);
+  if (resolvedTaskType.error) {
+    return `[ERROR] ${json(err("none", "invalid_input", resolvedTaskType.error.message, resolvedTaskType.error.remediation))}`;
+  }
+  const taskType = resolvedTaskType.taskType;
   let chain: string[];
 
   if (preferredProvider && config.providers[preferredProvider]?.enabled) {
@@ -593,6 +599,7 @@ async function doWebSearch(
       return `[OK] ${json(ok(slug, deepMeta.results, {
         query_time_ms: elapsed,
         fallback_used: slug !== primarySlug,
+        task_type: taskType,
         quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
         ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
         ignored_operators: ignoredOperators(slug, parsedQuery),
@@ -606,6 +613,7 @@ async function doWebSearch(
     return `[OK] ${json(ok(slug, filtered, {
       query_time_ms: elapsed,
       fallback_used: slug !== primarySlug,
+      task_type: taskType,
       quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
       ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
       ignored_operators: ignoredOperators(slug, parsedQuery),
@@ -681,7 +689,7 @@ async function doWebSearch(
       : "Retry later or check provider configuration";
     return `[ERROR] ${json(err("none", exhaustionCode, `Fallback chain exhausted: ${chain.join(", ")}`, exhaustionHint, details))}`;
   }
-  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, ignored_params: [], no_results: true }))}`;
+  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, task_type: taskType, ignored_params: [], no_results: true }))}`;
 }
 
 // REQ-021c: best-effort last-updated detection. Reads the last-modified header
@@ -1386,10 +1394,11 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `fresh: true` skips KB recall and searches external providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: true` skips KB recall and searches external providers. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
+      task_type: z.enum(SEARCHABLE_TASK_TYPES).optional().describe("Force a dispatch chain by task type (auto-classified when omitted)"),
       max_results: z.number().min(1).max(30).optional().default(8).describe("Number of results to return (1-30, default 8)"),
       safe_search: z.enum(["on", "off", "strict"]).optional().default("on").describe("Safe-search filtering: on, off, or strict (default on)"),
       time_range: z.enum(["day", "week", "month", "year"]).optional().describe("Restrict results to day, week, month, or year"),
@@ -1429,7 +1438,9 @@ instrumentTool(
       Boolean(params.deep),
       Boolean(params.research),
       Boolean(params.fresh),
-      Boolean(params.analyze)
+      Boolean(params.analyze),
+      undefined,
+      params.task_type as string | undefined
     );
     return { content: [{ type: "text" as const, text: content }] };
   }

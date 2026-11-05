@@ -25,7 +25,7 @@ interface ToolDef {
   description?: string;
   inputSchema?: {
     type?: string;
-    properties?: Record<string, { description?: string; default?: unknown }>;
+    properties?: Record<string, { description?: string; default?: unknown; enum?: string[] }>;
     required?: string[];
   };
   annotations?: ToolAnnotations;
@@ -204,10 +204,17 @@ test("search_web advertises the REQ-020 parameter contract and defaults", async 
   }
 
   // REQ-020: optional parameters that carry no declared default.
-  const noDefault = ["provider", "time_range", "priority", "region", "language"];
+  const noDefault = ["provider", "task_type", "time_range", "priority", "region", "language"];
   for (const param of noDefault) {
     expect(props[param], `search_web.${param} is missing from the advertised schema`).toBeDefined();
   }
+
+  // REQ-020a: the override accepts every searchable task type and rejects the
+  // renderer-only content_fetch chain.
+  expect(props.task_type?.enum).toHaveLength(14);
+  expect(props.task_type?.enum).toContain("academic");
+  expect(props.task_type?.enum).not.toContain("content_fetch");
+  expect(props.task_type?.description).toBeTruthy();
 
   // REQ-020: the contract is exhaustive — a parameter the REQ does not declare
   // cannot appear in the advertised schema without an accompanying REQ update.
