@@ -197,6 +197,9 @@ PIPELINE_LIGHT_MODEL="${PIPELINE_LIGHT_MODEL:-${PIPELINE_MODEL:-}}"
 PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
+# Display-only snapshot, taken before any step runs. The sync step bumps the
+# version mid-run, so this value must never decide a release action; the tag
+# and push blocks re-derive RELEASE_VERSION after the commit.
 VERSION=$(pipeline_version "$PROJECT_DIR")
 # Bounded auto-repair budget per failure class. Exhaustion is a human call.
 PIPELINE_FIX_ATTEMPTS="${PIPELINE_FIX_ATTEMPTS:-2}"
@@ -283,7 +286,7 @@ print_readiness_report() {
   info "Readiness report"
   info "═══════════════════════════════════════════════"
   printf '  Branch:        %s\n' "$BRANCH"
-  printf '  Version:       %s\n' "${VERSION:-unknown}"
+  printf '  Version:       %s\n' "${RELEASE_VERSION:-$VERSION}"
   printf '  HEAD:          %s (%s)\n' "$sha" "$stat"
   for step in $STEP_ORDER; do
     printf '  %-13s %s\n' "$step:" "${STEP_STATUS[$step]:-not run}"
@@ -919,6 +922,16 @@ ${COMMIT_SUMMARY}"
 fi
 echo ""
 
+# Release identity is re-derived here, after the sync step has had its chance
+# to bump the version. A startup snapshot can be stale by minutes and a stale
+# version tags the wrong code (2026-11-04: v2026.10.28 was moved onto a
+# 2026.11.04 commit).
+RELEASE_VERSION=$(pipeline_version "$PROJECT_DIR")
+if [[ "$RELEASE_VERSION" != "$VERSION" ]]; then
+  info "Version changed during this run: ${VERSION} → ${RELEASE_VERSION}"
+fi
+[[ "$RELEASE_VERSION" == "unknown" ]] && die "Cannot read the release version from package.json."
+
 # ── readiness report + push approval ────────────────────────────────────────
 # The commit is local and reversible. Publication happens only after the
 # report below and an explicit approval (or --yes).
@@ -930,7 +943,7 @@ SHIPPABLE=false
 if $COMMITTED; then SHIPPABLE=true; fi
 [[ "${AHEAD:-0}" -gt 0 ]] && SHIPPABLE=true
 # A moved local tag also needs publishing.
-if ! git -C "$PROJECT_DIR" tag -l "v${VERSION}" | grep -q "v${VERSION}"; then SHIPPABLE=true; fi
+if ! git -C "$PROJECT_DIR" tag -l "v${RELEASE_VERSION}" | grep -q "v${RELEASE_VERSION}"; then SHIPPABLE=true; fi
 
 INTERACTIVE=false
 [[ -t 0 ]] && INTERACTIVE=true
@@ -948,7 +961,7 @@ case "$ACTION" in
     exit 0
     ;;
   prompt)
-    read -r -p "Push ${BRANCH}, tag v${VERSION}, and sync the mirror? (y/N) " confirm
+    read -r -p "Push ${BRANCH}, tag v${RELEASE_VERSION}, and sync the mirror? (y/N) " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
       warn "Push declined — the local commit is kept. Re-run with --yes to publish."
       exit 0
@@ -989,31 +1002,20 @@ else
 fi
 info "Push: DONE"
 
-# Tag with version. When the tag already exists but points to an earlier
-# commit, the tag is stale rather than conflicting: multiple commits can share
-# one CalVer version (no version bump on a whitespace-only or non-behavior
-# run). The default is to move the stale tag onto the current head; an
-# explicit --force-tag is only required when the existing tag points to a
-# different, newer line of work.
-warn "Tagging v${VERSION}..."
+# Tag the release. The tag name follows the version on disk *now*, not the
+# startup snapshot. When the tag already exists for this same version and is an
+# ancestor, it is stale rather than conflicting — multiple commits can share one
+# CalVer version (no bump on a whitespace-only or non-behavior run) — so it is
+# moved. A tag carrying a different version is never relabelled.
+warn "Tagging v${RELEASE_VERSION}..."
 TAG_MOVED=false
-if git -C "$PROJECT_DIR" tag -l "v${VERSION}" | grep -q "v${VERSION}"; then
-  if $FORCE_TAG || git -C "$PROJECT_DIR" merge-base --is-ancestor "v${VERSION}" HEAD; then
-    warn "Tag v${VERSION} exists — moving it onto the current head (packages pinning the old tag will diverge)."
-    git -C "$PROJECT_DIR" tag -f "v${VERSION}"
-    TAG_MOVED=true
-  else
-    die "Tag v${VERSION} already exists and is not an ancestor of HEAD. Use --force-tag to overwrite."
-  fi
-else
-  git -C "$PROJECT_DIR" tag "v${VERSION}"
-fi
+tag_release "$RELEASE_VERSION" "$($FORCE_TAG && echo 1 || echo 0)" "$SCRIPT_DIR/lib/release-policy.ts"
 if $TAG_MOVED; then
-  git -C "$PROJECT_DIR" push origin "v${VERSION}" --force
+  git -C "$PROJECT_DIR" push origin "v${RELEASE_VERSION}" --force
 else
-  git -C "$PROJECT_DIR" push origin "v${VERSION}"
+  git -C "$PROJECT_DIR" push origin "v${RELEASE_VERSION}"
 fi
-info "Tag v${VERSION}: DONE"
+info "Tag v${RELEASE_VERSION}: DONE"
 echo ""
 
 # ── Mirror sync: push the canonical origin (git.gay) to the GitHub mirror ──
@@ -1023,9 +1025,9 @@ info "════════════════════════�
 if git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
   git -C "$PROJECT_DIR" push github "$BRANCH" || warn "Mirror push (${BRANCH}) FAILED — GitHub mirror is behind origin."
   if $TAG_MOVED; then
-    git -C "$PROJECT_DIR" push github "v${VERSION}" --force || warn "Mirror tag push FAILED."
+    git -C "$PROJECT_DIR" push github "v${RELEASE_VERSION}" --force || warn "Mirror tag push FAILED."
   else
-    git -C "$PROJECT_DIR" push github "v${VERSION}" || warn "Mirror tag push FAILED."
+    git -C "$PROJECT_DIR" push github "v${RELEASE_VERSION}" || warn "Mirror tag push FAILED."
   fi
   info "Mirror sync: DONE"
 else
@@ -1068,7 +1070,7 @@ if [[ -d "$PIPELINE_RUN_DIR/timings" ]]; then
   echo "  Step timings (seconds):"
   print_timings "$PIPELINE_RUN_DIR/timings"
 fi
-echo "  Pushed to origin/${BRANCH} — v${VERSION}"
+echo "  Pushed to origin/${BRANCH} — v${RELEASE_VERSION}"
 echo "  Logs: $PIPELINE_RUN_DIR"
 echo ""
 info "Done."

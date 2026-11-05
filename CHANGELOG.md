@@ -24,6 +24,12 @@
 - Report export (JSON and CSV alongside HTML) is listed with the other
   client-artifact requirements, so its documentation and verification gate
   agree. (REQ-126)
+- The release pipeline derives the tag version from `package.json` after the
+  sync step instead of a startup snapshot, so a mid-run version bump can no
+  longer relabel an old tag onto new code (the 2026-11-04 run moved
+  `v2026.10.28` onto a 2026.11.04 commit). A tag that is named for the current
+  version but carries different code is refused rather than force-moved, and
+  the readiness report prints the version actually being shipped.
 
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 

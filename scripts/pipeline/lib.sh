@@ -416,6 +416,52 @@ stop_server() {
   fi
 }
 
+# ── Release tagging ──────────────────────────────────────────────────────────
+# tag_release <version> <force 0|1> <policy-cli>
+# Creates, moves, or refuses the tag v<version> using release-policy, then
+# asserts the tag's own package.json version equals <version>. Dies on refusal
+# or mismatch — a wrong release identity is never forced through.
+# Requires PROJECT_DIR. Sets TAG_MOVED.
+tag_release() {
+  local version="$1" force="$2" policy="$3"
+  local tag="v${version}" exists=0 tag_version="-" ancestor=0
+  local decision action reason tagged
+  git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1 && exists=1
+  if [[ "$exists" == "1" ]]; then
+    tag_version=$(git -C "$PROJECT_DIR" show "${tag}:package.json" 2>/dev/null \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).version))}catch{process.stdout.write("-")}})' \
+      || printf '%s' "-")
+    git -C "$PROJECT_DIR" merge-base --is-ancestor "$tag" HEAD 2>/dev/null && ancestor=1
+  fi
+  decision=$(npx tsx "$policy" tag-action \
+    --current "$version" --exists "$exists" \
+    --tag-version "$tag_version" --ancestor "$ancestor" --force "$force") \
+    || die "release-policy tag-action FAILED."
+  action="${decision%%|*}"
+  reason="${decision#*|}"
+  case "$action" in
+    create)
+      git -C "$PROJECT_DIR" tag "$tag"
+      ;;
+    move)
+      warn "Tag ${tag} — ${reason} (packages pinning the old tag will diverge)."
+      git -C "$PROJECT_DIR" tag -f "$tag"
+      TAG_MOVED=true
+      ;;
+    refuse)
+      die "Tag ${tag}: ${reason}."
+      ;;
+    *)
+      die "release-policy returned an unknown tag action '${action}'."
+      ;;
+  esac
+  tagged=$(git -C "$PROJECT_DIR" show "${tag}:package.json" 2>/dev/null \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).version))}catch{process.stdout.write("-")}})' \
+    || printf '%s' "-")
+  [[ "$tagged" == "$version" ]] \
+    || die "Tag ${tag} points at package.json version '${tagged}', expected '${version}'."
+}
+
 # ── Bounded auto-repair ──────────────────────────────────────────────────────
 # repair_loop <label> <gate-cmd> <prompt-template> <max> <log> <out>
 # Runs a gate; on failure renders the fix-gate prompt with the failure log and
