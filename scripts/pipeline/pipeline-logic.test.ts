@@ -216,14 +216,16 @@ describe("latest_run_dir", () => {
 });
 
 describe("state_init", () => {
-  it("records repo, branch, and head", () => {
+  it("records repo, branch, head, and the run start time", () => {
     const file = join(tempDir("pipe-state-"), "state.json");
     runLib('state_init "$1" "$2" "$3" "$4"', [file, "/repo/a", "main", "abc123"]);
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+    const state = JSON.parse(readFileSync(file, "utf8"));
+    expect(state).toMatchObject({
       repo: "/repo/a",
       branch: "main",
       head: "abc123",
     });
+    expect(Number.isFinite(Date.parse(state.started_at))).toBe(true);
   });
 });
 

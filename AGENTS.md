@@ -96,8 +96,17 @@ and a fail-closed leftover check, so tracked paths the old allowlist omitted
 (e.g. `test-fixtures/`, `DECISIONS.md`, `bin/`) can no longer be silently
 dropped. Secret scanning reports `path:line` only and never logs the matched
 value. Push, tag, and mirror operations target the current branch rather than
-a hardcoded `main`. An unexpected command failure exits 2; gate failures and
-required human approval exit 1.
+a hardcoded `main`. The tag version is read from `package.json` after the sync
+step, so a mid-run version bump cannot relabel an old tag onto new code; a tag
+that is named for the current version but carries different code is refused
+rather than force-moved (`--force-tag` overrides). Branch and tag are pushed
+together, one push per remote. The mirror push is fatal because npm publishing
+is delegated to the mirror's CI (`--no-mirror` opts out deliberately). A full
+`npm run check` on the tree to ship runs before staging; its success exports
+`INFOBROKER_PIPELINE_VERIFIED_SHA`, which lets `.githooks/pre-push` skip its
+own duplicate suite for exactly that commit when the tree is clean and CI is
+unset. An unexpected command failure exits 2; gate failures and required human
+approval exit 1.
 
 ## Script Discipline
 

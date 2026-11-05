@@ -1,9 +1,30 @@
 #!/usr/bin/env bash
+# pre-push — gate: run the full check suite before any ref leaves the machine.
+#
+# Exit codes: 0 = checks passed (or the pipeline just verified this exact
+# commit), 1 = checks failed or node is missing, 2 = fatal/unexpected.
+#
+# The push pipeline runs `npm run check` on the final tree and exports
+# INFOBROKER_PIPELINE_VERIFIED_SHA after committing. When that token names the
+# current HEAD, the tree is clean, and CI is unset, the suite has already been
+# run on exactly these objects, so re-running it per ref (branch, tag, mirror)
+# only duplicates work. Anything else — a stale token, a dirty tree, a manual
+# push, CI — runs the suite in full.
 set -euo pipefail
 
 if ! command -v node >/dev/null 2>&1; then
     echo "ERROR: node is required to run pre-push checks but was not found in PATH"
     exit 1
+fi
+
+verified_sha="${INFOBROKER_PIPELINE_VERIFIED_SHA:-}"
+if [[ -n "$verified_sha" && -z "${CI:-}" ]]; then
+    head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "$head_sha" && "$verified_sha" == "$head_sha" ]] \
+        && [[ -z "$(git status --porcelain 2>/dev/null)" ]]; then
+        echo "Pre-push checks skipped: pipeline verified ${head_sha} (npm run check passed on this tree)."
+        exit 0
+    fi
 fi
 
 echo "Running pre-push checks..."

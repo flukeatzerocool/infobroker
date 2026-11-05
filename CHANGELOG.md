@@ -34,6 +34,12 @@
   run's numbers, gate and push/commit time is recorded alongside the AI steps,
   and the summary reports wall time since the run started next to the sum of
   steps — the 2026-11-04 summary showed 677 s for a run that took 1580 s.
+- A failed mirror push now fails the release instead of warning: npm and the
+  MCP Registry publish from the mirror's CI, so the pipeline previously printed
+  COMPLETE after a push that published nothing. Branch and tag travel in one
+  push per remote, and a full `npm run check` on the shipping tree lets the
+  pre-push hook skip its duplicate run for that exact commit (`--no-mirror`
+  opts out of the mirror deliberately).
 
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 

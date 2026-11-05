@@ -35,6 +35,7 @@
 #   --scan-ai        Also run the AI scan prompts (default: deterministic scan only).
 #   --force-tag      Overwrite an existing version tag that is not an ancestor.
 #   --force-push     Force push with lease (otherwise refuse if diverged).
+#   --no-mirror      Publish to origin only; skip the GitHub mirror and its CI.
 #   --allow-secrets  Warn but do not block when staged content matches secret patterns.
 #   --help (-h)      Show this message.
 #
@@ -77,6 +78,7 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --scan-ai        Also run the AI scan prompts (default: deterministic only).
   --force-tag      Overwrite an existing version tag that is not an ancestor of HEAD.
   --force-push     Force-push with lease if diverged.
+  --no-mirror      Publish to origin only; skip the GitHub mirror (and its CI publish).
   --allow-secrets  Warn only on secret patterns.
   --help (-h)      Show this message.
 EOF
@@ -85,7 +87,7 @@ EOF
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
-NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false
+NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false
 START_STEP=""; END_STEP=""; RUN_ID=""
 
 for arg in "$@"; do
@@ -100,6 +102,7 @@ for arg in "$@"; do
     --force-push) FORCE_PUSH=true ;;
     --allow-secrets) ALLOW_SECRETS=true ;;
     --no-push) NO_PUSH=true ;;
+    --no-mirror) NO_MIRROR=true ;;
     --no-commit) NO_COMMIT=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --to=*) END_STEP="${arg#--to=}" ;;
@@ -844,6 +847,22 @@ if $NO_COMMIT; then
   exit 0
 fi
 
+# ── final gate ──────────────────────────────────────────────────────────────
+# The full suite on the tree about to be committed. Its passing lets the
+# pre-push hook skip re-running the same suite for refs this run just verified
+# (INFOBROKER_PIPELINE_VERIFIED_SHA); without it the token is never exported and
+# the hook runs in full. This is also the only full gate that sees the final
+# tree — step 1 ran before any edit.
+info "═══════════════════════════════════════════════"
+info "Final gate: npm run check on the tree to ship"
+info "═══════════════════════════════════════════════"
+echo ""
+repair_loop "Final gate" "npm run check" "$PROMPT_DIR/fix-gate.md" \
+  "$PIPELINE_FIX_ATTEMPTS" "$PIPELINE_RUN_DIR/final-gate.txt" "$PIPELINE_RUN_DIR/final-gate-fix.txt" \
+  || die "Final gate FAILED after ${PIPELINE_FIX_ATTEMPTS} repair attempt(s) (see $PIPELINE_RUN_DIR/final-gate.txt)."
+info "Final gate: PASSED"
+echo ""
+
 # ── stage ───────────────────────────────────────────────────────────────────
 info "═══════════════════════════════════════════════"
 info "Stage changes"
@@ -922,6 +941,10 @@ ${COMMIT_SUMMARY}"
   info "Commit: DONE"
 fi
 record_timing "$PIPELINE_RUN_DIR/timings" "phase-commit" "$(( $(date +%s) - COMMIT_PHASE_START ))"
+
+# The pre-push hook skips its own `npm run check` only when this token names the
+# exact HEAD and the tree is clean, i.e. for refs the final gate just verified.
+export INFOBROKER_PIPELINE_VERIFIED_SHA=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)
 echo ""
 
 # Release identity is re-derived here, after the sync step has had its chance
@@ -982,61 +1005,65 @@ info "Push to origin"
 info "═══════════════════════════════════════════════"
 echo ""
 
+# Tag first, so branch and tag travel together in one push per remote. Two
+# pushes per remote meant two pre-push gate runs and two ways to fail halfway.
+# The tag name follows the version on disk *now*; a tag carrying a different
+# version is refused rather than relabelled.
+warn "Tagging v${RELEASE_VERSION}..."
+TAG_MOVED=false
+tag_release "$RELEASE_VERSION" "$($FORCE_TAG && echo 1 || echo 0)" "$SCRIPT_DIR/lib/release-policy.ts"
+TAG_NAME="v${RELEASE_VERSION}"
+if $TAG_MOVED; then
+  TAG_REFSPEC="+refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+else
+  TAG_REFSPEC="refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+fi
+info "Tag ${TAG_NAME}: created (local)"
+echo ""
+
 # Fetch and check divergence before pushing.
 git -C "$PROJECT_DIR" fetch origin >/dev/null 2>&1 || warn "fetch origin failed — proceeding with local state."
 UPSTREAM=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)
 if [[ -n "$UPSTREAM" ]]; then
   BEHIND=$(git -C "$PROJECT_DIR" rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
-  AHEAD=$(git -C "$PROJECT_DIR" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
   if [[ "$BEHIND" -gt 0 ]]; then
     if $FORCE_PUSH; then
       warn "Local is behind remote by ${BEHIND} commit(s) — force-pushing with lease."
-      git -C "$PROJECT_DIR" push --force-with-lease origin "$BRANCH"
+      git -C "$PROJECT_DIR" push --force-with-lease origin "$BRANCH" "$TAG_REFSPEC" \
+        || die "Push to origin FAILED (force-with-lease). See git output above."
     else
       die "Local is behind remote by ${BEHIND} commit(s). Pull/rebase first, or use --force-push."
     fi
   else
-    warn "Pushing ${BRANCH}..."
-    git -C "$PROJECT_DIR" push origin "$BRANCH"
+    warn "Pushing ${BRANCH} and ${TAG_NAME}..."
+    git -C "$PROJECT_DIR" push origin "$BRANCH" "$TAG_REFSPEC" \
+      || die "Push to origin FAILED. See git output above."
   fi
 else
-  warn "Pushing ${BRANCH}..."
-  git -C "$PROJECT_DIR" push origin "$BRANCH"
+  warn "Pushing ${BRANCH} and ${TAG_NAME}..."
+  git -C "$PROJECT_DIR" push origin "$BRANCH" "$TAG_REFSPEC" \
+    || die "Push to origin FAILED. See git output above."
 fi
-info "Push: DONE"
-record_timing "$PIPELINE_RUN_DIR/timings" "phase-push" "$(( $(date +%s) - PUSH_PHASE_START ))"
-
-# Tag the release. The tag name follows the version on disk *now*, not the
-# startup snapshot. When the tag already exists for this same version and is an
-# ancestor, it is stale rather than conflicting — multiple commits can share one
-# CalVer version (no bump on a whitespace-only or non-behavior run) — so it is
-# moved. A tag carrying a different version is never relabelled.
-warn "Tagging v${RELEASE_VERSION}..."
-TAG_MOVED=false
-tag_release "$RELEASE_VERSION" "$($FORCE_TAG && echo 1 || echo 0)" "$SCRIPT_DIR/lib/release-policy.ts"
-if $TAG_MOVED; then
-  git -C "$PROJECT_DIR" push origin "v${RELEASE_VERSION}" --force
-else
-  git -C "$PROJECT_DIR" push origin "v${RELEASE_VERSION}"
-fi
-info "Tag v${RELEASE_VERSION}: DONE"
+info "Push: DONE (branch + tag)"
 echo ""
 
 # ── Mirror sync: push the canonical origin (git.gay) to the GitHub mirror ──
+# npm and MCP Registry publishing is delegated to the mirror's CI, so a failed
+# mirror push means nothing is published. That is a release failure, not a
+# warning; --no-mirror is the deliberate opt-out.
 info "═══════════════════════════════════════════════"
 info "Mirror sync (github)"
 info "═══════════════════════════════════════════════"
-if git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
-  git -C "$PROJECT_DIR" push github "$BRANCH" || warn "Mirror push (${BRANCH}) FAILED — GitHub mirror is behind origin."
-  if $TAG_MOVED; then
-    git -C "$PROJECT_DIR" push github "v${RELEASE_VERSION}" --force || warn "Mirror tag push FAILED."
-  else
-    git -C "$PROJECT_DIR" push github "v${RELEASE_VERSION}" || warn "Mirror tag push FAILED."
-  fi
-  info "Mirror sync: DONE"
+if $NO_MIRROR; then
+  warn "Mirror sync skipped (--no-mirror): the GitHub mirror and its publish CI will be behind."
+elif git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
+  git -C "$PROJECT_DIR" push github "$BRANCH" "$TAG_REFSPEC" \
+    || die "Mirror push FAILED — npm publishing is delegated to the mirror CI, so nothing was published. Re-run, or pass --no-mirror to publish origin-only."
+  info "Mirror sync: DONE (branch + tag)"
 else
   warn "No 'github' remote configured — skipping mirror sync (run 'git remote add github <url>')."
 fi
+record_timing "$PIPELINE_RUN_DIR/timings" "phase-push" "$(( $(date +%s) - PUSH_PHASE_START ))"
 echo ""
 
 # ── npm + MCP Registry publish ─────────────────────────────────────────────
