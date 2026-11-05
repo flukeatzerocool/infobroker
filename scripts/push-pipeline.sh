@@ -899,6 +899,7 @@ echo ""
 
 require_git_identity
 COMMIT_DATE=$(date +%Y-%m-%d)
+COMMIT_PHASE_START=$(date +%s)
 
 COMMIT_SUMMARY=""
 grep -q "SYNC COMPLETE" "$OUT_SYNC" 2>/dev/null && COMMIT_SUMMARY="${COMMIT_SUMMARY}Server synced to spec. "
@@ -920,6 +921,7 @@ ${COMMIT_SUMMARY}"
   COMMITTED=true
   info "Commit: DONE"
 fi
+record_timing "$PIPELINE_RUN_DIR/timings" "phase-commit" "$(( $(date +%s) - COMMIT_PHASE_START ))"
 echo ""
 
 # Release identity is re-derived here, after the sync step has had its chance
@@ -974,6 +976,7 @@ esac
 echo ""
 
 # ── push ────────────────────────────────────────────────────────────────────
+PUSH_PHASE_START=$(date +%s)
 info "═══════════════════════════════════════════════"
 info "Push to origin"
 info "═══════════════════════════════════════════════"
@@ -1001,6 +1004,7 @@ else
   git -C "$PROJECT_DIR" push origin "$BRANCH"
 fi
 info "Push: DONE"
+record_timing "$PIPELINE_RUN_DIR/timings" "phase-push" "$(( $(date +%s) - PUSH_PHASE_START ))"
 
 # Tag the release. The tag name follows the version on disk *now*, not the
 # startup snapshot. When the tag already exists for this same version and is an
@@ -1067,6 +1071,11 @@ printf '  %-13s %s\n' "scan:" "${SCAN_FINDINGS} finding(s)"
 printf '  %-13s %s stale\n' "fixtures:" "$FIXTURE_STALE"
 [[ "$FIXTURE_STALE" != "0" && "$FIXTURE_STALE" != "?" ]] && warn "  ${FIXTURE_STALE} fixture(s) past the refresh cadence (see $PIPELINE_RUN_DIR/fixture-freshness.txt)."
 if [[ -d "$PIPELINE_RUN_DIR/timings" ]]; then
+  STARTED_AT=$(json_from_file "$STATE_FILE" started_at)
+  if [[ "$STARTED_AT" != "?" ]]; then
+    WALL_SECS=$(node -e 'const d=Date.parse(process.argv[1]);process.stdout.write(Number.isFinite(d)?String(Math.round((Date.now()-d)/1000)):"?")' "$STARTED_AT" 2>/dev/null || echo "?")
+    printf '  %-13s %s s since run start (%s)\n' "wall time:" "$WALL_SECS" "$STARTED_AT"
+  fi
   echo "  Step timings (seconds):"
   print_timings "$PIPELINE_RUN_DIR/timings"
 fi

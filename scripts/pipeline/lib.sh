@@ -148,12 +148,14 @@ prune_runs() {
 }
 
 # state_init <state-file> <repo> <branch> <head> — initialize the journal.
+# `started_at` is what makes wall time reportable later: the sum of step
+# timings excludes gates, pushes, and idle time between steps.
 state_init() {
   local path="$1" repo="$2" branch="$3" head="$4"
   node -e '
     const fs = require("fs");
     const [p, repo, branch, head] = process.argv.slice(1);
-    fs.writeFileSync(p, JSON.stringify({ repo, branch, head }, null, 2));
+    fs.writeFileSync(p, JSON.stringify({ repo, branch, head, started_at: new Date().toISOString() }, null, 2));
   ' "$path" "$repo" "$branch" "$head" 2>/dev/null || true
 }
 
@@ -293,17 +295,25 @@ ensure_session() {
 # ── Timing ───────────────────────────────────────────────────────────────────
 # record_timing <dir> <key> <seconds> — write one step's duration as its own
 # file. Per-key files keep concurrent steps (the two AI scans) from clobbering
-# each other's read-modify-write of a shared map.
+# each other. A repeated key (a resumed run, or a repair pass) is kept rather
+# than overwritten: the aborted run's numbers are the evidence for how the time
+# went, so they get a #N suffix instead of being lost.
 record_timing() {
-  local dir="$1" key="$2" secs="$3"
+  local dir="$1" key="$2" secs="$3" candidate="$2" n=1
   mkdir -p "$dir" 2>/dev/null || true
-  printf '%s\n' "$secs" > "$dir/$key" 2>/dev/null || true
+  while [[ -f "$dir/$candidate" ]]; do
+    n=$((n + 1))
+    candidate="${key}#${n}"
+  done
+  printf '%s\n' "$secs" > "$dir/$candidate" 2>/dev/null || true
 }
-# print_timings <dir> — emit "<label>: <secs>" (sorted) and a total.
+# print_timings <dir> — emit "<label>: <secs>" (sorted) and a total. The total
+# is the sum of recorded steps, not wall time: concurrent lanes double-count and
+# gate/commit/push time is recorded separately as gate-*/phase keys.
 print_timings() {
   local dir="$1"
   [[ -d "$dir" ]] || return 0
-  node -e 'const fs=require("fs"),p=process.argv[1];let t=0;for(const f of fs.readdirSync(p).sort()){const v=Number(fs.readFileSync(p+"/"+f,"utf8").trim());if(!Number.isFinite(v))continue;t+=v;console.log("    "+f+": "+v)}console.log("    total: "+t)' \
+  node -e 'const fs=require("fs"),p=process.argv[1];let t=0;for(const f of fs.readdirSync(p).sort()){const v=Number(fs.readFileSync(p+"/"+f,"utf8").trim());if(!Number.isFinite(v))continue;t+=v;console.log("    "+f+": "+v)}console.log("    sum of steps (not wall time): "+t)' \
     "$dir" 2>/dev/null || true
 }
 # time_it <label> <command...> — run a command, record its wall time, return its
@@ -326,9 +336,12 @@ time_it() {
 
 # run_gate <label> <log> <command...> — run a gate, capture its output to <log>,
 # print a short tail on failure, and return the command's exit code unchanged.
+# Its wall time is recorded as gate-<label> so the run summary accounts for
+# time the AI-step timings cannot see.
 run_gate() {
   local label="$1" log="$2"; shift 2
-  local rc saved
+  local rc saved start end
+  start=$(date +%s)
   saved=$(trap -p ERR 2>/dev/null || true)
   trap - ERR
   set +e
@@ -336,6 +349,8 @@ run_gate() {
   rc=$?
   set -e
   [[ -n "$saved" ]] && eval "$saved"
+  end=$(date +%s)
+  record_timing "${PIPELINE_RUN_DIR:-/tmp}/timings" "gate-$(printf '%s' "$label" | tr ' /' '--')" "$((end - start))"
   if [[ $rc -ne 0 ]]; then
     warn "${label} FAILED (exit ${rc}) — last lines of ${log}:"
     tail -30 "$log" 2>/dev/null || true

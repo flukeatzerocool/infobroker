@@ -30,6 +30,10 @@
   `v2026.10.28` onto a 2026.11.04 commit). A tag that is named for the current
   version but carries different code is refused rather than force-moved, and
   the readiness report prints the version actually being shipped.
+- Pipeline timings survive a resume instead of overwriting the interrupted
+  run's numbers, gate and push/commit time is recorded alongside the AI steps,
+  and the summary reports wall time since the run started next to the sum of
+  steps — the 2026-11-04 summary showed 677 s for a run that took 1580 s.
 
 ## 2026.10.28 — Harnesses on opencode v2, and a gate for removed CLI flags
 
