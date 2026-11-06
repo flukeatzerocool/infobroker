@@ -661,7 +661,8 @@ notice while a provider is held off after a rate limit.
 
 Any HTTP search endpoint can become an Infobroker provider without
 touching the source tree. Declare it in `config.local.json` as a
-`generic_http` provider, then reference it from a dispatch chain:
+`generic_http` provider, then append it to a dispatch chain: `dispatch_append`
+adds the slug after the shipped providers instead of replacing the chain.
 
 ```json
 {
@@ -674,17 +675,35 @@ touching the source tree. Declare it in `config.local.json` as a
       "endpoint": "https://api.example.com/search",
       "query_param": "q",
       "results_path": "data.items",
+      "health_endpoint": "https://api.example.com/health",
+      "auth_env": "INFOBROKER_MYSEARCH_API_KEY",
       "field_map": { "title": "name", "url": "link", "snippet": "summary" }
     }
   },
-  "dispatch": { "general_web": ["my_search", "duckduckgo"] }
+  "dispatch_append": { "general_web": ["my_search"] }
 }
 ```
 
 The server GETs `endpoint?query_param=<query>`, walks `results_path`
 (dot-separated into the response JSON), and maps each result to the
-common shape using `field_map`. Add the slug to your `config.local.json`
-override and call `reload_config` to use it immediately.
+common shape using `field_map`. `field_map` values are dot paths; besides
+`title`, `url`, `snippet`, `published_date`, `source_type`, and
+`original_source`, it accepts the scholarly keys `authors` (a string or
+array), `doi`, `venue`, `abstract`, and `citation_count`. Relative result
+URLs resolve against the endpoint.
+
+Set `auth_env` to an environment variable name to send its value as
+`Authorization: Bearer …`; the key never appears in configuration. Set
+`health_endpoint` to a query-free URL so `inspect_providers` health does
+not spend a real search against a metered API — without it the probe is a
+search query. A generic provider's capabilities must be `web_search` or a
+search task type such as `academic`; `suggest` and `content_fetch` are not
+implemented by the shared generic backend. A slug that matches a built-in
+provider is rejected. Add the entry to `config.local.json` and call
+`reload_config` to use it immediately.
+
+`priority` orders the first-pass provider pool for `verify_claims`; it does
+not reorder `search_web`, which follows dispatch-chain order.
 
 ### Per-provider status and provenance
 

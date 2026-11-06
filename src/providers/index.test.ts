@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PROVIDERS, resolveProvider } from "./index.js";
+import { REGISTERED_PROVIDER_SLUGS } from "./registered-slugs.js";
 
 const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "..", "config.json"), "utf-8")) as {
   providers: Record<string, { tier: string }>;
@@ -26,5 +27,9 @@ describe("provider registration (REQ-070)", () => {
 
   it("returns undefined for an unknown, non-generic slug", () => {
     expect(resolveProvider("no-such-provider")).toBeUndefined();
+  });
+
+  it("keeps the registered slug list in parity with PROVIDERS", () => {
+    expect([...REGISTERED_PROVIDER_SLUGS].sort()).toEqual(Object.keys(PROVIDERS).sort());
   });
 });

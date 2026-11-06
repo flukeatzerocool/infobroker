@@ -221,7 +221,7 @@ API keys SHALL be accepted via environment variables: `INFOBROKER_<PROVIDER>_API
 The server SHALL assess each configured provider's status: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed, REQ-034). The assessment SHALL be exposed via the `inspect_providers` tool, and startup SHALL NOT be delayed awaiting it. _Check:_ G1.
 
 **REQ-014 — Generic HTTP Provider Tier**
-The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and referencing it from a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
+The server SHALL support a provider tier whose search behavior is defined by configuration rather than by a provider module in the source tree. The configuration of a provider of this tier SHALL declare the HTTP endpoint it queries, how requests are constructed and authenticated, how its liveness is probed, and how responses map to the normalized result shape. A provider of this tier SHALL be added without source-code changes by placing its configuration entry in the user configuration layer and appending it to, or referencing it from, a dispatch chain. A provider of this tier SHALL be subject to the same configuration validation as all providers, and an invalid configuration SHALL be rejected on load and reload. _Check:_ G1.
 
 **REQ-015 — Provider Removal by Disable**
 A disabled provider SHALL be treated as removed from dispatch: it SHALL NOT appear in fallback chains or provider recommendations, and it SHALL be skipped by all provider-selection logic. Disabling a provider SHALL require only a configuration change in the user configuration layer, SHALL NOT remove its configuration entry or backend module, and SHALL NOT require source-code changes. The disabled state SHALL be preserved across software updates. _Check:_ G1.
@@ -419,10 +419,12 @@ accumulation SHALL NOT be the sole computation strategy. _Check:_ G1.
 
 **REQ-037 — Config Validation**
 The server SHALL validate the configuration structure on load and reload.
-Validation SHALL reject: missing required provider fields, dispatch chains
-referencing providers not declared in the configuration, and invalid rate-limit
-values. On reload, an invalid configuration SHALL leave the previous
-configuration active without interruption. _Check:_ G1.
+Validation SHALL reject: missing required provider fields, unknown provider
+keys, dispatch chains referencing providers not declared in the configuration,
+dispatch appends naming an undeclared chain or provider, capabilities a generic
+tier cannot honor, and invalid rate-limit values. On reload, an invalid
+configuration SHALL leave the previous configuration active without
+interruption. _Check:_ G1.
 
 **REQ-038 — Rate-Limit Cooldown**
 WHEN a provider returns a rate-limit response or an anti-bot challenge, the server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. A rate-limited response SHALL report the remaining cooldown in milliseconds as `retry_after_ms`. Every provider-attributable error's `remediation` SHALL name the provider-status surface. _Check:_ G1.
@@ -1507,16 +1509,22 @@ the mapping from response fields to the normalized result shape (REQ-003):
     "endpoint": "https://api.example.com/search",
     "query_param": "q",
     "results_path": "data.items",
+    "health_endpoint": "https://api.example.com/health",
+    "auth_env": "INFOBROKER_MYSEARCH_API_KEY",
     "field_map": { "title": "name", "url": "link", "snippet": "summary" }
   }
 }
 ```
 
-The slug is then referenced from a dispatch chain so `search_web` picks it up.
-Removing the provider means setting `enabled`
+The slug is then appended to a dispatch chain (`dispatch_append`) so
+`search_web` picks it up without replacing the shipped providers, or used
+through the `provider` parameter. `auth_env` names an environment variable
+whose value is sent as a bearer token; `health_endpoint` supplies a query-free
+liveness probe. Removing the provider means setting `enabled`
 to `false`; the entry and its backend remain installed (REQ-015). A generic
-provider whose endpoint or result mapping is malformed is rejected by
-configuration validation (REQ-037, REQ-014).
+provider whose endpoint or result mapping is malformed, whose capability the
+shared backend cannot honor, or whose slug collides with a built-in provider is
+rejected by configuration validation (REQ-037, REQ-014).
 
 ---
 

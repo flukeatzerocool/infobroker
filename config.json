@@ -258,6 +258,7 @@
     "privacy_critical": ["duckduckgo", "searxng", "mojeek"],
     "content_fetch": ["jina", "native_fetch"]
   },
+  "dispatch_append": {},
   "fetch": {
     "allow_private_urls": false,
     "passage_size": 250,

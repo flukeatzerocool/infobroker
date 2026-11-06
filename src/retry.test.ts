@@ -33,4 +33,20 @@ describe("retryWithBackoff per-provider config (REQ-032)", () => {
     await expect(retryWithBackoff(fn, { retry_count: 3, retry_backoff_ms: 1 })).resolves.toBe("ok");
     expect(fn).toHaveBeenCalledTimes(1);
   });
+
+  it("retries a 5xx response", async () => {
+    const fn = vi.fn(async () => {
+      throw new RetryableError("upstream failure", 502);
+    });
+    await expect(retryWithBackoff(fn, { retry_count: 1, retry_backoff_ms: 1 })).rejects.toThrow(/upstream failure/);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a 4xx response other than 429", async () => {
+    const fn = vi.fn(async () => {
+      throw new RetryableError("not found", 404);
+    });
+    await expect(retryWithBackoff(fn, { retry_count: 2, retry_backoff_ms: 1 })).rejects.toThrow(/not found/);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
 });

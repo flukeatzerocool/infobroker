@@ -10,6 +10,7 @@ import {
   type ConfigDrift,
 } from "./config-migrations.js";
 import { atomicWriteFile, backupFile } from "./lib/atomic-write.js";
+import { REGISTERED_PROVIDER_SLUGS } from "./providers/registered-slugs.js";
 
 /**
  * Numeric configuration must be finite: JSON can express `Infinity` through an
@@ -26,6 +27,32 @@ const MAX_TIMER_MS = 2_147_483_647;
 const MAX_RETRY_BACKOFF_MS = 60_000;
 const MAX_RETRY_COUNT = 10;
 const MAX_MAINTENANCE_MINUTES = Math.floor(MAX_TIMER_MS / 60_000);
+
+/** Every key a provider entry may declare. Rejects typo'd or unsupported keys. */
+const PROVIDER_CONFIG_KEYS = new Set<string>([
+  "tier",
+  "capabilities",
+  "rate_limit",
+  "auth_env",
+  "auth_optional",
+  "url_env",
+  "enabled",
+  "priority",
+  "timeout",
+  "retry_count",
+  "retry_backoff_ms",
+  "degraded_latency_ms",
+  "resells",
+  "languages",
+  "privacy",
+  "endpoint",
+  "query_param",
+  "results_path",
+  "health_endpoint",
+  "field_map",
+]);
+
+const REGISTERED_PROVIDER_SLUG_SET = new Set<string>(REGISTERED_PROVIDER_SLUGS);
 
 let configPath: string;
 let cachedConfig: Config | null = null;
@@ -288,6 +315,9 @@ export function patchUserConfigLayer(patch: Record<string, unknown>): {
 }
 
 function applyDefaults(config: Config): Config {
+  // REQ-010: dispatch_append runs before the defaults early-return so a config
+  // without a `defaults` block still receives the append.
+  applyDispatchAppend(config);
   const defaults = config.defaults;
   if (!defaults) return config;
   for (const provider of Object.values(config.providers)) {
@@ -296,6 +326,25 @@ function applyDefaults(config: Config): Config {
     if (defaults.retry_backoff_ms !== undefined && provider.retry_backoff_ms === undefined) provider.retry_backoff_ms = defaults.retry_backoff_ms;
   }
   return config;
+}
+
+/**
+ * REQ-010: append user-declared slugs to an existing dispatch chain without
+ * replacing the shipped chain. Unknown task types are left untouched for
+ * validation to reject; appends are idempotent so repeated loads are stable.
+ */
+function applyDispatchAppend(config: Config): void {
+  const appends = config.dispatch_append;
+  if (!appends || typeof appends !== "object" || Array.isArray(appends)) return;
+  for (const [taskType, slugs] of Object.entries(appends)) {
+    const existing = config.dispatch?.[taskType];
+    if (!Array.isArray(existing) || !Array.isArray(slugs)) continue;
+    const merged = [...existing];
+    for (const slug of slugs) {
+      if (typeof slug === "string" && slug.length > 0 && !merged.includes(slug)) merged.push(slug);
+    }
+    config.dispatch[taskType] = merged;
+  }
 }
 
 export function validateConfig(config: Config): void {
@@ -326,11 +375,35 @@ export function validateConfig(config: Config): void {
   }
 
   for (const [slug, provider] of Object.entries(config.providers)) {
+    for (const key of Object.keys(provider)) {
+      if (!PROVIDER_CONFIG_KEYS.has(key)) {
+        errors.push(`Provider "${slug}": unknown key "${key}"`);
+      }
+    }
     if (!provider.tier || !["builtin", "free_http", "keyed_http", "self_hosted_http", "generic_http"].includes(provider.tier)) {
       errors.push(`Provider "${slug}": missing or invalid "tier"`);
     }
+    if (provider.tier === "generic_http" && REGISTERED_PROVIDER_SLUG_SET.has(slug)) {
+      errors.push(
+        `Provider "${slug}": slug is already a built-in provider and cannot be redefined as generic_http; choose a new slug`
+      );
+    }
     if (!Array.isArray(provider.capabilities)) {
       errors.push(`Provider "${slug}": missing or invalid "capabilities"`);
+    } else if (provider.tier === "generic_http") {
+      // The shared generic implementation only serves search; a declared
+      // suggest/content_fetch capability could never be honored.
+      const allowed = new Set<string>(["web_search"]);
+      for (const taskType of Object.keys(config.dispatch ?? {})) {
+        if (taskType !== "content_fetch") allowed.add(taskType);
+      }
+      for (const capability of provider.capabilities) {
+        if (typeof capability !== "string" || !allowed.has(capability)) {
+          errors.push(
+            `Provider "${slug}": generic_http does not implement capability "${String(capability)}" (allowed: web_search and search task types)`
+          );
+        }
+      }
     }
     if (typeof provider.enabled !== "boolean") {
       errors.push(`Provider "${slug}": missing or invalid "enabled"`);
@@ -415,6 +488,12 @@ export function validateConfig(config: Config): void {
       if (provider.results_path !== undefined && (typeof provider.results_path !== "string" || provider.results_path.length === 0)) {
         errors.push(`Provider "${slug}": "results_path" must be a non-empty string when present`);
       }
+      if (
+        provider.health_endpoint !== undefined &&
+        (typeof provider.health_endpoint !== "string" || !/^https?:\/\//i.test(provider.health_endpoint))
+      ) {
+        errors.push(`Provider "${slug}": "health_endpoint" must be an http(s) URL when present`);
+      }
       if (provider.field_map !== undefined) {
         if (typeof provider.field_map !== "object" || provider.field_map === null || Array.isArray(provider.field_map)) {
           errors.push(`Provider "${slug}": "field_map" must be an object`);
@@ -427,7 +506,7 @@ export function validateConfig(config: Config): void {
         }
       }
     } else {
-      for (const key of ["endpoint", "query_param", "results_path", "field_map"] as const) {
+      for (const key of ["endpoint", "query_param", "results_path", "health_endpoint", "field_map"] as const) {
         if (provider[key as keyof ProviderConfig] !== undefined) {
           errors.push(`Provider "${slug}": "${key}" is only valid for generic_http providers`);
         }
@@ -462,6 +541,21 @@ export function validateConfig(config: Config): void {
     for (const slug of chain) {
       if (!config.providers[slug]) {
         errors.push(`Dispatch chain "${taskType}" references undeclared provider "${slug}"`);
+      }
+    }
+  }
+
+  if (config.dispatch_append !== undefined) {
+    if (!isPlainObject(config.dispatch_append)) {
+      errors.push("dispatch_append must be an object of task-type arrays");
+    } else {
+      for (const [taskType, slugs] of Object.entries(config.dispatch_append)) {
+        if (!config.dispatch[taskType]) {
+          errors.push(`dispatch_append.${taskType} does not match a declared dispatch chain`);
+        }
+        if (!Array.isArray(slugs) || slugs.some((slug) => typeof slug !== "string" || slug.trim().length === 0)) {
+          errors.push(`dispatch_append.${taskType} must be an array of non-empty provider slugs`);
+        }
       }
     }
   }
@@ -905,6 +999,10 @@ export function getDispatchChain(taskType: string): string[] {
     const provider = config.providers[slug];
     if (!provider || !provider.enabled) return false;
     if (provider.tier === "keyed_http" && provider.auth_env) {
+      const many = provider.auth_env.replace(/_API_KEY$/, "_API_KEYS");
+      if (!process.env[provider.auth_env] && !process.env[many]) return false;
+    }
+    if (provider.tier === "generic_http" && provider.auth_env && provider.auth_optional !== true) {
       const many = provider.auth_env.replace(/_API_KEY$/, "_API_KEYS");
       if (!process.env[provider.auth_env] && !process.env[many]) return false;
     }

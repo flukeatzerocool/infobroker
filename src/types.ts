@@ -74,7 +74,21 @@ export interface ProviderConfig {
   endpoint?: string;
   query_param?: string;
   results_path?: string;
-  field_map?: { title?: string; url?: string; snippet?: string; published_date?: string; source_type?: string; original_source?: string };
+  /** Query-free liveness probe (REQ-014); falls back to a search probe. */
+  health_endpoint?: string;
+  field_map?: {
+    title?: string;
+    url?: string;
+    snippet?: string;
+    published_date?: string;
+    source_type?: string;
+    original_source?: string;
+    authors?: string;
+    doi?: string;
+    venue?: string;
+    abstract?: string;
+    citation_count?: string;
+  };
 }
 
 export interface Config {
@@ -84,6 +98,11 @@ export interface Config {
   config_version?: number;
   providers: Record<string, ProviderConfig>;
   dispatch: Record<string, string[]>;
+  /**
+   * Provider slugs appended (deduplicated) to an existing dispatch chain after
+   * the shipped entries, without replacing the chain (REQ-010).
+   */
+  dispatch_append?: Record<string, string[]>;
   defaults?: {
     timeout?: number;
     retry_count?: number;

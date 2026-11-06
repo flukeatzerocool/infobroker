@@ -59,10 +59,10 @@ export async function retryWithBackoff<T>(
 
 function isRetryable(e: Error): boolean {
   if (e instanceof RetryableError) {
-    return e.status === 429 || e.status === 503;
+    return e.status === 429 || (e.status >= 500 && e.status <= 599);
   }
   const msg = e.message;
-  return /\b429\b|\b503\b|rate.?limit|too many requests|service unavailable/i.test(msg);
+  return /\b429\b|\b50[0-9]\b|rate.?limit|too many requests|service unavailable/i.test(msg);
 }
 
 function sleep(ms: number): Promise<void> {

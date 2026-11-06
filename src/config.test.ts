@@ -160,11 +160,95 @@ describe("configuration overlay", () => {
         my_search: {
           tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
           endpoint: "https://api.example.com/search", query_param: "q", results_path: "data.items",
-          field_map: { title: "name", url: "link", snippet: "summary" },
+          health_endpoint: "https://api.example.com/health",
+          field_map: {
+            title: "name", url: "link", snippet: "summary",
+            authors: "author_names", doi: "doi", venue: "journal",
+            abstract: "abstract", citation_count: "citations",
+          },
         },
       },
     });
     expect(cfg.providers.my_search.endpoint).toBe("https://api.example.com/search");
+  });
+
+  it("rejects a generic_http provider that collides with a built-in slug", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          duckduckgo: {
+            tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "https://api.example.com/search", query_param: "q",
+          },
+        },
+      })
+    ).rejects.toThrow(/already a built-in provider/);
+  });
+
+  it("rejects an unknown provider key", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: {
+            tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "https://api.example.com/search", query_param: "q", result_path: "data.items",
+          },
+        },
+      })
+    ).rejects.toThrow(/unknown key "result_path"/);
+  });
+
+  it("rejects a generic_http capability the shared implementation cannot honor", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: {
+            tier: "generic_http", capabilities: ["web_search", "suggest"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "https://api.example.com/search", query_param: "q",
+          },
+        },
+      })
+    ).rejects.toThrow(/does not implement capability "suggest"/);
+  });
+
+  it("rejects an invalid health_endpoint", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: {
+            tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "https://api.example.com/search", query_param: "q", health_endpoint: "ftp://bad",
+          },
+        },
+      })
+    ).rejects.toThrow(/health_endpoint/);
+  });
+
+  it("rejects health_endpoint on a non-generic provider", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: { duckduckgo: { health_endpoint: "https://api.example.com/health" } },
+      })
+    ).rejects.toThrow(/only valid for generic_http/);
+  });
+
+  it("appends providers to a dispatch chain without replacing it", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      dispatch_append: { general_web: ["searxng", "duckduckgo"] },
+    });
+    expect(cfg.dispatch.general_web).toEqual(["duckduckgo", "searxng"]);
+  });
+
+  it("rejects a dispatch_append for an undeclared task type", async () => {
+    await expect(
+      loadWithOverlay(BASE, { dispatch_append: { no_such_task: ["duckduckgo"] } })
+    ).rejects.toThrow(/does not match a declared dispatch chain/);
+  });
+
+  it("rejects a dispatch_append referencing an undeclared provider", async () => {
+    await expect(
+      loadWithOverlay(BASE, { dispatch_append: { general_web: ["ghost_provider"] } })
+    ).rejects.toThrow(/undeclared provider "ghost_provider"/);
   });
 
   it("rejects a non-positive fallback_depth", async () => {

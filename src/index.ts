@@ -1427,8 +1427,17 @@ function assessProviderStatus(slug: string, p: ProviderConfig): HealthStatus {
   });
 }
 
-function doListProviders(filter?: string): string {
-  const config = getConfig();
+/** Non-secret host of a generic provider's endpoint, for diagnostics only. */
+function endpointHost(endpoint?: string): string | undefined {
+  if (!endpoint) return undefined;
+  try {
+    return new URL(endpoint).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+function doListProviders(filter?: string): string {  const config = getConfig();
   const entries = Object.entries(config.providers);
 
   // REQ-024a: supported task types per provider, derived from the dispatch table.
@@ -1459,6 +1468,12 @@ function doListProviders(filter?: string): string {
       tier: p.tier,
       capabilities: p.capabilities,
       task_types: taskTypesBySlug[slug] ?? [],
+      ...(p.tier === "generic_http"
+        ? {
+            endpoint_host: endpointHost(p.endpoint),
+            results_path: p.results_path ?? null,
+          }
+        : {}),
       rate_limit: p.rate_limit,
       enabled: p.enabled,
       status,
@@ -1815,7 +1830,7 @@ instrumentTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
-    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state (including each provider's derived privacy posture) and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status) and session counters. Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state (including each provider's derived privacy posture) and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow; for a `generic_http` provider with no `health_endpoint` the probe is a real search query and may consume provider quota or credits); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status) and session counters. Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),

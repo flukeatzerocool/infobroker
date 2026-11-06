@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.11.05 — User-defined provider hardening
+
+- A `generic_http` provider can no longer shadow a built-in slug: validation
+  rejects the collision instead of silently running the built-in backend.
+  Unknown keys inside a provider entry (a `result_path` typo, `headers`) are
+  rejected, and generic capabilities are limited to `web_search` and real
+  search task types. (REQ-014, REQ-037)
+- `auth_env` now sends `Authorization: Bearer …` for `generic_http` (it was
+  accepted and ignored), and optional `health_endpoint` provides a query-free
+  liveness probe so `inspect_providers` health does not spend a metered
+  search. (REQ-014, REQ-011)
+- New `dispatch_append` adds provider slugs after a shipped dispatch chain
+  without replacing it, so a custom engine no longer drops the default
+  providers. (REQ-010)
+- Generic results resolve relative URLs against the endpoint, report a
+  non-JSON body as `parse_error`, honor `max_results` after unmappable rows,
+  and map scholarly `field_map` keys (`authors`, `doi`, `venue`, `abstract`,
+  `citation_count`). `inspect_providers` list shows a generic provider's
+  endpoint host and results path, never the full URL. (REQ-014, REQ-037)
+- Retry policy treats all 5xx responses as retryable, not only 503.
+
 ## 2026.11.05 — Knowledge-base memory
 
 - `search_web` accepts `fresh: "blend"` and a `collection` name: blend returns

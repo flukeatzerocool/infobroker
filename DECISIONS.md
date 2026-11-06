@@ -2,6 +2,32 @@
 
 ## Active Decisions
 
+### D-079: User-Defined Provider Hardening (2026.11.06)
+
+A `generic_http` entry that reuses a built-in provider slug is rejected rather
+than preferred over the registered module: the registry identity would
+otherwise be ambiguous, and a user re-pointing a built-in engine for privacy
+was silently sending queries to the original backend. The registered slug list
+lives in a dependency-free module so configuration validation can use it
+without importing the provider modules, which import the config loader.
+
+`auth_env` now sends its value as a bearer token for generic providers instead
+of being accepted and ignored. `dispatch_append` was chosen over making
+`dispatch` arrays merge by default: the existing wholesale-replace semantics
+are documented and relied on by user layers, so appending is opt-in and
+idempotent, placing user slugs after the shipped chain. Unknown provider keys
+are rejected because a typo such as `result_path` previously produced an empty
+provider at runtime with an opaque mapping error. Generic capabilities are
+limited to `web_search` and search task types because the shared backend does
+not implement `suggest` or `content_fetch`.
+
+`health_endpoint` exists because the fallback health probe is a real search
+query, which spends metered API credits. Scholarly `field_map` keys and
+array/number leaves reuse the normalizer's existing additive metadata path.
+`retry.ts` treats all 5xx as retryable; a generic provider previously threw a
+`RetryableError` for them even though only 429/503 were retried. (REQ-010,
+REQ-014, REQ-037)
+
 ### D-078: KB Blend, Collection Recall, and Report Source Links (2026.11.06)
 
 The knowledge-base memory item resolves three session-observed failures.
