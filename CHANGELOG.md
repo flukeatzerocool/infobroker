@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.11.05 — Batch response fidelity
+
+- `fetch_page` in array mode now preserves each item's ranked passages, top
+  score, note, extraction mode, and truncation state, and every merged result
+  names the renderer that served it. Per-query metadata now reports the top
+  score, passage count, extraction mode, and the error for a failed URL.
+  (REQ-021, REQ-021b)
+
 ## 2026.11.05 — Observability, config, and source quality
 
 - Every tool invocation and outbound provider attempt now emits a fixed-shape

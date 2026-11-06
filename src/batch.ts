@@ -61,8 +61,18 @@ export function coerceStringArray(value: unknown, options: CoerceOptions = {}): 
 interface EnvelopeOk {
   status: "ok";
   provider: string;
-  results: Array<{ url?: string; [k: string]: unknown }>;
+  results: Array<{ url?: string; provider?: string; [k: string]: unknown }>;
   meta?: Record<string, unknown>;
+  /** REQ-021b: the question a question-mode item was ranked against. */
+  question?: string;
+  /** REQ-021b: passage content or full content for a question-mode item. */
+  extraction_mode?: string;
+  /** REQ-021b: ranked passages, each with a relevance score. */
+  snippets?: Array<{ text: string; score: number; index: number }>;
+  /** REQ-021b: best passage score for a question-mode item. */
+  top_score?: number;
+  /** REQ-021b: no-match note when no passage addressed the question. */
+  note?: string;
   truncated?: boolean;
   output_path?: string;
 }
@@ -95,6 +105,16 @@ export interface PerInputMeta {
   output_path?: string;
   /** REQ-020h: results excluded by the source-quality blocklist for this query. */
   blocked_count?: number;
+  /** REQ-021b: extraction mode for a question-mode item. */
+  extraction_mode?: string;
+  /** REQ-021b: number of ranked passages returned for this item. */
+  passages_returned?: number;
+  /** REQ-021b: best passage score for this item. */
+  top_score?: number;
+  /** REQ-021b: no-match note for this item. */
+  note?: string;
+  /** REQ-002: the error for a failed item in a partially successful batch. */
+  error?: { code: string; message: string; remediation?: string };
 }
 
 export interface BatchItem {
@@ -138,10 +158,28 @@ export function mergeItems(items: BatchItem[]): Envelope {
         result_count: env.results.length,
         ...(env.truncated ? { truncated: true, output_path: env.output_path } : {}),
         ...(typeof blockedCount === "number" ? { blocked_count: blockedCount } : {}),
+        ...(env.extraction_mode ? { extraction_mode: env.extraction_mode } : {}),
+        ...(typeof env.top_score === "number" ? { top_score: env.top_score } : {}),
+        ...(env.snippets ? { passages_returned: env.snippets.length } : {}),
+        ...(env.note ? { note: env.note } : {}),
       });
     } else {
       if (!firstError) firstError = env;
-      perQuery.push({ query: item.query, provider: env.provider, status: "error", result_count: 0 });
+      perQuery.push({
+        query: item.query,
+        provider: env.provider,
+        status: "error",
+        result_count: 0,
+        ...(env.error
+          ? {
+              error: {
+                code: env.error.code,
+                message: env.error.message,
+                ...(env.error.remediation ? { remediation: env.error.remediation } : {}),
+              },
+            }
+          : {}),
+      });
     }
   }
 
@@ -150,7 +188,28 @@ export function mergeItems(items: BatchItem[]): Envelope {
   }
 
   const firstOk = okItems[0].env;
-  const results = dedupeByUrl(okItems.flatMap((o) => o.env.results));
+  // REQ-021: every merged result names the renderer that served it, and keeps
+  // the item's own question-mode extraction fields. An existing per-result
+  // provider (search_web) is preserved.
+  const results = dedupeByUrl(
+    okItems.flatMap((o) =>
+      o.env.results.map((r) => ({
+        ...r,
+        provider: r.provider ?? o.env.provider,
+        ...(o.env.snippets ? { snippets: o.env.snippets } : {}),
+        ...(typeof o.env.top_score === "number" ? { top_score: o.env.top_score } : {}),
+        ...(o.env.extraction_mode ? { extraction_mode: o.env.extraction_mode } : {}),
+        ...(o.env.note ? { note: o.env.note } : {}),
+      }))
+    )
+  );
+  // REQ-021b: a question is a batch-level input; lift it only when every item
+  // agrees on it. Extraction mode and note stay per result because they differ
+  // per page.
+  const questions = new Set(
+    okItems.map((o) => o.env.question).filter((q): q is string => typeof q === "string" && q.length > 0)
+  );
+  const sharedQuestion = questions.size === 1 ? [...questions][0] : undefined;
   const hasBlockedCount = okItems.some((o) => typeof o.env.meta?.["blocked_count"] === "number");
   const blockedTotal = okItems.reduce((sum, o) => {
     const count = o.env.meta?.["blocked_count"];
@@ -159,6 +218,7 @@ export function mergeItems(items: BatchItem[]): Envelope {
   return {
     status: "ok",
     provider: firstOk.provider,
+    ...(sharedQuestion ? { question: sharedQuestion } : {}),
     results,
     meta: {
       ...(firstOk.meta ?? {}),

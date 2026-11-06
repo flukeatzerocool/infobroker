@@ -250,7 +250,9 @@ Markdown optimized for LLM consumption. It falls back to native HTTP when
 Jina is throttled. Wikipedia and Internet Archive have dedicated
 renderers for source-specific extraction. Ask a page a question — pass
 `question` to `fetch_page` and it returns the passages that answer it, each
-scored and ranked, instead of the whole document. Built-in web fetchers
+scored and ranked, instead of the whole document. Fetch several URLs at once
+and each result keeps its own renderer, ranked passages, and top score.
+Built-in web fetchers
 return raw HTML; Infobroker gives you clean, readable content from any
 source — ready for summarization or analysis. Fetch also reports the page's
 last-updated date when it can determine one, so you know how current your

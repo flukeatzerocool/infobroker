@@ -16,15 +16,6 @@ and ACLs; enterprise scheduling.
   Update this file when planning a release.
 -->
 
-## [P0] Batch response fidelity
-
-- `fetch_page` array mode drops `snippets[]`, `top_score`, `note`, and
-  per-item truncation; merge them per REQ-021b and REQ-021.
-- Merged results must carry per-result provider provenance, not a single
-  top-level provider (REQ-021).
-- Add regression tests for multi-URL question mode, partial failures, and
-  truncated items.
-
 ## [P0] Provider resilience
 
 - The live `general_web` chain is DuckDuckGo plus three small-web engines

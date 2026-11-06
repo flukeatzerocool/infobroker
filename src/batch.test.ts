@@ -1,4 +1,4 @@
-// @implements REQ-020 REQ-021
+// @implements REQ-020 REQ-021 REQ-021b content-mode full-content-mode
 import { describe, it, expect } from "vitest";
 import { capInputs, coerceStringArray, mergeItems, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
 
@@ -119,5 +119,135 @@ describe("mergeItems (REQ-020/REQ-021 array inputs)", () => {
     expect(merged.status).toBe("error");
     expect(merged.error.code).toBe("internal_error");
     expect(merged.error.remediation).toBeTruthy();
+  });
+
+  const questionEnv = (url: string, provider: string, text: string, score: number) =>
+    `[OK] ${JSON.stringify({
+      status: "ok",
+      provider,
+      question: "When did Trump enter the WWE Hall of Fame?",
+      extraction_mode: "content",
+      results: [{ title: new URL(url).hostname, url, snippet: text }],
+      snippets: [{ text, score, index: 0 }],
+      top_score: score,
+      meta: { query_time_ms: 1, fallback_used: false },
+    })}`;
+
+  it("preserves per-item question-mode fields in array mode (REQ-021b)", () => {
+    const merged = mergeItems([
+      { query: "u1", envelope: questionEnv("https://a.example/1", "wikipedia", "passage one", 0.82) },
+      { query: "u2", envelope: questionEnv("https://b.example/2", "native_fetch", "passage two", 0.41) },
+    ]) as unknown as {
+      question?: string;
+      results: Array<{
+        url: string;
+        provider?: string;
+        snippets?: unknown[];
+        top_score?: number;
+        extraction_mode?: string;
+      }>;
+      meta: {
+        per_query: Array<{ passages_returned?: number; top_score?: number; extraction_mode?: string }>;
+      };
+    };
+
+    expect(merged.question).toBe("When did Trump enter the WWE Hall of Fame?");
+    expect(merged.results.map((r) => r.provider)).toEqual(["wikipedia", "native_fetch"]);
+    expect(merged.results[0].snippets).toHaveLength(1);
+    expect(merged.results[0].top_score).toBe(0.82);
+    expect(merged.results[0].extraction_mode).toBe("content");
+    expect(merged.meta.per_query[0]).toMatchObject({
+      top_score: 0.82,
+      passages_returned: 1,
+      extraction_mode: "content",
+    });
+  });
+
+  it("keeps the no-passage note on its own item", () => {
+    const fullContent = `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "jina",
+      question: "When did Trump enter the WWE Hall of Fame?",
+      extraction_mode: "full_content",
+      results: [{ title: "b.example", url: "https://b.example/2", snippet: "full text" }],
+      note: "No passage addressed the question; returning the full content instead.",
+    })}`;
+    const merged = mergeItems([
+      { query: "u1", envelope: questionEnv("https://a.example/1", "wikipedia", "passage one", 0.82) },
+      { query: "u2", envelope: fullContent },
+    ]) as unknown as {
+      extraction_mode?: string;
+      note?: string;
+      results: Array<{ extraction_mode?: string; note?: string }>;
+    };
+
+    expect(merged.extraction_mode).toBeUndefined();
+    expect(merged.note).toBeUndefined();
+    expect(merged.results[0].note).toBeUndefined();
+    expect(merged.results[0].extraction_mode).toBe("content");
+    expect(merged.results[1].note).toContain("No passage addressed");
+    expect(merged.results[1].extraction_mode).toBe("full_content");
+  });
+
+  it("returns the ok subset with per-query error detail", () => {
+    const failed = `[ERROR] ${JSON.stringify({
+      status: "error",
+      provider: "mojeek",
+      error: {
+        code: "provider_unavailable",
+        message: "timeout",
+        remediation: "Retry or use inspect_providers action=health",
+      },
+    })}`;
+    const merged = mergeItems([
+      { query: "https://a.example/1", envelope: questionEnv("https://a.example/1", "wikipedia", "p", 0.5) },
+      { query: "https://b.example/2", envelope: failed },
+    ]) as unknown as {
+      status: string;
+      results: Array<{ url: string }>;
+      meta: {
+        per_query: Array<{ status: string; error?: { code: string; message: string; remediation?: string } }>;
+      };
+    };
+
+    expect(merged.status).toBe("ok");
+    expect(merged.results.map((r) => r.url)).toEqual(["https://a.example/1"]);
+    expect(merged.meta.per_query[1]).toMatchObject({
+      status: "error",
+      error: {
+        code: "provider_unavailable",
+        message: "timeout",
+        remediation: "Retry or use inspect_providers action=health",
+      },
+    });
+  });
+
+  it("keeps truncation per item when only one URL is truncated", () => {
+    const truncated = `[OK] ${JSON.stringify({ status: "ok", provider: "jina", results: [{ title: "t", url: "https://a.example/1", snippet: "s" }], truncated: true, output_path: "/tmp/x" })}`;
+    const full = `[OK] ${JSON.stringify({ status: "ok", provider: "wikipedia", results: [{ title: "t", url: "https://b.example/2", snippet: "s" }] })}`;
+    const merged = mergeItems([
+      { query: "u1", envelope: truncated },
+      { query: "u2", envelope: full },
+    ]) as unknown as {
+      results: Array<{ url: string }>;
+      meta: { per_query: Array<{ truncated?: boolean; output_path?: string }> };
+    };
+
+    expect(merged.results).toHaveLength(2);
+    expect(merged.meta.per_query[0]).toMatchObject({ truncated: true, output_path: "/tmp/x" });
+    expect(merged.meta.per_query[1].truncated).toBeUndefined();
+  });
+
+  it("does not overwrite an existing per-result provider (search_web path)", () => {
+    const env = `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "duckduckgo",
+      results: [{ title: "t", url: "https://a.example/1", snippet: "s", provider: "mojeek" }],
+    })}`;
+    const merged = mergeItems([{ query: "q1", envelope: env }]) as unknown as {
+      results: Array<{ provider?: string }>;
+    };
+
+    expect(merged.results[0].provider).toBe("mojeek");
   });
 });
