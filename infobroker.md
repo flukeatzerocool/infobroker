@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020g`, `021a`–`021i`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020h`, `021a`–`021i`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -256,7 +256,10 @@ WHEN `search_web` receives `expand` set to true, the tool SHALL return query-exp
 WHEN `search_web` receives `research` set to true, the tool SHALL derive multiple search variants from the query, search each variant through its dispatch chain, and deep-read the top-ranked pages of each variant per REQ-028. The response SHALL group the ranked passages by originating variant, each with a relevance score and provenance. The number of variants and the pages deep-read SHALL be bounded by configuration. The response SHALL be subject to REQ-004 truncation. When a variant yields no fetchable page, the tool SHALL report that variant's search results rather than fail. _Check:_ G1.
 
 **REQ-020g — Cross-provider result reconciliation**
-WHEN `search_web` assembles results from more than one provider or query variant, the tool SHALL collapse results that express the same content into a single representative and SHALL order the returned results by semantic relevance to the query. The representative SHALL preserve the contributing providers and the original source. Collapsing SHALL NOT reduce the count of distinct retrieved results below the caller's requested maximum. WHEN no embedding capability is available, the tool SHALL still return results ordered by its non-semantic ranking. _Check:_ G1.
+WHEN `search_web` assembles results from more than one provider or query variant, the tool SHALL collapse results that express the same content into a single representative and SHALL order the returned results by semantic relevance to the query. The representative SHALL preserve the contributing providers and the original source. Collapsing SHALL NOT reduce the count of distinct retrieved results below the caller's requested maximum. Results excluded by the configured blocklist (REQ-020h) SHALL NOT count toward this guarantee. WHEN no embedding capability is available, the tool SHALL still return results ordered by its non-semantic ranking. _Check:_ G1.
+
+**REQ-020h — Source-quality ordering and domain blocklist**
+WHEN `search_web` returns external results, the tool SHALL order them by semantic relevance adjusted by a configurable source-quality weight that favors primary and trusted domains and disfavors configured low-quality domains. A result whose host matches the configured blocklist SHALL be excluded, and the response SHALL report the number excluded. Blocklisting MAY return fewer results than the caller requested. The quality weight SHALL default to a value that keeps relevance dominant, and a zero weight SHALL leave semantic ordering unchanged. Domain matching SHALL be case-insensitive, and a configured domain SHALL match its subdomains. An invalid configured pattern SHALL be ignored rather than fail the request. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into a single response with per-input provenance. _Check:_ G0, G1.
@@ -377,7 +380,7 @@ fields from the provider's `rate_limit` configuration. Throttling is governed by
 operate independently.
 
 **REQ-030 — Per-Provider Throttling**
-Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. _Check:_ G1.
+Each provider SHALL enforce a configurable minimum interval between requests. The throttle SHALL be scoped per-provider, not global. The minimum interval SHALL support a configurable non-negative jitter so successive requests are not spaced at a fixed cadence. _Check:_ G1.
 
 **REQ-031 — Fallback Chain**
 The chain SHALL be ordered by provider priority in `config.json` and SHALL exclude providers that are disabled or lack required authentication. Hedging SHALL be enabled or disabled by configuration; when enabled, the server SHALL dispatch lower-priority providers once the serving provider exceeds a configurable threshold, returning the first provider to succeed. On error, response timeout, or empty results, the server SHALL try the next provider, counting a blocked or non-parseable response as a provider failure. The maximum fallback depth SHALL be configurable. When every provider in the chain is exhausted by errors, the server SHALL return an error with code `all_providers_exhausted`; when every provider instead returns empty, the server SHALL return a successful empty result. _Check:_ G1.
@@ -627,6 +630,9 @@ WHEN a release advances the configuration schema, the server SHALL detect entrie
 
 **REQ-111 — State health and migration notice**
 `inspect_providers` action `spec` SHALL report a state-health record covering user-configuration drift, pending configuration migrations, knowledge-base backend capabilities and storage format, and update-check status. WHEN actionable user-state drift exists, every successful tool response SHALL include a top-level `notices` array naming each condition and its remediation; the field SHALL be omitted when no notice exists and SHALL NOT alter existing response fields. The server SHALL emit the same notice through its startup diagnostics and MCP initialization instructions. State health SHALL be computed from local state without waiting on network access and SHALL NOT expose secrets or user content. _Check:_ G1.
+
+**REQ-111a — Operational call record and session summary**
+Every tool invocation and every outbound provider attempt SHALL be recorded in the server's diagnostic stream or a size-bounded owner-readable log, unless disabled by configuration. Each record SHALL carry the tool or provider name, the outcome status, and the elapsed time, and SHALL NOT contain the caller's query, retrieved content, or credentials. A file sink SHALL be owner-readable only and SHALL rotate at a configured size. WHEN a provider is cooling down, every successful tool response SHALL include a bounded notice naming the provider and the remaining cooldown. The `inspect_providers` spec action SHALL report a session summary with per-provider call, error, latency, and cooldown counts. A logging failure SHALL NOT fail the triggering operation. _Check:_ G1.
 
 **REQ-112 — Update availability check**
 The server SHALL support an opt-in update check comparing its build version with the latest published package version. WHEN enabled, the server SHALL perform the check without blocking tool responses and SHALL cache the result for a bounded interval. The check SHALL report available, current, or unavailable, and a failed check SHALL NOT affect server operation. The server SHALL report the result through the state-health record and SHALL NOT download, install, or apply an update. The check SHALL require explicit user configuration to run. _Check:_ G1.
@@ -1136,6 +1142,7 @@ verdict is preserved (REQ-026f).
 | REQ-020e | `search_web` query expansion | 4.3 | G0, G1 |
 | REQ-020f | `search_web` research compile | 4.3 | G1 |
 | REQ-020g | Cross-provider result reconciliation | 4.3 | G1 |
+| REQ-020h | Source-quality ordering and domain blocklist | 4.3 | G1 |
 | REQ-021 | `fetch_page` | 4.3 | G0, G1 |
 | REQ-021a | `fetch_page` network-target safety | 4.3 | G1 |
 | REQ-021b | `fetch_page` question-grounded extraction | 4.3 | G1 |
@@ -1241,6 +1248,7 @@ verdict is preserved (REQ-026f).
 | REQ-043 | Update Preservation | 4.10 | G1 |
 | REQ-105 | User Configuration Layer Migration | 4.10 | G1 |
 | REQ-111 | State Health and Migration Notice | 4.10 | G1 |
+| REQ-111a | Operational call record and session summary | 4.10 | G1 |
 | REQ-112 | Update Availability Check | 4.10 | G1 |
 | REQ-113 | Startup with an Invalid User Layer | 4.10 | G1 |
 | REQ-091 | Registry-Published Distribution | 4.10 | G1, G3 |
@@ -1312,6 +1320,7 @@ config.local.json                              # Legacy sibling layer beside the
                                                #   legacy vector-store.json (migrated on first open), .migrated-* backups
 $TMPDIR/infobroker/quota.json                  # Persistent quota counters (REQ-033)
 $TMPDIR/infobroker/trunc-*.txt                 # Full content of truncated responses
+~/.local/share/infobroker/call-log.jsonl       # Operational call records (REQ-111a; file sink only)
 ```
 
 Component names above are the reference layout; the user configuration
@@ -1728,11 +1737,11 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-112, REQ-113 | G0, G1 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
 | 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-125, REQ-126 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |

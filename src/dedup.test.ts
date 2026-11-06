@@ -39,4 +39,41 @@ describe("reconcileResults (REQ-020g)", () => {
   it("exposes a conservative default threshold", () => {
     expect(DEFAULT_DEDUP_THRESHOLD).toBeGreaterThanOrEqual(0.8);
   });
+
+  it("promotes a primary source when relevance is comparable (REQ-020h)", () => {
+    const results = [
+      r("Quantum error correction", "https://blog.example/1", "quantum error correction with logical qubits"),
+      r("Quantum error correction", "https://agency.gov/2", "quantum error correction with logical qubits"),
+    ];
+    const score = (url?: string) => (url?.endsWith(".gov/2") ? 1 : 0);
+    const out = reconcileResults(results, "quantum error correction", undefined, {
+      qualityWeight: 0.15,
+      qualityScore: (result) => score(result.url),
+    });
+    expect(out[0]?.url).toBe("https://agency.gov/2");
+  });
+
+  it("keeps relevance dominant under a small quality weight (REQ-020h)", () => {
+    const results = [
+      r("Gardening tips", "https://agency.gov/1", "planting vegetables and flowers in spring"),
+      r("Quantum computing", "https://blog.example/2", "quantum error correction with logical qubits"),
+    ];
+    const out = reconcileResults(results, "quantum computing qubits", undefined, {
+      qualityWeight: 0.15,
+      qualityScore: (result) => (result.url?.endsWith(".gov/1") ? 1 : 0),
+    });
+    expect(out[0]?.url).toBe("https://blog.example/2");
+  });
+
+  it("leaves ordering unchanged at weight zero (REQ-020h)", () => {
+    const results = [
+      r("Gardening tips", "https://a.com/1", "planting vegetables and flowers"),
+      r("Quantum computing qubits", "https://b.com/2", "quantum error correction with qubits"),
+    ];
+    const out = reconcileResults(results, "quantum computing qubits", undefined, {
+      qualityWeight: 0,
+      qualityScore: () => 1,
+    });
+    expect(out[0]?.url).toBe("https://b.com/2");
+  });
 });

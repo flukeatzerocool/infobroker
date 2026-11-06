@@ -90,6 +90,19 @@ describe("mergeItems (REQ-020/REQ-021 array inputs)", () => {
     expect(merged.meta.per_query[0].output_path).toBe("/tmp/x");
   });
 
+  it("aggregates blocked_count across queries (REQ-020h)", () => {
+    const blockedEnv = (url: string, blocked: number) =>
+      `[OK] ${JSON.stringify({ status: "ok", provider: "duckduckgo", results: [{ title: "t", url, snippet: "s" }], meta: { blocked_count: blocked } })}`;
+    const merged = mergeItems([
+      { query: "q1", envelope: blockedEnv("https://a.com", 2) },
+      { query: "q2", envelope: blockedEnv("https://b.com", 1) },
+    ]) as unknown as {
+      meta: { blocked_count: number; per_query: Array<{ blocked_count?: number }> };
+    };
+    expect(merged.meta.blocked_count).toBe(3);
+    expect(merged.meta.per_query.map((q) => q.blocked_count)).toEqual([2, 1]);
+  });
+
   it("emits a remediation field on the internal_error envelope when an item fails to parse (REQ-002)", () => {
     const merged = mergeItems([
       { query: "q1", envelope: "not an envelope" },

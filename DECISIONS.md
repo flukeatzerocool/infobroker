@@ -42,6 +42,50 @@ single-claim output); an LLM/heuristic "reads too flat" report check
 (false-positive prone, not verifiable as a G3 gate); persisting span/modality
 in the ledger (schema migration for advisory data).
 
+### D-074: Operational Records, Research Passages, and Source-Quality Ordering (2026.11.05)
+
+Per-call observability is a diagnostic stream by default, not a file:
+`output.call_log` accepts `stderr`, `file`, or `off`, and the shipped default
+is `stderr`. The MCP server already writes startup and state diagnostics there,
+clients capture it, and a default file sink would append on every call for
+every install (and during tests). The file sink remains available and is
+owner-only (0600) with a single-generation rotation at
+`output.call_log_max_bytes`. Records are fixed-shape JSON lines with a
+sanitized tool/provider name, an outcome, and elapsed milliseconds; they never
+carry the query, URL, snippet, or credentials, so the log can be shared when
+diagnosing a session. HTTP transport records (`kind: http`) and dispatch
+outcome records (`kind: provider`) are separate: one attempt can make several
+HTTP requests because of retries, and counting both as "calls" would hide that.
+The session summary lives in `inspect_providers action=spec` rather than a new
+action or tool, because that action already reports uptime, request count, and
+tool metrics; adding a surface would churn TDQS, intent citations, and the
+harness for no user gain.
+
+Passage defaults move from 100/5 to 250/6 words globally rather than gaining a
+separate research profile. The essay session used `fetch_page(question=…)`
+directly, so a deep/research-only knob would have left the observed path
+unchanged. The per-call `passage_size` and `max_passages` parameters still
+override for Q&A. The 500-word option was rejected as too costly for ordinary
+question mode.
+
+DuckDuckGo moves to 0.25 requests/second with 800 ms of jitter. Jitter alone
+does not lower the sustained rate that produced the six-query `rate_limited`
+burst; a fixed 0.33/s cadence did. Lowering to 0.20/s was rejected because a
+five-query batch would exceed the practical client wait before retries. The
+tuning is a measured-once setting, not a guarantee: the build records whether
+a live burst still trips the limit and lowers `per_second` if it does.
+
+Source quality is a small, configurable ranking term plus a blocklist, not a
+built-in reputation list. Defaults reward `.gov`/`.mil`/`.edu`/`.int` hosts;
+trusted and low-quality domains ship empty so an operator supplies judgement
+rather than inheriting a list that rots. The default weight (0.15) keeps
+relevance dominant and `0` restores pure semantic order. Quality is folded
+into the existing single `reconcileResults` embedding pass; a post-reconcile
+re-sort would repeat the embedding work and could separate a representative
+from its duplicate group. The blocklist is exempted in REQ-020g's count
+guarantee by cross-reference, because removing a blocked host intentionally
+reduces the count.
+
 ### D-072: Citation Aggregation Through the Provider Layer (2026.11.05)
 
 `get_citations` had always called two bespoke clients (arXiv and Semantic

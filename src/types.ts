@@ -50,7 +50,7 @@ export interface SearchResult {
 export interface ProviderConfig {
   tier: "builtin" | "free_http" | "self_hosted_http" | "keyed_http" | "generic_http";
   capabilities: string[];
-  rate_limit: { per_second?: number; per_day?: number; per_month?: number };
+  rate_limit: { per_second?: number; per_day?: number; per_month?: number; jitter_ms?: number };
   auth_env?: string;
   auth_optional?: boolean;
   url_env?: string;
@@ -133,6 +133,19 @@ export interface Config {
     hedge_grace_ms?: number;
     rate_limit_cooldown_ms?: number;
     audit_log_path?: string;
+    /** REQ-111a: operational call-log sink. */
+    call_log?: "off" | "stderr" | "file";
+    call_log_path?: string;
+    call_log_max_bytes?: number;
+  };
+  /** REQ-020h: source-quality ordering and domain blocklist. */
+  source_quality?: {
+    enabled?: boolean;
+    weight?: number;
+    primary_source_suffixes?: string[];
+    trusted_domains?: string[];
+    low_quality_domains?: string[];
+    blocklist?: string[];
   };
   content_policy?: ContentPolicyConfig;
   fetch?: {

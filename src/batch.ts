@@ -93,6 +93,8 @@ export interface PerInputMeta {
   result_count: number;
   truncated?: boolean;
   output_path?: string;
+  /** REQ-020h: results excluded by the source-quality blocklist for this query. */
+  blocked_count?: number;
 }
 
 export interface BatchItem {
@@ -128,12 +130,14 @@ export function mergeItems(items: BatchItem[]): Envelope {
     }
     if (env.status === "ok") {
       okItems.push({ query: item.query, env });
+      const blockedCount = env.meta?.["blocked_count"];
       perQuery.push({
         query: item.query,
         provider: env.provider,
         status: "ok",
         result_count: env.results.length,
         ...(env.truncated ? { truncated: true, output_path: env.output_path } : {}),
+        ...(typeof blockedCount === "number" ? { blocked_count: blockedCount } : {}),
       });
     } else {
       if (!firstError) firstError = env;
@@ -147,12 +151,18 @@ export function mergeItems(items: BatchItem[]): Envelope {
 
   const firstOk = okItems[0].env;
   const results = dedupeByUrl(okItems.flatMap((o) => o.env.results));
+  const hasBlockedCount = okItems.some((o) => typeof o.env.meta?.["blocked_count"] === "number");
+  const blockedTotal = okItems.reduce((sum, o) => {
+    const count = o.env.meta?.["blocked_count"];
+    return sum + (typeof count === "number" ? count : 0);
+  }, 0);
   return {
     status: "ok",
     provider: firstOk.provider,
     results,
     meta: {
       ...(firstOk.meta ?? {}),
+      ...(hasBlockedCount ? { blocked_count: blockedTotal } : {}),
       per_query: perQuery,
     },
   };

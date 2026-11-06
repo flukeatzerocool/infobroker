@@ -646,6 +646,14 @@ generated from `config.json` into
 `skills/infobroker/references/provider-privacy.md`; the gate fails when that
 document drifts from configuration.
 
+Operational records are separate: every tool call and outbound provider
+request logs its name, status, and elapsed time, never the query, URL, or
+content. Set `output.call_log` to `"stderr"` (the default), `"file"`, or
+`"off"`; the file sink is owner-only and rotates at
+`output.call_log_max_bytes`. `inspect_providers action=spec` reports the
+session summary, and a successful response carries a `provider_cooldown`
+notice while a provider is held off after a rate limit.
+
 ### Bring your own endpoint
 
 Any HTTP search endpoint can become an Infobroker provider without
@@ -689,6 +697,32 @@ Two optional keys tune per-provider behavior in `config.json`:
   backing API exposes one (e.g. Brave's `profile` name); first-party
   sources (Wikipedia, arXiv) leave it empty because the page is the
   origin.
+
+### Source quality and blocklisting
+
+Search results are ordered by relevance, then adjusted by a configurable
+source-quality weight. Primary sources (default `.gov`, `.mil`, `.edu`, and
+`.int`) and domains marked trusted rank higher; domains marked low-quality
+rank lower. The default weight is small enough that relevance stays
+dominant. A blocklist removes a host and its subdomains before ordering and
+reports the count in `meta.blocked_count`; a `*.` pattern matches subdomains
+only.
+
+```json
+{
+  "source_quality": {
+    "enabled": true,
+    "weight": 0.15,
+    "primary_source_suffixes": [".gov", ".edu"],
+    "trusted_domains": ["nature.com"],
+    "low_quality_domains": ["contentfarm.example"],
+    "blocklist": ["spam.example", "*.tracker.example"]
+  }
+}
+```
+
+Set `weight` to `0` to keep pure semantic ordering, or `enabled` to `false`
+to disable both ranking and blocklisting.
 
 ### Hedged fallback
 

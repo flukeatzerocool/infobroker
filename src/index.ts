@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-112 REQ-113
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-020h REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-111a REQ-112 REQ-113
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -15,7 +15,10 @@ import { corroborate } from "./corroborate.js";
 import { snapshotSource } from "./preservation.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
 import { ignoredOperators, parseQuery } from "./query.js";
-import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs } from "./cooldown.js";
+import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs, activeCooldowns } from "./cooldown.js";
+import { recordAttempt, recordTool, callLogTarget } from "./call-log.js";
+import { sessionStats } from "./session-stats.js";
+import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
@@ -354,23 +357,24 @@ async function doWebSearch(
         // REQ-028: a deep or research request must still read pages. The KB
         // shortcut returns stored snippets and would otherwise silently skip
         // enrichment, so it applies only to plain searches.
-        if (!fresh && !deep && !research && sufficientResults.length > 0) {
+        const kbMapped = sufficientResults.map((r) => ({
+          title: r.title,
+          url: r.source_url,
+          snippet: r.snippet,
+          source_type: r.source_type,
+        }));
+        // REQ-020h: the blocklist applies to stored results too, so a cached
+        // page from an excluded domain cannot bypass the policy.
+        const kbKept = kbMapped.filter((r) => !isBlocked(r.url, config.source_quality));
+        const kbBlocked = kbMapped.length - kbKept.length;
+        if (!fresh && !deep && !research && kbKept.length > 0) {
           const kbProvider = "knowledge_base";
-          return `[OK] ${json(ok(kbProvider, sufficientResults.map((r) => ({
-            title: r.title,
-            url: r.source_url,
-            snippet: r.snippet,
-            source_type: r.source_type,
-          })), {
+          return `[OK] ${json(ok(kbProvider, kbKept, {
             query_time_ms: 0,
             fallback_used: false,
             quota_remaining: undefined,
-            ...(analyze ? { analysis: analyzeResults(sufficientResults.map((r) => ({
-              title: r.title,
-              url: r.source_url,
-              snippet: r.snippet,
-              source_type: r.source_type,
-            })), config.analysis) } : {}),
+            ...(config.source_quality?.enabled !== false ? { blocked_count: kbBlocked } : {}),
+            ...(analyze ? { analysis: analyzeResults(kbKept, config.analysis) } : {}),
           }))}`;
         }
       }
@@ -443,12 +447,17 @@ async function doWebSearch(
     if (inCooldown(slug)) {
       rateLimited = true;
       lastError = err(slug, "rate_limited", "Provider is cooling down", "Retry after the cooldown window");
+      sessionStats.recordAttempt(slug, "cooldown");
+      recordAttempt(slug, "cooldown");
       return null;
     }
+    let start = 0;
     try {
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) {
         quotaExhausted[slug] = quota.daily.remaining;
+        sessionStats.recordAttempt(slug, "quota");
+        recordAttempt(slug, "quota");
         // REQ-098: quota exhaustion is a security-relevant event for the audit
         // trail, recorded once per provider per session.
         if (!quotaAudited.has(slug)) {
@@ -459,7 +468,7 @@ async function doWebSearch(
       }
 
       await throttle(slug);
-      const start = Date.now();
+      start = Date.now();
 
       const provider = resolveProvider(slug);
       if (!provider?.search) {
@@ -483,6 +492,8 @@ async function doWebSearch(
       increment(slug, config.providers[slug]?.rate_limit);
       latency.track(slug, elapsed);
       providerLastSuccess[slug] = Date.now();
+      sessionStats.recordAttempt(slug, "ok");
+      recordAttempt(slug, "ok", elapsed);
 
       // REQ-031: an empty result set is a failure for chain advancement, not a
       // successful answer. Fall through to the next provider — but keep a
@@ -490,12 +501,16 @@ async function doWebSearch(
       // all-empty case is reported as a legitimate zero-result answer.
       if (results.length === 0) {
         providerLastError[slug] = { message: "empty result set", timestamp: Date.now() };
+        sessionStats.recordAttempt(slug, "empty");
+        recordAttempt(slug, "empty", elapsed);
         return null;
       }
 
       const filtered = contentType ? filterByContentType(results, contentType) : results;
       if (filtered.length === 0) {
         providerLastError[slug] = { message: "content_type filter removed all results", timestamp: Date.now() };
+        sessionStats.recordAttempt(slug, "empty");
+        recordAttempt(slug, "empty", elapsed);
         return null;
       }
 
@@ -516,6 +531,14 @@ async function doWebSearch(
       } else {
         lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
       }
+      const code =
+        e instanceof RetryableError && e.status === 429
+          ? "rate_limited"
+          : e instanceof ParseError
+            ? "parse_error"
+            : "provider_unavailable";
+      sessionStats.recordAttempt(slug, "error", code);
+      recordAttempt(slug, "error", start > 0 ? Date.now() - start : 0, code);
       return null;
     }
   };
@@ -546,9 +569,19 @@ async function doWebSearch(
     }
     const policyNote = policyMeta(policyFlags, policyMode());
 
-    // REQ-020g: collapse results expressing the same content across providers
-    // and order survivors by semantic relevance to the query.
-    filtered = reconcileResults(filtered, query);
+    // REQ-020h: remove blocklisted hosts before ordering, and report the count.
+    const sourceQuality = config.source_quality;
+    const blocked = filterBlocked(filtered, sourceQuality);
+    filtered = blocked.kept;
+    const blockedCount = blocked.blocked;
+
+    // REQ-020g/REQ-020h: collapse results expressing the same content across
+    // providers and order survivors by semantic relevance adjusted by source
+    // quality. With no quality configuration this is the previous behavior.
+    filtered = reconcileResults(filtered, query, undefined, {
+      qualityWeight: sourceQuality?.enabled === false ? 0 : (sourceQuality?.weight ?? 0.15),
+      qualityScore: (result) => qualityScore(result.url, sourceQuality),
+    });
 
     if (deep && !compactMode(config)) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
@@ -559,8 +592,8 @@ async function doWebSearch(
         query,
         filtered,
         deepConf,
-        config.fetch?.passage_size ?? 100,
-        config.fetch?.max_passages ?? 5,
+        config.fetch?.passage_size ?? 250,
+        config.fetch?.max_passages ?? 6,
         maxPages,
         async (url) => {
           let fetched;
@@ -607,6 +640,7 @@ async function doWebSearch(
         ignored_operators: ignoredOperators(slug, parsedQuery),
         deep: true,
         pages_read: deepMeta.pages_read,
+        ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
         ...(analyze ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
         ...(policyNote ?? {}),
       }))}`;
@@ -619,6 +653,7 @@ async function doWebSearch(
       quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
       ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
       ignored_operators: ignoredOperators(slug, parsedQuery),
+      ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
       ...(analyze ? { analysis: analyzeResults(filtered, config.analysis) } : {}),
       ...(policyNote ?? {}),
     }))}`;
@@ -740,11 +775,14 @@ async function fetchPageContent(
   const attempt = async (slug: string) => {
     // REQ-038: a throttled renderer in cooldown is skipped without a new call.
     if (inCooldown(slug)) {
+      sessionStats.recordAttempt(slug, "cooldown");
+      recordAttempt(slug, "cooldown");
       return null;
     }
+    let start = 0;
     try {
       await throttle(slug);
-      const start = Date.now();
+      start = Date.now();
 
       const doCall = async (): Promise<string> => {
         if (slug === "native_fetch") {
@@ -776,6 +814,8 @@ async function fetchPageContent(
         // REQ-021h: keep the challenge distinct from a provider failure so the
         // caller can report access_blocked with cause anti_bot.
         onFailure?.({ renderer: slug, kind: "anti_bot", message: "anti-bot challenge" });
+        sessionStats.recordAttempt(slug, "error", "anti_bot");
+        recordAttempt(slug, "error", Date.now() - start, "anti_bot");
         return null;
       }
 
@@ -787,6 +827,8 @@ async function fetchPageContent(
       increment(slug, config.providers[slug]?.rate_limit);
       latency.track(slug, elapsed);
       providerLastSuccess[slug] = Date.now();
+      sessionStats.recordAttempt(slug, "ok");
+      recordAttempt(slug, "ok", elapsed);
       return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
     } catch (e) {
       // REQ-021a: a safety refusal must surface with its distinct code, not
@@ -794,11 +836,14 @@ async function fetchPageContent(
       if (e instanceof SsrRefusalError) throw e;
       // REQ-021h: keep each renderer's failure reason so the caller can
       // distinguish a paywall from an anti-bot gate from a network failure.
-      onFailure?.(classifyFailure(e, slug));
+      const failure = classifyFailure(e, slug);
+      onFailure?.(failure);
       providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
       }
+      sessionStats.recordAttempt(slug, "error", failure.kind);
+      recordAttempt(slug, "error", start > 0 ? Date.now() - start : 0, failure.kind);
       return null;
     }
   };
@@ -1141,8 +1186,8 @@ async function doFetchPage(
         const passages = rankPassages(
           fallbackContent,
           question,
-          effectivePassageSize ?? 100,
-          effectiveMaxPassages ?? 1
+          effectivePassageSize ?? 250,
+          effectiveMaxPassages ?? 6
         );
         if (passages.length > 0) {
           return `[OK] ${json({
@@ -1223,7 +1268,7 @@ async function doFetchPage(
   }
 
   if (question) {
-    const passages = rankPassages(content, question, effectivePassageSize ?? 100, effectiveMaxPassages ?? 1);
+    const passages = rankPassages(content, question, effectivePassageSize ?? 250, effectiveMaxPassages ?? 6);
     if (passages.length > 0) {
       return `[OK] ${json({
         status: "ok",
@@ -1497,6 +1542,11 @@ function doSpecHealth(): string {
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
       total_requests_served: latency.total(),
       tool_metrics: toolMetrics.snapshot(),
+      session: {
+        ...sessionStats.snapshot(),
+        cooldowns_active: activeCooldowns(),
+        call_log: callLogTarget(),
+      },
       last_spec_review: new Date(SPEC_REVIEW_TIME).toISOString(),
       quota_state_path: getQuotaStatePath(),
       config_path: process.env["INFOBROKER_CONFIG"] || "./config.json",
@@ -1572,10 +1622,14 @@ const instrumentTool = (name: string, config: any, handler: any) =>
     const start = Date.now();
     try {
       const result = await handler(...args);
-      toolMetrics.record(name, Date.now() - start, true);
+      const elapsed = Date.now() - start;
+      toolMetrics.record(name, elapsed, true);
+      recordTool(name, true, elapsed);
       return injectNotices(result, collectNotices());
     } catch (error) {
-      toolMetrics.record(name, Date.now() - start, false);
+      const elapsed = Date.now() - start;
+      toolMetrics.record(name, elapsed, false);
+      recordTool(name, false, elapsed);
       throw error;
     }
   });
@@ -1683,7 +1737,7 @@ instrumentTool(
   "infobroker_inspect_providers",
   {
     title: "Inspect Providers",
-    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state (including each provider's derived privacy posture) and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status). Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
+    description: "Inspect configured search providers: list their state, run a live health check, or report build and spec identity. Use when searches return empty or slow results and you want provider status, quota, or latency, or when choosing which backend to trust. Do NOT use to search (use infobroker_search_web) or to read a page (use infobroker_fetch_page). Read-only: it never modifies configuration, providers, or stored data. `list` snapshots provider state (including each provider's derived privacy posture) and `status` filters it; `health` runs a live outbound probe against `provider` (required for the `health` action; subject to that provider's rate limits, so it can be slow); `spec` reports build and spec identity plus local state health (config drift, backend capabilities, update status) and session counters. Returns an [OK] or [ERROR] JSON envelope with status, provider, and results.",
     inputSchema: {
       action: z.enum(["list", "health", "spec"]).describe("Operation to perform"),
       provider: z.string().optional().describe("Provider slug (required for health)"),

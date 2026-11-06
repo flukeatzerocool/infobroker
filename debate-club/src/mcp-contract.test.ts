@@ -346,6 +346,11 @@ test("inspect_providers list and spec report operational state", async () => {
   expect(JSON.stringify(spec)).toContain("tool_count");
   // REQ-024c: counts reconcile and exclude the inline fallback.
   const specRow = (spec.results as Array<Record<string, unknown>>)[0];
+  // REQ-111a: the spec action carries a bounded session summary.
+  const session = specRow.session as Record<string, unknown> | undefined;
+  expect(session).toBeTruthy();
+  expect(session?.providers).toBeTruthy();
+  expect(Array.isArray(session?.cooldowns_active)).toBe(true);
   const providerCount = Number(specRow.provider_count);
   const enabledCount = Number(specRow.enabled_provider_count);
   const activeCount = Number(specRow.active_provider_count);

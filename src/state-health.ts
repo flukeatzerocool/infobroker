@@ -12,6 +12,7 @@ import {
   kbSupportsReportReceipts,
 } from "./kb.js";
 import { getUpdateState, type UpdateState } from "./update-check.js";
+import { activeCooldowns } from "./cooldown.js";
 import type { ToolNotice } from "./types.js";
 
 const MAX_NOTICES = 5;
@@ -112,6 +113,20 @@ function collect(bound: number): ToolNotice[] {
       severity: "info",
       message: `Infobroker ${update.latest_version} is available (running ${update.current_version}).`,
       remediation: "Update from the source repository or npm, then restart the server. No update is applied automatically.",
+    });
+  }
+
+  // REQ-111a: cooldowns are informational and follow action-required notices,
+  // so a config problem is never crowded out by a transient provider hold-off.
+  for (const cooling of activeCooldowns().slice(0, 2)) {
+    const seconds = Math.ceil(cooling.remaining_ms / 1000);
+    notices.push({
+      code: "provider_cooldown",
+      severity: "info",
+      message: `${cooling.provider} is cooling down for ${seconds}s.`,
+      remediation:
+        "The hold-off is automatic; retry after it expires, or use infobroker_inspect_providers action=health to confirm provider status.",
+      details: { provider: cooling.provider, remaining_ms: cooling.remaining_ms },
     });
   }
 

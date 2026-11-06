@@ -38,8 +38,8 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 
 | Key | Default | Effect |
 |-----|---------|--------|
-| `passage_size` | 100 | Words per ranked passage (question mode). Smaller = fewer tokens per read. |
-| `max_passages` | 5 | Passages returned per page in question mode. |
+| `passage_size` | 250 | Words per ranked passage (question mode). Smaller = fewer tokens per read. |
+| `max_passages` | 6 | Passages returned per page in question mode. |
 | `crawl_max_pages` / `crawl_max_depth` | 10 / 2 | Bounds for same-origin `crawl`. Lower to cap crawl cost. |
 | `detect_date` | true | Extra date lookup per fetch. Disable for the cheapest path. |
 | `cache.kb_read` | true | Read a fresh knowledge-base copy before an outbound fetch. |
@@ -59,6 +59,19 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 | `hedge_min_delay_ms` / `hedge_max_delay_ms` | 200 / 1500 | Hedge window bounds. |
 | `fallback_depth` | 5 | Providers tried per dispatch chain. |
 | `rate_limit_cooldown_ms` | 30000 | Hold-off after a 429/anti-bot. |
+| `call_log` | stderr | Operational call records: `stderr`, `file`, or `off`. No query or content is recorded. |
+| `call_log_path` / `call_log_max_bytes` | `~/.local/share/infobroker/call-log.jsonl` / 2000000 | File sink target and rotation bound. |
+| `provider.rate_limit.jitter_ms` | 0 (DDG: 800) | Added to the minimum interval so a burst is not fixed-cadence. |
+
+## Source quality (`source_quality`)
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `enabled` | true | Apply quality ordering and the blocklist. |
+| `weight` | 0.15 | Relevance weight of a quality score. `0` preserves pure semantic order. |
+| `primary_source_suffixes` | `.gov`, `.mil`, `.edu`, `.int` | Hosts ending in one of these score as primary sources. |
+| `trusted_domains` / `low_quality_domains` | empty | Raise or lower matching hosts (subdomains included). |
+| `blocklist` | empty | Remove matching hosts; `*.domain` matches subdomains only. |
 
 ## Knowledge base (`kb`)
 

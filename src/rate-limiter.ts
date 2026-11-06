@@ -4,6 +4,8 @@ import type { Config } from "./types.js";
 interface RateLimit {
   perSecond: number;
   lastCall: number;
+  jitterMs: number;
+  random: () => number;
 }
 
 const limits: Map<string, RateLimit> = new Map();
@@ -13,13 +15,17 @@ const queues: Map<string, Promise<void>> = new Map();
 
 export function configureProviderRateLimit(
   slug: string,
-  config: { per_second?: number }
+  config: { per_second?: number; jitter_ms?: number },
+  random: () => number = Math.random,
 ): void {
   const perSecond = config.per_second;
   if (!perSecond || perSecond <= 0) return;
+  const jitter = config.jitter_ms;
   limits.set(slug, {
     perSecond,
     lastCall: 0,
+    jitterMs: typeof jitter === "number" && jitter > 0 ? jitter : 0,
+    random,
   });
 }
 
@@ -39,9 +45,13 @@ export function throttle(slug: string): Promise<void> {
 
     const elapsed = Date.now() - limit.lastCall;
     const minInterval = 1000 / limit.perSecond;
+    // REQ-030: jitter decorrelates a burst without reducing the minimum
+    // interval. A per-provider random function keeps tests deterministic.
+    const jitter = limit.jitterMs > 0 ? limit.random() * limit.jitterMs : 0;
+    const wait = minInterval - elapsed + jitter;
 
-    if (elapsed < minInterval) {
-      await sleep(minInterval - elapsed);
+    if (wait > 0) {
+      await sleep(wait);
     }
 
     // Record the post-sleep timestamp so consecutive calls each enforce the

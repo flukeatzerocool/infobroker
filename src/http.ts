@@ -1,6 +1,8 @@
-// @implements REQ-035 REQ-071
+// @implements REQ-035 REQ-071 REQ-111a
 import { getConfig } from "./config.js";
 import { USER_AGENT } from "./lib/html.js";
+import { recordHttp } from "./call-log.js";
+import { sessionStats } from "./session-stats.js";
 
 export interface InfobrokerFetchOptions extends Omit<RequestInit, "signal"> {
   providerSlug?: string;
@@ -28,10 +30,26 @@ export async function infobrokerFetch(
   }
 
   const signal = AbortSignal.timeout(timeout);
+  const start = Date.now();
 
-  return fetch(url, {
-    ...fetchInit,
-    headers,
-    signal,
-  });
+  try {
+    const response = await fetch(url, {
+      ...fetchInit,
+      headers,
+      signal,
+    });
+    if (providerSlug) {
+      const elapsed = Date.now() - start;
+      recordHttp(providerSlug, response.ok, elapsed, response.status);
+      sessionStats.recordHttp(providerSlug, response.ok, elapsed);
+    }
+    return response;
+  } catch (error) {
+    if (providerSlug) {
+      const elapsed = Date.now() - start;
+      recordHttp(providerSlug, false, elapsed);
+      sessionStats.recordHttp(providerSlug, false, elapsed);
+    }
+    throw error;
+  }
 }

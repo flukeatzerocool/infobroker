@@ -154,3 +154,47 @@ describe("state health with a stale user layer (REQ-111)", () => {
     expect(health.collectNotices().map((n) => n.code)).toContain("config_invalid_startup");
   });
 });
+
+describe("cooldown notices (REQ-111a)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ib-cooldown-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+    vi.resetModules();
+  });
+
+  it("reports an active cooldown as an info notice", async () => {
+    writeFileSync(join(dir, "config.json"), JSON.stringify(BASE));
+    process.env["INFOBROKER_CONFIG"] = join(dir, "config.json");
+    process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
+    vi.resetModules();
+    const config = await import("./config.js");
+    config.loadConfig();
+    const cooldown = await import("./cooldown.js");
+    cooldown.markCooldown("duckduckgo", 5000);
+    const health = await import("./state-health.js");
+    const notice = health.collectNotices().find((n) => n.code === "provider_cooldown");
+    expect(notice?.severity).toBe("info");
+    expect(notice?.details).toEqual({ provider: "duckduckgo", remaining_ms: expect.any(Number) });
+  });
+
+  it("keeps action-required notices ahead of cooldown notices", async () => {
+    writeFileSync(join(dir, "config.json"), JSON.stringify(BASE));
+    writeFileSync(join(dir, "config.local.json"), JSON.stringify({ config_version: 0 }));
+    process.env["INFOBROKER_CONFIG"] = join(dir, "config.json");
+    process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
+    vi.resetModules();
+    const config = await import("./config.js");
+    config.loadConfig();
+    const cooldown = await import("./cooldown.js");
+    cooldown.markCooldown("duckduckgo", 5000);
+    const health = await import("./state-health.js");
+    const codes = health.collectNotices().map((n) => n.code);
+    expect(codes.indexOf("config_migration_pending")).toBeGreaterThanOrEqual(0);
+    expect(codes.indexOf("config_migration_pending")).toBeLessThan(codes.indexOf("provider_cooldown"));
+  });
+});

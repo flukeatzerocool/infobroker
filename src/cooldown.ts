@@ -33,6 +33,22 @@ export function cooldownRemainingMs(slug: string): number {
   return Math.max(0, until - Date.now());
 }
 
+export interface ActiveCooldown {
+  provider: string;
+  remaining_ms: number;
+}
+
+/** REQ-111a: active cooldowns, longest remaining first, for response notices. */
+export function activeCooldowns(): ActiveCooldown[] {
+  const out: ActiveCooldown[] = [];
+  for (const [provider, until] of cooldowns) {
+    const remaining = Math.max(0, until - Date.now());
+    if (remaining > 0) out.push({ provider, remaining_ms: remaining });
+    else cooldowns.delete(provider);
+  }
+  return out.sort((a, b) => b.remaining_ms - a.remaining_ms || a.provider.localeCompare(b.provider));
+}
+
 // A failure that should put the provider in cooldown: a rate-limit response
 // (HTTP 429) or a provider-declared bot challenge. Transient 503s are left to
 // the retry policy and do not cool the provider down.

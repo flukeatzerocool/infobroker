@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026.11.05 — Observability, config, and source quality
+
+- Every tool invocation and outbound provider attempt now emits a fixed-shape
+  operational record — name, outcome, elapsed time — to stderr by default, or
+  to an owner-only rotating file when `output.call_log` is `file`. Records
+  carry no query, URL, or content. (REQ-111a)
+- `inspect_providers action=spec` reports a bounded session summary with
+  per-provider HTTP calls, errors, average latency, attempt outcomes, and any
+  active cooldowns; a successful response carries a `provider_cooldown` notice
+  while a provider is held off after a rate limit. (REQ-111a)
+- Research passage defaults increase to 250 words and six passages, so
+  question-mode reads return usable research windows instead of one short
+  snippet per URL. DuckDuckGo throttling adds an 800 ms jitter and a 0.25
+  requests/second base rate to make the six-query burst failure less likely.
+  (REQ-030)
+- Search ordering gains a configurable source-quality term: primary-source
+  suffixes and trusted domains rank higher, configured low-quality domains
+  rank lower, and a domain blocklist removes matching hosts. The response
+  reports `meta.blocked_count`, including the sum across a batch. (REQ-020h)
+- The ROADMAP "Observability, config, and source quality" item is complete and
+  removed.
+
 ## 2026.11.05 — Skill pipeline alignment
 
 - Every workflow shape now ends with the full report tail — write,

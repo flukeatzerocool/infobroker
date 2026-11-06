@@ -53,15 +53,6 @@ and ACLs; enterprise scheduling.
   `search_web` recall named collections (REQ-020).
 - Link an ingested report to its source URLs.
 
-## [P2] Observability, config, and source quality
-
-- Log per-call provider, latency, and status; expose a session summary and
-  cooldown notices (REQ-111).
-- Raise the research passage size and add DDG jitter/rate-limit tuning
-  (REQ-030).
-- Rank results by domain quality and primary-source bias; add a configurable
-  blocklist (REQ-020g).
-
 ## Dependency advisories
 
 - `npm audit` reports 5 low/moderate advisories (`@hono/node-server`

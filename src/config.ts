@@ -347,6 +347,13 @@ export function validateConfig(config: Config): void {
             errors.push(`Provider "${slug}": rate_limit.${key} must be a non-negative finite number`);
           }
         }
+        if (
+          provider.rate_limit.jitter_ms !== undefined &&
+          isFiniteNumber(provider.rate_limit.jitter_ms) &&
+          provider.rate_limit.jitter_ms > MAX_TIMER_MS
+        ) {
+          errors.push(`Provider "${slug}": rate_limit.jitter_ms must be no greater than ${MAX_TIMER_MS}`);
+        }
       }
     }
     if (provider.timeout !== undefined && (!isFiniteNumber(provider.timeout) || provider.timeout < 0 || provider.timeout > MAX_TIMER_MS)) {
@@ -594,6 +601,41 @@ export function validateConfig(config: Config): void {
   }
   if (config.output.audit_log_path !== undefined && typeof config.output.audit_log_path !== "string") {
     errors.push("output.audit_log_path must be a string");
+  }
+  if (config.output.call_log !== undefined && !["off", "stderr", "file"].includes(config.output.call_log)) {
+    errors.push("output.call_log must be one of: off, stderr, file");
+  }
+  if (config.output.call_log_path !== undefined && typeof config.output.call_log_path !== "string") {
+    errors.push("output.call_log_path must be a string");
+  }
+  if (
+    config.output.call_log_max_bytes !== undefined &&
+    (!isFiniteNumber(config.output.call_log_max_bytes) ||
+      !Number.isInteger(config.output.call_log_max_bytes) ||
+      config.output.call_log_max_bytes < 1024 ||
+      config.output.call_log_max_bytes > 100_000_000)
+  ) {
+    errors.push("output.call_log_max_bytes must be an integer between 1024 and 100000000");
+  }
+
+  if (config.source_quality !== undefined) {
+    if (typeof config.source_quality !== "object" || config.source_quality === null || Array.isArray(config.source_quality)) {
+      errors.push("source_quality must be an object");
+    } else {
+      const sq = config.source_quality;
+      if (sq.enabled !== undefined && typeof sq.enabled !== "boolean") {
+        errors.push("source_quality.enabled must be a boolean");
+      }
+      if (sq.weight !== undefined && (!isFiniteNumber(sq.weight) || sq.weight < 0 || sq.weight > 1)) {
+        errors.push("source_quality.weight must be a number between 0 and 1");
+      }
+      for (const key of ["primary_source_suffixes", "trusted_domains", "low_quality_domains", "blocklist"] as const) {
+        const value = sq[key];
+        if (value !== undefined && (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.trim() === ""))) {
+          errors.push(`source_quality.${key} must be an array of non-empty strings`);
+        }
+      }
+    }
   }
 
   if (config.content_policy) {

@@ -506,6 +506,7 @@ const NUMERIC_BRANCHES = [
   "providers.duckduckgo.retry_count",
   "providers.duckduckgo.retry_backoff_ms",
   "providers.duckduckgo.degraded_latency_ms",
+  "providers.duckduckgo.rate_limit.jitter_ms",
   "defaults.timeout",
   "defaults.retry_count",
   "defaults.retry_backoff_ms",
@@ -529,6 +530,7 @@ const NUMERIC_BRANCHES = [
   "output.hedge_max_delay_ms",
   "output.hedge_grace_ms",
   "output.rate_limit_cooldown_ms",
+  "output.call_log_max_bytes",
   "content_policy.threshold",
   "fetch.passage_size",
   "fetch.max_passages",
@@ -610,6 +612,14 @@ describe("numeric config hardening (REQ-067, REQ-010)", () => {
       new RegExp("retry_backoff_ms")
     );
     expect(() => validateConfig(configWith("providers.duckduckgo.timeout", "1000"))).toThrow(new RegExp("timeout"));
+  });
+
+  it("validates call-log and source-quality settings (REQ-111a, REQ-020h)", () => {
+    expect(() => validateConfig(configWith("output.call_log", "syslog"))).toThrow(/call_log/);
+    expect(() => validateConfig(configWith("output.call_log_max_bytes", 10))).toThrow(/call_log_max_bytes/);
+    expect(() => validateConfig(configWith("providers.duckduckgo.rate_limit.jitter_ms", -1))).toThrow(/jitter_ms/);
+    expect(() => validateConfig(configWith("source_quality.weight", 2))).toThrow(/source_quality.weight/);
+    expect(() => validateConfig(configWith("source_quality.blocklist", [""]))).toThrow(/source_quality.blocklist/);
   });
 
   it("rejects finite values that would overflow the 32-bit timer", () => {

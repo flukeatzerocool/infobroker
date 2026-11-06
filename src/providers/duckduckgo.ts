@@ -76,7 +76,10 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 }
 
 async function suggest(query: string): Promise<string[]> {
-  const resp = await fetch(`${SUGGEST_URL}?q=${encodeURIComponent(query)}&type=list`, {
+  // REQ-111a: use the shared HTTP seam so every provider call is observable
+  // and bounded by the provider timeout.
+  const resp = await infobrokerFetch(`${SUGGEST_URL}?q=${encodeURIComponent(query)}&type=list`, {
+    providerSlug: "duckduckgo",
     headers: { "User-Agent": "Infobroker/1.0" },
   });
 

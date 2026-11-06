@@ -9,7 +9,7 @@
     "duckduckgo": {
       "tier": "builtin",
       "capabilities": ["web_search", "suggest"],
-      "rate_limit": { "per_second": 0.33 },
+      "rate_limit": { "per_second": 0.25, "jitter_ms": 800 },
       "enabled": true,
       "priority": 10,
       "timeout": 10000,
@@ -270,8 +270,8 @@
   },
   "fetch": {
     "allow_private_urls": false,
-    "passage_size": 100,
-    "max_passages": 5,
+    "passage_size": 250,
+    "max_passages": 6,
     "detect_date": true,
     "crawl_max_pages": 10,
     "crawl_max_depth": 2,
@@ -341,7 +341,18 @@
     "hedge_max_delay_ms": 1500,
     "hedge_grace_ms": 300,
     "rate_limit_cooldown_ms": 30000,
-    "audit_log_path": "~/.local/share/infobroker/audit.log"
+    "audit_log_path": "~/.local/share/infobroker/audit.log",
+    "call_log": "stderr",
+    "call_log_path": "~/.local/share/infobroker/call-log.jsonl",
+    "call_log_max_bytes": 2000000
+  },
+  "source_quality": {
+    "enabled": true,
+    "weight": 0.15,
+    "primary_source_suffixes": [".gov", ".mil", ".edu", ".int"],
+    "trusted_domains": [],
+    "low_quality_domains": [],
+    "blocklist": []
   },
   "content_policy": {
     "mode": "flag",

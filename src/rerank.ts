@@ -17,7 +17,7 @@ const BLOCK_START = /^```|^<pre|^\s*\||^\s*#|^\s*[-*]\s/;
 
 // Split text into ~passageSize-word passages at sentence boundaries, skipping
 // code blocks, tables, and headings that would pollute ranking.
-export function splitPassages(text: string, passageSize = 100): string[] {
+export function splitPassages(text: string, passageSize = 250): string[] {
   const raw = (text ?? "").replace(/```[\s\S]*?```/g, " ").replace(/\|\s.*/g, "");
   const sentences = raw
     .split(/(?<=[.!?。！？])\s+/)
@@ -79,7 +79,7 @@ export function scorePassages(
   });
 }
 
-export function rankPassages(text: string, question: string, passageSize = 100, topk = 1): RankedPassage[] {
+export function rankPassages(text: string, question: string, passageSize = 250, topk = 1): RankedPassage[] {
   const passages = splitPassages(text, passageSize);
   return scorePassages(passages, question, sourceOffsets(text, passages)).slice(0, topk);
 }

@@ -12,6 +12,14 @@ describe("splitPassages (REQ-021b)", () => {
     }
   });
 
+  it("defaults to the research passage size", () => {
+    const sentence = "This is a sentence about a research topic.";
+    const text = Array.from({ length: 60 }, () => sentence).join(" ");
+    const passages = splitPassages(text);
+    expect(passages.length).toBe(2);
+    expect(passages[0].split(/\s+/).length).toBeGreaterThan(200);
+  });
+
   it("strips code fences", () => {
     const text = "Intro sentence with words. ```\nconst x = 1;\n``` Another sentence follows here.";
     const passages = splitPassages(text, 100);

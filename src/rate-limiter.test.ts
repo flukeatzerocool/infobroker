@@ -34,6 +34,23 @@ describe("throttle (REQ-030)", () => {
     expect(thirdSettled).toBe(true);
   });
 
+  it("adds jitter after the minimum interval (REQ-030)", async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    configureProviderRateLimit("jittered", { per_second: 1, jitter_ms: 800 }, () => 0.5);
+
+    await throttle("jittered");
+
+    let settled = false;
+    const second = throttle("jittered").then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(1399);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await second;
+    expect(settled).toBe(true);
+  });
+
   it("serializes a concurrent burst instead of firing together", async () => {
     vi.useFakeTimers({ now: Date.now() });
     configureProviderRateLimit("burst", { per_second: 1 });
