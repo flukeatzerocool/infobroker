@@ -29,6 +29,7 @@ interface ToolDef {
     required?: string[];
   };
   annotations?: ToolAnnotations;
+  outputSchema?: Record<string, unknown>;
 }
 
 interface ListToolsResult {
@@ -169,11 +170,15 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
     expect(a.idempotentHint, `${tool.name} missing idempotentHint`).toBeDefined();
     expect(a.openWorldHint, `${tool.name} missing openWorldHint`).toBeDefined();
 
-    // REQ-089: every parameter carries a description.
+    // REQ-089/092: every parameter carries a description.
     const props = tool.inputSchema?.properties ?? {};
     for (const [param, def] of Object.entries(props)) {
       expect(def?.description, `${tool.name}.${param} missing description`).toBeTruthy();
     }
+
+    // REQ-001: every tool declares a machine-readable output schema.
+    expect(tool.outputSchema, `${tool.name} missing outputSchema`).toBeTruthy();
+    expect(Object.keys(tool.outputSchema!).length, `${tool.name} outputSchema is empty`).toBeGreaterThan(0);
   }
 }, 30000);
 

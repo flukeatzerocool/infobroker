@@ -2,6 +2,37 @@
 
 ## Active Decisions
 
+### D-076: Structured Tool Output with a Shared Envelope Schema (2026.11.06)
+
+Every tool now registers a `z.looseObject` output schema (converted to JSON
+Schema for `tools/list`) and returns the same `[OK]`/`[ERROR]` envelope as
+`structuredContent` beside the text. The MCP SDK validates `structuredContent`
+against the declared schema, so a plain JSON Schema object was rejected: the
+SDK's `normalizeObjectSchema` only recognises Zod schemas, and a plain object
+fails at validation time. One shared schema covers all seven tools rather than
+seven bespoke schemas, because REQ-001 already defines the envelope as the
+common contract; per-tool fields travel under the permissive object. Errors
+stay non-`isError` text so clients keep branching on `status`/`code`, and the
+schema marks `error` optional so both statuses validate. A finalizer parses the
+text envelope and attaches it, so a handler that returns unexpected non-JSON
+text still yields a minimal object instead of failing output validation.
+
+Raw fetch mode is `raw: true`, not `format: "text"`, because `manage_kb`
+already uses `format` for the disk file format; two meanings for one parameter
+name invite confusion. Raw mode is limited to a single URL without crawl or
+extract and returns `invalid_input` otherwise rather than silently ignoring
+the flag. `match_quality` is a deterministic band over the existing top passage
+score (strong >= 0.5, moderate >= 0.25, weak > 0, none otherwise), not an LLM
+judgement, so it stays testable and cheap. Observed fixture top scores (0.04,
+0.13, 0.18, 0.60, 0.69, 0.73) separate cleanly under those thresholds. Batch
+per-input metadata gained `url` and `passages` beside the existing provider,
+status, and truncation fields; `search_web` and `fetch_page` inherit the same
+shape through the shared `mergeItems`.
+
+Notice injection now pretty-prints the rewritten envelope instead of
+serialising it compactly, which removes the long-single-line class the essay
+session hit when a notice was present.
+
 ### D-075: Keyed General-Web Redundancy and Cooldown-Derived Retry Hints (2026.11.06)
 
 Brave now ships `enabled: true` in `config.json`. D-005 required a keyed

@@ -30,6 +30,7 @@ export interface ToolCall {
 export interface DebateServer {
   call(name: string, args: Record<string, unknown>): Promise<ToolCall>;
   listTools(): Promise<string[]>;
+  listToolDefs(): Promise<Array<{ name: string; outputSchema?: Record<string, unknown> }>>;
   unmatched(): string[];
   tmpDir: string;
   stop(): void;
@@ -164,6 +165,12 @@ export async function startServer(): Promise<DebateServer> {
       if (resp.error) throw new Error(`tools/list failed: ${resp.error.message}`);
       const result = resp.result as { tools?: Array<{ name: string }> } | undefined;
       return (result?.tools ?? []).map((t) => t.name);
+    },
+    async listToolDefs() {
+      const resp = await rpc("tools/list", {});
+      if (resp.error) throw new Error(`tools/list failed: ${resp.error.message}`);
+      const result = resp.result as { tools?: Array<{ name: string; outputSchema?: Record<string, unknown> }> } | undefined;
+      return result?.tools ?? [];
     },
     unmatched() {
       if (!existsSync(unmatchedPath)) return [];

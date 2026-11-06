@@ -70,6 +70,13 @@ describe("notice injection (REQ-111)", () => {
     expect(JSON.parse(output.slice(5)).notices).toEqual([notice]);
   });
 
+  it("keeps the injected envelope pretty-printed", () => {
+    const text = `[OK] ${JSON.stringify({ status: "ok", provider: "x", results: [{ title: "t" }] })}`;
+    const output = injectText(text, [notice]);
+    expect(output).toContain("\n  \"status\"");
+    expect(output.split("\n").length).toBeGreaterThan(1);
+  });
+
   it("leaves an OK envelope byte-identical when there are no notices", () => {
     const text = `[OK] ${JSON.stringify({ status: "ok", provider: "x", results: [] })}`;
     expect(injectText(text, [])).toBe(text);

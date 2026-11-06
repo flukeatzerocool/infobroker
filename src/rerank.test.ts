@@ -1,6 +1,6 @@
 // @implements REQ-021b content-mode REQ-021b full-content-mode REQ-028
 import { describe, it, expect } from "vitest";
-import { splitPassages, scorePassages, rankPassages } from "./rerank.js";
+import { splitPassages, scorePassages, rankPassages, matchQuality, MATCH_STRONG, MATCH_MODERATE } from "./rerank.js";
 
 describe("splitPassages (REQ-021b)", () => {
   it("splits at sentence boundaries into roughly passage-sized chunks", () => {
@@ -71,5 +71,32 @@ describe("span anchors (REQ-028)", () => {
     expect(start).toBeGreaterThan(0);
     expect(text.slice(start, end)).toContain("Quantum entanglement");
     expect(end).toBeGreaterThan(start);
+  });
+});
+
+describe("match quality bands (REQ-021b)", () => {
+  // @implements REQ-021b match-strong
+  it("reports strong at or above the strong threshold", () => {
+    expect(matchQuality(MATCH_STRONG, 1)).toBe("strong");
+    expect(matchQuality(0.9, 3)).toBe("strong");
+  });
+
+  // @implements REQ-021b match-moderate
+  it("reports moderate between the moderate and strong thresholds", () => {
+    expect(matchQuality(MATCH_MODERATE, 1)).toBe("moderate");
+    expect(matchQuality(0.49, 2)).toBe("moderate");
+  });
+
+  // @implements REQ-021b match-weak
+  it("reports weak for a positive score below the moderate threshold", () => {
+    expect(matchQuality(0.01, 1)).toBe("weak");
+    expect(matchQuality(0.24, 5)).toBe("weak");
+  });
+
+  // @implements REQ-021b match-none
+  it("reports none when there are no passages or no top score", () => {
+    expect(matchQuality(0.9, 0)).toBe("none");
+    expect(matchQuality(undefined, 3)).toBe("none");
+    expect(matchQuality(0, 1)).toBe("none");
   });
 });

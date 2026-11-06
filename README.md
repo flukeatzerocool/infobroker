@@ -239,7 +239,8 @@ in-process, with no extra request.
 Failed providers fall back silently through a configurable chain so you get
 results, not error messages. Other search tools lock you to one engine;
 Infobroker routes every query to the right provider and keeps going when one
-fails.
+fails. Every tool also returns the same envelope as a machine-readable
+object, so programmatic clients read fields instead of parsing text.
 
 ### Content Extraction
 
@@ -253,7 +254,8 @@ Jina is throttled. Wikipedia and Internet Archive have dedicated
 renderers for source-specific extraction. Ask a page a question — pass
 `question` to `fetch_page` and it returns the passages that answer it, each
 scored and ranked, instead of the whole document. Fetch several URLs at once
-and each result keeps its own renderer, ranked passages, and top score.
+and each result keeps its own renderer, ranked passages, and top score. Pass
+`raw: true` to get the page text directly, without the JSON wrapper.
 Built-in web fetchers
 return raw HTML; Infobroker gives you clean, readable content from any
 source — ready for summarization or analysis. Fetch also reports the page's

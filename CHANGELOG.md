@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.11.05 — Structured response contract
+
+- Every tool now declares a machine-readable output schema and returns its
+  `[OK]`/`[ERROR]` envelope as `structuredContent` beside the text, so Code
+  Mode reads objects instead of parsing prefixed strings. (REQ-001)
+- `fetch_page` accepts `raw`, returning the page text directly with the
+  envelope metadata in the structured object; an array, crawl, or extract
+  request with `raw` is an invalid-input error. (REQ-021j)
+- Question-mode fetch reports `passages_returned` and a deterministic
+  `match_quality` band (strong, moderate, weak, none) derived from the top
+  passage score. (REQ-021b)
+- Batch responses now make each input self-describing with its URL, serving
+  provider, status, retained passages, passage count, and truncation state.
+  (REQ-021k, REQ-020i)
+- Notice-bearing responses keep pretty-printed JSON instead of collapsing to
+  one line.
+- The ROADMAP "Structured response contract" item is complete and removed.
+
 ## 2026.11.05 — Provider resilience
 
 - Brave ships enabled, so a keyed install gains a second general-web index

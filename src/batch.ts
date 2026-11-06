@@ -1,5 +1,9 @@
-// @implements REQ-020 REQ-021
+// @implements REQ-020 REQ-021 REQ-021k
+import { matchQuality, type MatchQuality } from "./rerank.js";
 export const MAX_BATCH_INPUTS = 5;
+
+/** REQ-021k: a batch input that is an HTTP(S) URL is echoed as `url`. */
+const HTTP_URL_RE = /^https?:\/\//i;
 
 export function capInputs(items: string[]): string[] {
   return items.slice(0, MAX_BATCH_INPUTS);
@@ -68,7 +72,7 @@ interface EnvelopeOk {
   /** REQ-021b: passage content or full content for a question-mode item. */
   extraction_mode?: string;
   /** REQ-021b: ranked passages, each with a relevance score. */
-  snippets?: Array<{ text: string; score: number; index: number }>;
+  snippets?: Array<{ text: string; score: number; index: number; start?: number; end?: number }>;
   /** REQ-021b: best passage score for a question-mode item. */
   top_score?: number;
   /** REQ-021b: no-match note when no passage addressed the question. */
@@ -98,6 +102,8 @@ export function parseEnvelope(text: string): Envelope {
 
 export interface PerInputMeta {
   query: string;
+  /** REQ-021k: the input echoed when it is an HTTP(S) URL. */
+  url?: string;
   provider: string;
   status: "ok" | "error";
   result_count: number;
@@ -109,8 +115,12 @@ export interface PerInputMeta {
   extraction_mode?: string;
   /** REQ-021b: number of ranked passages returned for this item. */
   passages_returned?: number;
+  /** REQ-021k: retained ranked passages for this item. */
+  passages?: Array<{ text: string; score: number; index: number; start?: number; end?: number }>;
   /** REQ-021b: best passage score for this item. */
   top_score?: number;
+  /** REQ-021b: deterministic match-quality band for this item. */
+  match_quality?: MatchQuality;
   /** REQ-021b: no-match note for this item. */
   note?: string;
   /** REQ-002: the error for a failed item in a partially successful batch. */
@@ -151,8 +161,10 @@ export function mergeItems(items: BatchItem[]): Envelope {
     if (env.status === "ok") {
       okItems.push({ query: item.query, env });
       const blockedCount = env.meta?.["blocked_count"];
+      const passages = env.snippets;
       perQuery.push({
         query: item.query,
+        ...(HTTP_URL_RE.test(item.query) ? { url: item.query } : {}),
         provider: env.provider,
         status: "ok",
         result_count: env.results.length,
@@ -160,13 +172,15 @@ export function mergeItems(items: BatchItem[]): Envelope {
         ...(typeof blockedCount === "number" ? { blocked_count: blockedCount } : {}),
         ...(env.extraction_mode ? { extraction_mode: env.extraction_mode } : {}),
         ...(typeof env.top_score === "number" ? { top_score: env.top_score } : {}),
-        ...(env.snippets ? { passages_returned: env.snippets.length } : {}),
+        ...(passages ? { passages_returned: passages.length, passages } : {}),
         ...(env.note ? { note: env.note } : {}),
+        ...(passages ? { match_quality: matchQuality(env.top_score, passages.length) } : {}),
       });
     } else {
       if (!firstError) firstError = env;
       perQuery.push({
         query: item.query,
+        ...(HTTP_URL_RE.test(item.query) ? { url: item.query } : {}),
         provider: env.provider,
         status: "error",
         result_count: 0,
@@ -215,6 +229,11 @@ export function mergeItems(items: BatchItem[]): Envelope {
     const count = o.env.meta?.["blocked_count"];
     return sum + (typeof count === "number" ? count : 0);
   }, 0);
+  const topScores = okItems
+    .map((o) => o.env.top_score)
+    .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+  const bestScore = topScores.length > 0 ? Math.max(...topScores) : undefined;
+  const totalPassages = okItems.reduce((sum, o) => sum + (o.env.snippets?.length ?? 0), 0);
   return {
     status: "ok",
     provider: firstOk.provider,
@@ -223,6 +242,8 @@ export function mergeItems(items: BatchItem[]): Envelope {
     meta: {
       ...(firstOk.meta ?? {}),
       ...(hasBlockedCount ? { blocked_count: blockedTotal } : {}),
+      ...(bestScore !== undefined ? { top_score: bestScore } : {}),
+      match_quality: matchQuality(bestScore, totalPassages),
       per_query: perQuery,
     },
   };

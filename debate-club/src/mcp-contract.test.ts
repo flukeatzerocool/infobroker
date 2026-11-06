@@ -102,6 +102,16 @@ test("tools/list advertises exactly the seven-tool surface", async () => {
   ]);
 });
 
+test("tools/list declares a machine-readable output schema on every tool (REQ-001)", async () => {
+  scenario = "surface";
+  const tools = await server.listToolDefs();
+  expect(tools).toHaveLength(7);
+  for (const tool of tools) {
+    expect(tool.outputSchema, `${tool.name} missing outputSchema`).toBeTruthy();
+    expect(Object.keys(tool.outputSchema!).length).toBeGreaterThan(0);
+  }
+});
+
 test("search_web returns a shape-valid result set from the pinned provider", async () => {
   scenario = "search-wikipedia";
   const out = await call("infobroker_search_web", {

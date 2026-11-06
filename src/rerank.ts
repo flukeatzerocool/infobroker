@@ -9,6 +9,21 @@ export interface RankedPassage {
   end: number;
 }
 
+/** REQ-021b: deterministic match-quality bands over the top passage score. */
+export const MATCH_STRONG = 0.5;
+export const MATCH_MODERATE = 0.25;
+
+export type MatchQuality = "strong" | "moderate" | "weak" | "none";
+
+export function matchQuality(topScore: number | undefined, passagesReturned: number): MatchQuality {
+  if (passagesReturned <= 0 || topScore === undefined || !Number.isFinite(topScore) || topScore <= 0) {
+    return "none";
+  }
+  if (topScore >= MATCH_STRONG) return "strong";
+  if (topScore >= MATCH_MODERATE) return "moderate";
+  return "weak";
+}
+
 function isBoundarySentence(p: string): boolean {
   return /[.!?。！？]["')\]]*\s+/.test(p);
 }

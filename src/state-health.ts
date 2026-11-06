@@ -191,7 +191,7 @@ export function injectNotices<T>(result: T, notices: ToolNotice[]): T {
     if (Array.isArray(payload["notices"]) && (payload["notices"] as unknown[]).length > 0) return result;
     payload["notices"] = notices;
     const next = [...(content as unknown[])];
-    next[index] = { ...item, text: `[OK] ${JSON.stringify(payload)}` };
+    next[index] = { ...item, text: `[OK] ${JSON.stringify(payload, null, 2)}` };
     return { ...(result as object), content: next } as T;
   } catch {
     // Non-JSON or malformed content is left untouched.

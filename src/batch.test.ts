@@ -1,4 +1,4 @@
-// @implements REQ-020 REQ-021 REQ-021b content-mode full-content-mode
+// @implements REQ-020 REQ-021 REQ-021b content-mode full-content-mode match-strong match-moderate match-weak match-none REQ-021k
 import { describe, it, expect } from "vitest";
 import { capInputs, coerceStringArray, mergeItems, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
 
@@ -249,5 +249,60 @@ describe("mergeItems (REQ-020/REQ-021 array inputs)", () => {
     };
 
     expect(merged.results[0].provider).toBe("mojeek");
+  });
+});
+
+describe("self-describing batch items (REQ-021k)", () => {
+  // @implements REQ-021k
+  it("names url, provider, status, passages, and truncation per input", () => {
+    const ok = `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "jina",
+      url: "https://a.example/one",
+      question: "what happened",
+      extraction_mode: "content",
+      results: [{ title: "a.example", url: "https://a.example/one", snippet: "passage one" }],
+      snippets: [{ text: "passage one", score: 0.6, index: 0, start: 0, end: 12 }],
+      top_score: 0.6,
+      truncated: true,
+      output_path: "/tmp/full.txt",
+      meta: { query_time_ms: 1, fallback_used: false },
+    })}`;
+    const failed = `[ERROR] ${JSON.stringify({
+      status: "error",
+      provider: "none",
+      error: { code: "network_error", message: "unreachable", remediation: "retry" },
+    })}`;
+    const merged = mergeItems([
+      { query: "https://a.example/one", envelope: ok },
+      { query: "https://b.example/two", envelope: failed },
+    ]) as unknown as {
+      meta: {
+        per_query: Array<{
+          url?: string;
+          provider: string;
+          status: string;
+          passages?: unknown[];
+          passages_returned?: number;
+          truncated?: boolean;
+          match_quality?: string;
+        }>;
+      };
+    };
+
+    expect(merged.meta.per_query[0]).toMatchObject({
+      url: "https://a.example/one",
+      provider: "jina",
+      status: "ok",
+      passages_returned: 1,
+      truncated: true,
+      match_quality: "strong",
+    });
+    expect(merged.meta.per_query[0].passages).toHaveLength(1);
+    expect(merged.meta.per_query[1]).toMatchObject({
+      url: "https://b.example/two",
+      provider: "none",
+      status: "error",
+    });
   });
 });

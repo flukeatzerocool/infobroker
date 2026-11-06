@@ -39,7 +39,9 @@ import { createLatencyTracker } from "./latency.js";
 import { compactMode, compactResults } from "./verbosity.js";
 import { deriveResearchVariants, compileResearchGroups } from "./research.js";
 import { keyPoolStatus } from "./key-pool.js";
-import { rankPassages } from "./rerank.js";
+import { matchQuality, rankPassages } from "./rerank.js";
+import { envelopeOutputSchema } from "./output-schema.js";
+import { finalizeToolResult, parseEnvelopeObject, rawRequestError, rawTextFromEnvelope } from "./structured-output.js";
 import { deepRead } from "./deep-search.js";
 import { analyzeResults } from "./analysis.js";
 import { derivePrivacy } from "./privacy.js";
@@ -1213,6 +1215,8 @@ async function doFetchPage(
               fallback_used: true,
               fallback_kind: fallback.fallback_kind,
               fallback_url: fallback.fetched_url,
+              passages_returned: passages.length,
+              match_quality: matchQuality(passages[0].score, passages.length),
               ...(policyMeta(fallbackPolicy.flagged ? 1 : 0, policyMode()) ?? {}),
             },
           })}`;
@@ -1290,6 +1294,8 @@ async function doFetchPage(
         meta: {
           query_time_ms: elapsed,
           fallback_used: false,
+          passages_returned: passages.length,
+          match_quality: matchQuality(passages[0].score, passages.length),
           ...(policyNote ?? {}),
         },
       })}`;
@@ -1628,7 +1634,8 @@ const instrumentTool = (name: string, config: any, handler: any) =>
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, true);
       recordTool(name, true, elapsed);
-      return injectNotices(result, collectNotices());
+      const notices = collectNotices();
+      return finalizeToolResult(injectNotices(result, notices), notices);
     } catch (error) {
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, false);
@@ -1667,6 +1674,7 @@ instrumentTool(
       idempotentHint: true,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
     const content = await doWebSearch(
@@ -1711,6 +1719,7 @@ instrumentTool(
       detect_date: z.boolean().optional().describe("Detect and report the page's last-updated date (default from config)"),
       crawl: z.boolean().optional().default(false).describe("Bounded same-origin crawl: recursively fetch same-origin pages up to config caps (default off)"),
       extract: z.boolean().optional().default(false).describe("Return structured metadata (JSON-LD, OpenGraph, microdata) alongside the content (default off)"),
+      raw: z.boolean().optional().default(false).describe("Return the extracted page text directly instead of a JSON envelope (single URL; not with crawl or extract)"),
     },
     annotations: {
       readOnlyHint: false,
@@ -1718,8 +1727,15 @@ instrumentTool(
       idempotentHint: true,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
+    const raw = Boolean(params.raw);
+    const rawError = raw ? rawRequestError(params.url, params.crawl, params.extract) : undefined;
+    if (rawError) {
+      const text = `[ERROR] ${json(err("system", "invalid_input", rawError, "Call fetch_page with one URL and raw true, or omit raw for the standard envelope"))}`;
+      return { content: [{ type: "text" as const, text }] };
+    }
     const content = await doFetchPage(
       params.url,
       params.renderer as string | undefined,
@@ -1731,7 +1747,14 @@ instrumentTool(
       Boolean(params.crawl),
       Boolean(params.extract)
     );
-    return { content: [{ type: "text" as const, text: content }] };
+    if (!raw) return { content: [{ type: "text" as const, text: content }] };
+    const envelope = parseEnvelopeObject(content);
+    if (!envelope) return { content: [{ type: "text" as const, text: content }] };
+    // REQ-021j: raw text plus the envelope as structured metadata.
+    return {
+      content: [{ type: "text" as const, text: rawTextFromEnvelope(envelope) }],
+      structuredContent: { ...envelope, raw: true },
+    };
   }
 );
 
@@ -1752,6 +1775,7 @@ instrumentTool(
       idempotentHint: true,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
     const action = params.action as "list" | "health" | "spec";
@@ -1791,6 +1815,7 @@ instrumentTool(
       idempotentHint: false,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
     try {
@@ -1957,6 +1982,7 @@ instrumentTool(
       idempotentHint: false,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
     if (!isKbConfigured()) {
@@ -2264,6 +2290,7 @@ instrumentTool(
       idempotentHint: true,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
     try {
@@ -2373,6 +2400,7 @@ instrumentTool(
       idempotentHint: true,
       openWorldHint: true,
     },
+    outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
     try {

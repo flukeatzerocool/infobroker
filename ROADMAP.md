@@ -16,15 +16,6 @@ and ACLs; enterprise scheduling.
   Update this file when planning a release.
 -->
 
-## [P1] Structured response contract
-
-- Add `structuredContent` and `outputSchema` to all seven tools so Code Mode
-  receives objects, not `[OK]`-prefixed strings (REQ-001).
-- Add a raw-text mode and standardize `snippet`/`snippets`; include
-  `top_score`, `passages_returned`, and `match_quality` (REQ-021b).
-- Make batch items self-describing: provider, status, url, passages,
-  truncated.
-
 ## [P2] Knowledge-base memory
 
 - Make report ingest a required tail step for Deep-Dive and Research &
