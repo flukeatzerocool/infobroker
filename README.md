@@ -164,6 +164,8 @@ To run from a clone instead:
 cd Infobroker && npm install && npm run start
 ```
 
+The configuration below is written for OpenCode. Other MCP clients connect the same way — a local server command plus the instruction and skill paths — but their config keys and file locations differ, so adapt the block to your client's schema.
+
 Add this to your OpenCode config (`~/.config/opencode/opencode.json`):
 
 ```json
