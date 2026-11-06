@@ -24,17 +24,6 @@
 **Trigger:** Start on the next config change or when a `code` search stalls;
 close when `npm run check` passes and the generated auth reference is refreshed.
 
-## Task-type routing (P1)
-
-- Test the author–year signal against the raw query with a capitalized name so
-  "election results 2024" no longer routes to the academic chain (CR-3); remove
-  the duplicated scholarly branch (CR-15).
-- Add routing regressions for title-plus-year, author–year, and attendance
-  queries.
-
-**Trigger:** Start when a session log shows a misrouted query or with the next
-routing change; close when the classifier tests cover both false-positive forms.
-
 ## Structured-fact fidelity (P1)
 
 - Emit the unit for area and elevation facts (CR-4), parse real header-plus-data

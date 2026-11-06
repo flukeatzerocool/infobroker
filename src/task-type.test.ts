@@ -35,6 +35,8 @@ describe("classifyTaskType (REQ-020a)", () => {
     expect(classifyTaskType("10.1038/nature12373")).toBe("academic");
     expect(classifyTaskType("Smith 2020 attention mechanisms")).toBe("academic");
     expect(classifyTaskType("Smith et al. 2020 attention mechanisms")).toBe("academic");
+    expect(classifyTaskType("Van der Berg 2020 citation networks")).toBe("academic");
+    expect(classifyTaskType("as Smith 2020 shows")).toBe("academic");
     expect(classifyTaskType("peer-reviewed studies on sleep deprivation")).toBe("academic");
     expect(classifyTaskType('Sharon Mazer "Donald Trump Shoots the Match" TDR Drama Review')).toBe("academic");
     expect(classifyTaskType('Abraham Riesman "Trump Is a Pro Wrestler"')).toBe("academic");
@@ -165,6 +167,36 @@ describe("task-type regression corpus (REQ-020a)", () => {
       expect(classifyTaskType(query)).toBe(expected);
     });
   }
+});
+
+// CR-3/CR-15: the author–year signal must not fire on a lowercase word or a
+// multi-word title before a year. These are the named routing regressions for
+// title-plus-year, author–year, and attendance queries.
+describe("routing regressions (CR-3, CR-15)", () => {
+  // False positives: assert the route, not the exact fallback. The semantic
+  // fallback is model-dependent, so only "not academic" is stable; an empty
+  // ranker pins the general_web default when nothing else fires.
+  for (const query of ["election results 2024", "The Great Gatsby 1925", "Berlin Wall 1989"]) {
+    it(`keeps ${JSON.stringify(query)} off the academic chain`, () => {
+      expect(classifyTaskType(query)).not.toBe("academic");
+      expect(classifyTaskType(query, () => [])).toBe("general_web");
+    });
+  }
+
+  // Author–year: a literal signal fires, so the exact route is stable.
+  it("keeps a capitalized author–year citation on the academic chain", () => {
+    expect(classifyTaskType("Smith 2020 attention mechanisms")).toBe("academic");
+    expect(classifyTaskType("Smith et al. 2020 attention mechanisms")).toBe("academic");
+    expect(classifyTaskType("Mazer 1997")).toBe("academic");
+  });
+
+  // Title-plus-year with a measurable attribute: the attribute outweighs the
+  // scholarly signal, so the academic chain must not win.
+  it("keeps title-plus-year attendance queries on the structured_fact chain", () => {
+    expect(classifyTaskType("Survivor Series 1997 attendance")).toBe("structured_fact");
+    expect(classifyTaskType("WrestleMania 23 attendance")).toBe("structured_fact");
+    expect(classifyTaskType("The Great Gatsby 1925 box office")).not.toBe("academic");
+  });
 });
 
 describe("searchable task types match the dispatch table (REQ-020a)", () => {

@@ -8,8 +8,9 @@
 //
 // Signal weights: 2 = a distinctive token or phrase; 1 = a generic token that
 // is only meaningful alongside another signal; 3 = a structured scholarly form
-// (DOI, author–year, cited work). `MIN_SIGNAL_SCORE` is the confidence floor: a
-// single generic token is not enough evidence to leave the general_web chain.
+// (DOI, capitalised author–year, cited work). `MIN_SIGNAL_SCORE` is the
+// confidence floor: a single generic token is not enough evidence to leave the
+// general_web chain.
 import { rankDocs, type RankedDoc } from "./embed.js";
 
 // The searchable task types: every §7.1 type a `search_web` call can dispatch
@@ -200,7 +201,14 @@ const NARROW_CHAINS = new Set<string>(["location", "structured_fact", "financial
 // "Smith et al., 2020"), or a cited work title ("Mazer "Donald Trump Shoots
 // the Match"" — a capitalized name followed by a >=3-word quoted title).
 const DOI_RE = /\b10\.\d{4,9}\/\S+/;
-const AUTHOR_YEAR_RE = /\b[a-z][a-z'’-]{1,}\s+(?:et\s+al\.?,?\s+)?(?:19|20)\d{2}\b/;
+// The author–year form requires a real surname: one capitalized proper-noun
+// token immediately before the year, with no capitalized word before it. A
+// lowercase word ("election results 2024") or a multi-word title ("The Great
+// Gatsby 1925") is not an author, so it must not select the academic chain.
+// Deliberately case-sensitive: `i` would make `\p{Lu}` match lowercase and
+// silently restore the false positive.
+const AUTHOR_YEAR_RE =
+  /(?<![\p{L}\p{N}])(?<!\p{Lu}[\p{L}'’-]*\s)\p{Lu}[\p{L}'’-]+\s+(?:et\s+al\.?,?\s+)?(?:19|20)\d{2}\b/u;
 const CITED_WORK_RE = /\b[A-Z][a-z'’-]+\s+["“]([^"”]{12,})["”]/;
 const SCHOLARLY_WEIGHT = 3;
 
@@ -249,16 +257,12 @@ function scoreType(type: SearchableTaskType, lower: string, raw: string): TypeSc
     longest = Math.max(longest, signal.keyword.length);
   }
 
-  if (type === "academic") {
-    const scholarly = DOI_RE.test(lower) || AUTHOR_YEAR_RE.test(lower) || citedWorkMatches(raw);
-    if (scholarly && matched.size === 0) {
-      score += SCHOLARLY_WEIGHT;
-      maxWeight = Math.max(maxWeight, SCHOLARLY_WEIGHT);
-    } else if (scholarly) {
-      // Structured scholarly evidence strengthens an existing keyword hit.
-      score += SCHOLARLY_WEIGHT;
-      maxWeight = Math.max(maxWeight, SCHOLARLY_WEIGHT);
-    }
+  // Structured scholarly evidence is decisive on its own and strengthens an
+  // existing keyword hit. The author–year signal reads the raw query because
+  // the surname's capitalization is part of the evidence; the DOI is folded.
+  if (type === "academic" && (DOI_RE.test(lower) || AUTHOR_YEAR_RE.test(raw) || citedWorkMatches(raw))) {
+    score += SCHOLARLY_WEIGHT;
+    maxWeight = Math.max(maxWeight, SCHOLARLY_WEIGHT);
   }
 
   return { type, score: Math.min(score, 5), maxWeight, longest };

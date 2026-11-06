@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.05 — Task-type routing
+
+- `search_web` no longer reads a lowercase word before a year as an
+  author–year citation, so "election results 2024" stays on the `general_web`
+  chain instead of routing to the academic providers. (CR-3, REQ-020a)
+- A multi-word capitalized title before a year is not an author–year citation
+  either, so "The Great Gatsby 1925" and "Berlin Wall 1989" leave the academic
+  chain, while the attendance signal still wins for "Survivor Series 1997
+  attendance". (CR-3, REQ-020a)
+- The duplicated scholarly-evidence branch in the classifier collapses to one
+  path with identical scoring. (CR-15, REQ-020a)
+
 ## 2026.11.05 — Corroboration correctness
 
 - `verify_claims` reserves an HTTP-call slot synchronously before dispatch, so a
