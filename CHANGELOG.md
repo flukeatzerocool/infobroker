@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.11.05 — Config safety and discoverability
+
+- `validateConfig` reports `dispatch must be an object of task-type arrays`
+  instead of crashing when a user layer sets `dispatch` to `null`, and also
+  rejects an array dispatch or a non-array chain; `getDispatchChain` returns an
+  empty chain for a malformed table. (CR-9)
+- A `generic_http` provider can authenticate against non-Bearer APIs: optional
+  `auth_header` (default `Authorization`) and `auth_scheme` (default `Bearer`,
+  empty for a raw key) are validated as header material and default to the
+  existing behavior. (CF-6, REQ-014)
+- `config.json` ships the `corroboration.modality_markers` lexicon, pinned to
+  `DEFAULT_MODALITY_MARKERS` by a parity test, and `config-tune.md` documents
+  `max_batch_claims` and the marker override. (CF-5, CF-4, REQ-026h)
+- The README and troubleshooting reference state that provider keys are strict
+  (one unknown key invalidates the whole layer and falls back to shipped
+  defaults), that the call log writes one record per tool call plus one per
+  outbound request, and that the domain blocklist scopes to `search_web`
+  including KB recall. (CR-19, CF-3, CF-7, SR-1; D-082, D-083, REQ-020h)
+
 ## 2026.11.05 — Corroboration source reading
 
 - The modality lexicon no longer reads the month "May" as speculation: a marker

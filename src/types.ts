@@ -53,6 +53,10 @@ export interface ProviderConfig {
   rate_limit: { per_second?: number; per_day?: number; per_month?: number; jitter_ms?: number };
   auth_env?: string;
   auth_optional?: boolean;
+  /** Header name carrying the key for a generic_http provider (default `Authorization`). */
+  auth_header?: string;
+  /** Scheme prefixed to the key for a generic_http provider (default `Bearer`; empty sends the key alone). */
+  auth_scheme?: string;
   url_env?: string;
   enabled: boolean;
   priority: number;

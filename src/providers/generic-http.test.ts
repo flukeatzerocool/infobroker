@@ -166,6 +166,47 @@ describe("generic-http provider", () => {
     expect(init.headers).toEqual({ Authorization: "Bearer secret" });
   });
 
+  it("sends the key in a custom header with no scheme when configured", async () => {
+    process.env["INFOBROKER_MYSEARCH_API_KEY"] = "secret";
+    mockFetch.mockImplementation(async () => jsonResponse({ data: { items: [] } }));
+
+    const p = createGenericProvider(
+      "my_search",
+      cfg({ auth_env: "INFOBROKER_MYSEARCH_API_KEY", auth_header: "X-API-Key", auth_scheme: "" })
+    );
+    await p.search("test");
+
+    const init = mockFetch.mock.calls[0][1] as { headers?: Record<string, string> };
+    expect(init.headers).toEqual({ "X-API-Key": "secret" });
+  });
+
+  it("prefixes a custom scheme to the key", async () => {
+    process.env["INFOBROKER_MYSEARCH_API_KEY"] = "secret";
+    mockFetch.mockImplementation(async () => jsonResponse({ data: { items: [] } }));
+
+    const p = createGenericProvider(
+      "my_search",
+      cfg({ auth_env: "INFOBROKER_MYSEARCH_API_KEY", auth_scheme: "Token" })
+    );
+    await p.search("test");
+
+    const init = mockFetch.mock.calls[0][1] as { headers?: Record<string, string> };
+    expect(init.headers).toEqual({ Authorization: "Token secret" });
+  });
+
+  it("ignores auth_header and auth_scheme when auth_env is absent", async () => {
+    mockFetch.mockImplementation(async () => jsonResponse({ data: { items: [] } }));
+
+    const p = createGenericProvider(
+      "my_search",
+      cfg({ auth_header: "X-API-Key", auth_scheme: "" })
+    );
+    await p.search("test");
+
+    const init = mockFetch.mock.calls[0][1] as { headers?: Record<string, string> };
+    expect(init.headers).toEqual({});
+  });
+
   it("sends no auth header when auth_optional and the key is unset", async () => {
     mockFetch.mockImplementation(async () => jsonResponse({ data: { items: [] } }));
 

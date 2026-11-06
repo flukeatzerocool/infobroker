@@ -71,7 +71,8 @@ function authHeaders(cfg: ProviderConfig, slug: string): Record<string, string> 
     if (cfg.auth_optional) return {};
     throw new Error(`Provider "${slug}" requires ${cfg.auth_env}, which is not set`);
   }
-  return { Authorization: `Bearer ${key}` };
+  const scheme = (cfg.auth_scheme ?? "Bearer").trim();
+  return { [cfg.auth_header ?? "Authorization"]: scheme ? `${scheme} ${key}` : key };
 }
 
 async function readJson(resp: Response, slug: string): Promise<unknown> {

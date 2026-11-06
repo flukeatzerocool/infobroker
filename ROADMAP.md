@@ -45,18 +45,6 @@ empty table; close when REQ-021i's "unit when applicable" is exercised by a test
 **Trigger:** Start on the next paywalled or blocked fetch, or with the next
 fallback change; close when the taxonomy tests cover every branch.
 
-## Config safety and discoverability (P1)
-
-- Guard `validateConfig` against a null `dispatch` (CR-9); add default
-  `corroboration.modality_markers`, document `max_batch_claims` and the call-log
-  volume, and document the strict-provider-key and blocklist scopes (CR-19,
-  CF-3, CF-4, CF-5, CF-7, SR-1).
-- Add optional `generic_http` `auth_header`/`auth_scheme` so non-Bearer APIs can
-  be configured without a module (CF-6).
-
-**Trigger:** Start with the next config or provider-onboarding change; close when
-README, `config.json`, and `validate-spec` agree.
-
 ## Batch metadata and gate hygiene (P2)
 
 - Report a batch's aggregate time rather than the first item's (CR-16), make the

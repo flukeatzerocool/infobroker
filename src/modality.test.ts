@@ -6,7 +6,18 @@
 // @implements REQ-026h modality-month-name
 // @implements REQ-026h marker-lexicon-configurable
 import { describe, it, expect } from "vitest";
-import { readModality, resolveMarkers } from "./modality.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { readModality, resolveMarkers, DEFAULT_MODALITY_MARKERS } from "./modality.js";
+
+describe("shipped modality defaults", () => {
+  it("config.json carries the same marker lexicon as the code default", () => {
+    const raw = JSON.parse(
+      readFileSync(join(import.meta.dirname, "..", "config.json"), "utf-8")
+    ) as { corroboration?: { modality_markers?: unknown } };
+    expect(raw.corroboration?.modality_markers).toEqual(DEFAULT_MODALITY_MARKERS);
+  });
+});
 
 describe("readModality", () => {
   it("classifies a flat statement as asserted", () => {

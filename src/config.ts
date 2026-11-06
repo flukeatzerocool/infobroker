@@ -35,6 +35,8 @@ const PROVIDER_CONFIG_KEYS = new Set<string>([
   "rate_limit",
   "auth_env",
   "auth_optional",
+  "auth_header",
+  "auth_scheme",
   "url_env",
   "enabled",
   "priority",
@@ -494,6 +496,18 @@ export function validateConfig(config: Config): void {
       ) {
         errors.push(`Provider "${slug}": "health_endpoint" must be an http(s) URL when present`);
       }
+      if (
+        provider.auth_header !== undefined &&
+        (typeof provider.auth_header !== "string" || !/^[A-Za-z0-9-]+$/.test(provider.auth_header))
+      ) {
+        errors.push(`Provider "${slug}": "auth_header" must be a valid HTTP header name when present`);
+      }
+      if (
+        provider.auth_scheme !== undefined &&
+        (typeof provider.auth_scheme !== "string" || /[\u0000-\u001f\u007f]/.test(provider.auth_scheme))
+      ) {
+        errors.push(`Provider "${slug}": "auth_scheme" must be a string without control characters when present`);
+      }
       if (provider.field_map !== undefined) {
         if (typeof provider.field_map !== "object" || provider.field_map === null || Array.isArray(provider.field_map)) {
           errors.push(`Provider "${slug}": "field_map" must be an object`);
@@ -506,7 +520,7 @@ export function validateConfig(config: Config): void {
         }
       }
     } else {
-      for (const key of ["endpoint", "query_param", "results_path", "health_endpoint", "field_map"] as const) {
+      for (const key of ["endpoint", "query_param", "results_path", "health_endpoint", "field_map", "auth_header", "auth_scheme"] as const) {
         if (provider[key as keyof ProviderConfig] !== undefined) {
           errors.push(`Provider "${slug}": "${key}" is only valid for generic_http providers`);
         }
@@ -537,10 +551,18 @@ export function validateConfig(config: Config): void {
     }
   }
 
-  for (const [taskType, chain] of Object.entries(config.dispatch)) {
-    for (const slug of chain) {
-      if (!config.providers[slug]) {
-        errors.push(`Dispatch chain "${taskType}" references undeclared provider "${slug}"`);
+  if (!isPlainObject(config.dispatch)) {
+    errors.push("dispatch must be an object of task-type arrays");
+  } else {
+    for (const [taskType, chain] of Object.entries(config.dispatch)) {
+      if (!Array.isArray(chain)) {
+        errors.push(`dispatch.${taskType} must be an array of provider slugs`);
+        continue;
+      }
+      for (const slug of chain) {
+        if (!config.providers[slug]) {
+          errors.push(`Dispatch chain "${taskType}" references undeclared provider "${slug}"`);
+        }
       }
     }
   }
@@ -550,7 +572,7 @@ export function validateConfig(config: Config): void {
       errors.push("dispatch_append must be an object of task-type arrays");
     } else {
       for (const [taskType, slugs] of Object.entries(config.dispatch_append)) {
-        if (!config.dispatch[taskType]) {
+        if (!isPlainObject(config.dispatch) || !config.dispatch[taskType]) {
           errors.push(`dispatch_append.${taskType} does not match a declared dispatch chain`);
         }
         if (!Array.isArray(slugs) || slugs.some((slug) => typeof slug !== "string" || slug.trim().length === 0)) {
@@ -993,8 +1015,9 @@ export function getActiveProviders(): [string, ProviderConfig][] {
 
 export function getDispatchChain(taskType: string): string[] {
   const config = getConfig();
-  const chain = config.dispatch[taskType];
-  if (!chain) return [];
+  const dispatch = isPlainObject(config.dispatch) ? config.dispatch : {};
+  const chain = dispatch[taskType];
+  if (!Array.isArray(chain)) return [];
   return chain.filter((slug) => {
     const provider = config.providers[slug];
     if (!provider || !provider.enabled) return false;

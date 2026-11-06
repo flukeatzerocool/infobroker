@@ -13,6 +13,8 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 | `first_pass_max_results` | 5 | Results fetched per provider in Phase 1. Halving it roughly halves Phase-1 token volume. |
 | `max_http_calls` | 30 | Ceiling on total HTTP calls per `verify_claims` run. Lower it to hard-cap cost; too low forces `corroboration: "partial"`. |
 | `max_iterations` | 5 | Refinement rounds (capped at 10). Lower = cheaper, more gaps left open. |
+| `max_batch_claims` | 10 | Claims accepted in one `verify_claims` batch call (integer 1–25; the tool rejects a larger request). Lower = smaller batches, more calls. |
+| `modality_markers` | see `config.json` | Marker lexicon for `reported`/`speculative` attribution. Override either list; supplying an empty list disables that category (every source reads asserted). |
 | `similarity_threshold` | 0.3 | Claim-clustering threshold. Higher = stricter agreement (more contested findings); lower = looser grouping. |
 | `confidence_threshold` | 0.8 | Bar for `green`/confirmed. Lower = more findings confirmed earlier (earlier exit, fewer calls). |
 | `authority_weights` | — | Per-source-type weight (0.7–1.0). Affects confidence, not call count. |
@@ -59,7 +61,7 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 | `hedge_min_delay_ms` / `hedge_max_delay_ms` | 200 / 1500 | Hedge window bounds. |
 | `fallback_depth` | 5 | Providers tried per dispatch chain. |
 | `rate_limit_cooldown_ms` | 30000 | Hold-off after a 429/anti-bot. |
-| `call_log` | stderr | Operational call records: `stderr`, `file`, or `off`. No query or content is recorded. |
+| `call_log` | stderr | Operational call records: `stderr`, `file`, or `off`. No query or content is recorded; one line is written per tool call and per outbound provider request, so a batch or multi-query search multiplies the volume. |
 | `call_log_path` / `call_log_max_bytes` | `~/.local/share/infobroker/call-log.jsonl` / 2000000 | File sink target and rotation bound. |
 | `provider.rate_limit.jitter_ms` | 0 (DDG: 800) | Added to the minimum interval so a burst is not fixed-cadence. |
 

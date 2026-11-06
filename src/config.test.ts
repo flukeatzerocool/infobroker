@@ -102,6 +102,24 @@ describe("configuration overlay", () => {
     warn.mockRestore();
   });
 
+  it("rejects a null dispatch instead of crashing during validation", async () => {
+    await expect(loadWithOverlay(BASE, { dispatch: null })).rejects.toThrow(
+      /dispatch must be an object of task-type arrays/
+    );
+  });
+
+  it("rejects an array dispatch", async () => {
+    await expect(loadWithOverlay(BASE, { dispatch: [] })).rejects.toThrow(
+      /dispatch must be an object of task-type arrays/
+    );
+  });
+
+  it("rejects a non-array dispatch chain", async () => {
+    await expect(
+      loadWithOverlay(BASE, { dispatch: { general_web: "duckduckgo" } })
+    ).rejects.toThrow(/dispatch\.general_web must be an array of provider slugs/);
+  });
+
   it("preserves nested KB defaults not overridden", async () => {
     const cfg = await loadWithOverlay(BASE, {
       kb: { storage_path: "/custom/kb" },
@@ -222,6 +240,54 @@ describe("configuration overlay", () => {
         },
       })
     ).rejects.toThrow(/health_endpoint/);
+  });
+
+  it("accepts auth_header and auth_scheme on a generic_http provider", async () => {
+    const cfg = await loadWithOverlay(BASE, {
+      providers: {
+        my_search: {
+          tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+          endpoint: "https://api.example.com/search", query_param: "q",
+          auth_env: "INFOBROKER_MYSEARCH_API_KEY", auth_header: "X-API-Key", auth_scheme: "",
+        },
+      },
+    });
+    expect(cfg.providers.my_search.auth_header).toBe("X-API-Key");
+    expect(cfg.providers.my_search.auth_scheme).toBe("");
+  });
+
+  it("rejects an invalid auth_header name", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: {
+            tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "https://api.example.com/search", query_param: "q", auth_header: "Bad Header",
+          },
+        },
+      })
+    ).rejects.toThrow(/auth_header/);
+  });
+
+  it("rejects an auth_scheme with a control character", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: {
+          my_search: {
+            tier: "generic_http", capabilities: ["web_search"], rate_limit: {}, enabled: true, priority: 20,
+            endpoint: "https://api.example.com/search", query_param: "q", auth_scheme: "Bearer\nX-Injected: 1",
+          },
+        },
+      })
+    ).rejects.toThrow(/auth_scheme/);
+  });
+
+  it("rejects auth_header on a non-generic provider", async () => {
+    await expect(
+      loadWithOverlay(BASE, {
+        providers: { duckduckgo: { auth_header: "X-API-Key" } },
+      })
+    ).rejects.toThrow(/only valid for generic_http/);
   });
 
   it("rejects health_endpoint on a non-generic provider", async () => {

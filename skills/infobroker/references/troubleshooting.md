@@ -32,6 +32,25 @@ retry. The most common mistake is editing `config.json` directly instead of
 `config.local.json`, then losing overrides on update — put your changes in the
 local layer.
 
+## A config change had no effect
+
+Provider entries are strict: an unknown key (for example `result_path` instead
+of `results_path`) invalidates the whole user layer, so a single typo suppresses
+every override and the server runs on shipped defaults with an error notice.
+Check the reported key (the notice or `inspect_providers` action `spec`), fix it
+in `config.local.json`, then `reload_config`. `dispatch` must be an object of
+task-type arrays; `null`, an array, or a non-array chain is rejected the same
+way.
+
+## A generic HTTP provider returns empty or unauthorized results
+
+The shared backend sends the key named by `auth_env` as
+`Authorization: Bearer …`. If the API expects another header or no scheme, set
+`auth_header` (default `Authorization`) and `auth_scheme` (default `Bearer`;
+`""` sends the raw key). A rejected request is usually the header pair or a
+missing key, not the field mapping. `inspect_providers` (action health) with no
+`health_endpoint` runs a real search and can consume quota.
+
 ## Knowledge base is locked (encryption)
 
 The store locks rather than touching data when the key is missing or wrong.

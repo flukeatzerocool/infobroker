@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### D-082: Strict Provider Keys (CF-3, CR-19; 2026.11.06)
+
+Configuration validation rejects an unknown provider key instead of ignoring it,
+and the README and troubleshooting reference state the consequence: one typo
+invalidates the whole user layer, which then falls back to shipped defaults with
+an error notice. Warn-and-ignore was rejected because a silently dropped key
+yields a provider running on defaults the user did not choose (wrong priority,
+rate limit, or mapping), which is harder to diagnose than a refused layer. The
+error names the key, and the fix stays in `config.local.json`; the server never
+rewrites the file.
+
+### D-083: Domain Blocklist Scope (CF-7, SR-1; 2026.11.06)
+
+The `source_quality.blocklist` applies to results returned by `search_web`,
+including a knowledge-base recall used to answer a search — a cached copy must
+not resurrect a blocked host — and does not apply to `fetch_page` or
+`verify_claims`. The blocklist is a search-result policy, not a content-access
+policy: a caller that names a URL explicitly or asks for a claim to be checked
+may still need that source. REQ-020h states the scope, and README documents it.
+
 ### D-081: Roadmap Holds Scheduled Work; Standing Facts Are Decisions (2026.11.06)
 
 `ROADMAP.md` holds scheduled work: a `## <title>` section needs an action a

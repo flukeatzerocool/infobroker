@@ -533,6 +533,13 @@ startup after the merged result validates; the same backup is written first.
 If a user layer is invalid, the server starts on shipped defaults, leaves the
 file untouched, and reports the error instead of refusing to start.
 
+Provider entries are strict: a key outside the provider schema — for example
+`result_path` where the schema expects `results_path` — makes the whole user
+layer invalid instead of being ignored, so a single typo can suppress every
+override in the file. The server reports the offending key and the invalid
+value, and the fix belongs in `config.local.json`; a key the current schema no
+longer recognizes is reported as drift rather than silently dropped.
+
 `state.update_check` (off by default) enables an update-availability check
 against the published npm package. When enabled, the check runs in the
 background, caches its result for a day, and never downloads or applies an
@@ -655,7 +662,10 @@ document drifts from configuration.
 
 Operational records are separate: every tool call and outbound provider
 request logs its name, status, and elapsed time, never the query, URL, or
-content. Set `output.call_log` to `"stderr"` (the default), `"file"`, or
+content. A multi-query search or a `verify_claims` batch writes one record
+per call plus one per provider request, so a batch multiplies the volume;
+`output.call_log_max_bytes` (default 2 MB) bounds the file before rotation.
+Set `output.call_log` to `"stderr"` (the default), `"file"`, or
 `"off"`; the file sink is owner-only and rotates at
 `output.call_log_max_bytes`. `inspect_providers action=spec` reports the
 session summary, and a successful response carries a `provider_cooldown`
@@ -697,7 +707,11 @@ array), `doi`, `venue`, `abstract`, and `citation_count`. Relative result
 URLs resolve against the endpoint.
 
 Set `auth_env` to an environment variable name to send its value as
-`Authorization: Bearer …`; the key never appears in configuration. Set
+`Authorization: Bearer …`; the key never appears in configuration. For an API
+that expects a different header or no scheme, set `auth_header` (default
+`Authorization`) and `auth_scheme` (default `Bearer`; set `""` to send the raw
+key). For example, `{"auth_header": "X-API-Key", "auth_scheme": ""}` sends the
+key alone in `X-API-Key`. Set
 `health_endpoint` to a query-free URL so `inspect_providers` health does
 not spend a real search against a metered API — without it the probe is a
 search query. A generic provider's capabilities must be `web_search` or a
@@ -732,7 +746,9 @@ source-quality weight. Primary sources (default `.gov`, `.mil`, `.edu`, and
 rank lower. The default weight is small enough that relevance stays
 dominant. A blocklist removes a host and its subdomains before ordering and
 reports the count in `meta.blocked_count`; a `*.` pattern matches subdomains
-only.
+only. The blocklist applies to `search_web` results, including a
+knowledge-base recall used to answer a search, and does not apply to
+`fetch_page` or `verify_claims`.
 
 ```json
 {
