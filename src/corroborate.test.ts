@@ -1069,6 +1069,8 @@ describe("applyPriority speed ordering (REQ-026)", () => {
 // @implements REQ-026b positive-overlap
 // @implements REQ-026h span-located
 // @implements REQ-026h modality-preserved
+// @implements REQ-026h span-decimals
+// @implements REQ-026h modality-month-name
 describe("batch claim verification (REQ-026g, REQ-026h)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1288,6 +1290,23 @@ describe("batch claim verification (REQ-026g, REQ-026h)", () => {
     expect(source.modality_marker).toBe("reportedly");
     // Advisory only: the single-source finding stays unverified either way.
     expect(result.findings[0]!.verdict).toBe("unverified");
+  });
+
+  it("does not read a month in the snippet as a hedge (CR-6)", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const searchers = {
+      wikipedia: async () => [
+        makeResult("Plant history", "https://wiki.example/plant", "The plant opened in May 1974 and still runs."),
+      ],
+    };
+    const result = await corroborate(["the plant opened in 1974"], {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers,
+    });
+    const source = result.findings[0]!.sources[0]!;
+    expect(source.modality).toBe("asserted");
+    expect(source.modality_marker).toBeUndefined();
   });
 });
 

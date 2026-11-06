@@ -34,29 +34,56 @@ interface SentenceSlice {
   text: string;
 }
 
+const CLOSERS = new Set(['"', "'", ")", "]", "\u2019", "\u201d"]);
+
+/**
+ * A `.` between two digits is a decimal separator ("2.5"), never a sentence
+ * end; `!` and `?` always terminate.
+ */
+function isTerminator(text: string, index: number): boolean {
+  const char = text[index];
+  if (char === "!" || char === "?") return true;
+  if (char !== ".") return false;
+  const prev = text[index - 1] ?? "";
+  const next = text[index + 1] ?? "";
+  return !(/\d/.test(prev) && /\d/.test(next));
+}
+
 /**
  * Split text into sentence slices while keeping offsets into the original
  * string. Trailing punctuation and closing quotes stay in the sentence;
- * surrounding whitespace does not.
+ * surrounding whitespace does not. A `.` between two digits is a decimal
+ * separator, not a sentence end, so "2.5 million" stays inside one slice.
  */
 export function splitSentences(text: string): SentenceSlice[] {
   const slices: SentenceSlice[] = [];
-  const pattern = /[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g;
-  for (const match of text.matchAll(pattern)) {
-    const raw = match[0];
-    const offset = match.index ?? 0;
-    const leading = raw.length - raw.trimStart().length;
-    const start = offset + leading;
-    const end = offset + raw.trimEnd().length;
-    if (end > start) {
-      slices.push({ start, end, text: text.slice(start, end) });
+  const push = (from: number, to: number): void => {
+    const raw = text.slice(from, to);
+    const trimmed = raw.trim();
+    // A slice with no letters or digits is punctuation run-off ("..."), not a
+    // sentence; the old terminator regex never produced one because it required
+    // a non-terminator character before the punctuation.
+    if (!/[\p{L}\p{N}]/u.test(trimmed)) return;
+    const start = from + (raw.length - raw.trimStart().length);
+    slices.push({ start, end: start + trimmed.length, text: trimmed });
+  };
+
+  let start = 0;
+  let index = 0;
+  while (index < text.length) {
+    if (!isTerminator(text, index)) {
+      index++;
+      continue;
     }
+    let end = index;
+    while (end < text.length && isTerminator(text, end)) end++;
+    while (end < text.length && CLOSERS.has(text[end]!)) end++;
+    while (end < text.length && /\s/.test(text[end]!)) end++;
+    push(start, end);
+    start = end;
+    index = end;
   }
-  if (slices.length === 0 && text.trim().length > 0) {
-    const start = text.length - text.trimStart().length;
-    const end = start + text.trim().length;
-    slices.push({ start, end, text: text.slice(start, end) });
-  }
+  push(start, text.length);
   return slices;
 }
 

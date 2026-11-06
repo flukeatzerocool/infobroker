@@ -13,6 +13,7 @@ import { sha256Text, snapshotSource } from "./preservation.js";
 import { checkContent, disposition } from "./content-policy.js";
 import { locateSupport } from "./span.js";
 import { readModality } from "./modality.js";
+import { withTimeout } from "./lib/timeout.js";
 import { getDomain } from "tldts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -50,22 +51,16 @@ export function resolveSearcher(
 
 // Wrap a searcher call in a per-provider timeout race, mirroring search_web's
 // timeout guard (index.ts), so a slow provider cannot stall corroboration
-// beyond its configured timeout.
+// beyond its configured timeout. The shared helper clears the timer on a fast
+// success (CR-13).
 function timedSearch(
   searcher: Searcher,
   query: string,
   opts: { max_results?: number } | undefined,
   timeoutMs: number | undefined,
 ): () => Promise<SearchResult[]> {
-  return async () => {
-    if (!timeoutMs || timeoutMs <= 0) return searcher(query, opts);
-    return Promise.race([
-      searcher(query, opts),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Provider timed out after ${timeoutMs}ms`)), timeoutMs)
-      ),
-    ]);
-  };
+  return () =>
+    withTimeout(searcher(query, opts), timeoutMs, () => `Provider timed out after ${timeoutMs}ms`);
 }
 
 const STOPWORDS = new Set([

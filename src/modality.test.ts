@@ -1,5 +1,10 @@
 // @implements REQ-026h modality-preserved
 // @implements REQ-026h modality-advisory
+// @implements REQ-026h modality-asserted
+// @implements REQ-026h modality-reported
+// @implements REQ-026h modality-speculative
+// @implements REQ-026h modality-month-name
+// @implements REQ-026h marker-lexicon-configurable
 import { describe, it, expect } from "vitest";
 import { readModality, resolveMarkers } from "./modality.js";
 
@@ -27,6 +32,15 @@ describe("readModality", () => {
 
   it("does not fire on a word boundary miss", () => {
     expect(readModality("Maybe it happened.").modality).toBe("asserted");
+  });
+
+  it("does not read the month May as speculation", () => {
+    expect(readModality("The plant opened in May 1974 and still runs.").modality).toBe("asserted");
+    expect(readModality("May 2020 was the warmest on record.").modality).toBe("asserted");
+  });
+
+  it("still reads a lowercase may as speculation", () => {
+    expect(readModality("The plant may close next year.").modality).toBe("speculative");
   });
 
   it("treats empty text as asserted", () => {

@@ -1,5 +1,6 @@
 // @implements REQ-026h span-located
 // @implements REQ-026h span-unavailable
+// @implements REQ-026h span-decimals
 import { describe, it, expect } from "vitest";
 import { locateSupport, splitSentences, MAX_SPAN_TEXT } from "./span.js";
 
@@ -17,6 +18,33 @@ describe("splitSentences", () => {
     const slices = splitSentences("  plain text without punctuation  ");
     expect(slices).toHaveLength(1);
     expect(slices[0]!.text).toBe("plain text without punctuation");
+  });
+
+  it("keeps a decimal number inside one sentence (CR-7)", () => {
+    const text = "Roughly 2.5 million people live there. The city grew fast.";
+    const slices = splitSentences(text);
+    expect(slices).toHaveLength(2);
+    expect(slices[0]!.text).toBe("Roughly 2.5 million people live there.");
+    expect(slices[1]!.text).toBe("The city grew fast.");
+    for (const slice of slices) {
+      expect(text.slice(slice.start, slice.end)).toBe(slice.text);
+    }
+  });
+
+  it("does not split a version string", () => {
+    const text = "Upgraded to v1.2.3 yesterday. It works fine.";
+    expect(splitSentences(text).map((slice) => slice.text)).toEqual([
+      "Upgraded to v1.2.3 yesterday.",
+      "It works fine.",
+    ]);
+  });
+
+  it("keeps the pre-existing ellipsis split", () => {
+    // Parity with the old terminator regex: "..." still ends a sentence.
+    expect(splitSentences("It works... mostly!").map((slice) => slice.text)).toEqual([
+      "It works...",
+      "mostly!",
+    ]);
   });
 
   it("returns nothing for empty text", () => {
@@ -40,6 +68,14 @@ describe("locateSupport", () => {
     const span = locateSupport(snippet, "the claim lives here");
     expect(span!.text.startsWith("The claim")).toBe(true);
     expect(snippet[span!.start]).toBe("T");
+  });
+
+  it("keeps the decimal the claim depends on inside the span (CR-7)", () => {
+    const snippet = "Roughly 2.5 million people live there. The city grew fast.";
+    const span = locateSupport(snippet, "2.5 million people live there");
+    expect(span).not.toBeNull();
+    expect(span!.text).toBe("Roughly 2.5 million people live there.");
+    expect(snippet.slice(span!.start, span!.end)).toBe(span!.text);
   });
 
   it("returns null when no sentence clears the overlap floor", () => {

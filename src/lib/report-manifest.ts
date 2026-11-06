@@ -28,7 +28,7 @@ export interface ManifestClaim {
   /**
    * Modality of the supporting evidence (REQ-026h). `reported` and
    * `speculative` claims must declare an `attribution` that appears in the
-   * body, so a hedged source is never rendered as a flat assertion.
+   * body (REQ-116), so a hedged source is never rendered as a flat assertion.
    */
   modality?: "asserted" | "reported" | "speculative";
   /** Attribution phrase for a non-asserted claim, e.g. "reportedly". */
@@ -324,7 +324,7 @@ function validateManifest(manifest: ReportManifest): ReportFinding[] {
 }
 
 /**
- * REQ-026h: a claim whose evidence hedges must carry a matching attribution in
+ * REQ-116: a claim whose evidence hedges must carry a matching attribution in
  * the body. The rule is mechanical — it checks declared phrasing, never judges
  * whether prose "reads flat" — so it cannot false-positive on a report that
  * declares no modality.

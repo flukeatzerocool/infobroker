@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.05 — Corroboration source reading
+
+- The modality lexicon no longer reads the month "May" as speculation: a marker
+  that is also a month name matches lowercase only, so "opened in May 1974" is
+  asserted while "may close" still reports speculative. (CR-6, REQ-026h)
+- A support span keeps a decimal number intact: a `.` between two digits is no
+  longer a sentence boundary, so a span for "2.5 million people" slices back to
+  the full sentence instead of starting at "5 million". (CR-7, REQ-026h)
+- Every per-provider timeout race clears its timer when the call succeeds, and
+  the timer no longer holds the process open; the four race sites share one
+  `withTimeout` helper. (CR-13, REQ-035)
+- The report-body attribution clause lives only in REQ-116 (the report
+  contract); REQ-026h no longer duplicates it, and its reported, speculative,
+  month-name, decimal-span, and configurable-lexicon branches carry named test
+  tags. (SR-5, SR-6, REQ-026h, REQ-116)
+
 ## 2026.11.05 — Task-type routing
 
 - `search_web` no longer reads a lowercase word before a year as an

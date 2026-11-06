@@ -15,6 +15,7 @@ import { inCooldown, markCooldown, shouldCooldown, cooldownDurationMs } from "./
 import { throttle } from "./rate-limiter.js";
 import { providerOperational } from "./corroborate.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
+import { withTimeout } from "./lib/timeout.js";
 
 export interface CitationResult {
   title: string;
@@ -75,14 +76,9 @@ function timedSearch(
   options: SearchOptions,
   timeoutMs: number | undefined,
 ): () => Promise<SearchResult[]> {
-  if (!timeoutMs || timeoutMs <= 0) return () => searcher(query, options);
+  // REQ-032/CR-13: the shared helper clears the timer when the call wins.
   return () =>
-    Promise.race([
-      searcher(query, options),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Provider timed out after ${timeoutMs}ms`)), timeoutMs)
-      ),
-    ]);
+    withTimeout(searcher(query, options), timeoutMs, () => `Provider timed out after ${timeoutMs}ms`);
 }
 
 function toYear(published?: string): string | undefined {

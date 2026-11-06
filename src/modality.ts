@@ -40,6 +40,7 @@ export const DEFAULT_MODALITY_MARKERS: Required<ModalityMarkers> = {
     "sources say",
   ],
   speculative: [
+    // "May" is also a month name; see MONTH_NAME_MARKERS.
     "may",
     "might",
     "could",
@@ -56,6 +57,19 @@ export const DEFAULT_MODALITY_MARKERS: Required<ModalityMarkers> = {
   ],
 };
 
+/**
+ * Months are ambiguous with modal or verb markers ("May" the month vs "may" the
+ * modal, "March" the month vs "march" the verb). A marker that is also a month
+ * name matches lowercase only, so "the plant opened in May 1974" is asserted
+ * while "the plant may close" stays speculative. The trade-off: a capital
+ * sentence-initial "May" modal is not classified as speculation, which is the
+ * conservative direction — better no hedge than a false one.
+ */
+const MONTH_NAME_MARKERS = new Set([
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+]);
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -65,8 +79,10 @@ function firstMatch(text: string, markers: string[]): string | undefined {
     const trimmed = marker.trim();
     if (trimmed.length === 0) continue;
     // Word boundaries around the whole marker: "may" must not fire inside
-    // "maybe", and a phrase must match as a phrase.
-    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(trimmed)}(?![\\p{L}\\p{N}])`, "iu");
+    // "maybe", and a phrase must match as a phrase. Month-name markers drop the
+    // case-insensitive flag so "May 1974" is not read as speculation.
+    const flags = MONTH_NAME_MARKERS.has(trimmed.toLowerCase()) ? "u" : "iu";
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(trimmed)}(?![\\p{L}\\p{N}])`, flags);
     if (pattern.test(text)) return trimmed;
   }
   return undefined;

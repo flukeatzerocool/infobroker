@@ -35,17 +35,6 @@ close when `npm run check` passes and the generated auth reference is refreshed.
 **Trigger:** Start when a structured-fact query returns a bare number or an
 empty table; close when REQ-021i's "unit when applicable" is exercised by a test.
 
-## Corroboration source reading (P1)
-
-- Stop the modality lexicon from reading the month "May" as speculation (CR-6),
-  keep decimals inside a support span (CR-7), and clear the per-provider timeout
-  timer after a fast success (CR-13).
-- Move REQ-026h's report-body attribution clause to the report contract or gate
-  it G1+G3, and tag the modality and span branches (SR-5, SR-6).
-
-**Trigger:** Start when a report shows a hedged date or a truncated span; close
-when the span and modality regressions pass and the REQ gate matches its scope.
-
 ## Fetch fallback and raw mode (P1)
 
 - Return the error text in raw mode instead of an empty string (CR-10), and split

@@ -1,6 +1,6 @@
 // @implements REQ-116 modality-attribution
-// @implements REQ-026h modality-preserved
-// Modality and attribution in the report contract (REQ-026h, REQ-116): a claim
+// @implements REQ-120 modality-preserved
+// Modality and attribution in the report contract (REQ-116, REQ-120): a claim
 // whose evidence is hedged must carry an attribution that appears in the body.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -17,7 +17,7 @@ function codes(text: string): string[] {
   return validateReport(text).findings.map((finding) => finding.code);
 }
 
-describe("report modality (REQ-026h)", () => {
+describe("report modality (REQ-116)", () => {
   it("accepts a reported claim whose attribution appears in the body", () => {
     const result = validateReport(fixture("good-modality.md"));
     expect(result.findings.filter((finding) => finding.level === "error")).toEqual([]);

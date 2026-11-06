@@ -312,7 +312,8 @@ confidence, weighted
 by each source's authority; every source is bound to the claim it
 supports, with a span locating the supporting sentence and the claim's
 modality (`asserted`, `reported`, `speculative`) so a hedged source is never
-rendered as flat fact. Republished wire copy and mirrors are collapsed into one source
+rendered as flat fact. A report that repeats a hedged claim must carry that
+attribution in its body. Republished wire copy and mirrors are collapsed into one source
 family, so confidence counts origins, not hosts, and a secondary-only
 finding is capped rather than overstated. Contradictions are surfaced with
 all perspectives. Gaps trigger refined queries that broaden to the rest of

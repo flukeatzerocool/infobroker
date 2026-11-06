@@ -54,6 +54,7 @@ import { htmlToText, stripHtml } from "./lib/html.js";
 import { shouldUseKbCache } from "./fetch-cache.js";
 import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
+import { withTimeout } from "./lib/timeout.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { enrichStructuredFacts } from "./structured-fact.js";
 import { classifyFailure, failureTaxonomy, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
@@ -497,12 +498,7 @@ async function doWebSearch(
 
       const timeoutMs = config.providers[slug]?.timeout;
       const timedCall = async (): Promise<SearchResult[]> =>
-        Promise.race([
-          doCall(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
-          ),
-        ]);
+        withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
       // REQ-032: retry backoff and count are configurable per provider.
       const results = (await retryWithBackoff(timedCall, config.providers[slug])).slice(0, maxResults);
 
@@ -837,12 +833,7 @@ async function fetchPageContent(
 
       const timeoutMs = config.providers[slug]?.timeout;
       const timedCall = async (): Promise<string> =>
-        Promise.race([
-          doCall(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Provider ${slug} timed out after ${timeoutMs}ms`)), timeoutMs)
-          ),
-        ]);
+        withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
       // REQ-032: retry backoff and count are configurable per provider.
       const raw = await retryWithBackoff(timedCall, config.providers[slug]);
 
