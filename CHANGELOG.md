@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.11.05 — Brave Search removed
+
+- The Brave Search provider is removed from the reference server: its module,
+  config entry, `general_web`/`news`/`semantic` dispatch entries, spec section,
+  README references, and `server.json` env var are gone. The Brave Search API
+  Terms of Use §2(i) forbid storing Search Results beyond transient storage,
+  and Infobroker's knowledge base persists and re-serves them; shipping the
+  provider as a default would ship a non-compliant default. (DECISIONS D-077)
+- `general_web` and `news` now begin at DuckDuckGo; `semantic` begins at Exa.
+  No keyed provider ships enabled, so a keyless install is unchanged.
+- The REQ-031 keyed-activation test now uses a synthetic configuration fixture
+  instead of the shipped Brave entry.
+
 ## 2026.11.05 — Structured response contract
 
 - Every tool now declares a machine-readable output schema and returns its

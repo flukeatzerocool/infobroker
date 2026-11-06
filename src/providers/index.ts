@@ -13,7 +13,6 @@ import { provider as github } from "./github.js";
 import { provider as core } from "./core.js";
 import { provider as marginalia } from "./marginalia.js";
 import { provider as mojeek } from "./mojeek.js";
-import { provider as brave } from "./brave.js";
 import { provider as exa } from "./exa.js";
 import { provider as tavily } from "./tavily.js";
 import { provider as searxng } from "./searxng.js";
@@ -45,7 +44,6 @@ export const PROVIDERS: Record<string, Provider> = {
   core,
   marginalia,
   mojeek,
-  brave,
   exa,
   tavily,
   searxng,

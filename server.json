@@ -20,12 +20,6 @@
       },
       "environmentVariables": [
         {
-          "name": "INFOBROKER_BRAVE_API_KEY",
-          "description": "Brave Search API key for the keyed Brave provider",
-          "isRequired": false,
-          "isSecret": true
-        },
-        {
           "name": "INFOBROKER_EXA_API_KEY",
           "description": "Exa API key for the keyed Exa provider",
           "isRequired": false,

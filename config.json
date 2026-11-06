@@ -190,16 +190,6 @@
       "priority": 15,
       "timeout": 15000
     },
-    "brave": {
-      "tier": "keyed_http",
-      "capabilities": ["web_search", "news", "semantic"],
-      "languages": "*",
-      "rate_limit": { "per_month": 2000 },
-      "auth_env": "INFOBROKER_BRAVE_API_KEY",
-      "enabled": true,
-      "priority": 30,
-      "resells": true
-    },
     "exa": {
       "tier": "keyed_http",
       "capabilities": ["semantic", "synthesis"],
@@ -252,7 +242,7 @@
     }
   },
   "dispatch": {
-    "general_web": ["brave", "duckduckgo", "marginalia", "mojeek", "wiby"],
+    "general_web": ["duckduckgo", "marginalia", "mojeek", "wiby"],
     "small_web": ["marginalia", "mojeek", "wiby", "duckduckgo"],
     "encyclopedia": ["wikipedia", "duckduckgo"],
     "definition": ["wiktionary", "duckduckgo"],
@@ -260,10 +250,10 @@
     "location": ["openstreetmap", "wikipedia", "duckduckgo"],
     "academic": ["semantic_scholar", "arxiv", "openalex", "europe_pmc", "crossref"],
     "code": ["stack_exchange", "github", "duckduckgo"],
-    "news": ["brave", "duckduckgo", "gdelt", "hacker_news"],
+    "news": ["duckduckgo", "gdelt", "hacker_news"],
     "financial": ["sec_edgar", "world_bank", "duckduckgo"],
     "archive": ["internet_archive", "duckduckgo"],
-    "semantic": ["exa", "brave", "duckduckgo"],
+    "semantic": ["exa", "duckduckgo"],
     "synthesis": ["tavily", "exa", "duckduckgo"],
     "privacy_critical": ["duckduckgo", "searxng", "mojeek"],
     "content_fetch": ["jina", "native_fetch"]

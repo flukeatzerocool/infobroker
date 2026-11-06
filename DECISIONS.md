@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### D-077: Brave Search Removed from the Reference Server (2026.11.06)
+
+D-075 shipped Brave enabled as the general-web redundancy target. That is
+reversed: Brave is removed from the provider registry, `config.json`, the
+dispatch chains, the spec, and the client references. The Brave Search API
+Terms of Use (last updated 1 Sep 2026, §2 "Use Restrictions") forbid the
+customer to "store, cache, or create a database of Search Results, in whole or
+in part, other than transient storage required for operation." Infobroker's
+knowledge base persists provider results in SQLite (`kb.auto_index: true`, the
+`stable` freshness tier never expires) and re-serves them through KB-first
+recall, which is a persistent database of Search Results rather than transient
+storage; clause (xiii) also restricts using results to evaluate or benchmark AI
+services, which the Lab and benchmark lanes do. Brave sells storage rights only
+on its Data for AI plan. Rather than ship a default provider whose licensed use
+depends on disabling the KB, the reference server drops Brave entirely; a
+deployment that buys storage rights can add it back through the configuration
+layer without a source change. `general_web` and `news` now begin at
+DuckDuckGo, and `semantic` begins at Exa. No keyed provider ships enabled, so
+the REQ-031 auth-filter test moved to a synthetic configuration fixture.
+
 ### D-076: Structured Tool Output with a Shared Envelope Schema (2026.11.06)
 
 Every tool now registers a `z.looseObject` output schema (converted to JSON

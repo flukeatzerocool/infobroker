@@ -47,7 +47,7 @@ of the documentation can stay lean.
 - **Hedge.** Fallback providers race the primary after a latency-derived
   window, instead of waiting out the primary's full timeout.
 - **Cooldown.** A per-provider hold-off after a rate-limit/anti-bot response.
-- **`resells` / `original_source`.** Aggregator backends (DuckDuckGo, Brave,
+- **`resells` / `original_source`.** Aggregator backends (DuckDuckGo,
   SearXNG) resell other publishers' pages; the server reports each result's
   `original_source` where the API exposes it. First-party sources (Wikipedia,
   arXiv) leave it empty.

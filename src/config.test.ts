@@ -630,3 +630,38 @@ describe("numeric config hardening (REQ-067, REQ-010)", () => {
     expect(() => validateConfig(configWith("deep.max_ms", 1e308))).toThrow(new RegExp("max_ms"));
   });
 });
+
+// @implements REQ-031
+describe("keyed provider activation (REQ-031)", () => {
+  const savedKey = process.env["INFOBROKER_EXA_API_KEY"];
+  afterEach(() => {
+    if (savedKey === undefined) delete process.env["INFOBROKER_EXA_API_KEY"];
+    else process.env["INFOBROKER_EXA_API_KEY"] = savedKey;
+  });
+
+  it("includes a keyed provider only when its credential is present", async () => {
+    const keyedBase: Config = {
+      ...BASE,
+      providers: {
+        ...BASE.providers,
+        exa: {
+          tier: "keyed_http",
+          capabilities: ["web_search"],
+          rate_limit: {},
+          auth_env: "INFOBROKER_EXA_API_KEY",
+          enabled: true,
+          priority: 30,
+        },
+      },
+      dispatch: { ...BASE.dispatch, general_web: ["exa", "duckduckgo"] },
+    };
+    await loadWithOverlay(keyedBase, {});
+    const mod = await import("./config.js");
+
+    process.env["INFOBROKER_EXA_API_KEY"] = "test-key";
+    expect(mod.getDispatchChain("general_web")[0]).toBe("exa");
+
+    delete process.env["INFOBROKER_EXA_API_KEY"];
+    expect(mod.getDispatchChain("general_web")).not.toContain("exa");
+  });
+});

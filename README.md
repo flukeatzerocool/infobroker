@@ -120,7 +120,7 @@ Infobroker is a multi-provider MCP server that unifies web search,
 structured knowledge, academic, archive, and content-extraction APIs
 behind a single tool surface. Twenty-one zero-config providers ship in the
 box — search the web, look up facts, fetch articles — with nothing to
-configure. Six more providers unlock with an API key or self-hosting.
+configure. Five more providers unlock with an API key or self-hosting.
 A built-in corroboration engine cross-references independent sources to
 separate established facts from contested claims. Bundled client skills
 transform raw research into polished writing. Free first. Privacy always.
@@ -199,13 +199,10 @@ are what activate the bundled client skills. Without them the skills ship
 with the package but stay inert.
 
 Most free providers work immediately; CORE needs a free API key. The keyed
-providers — Brave, Exa, Tavily, Yep — unlock higher throughput and
-specialized search; Brave ships enabled, so exporting its key is enough to
-add a second general-web engine, and self-hosted SearXNG gives full query
-privacy:
+providers — Exa, Tavily, Yep — unlock higher throughput and specialized
+search when enabled, and self-hosted SearXNG gives full query privacy:
 
 ```bash
-export INFOBROKER_BRAVE_API_KEY="your-key"
 export INFOBROKER_EXA_API_KEY="your-key"
 ```
 
@@ -213,7 +210,7 @@ Requirements: Node.js 24+.
 
 ## MCP Server
 
-Your research backend. Seven tools, twenty-seven providers, one
+Your research backend. Seven tools, twenty-six providers, one
 corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
 spec.
@@ -439,7 +436,7 @@ documented answers.
 
 ## Providers
 
-Twenty-seven providers. Twenty-one work with zero configuration.
+Twenty-six providers. Twenty-one work with zero configuration.
 
 | Provider | Tier | Type | Key Required |
 |----------|------|------|-------------|
@@ -465,22 +462,19 @@ Twenty-seven providers. Twenty-one work with zero configuration.
 | Marginalia | Built-in | Small web | No |
 | Mojeek | Built-in | Independent index | No |
 | Wiby | Built-in | Small web | No |
-| Brave Search | Keyed HTTP | Web, News | Yes |
 | Exa | Keyed HTTP | Semantic | Yes |
 | Tavily | Keyed HTTP | Synthesis | Yes |
 | Yep | Keyed HTTP | Web, Semantic | Yes |
 | SearXNG | Self-hosted | Full privacy | Yes (self) |
 
 Built-in providers and most free-HTTP providers are active out of the box;
-CORE needs a free API key. Brave is enabled by default and joins the general-web
-chain automatically when `INFOBROKER_BRAVE_API_KEY` is set; a keyed provider
-whose key is absent is excluded from dispatch, so nothing changes for a keyless
-install. Exa, Tavily, and Yep ship disabled; set `"enabled": true` in
-`config.json` for those. Self-hosted providers point at a server you run
+CORE needs a free API key. Exa, Tavily, and Yep ship disabled; set
+`"enabled": true` in `config.json` for those, and export the matching key. A
+keyed provider whose key is absent is excluded from dispatch, so nothing
+changes for a keyless install. Self-hosted providers point at a server you run
 yourself:
 
 ```bash
-export INFOBROKER_BRAVE_API_KEY="BSA-..."
 export INFOBROKER_SEARXNG_URL="http://localhost:8080"
 ```
 
@@ -700,9 +694,9 @@ Two optional keys tune per-provider behavior in `config.json`:
   action, even while reachable. A global `output.degraded_latency_ms` acts
   as the fallback when a provider omits its own.
 - `resells` — set `true` on aggregator/reseller backends (search engines
-  that surface other publishers' pages, like DuckDuckGo, Brave, or
+  that surface other publishers' pages, like DuckDuckGo or
   SearXNG). The server reports each result's `original_source` where the
-  backing API exposes one (e.g. Brave's `profile` name); first-party
+  backing API exposes one (e.g. Yep's `source` field); first-party
   sources (Wikipedia, arXiv) leave it empty because the page is the
   origin.
 
@@ -758,7 +752,7 @@ chain exhausts, the server retries the `general_web` chain before failing.
 |-----------|--------------------|-----------------------|
 | Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Twenty zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
-| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and eighteen other providers work with zero configuration. Upgrade paths for Brave, Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
+| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and eighteen other providers work with zero configuration. Upgrade paths for Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
 | Other search MCP servers | Single-provider focus, no fallback, no corroboration, no writing pipeline | Multi-provider with automatic fallback. Corroboration engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
 | AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The corroboration engine verifies facts across independent sources. |
 

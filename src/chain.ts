@@ -15,9 +15,6 @@ export const SUPPORTED_OPTIONS: Record<
   wikidata: { language: true },
   gdelt: { language: true },
   searxng: { language: true },
-  // Brave maps `time_range` to `freshness` and `language` to `search_lang`; it
-  // does not read `region`, so a caller-supplied region is reported as ignored.
-  brave: { time_range: true, language: true },
   // Yep reads `region` (location), `time_range`, and `language`; it applies
   // `safe_search` only for the `strict` value, so `off` stays ignored.
   yep: { time_range: true, region: true, language: true },

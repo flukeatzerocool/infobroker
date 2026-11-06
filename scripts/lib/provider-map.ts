@@ -56,7 +56,6 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   gdelt: "GDELT",
   sec_edgar: "SEC EDGAR",
   world_bank: "World Bank",
-  brave: "Brave",
   exa: "Exa",
   tavily: "Tavily",
   searxng: "SearXNG",

@@ -1,5 +1,5 @@
 // @implements REQ-020c REQ-020d REQ-031a REQ-034 REQ-128
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./config.js", () => ({
   getConfig: vi.fn(),
@@ -19,7 +19,7 @@ beforeEach(() => {
 
 describe("selectChain", () => {
   it("returns the default chain for quality or omitted priority", () => {
-    const chain = ["brave", "duckduckgo", "marginalia"];
+    const chain = ["exa", "duckduckgo", "marginalia"];
     vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     expect(selectChain(chain, "quality", () => 0)).toEqual(chain);
     expect(selectChain(chain, undefined, () => 0)).toEqual(chain);
@@ -28,19 +28,19 @@ describe("selectChain", () => {
   it("routes privacy priority to the privacy_critical chain", () => {
     vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     vi.mocked(getDispatchChain).mockReturnValue(["duckduckgo", "searxng", "mojeek"]);
-    expect(selectChain(["brave", "duckduckgo"], "privacy", () => 0)).toEqual(["duckduckgo", "searxng", "mojeek"]);
+    expect(selectChain(["exa", "duckduckgo"], "privacy", () => 0)).toEqual(["duckduckgo", "searxng", "mojeek"]);
   });
 
   it("falls back to the given chain when privacy_critical is empty", () => {
     vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
     vi.mocked(getDispatchChain).mockReturnValue([]);
-    expect(selectChain(["brave", "duckduckgo"], "privacy", () => 0)).toEqual(["brave", "duckduckgo"]);
+    expect(selectChain(["exa", "duckduckgo"], "privacy", () => 0)).toEqual(["exa", "duckduckgo"]);
   });
 
   it("free_only excludes keyed and self-hosted providers", () => {
     vi.mocked(getConfig).mockReturnValue({
       providers: {
-        brave: makeProvider("keyed_http"),
+        exa: makeProvider("keyed_http"),
         duckduckgo: makeProvider("builtin"),
         marginalia: makeProvider("builtin"),
         searxng: makeProvider("self_hosted_http"),
@@ -48,7 +48,7 @@ describe("selectChain", () => {
       dispatch: { general_web: ["duckduckgo", "marginalia"] },
       output: { fallback_depth: 10 },
     } as any);
-    expect(selectChain(["brave", "duckduckgo", "marginalia", "searxng"], "free_only", () => 0))
+    expect(selectChain(["exa", "duckduckgo", "marginalia", "searxng"], "free_only", () => 0))
       .toEqual(["duckduckgo", "marginalia"]);
   });
 
@@ -60,8 +60,8 @@ describe("selectChain", () => {
 
   it("caps the chain at the configured fallback_depth", () => {
     vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 2 } } as any);
-    expect(selectChain(["brave", "duckduckgo", "marginalia", "mojeek"], undefined, () => 0))
-      .toEqual(["brave", "duckduckgo"]);
+    expect(selectChain(["exa", "duckduckgo", "marginalia", "mojeek"], undefined, () => 0))
+      .toEqual(["exa", "duckduckgo"]);
   });
 });
 
@@ -141,33 +141,8 @@ describe("ignoredParams", () => {
     expect(ignoredParams("yep", { region: "DE", time_range: "week" })).toEqual([]);
   });
 
-  it("flags region for Brave, which declares but does not read it (REQ-020d)", () => {
-    expect(ignoredParams("brave", { region: "DE" })).toEqual(["region"]);
-  });
-
   it("flags safe_search off for Yep, which applies only strict (REQ-020d)", () => {
     expect(ignoredParams("yep", { safe_search: "off" })).toEqual(["safe_search"]);
-  });
-});
-
-// REQ-031: a keyed provider shipped enabled participates only when its
-// credential is present; without the key the tier-aware filter excludes it.
-describe("keyed provider inclusion (REQ-031)", () => {
-  const saved = process.env.INFOBROKER_BRAVE_API_KEY;
-  afterEach(() => {
-    if (saved === undefined) delete process.env.INFOBROKER_BRAVE_API_KEY;
-    else process.env.INFOBROKER_BRAVE_API_KEY = saved;
-  });
-
-  it("includes Brave with a credential and excludes it without one", async () => {
-    const actual = await vi.importActual<typeof import("./config.js")>("./config.js");
-    actual.loadConfig();
-
-    process.env.INFOBROKER_BRAVE_API_KEY = "test-key";
-    expect(actual.getDispatchChain("general_web")[0]).toBe("brave");
-
-    delete process.env.INFOBROKER_BRAVE_API_KEY;
-    expect(actual.getDispatchChain("general_web")).not.toContain("brave");
   });
 });
 

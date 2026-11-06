@@ -16,7 +16,6 @@ export interface ParsedQuery {
 
 const OPERATOR_CAPABLE = new Set([
   "duckduckgo",
-  "brave",
   "mojeek",
   "marginalia",
   "wiby",

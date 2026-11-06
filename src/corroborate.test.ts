@@ -885,25 +885,25 @@ describe("corroborate", () => {
   });
 
   it("excludes providers whose auth env is unset", async () => {
-    process.env["INFOBROKER_BRAVE_API_KEY"] = "";
+    process.env["INFOBROKER_EXA_API_KEY"] = "";
     mockConfig({
       providers: {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
-        brave: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 30, timeout: 10000, auth_env: "INFOBROKER_BRAVE_API_KEY" },
+        exa: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 30, timeout: 10000, auth_env: "INFOBROKER_EXA_API_KEY" },
       },
       corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
     });
 
-    let braveCalled = false;
+    let exaCalled = false;
     await corroborate("topic", {
       searchers: {
         duckduckgo: async () => [makeResult("T", "https://a.com/1", "x")],
-        brave: async () => { braveCalled = true; return []; },
+        exa: async () => { exaCalled = true; return []; },
       },
     });
 
-    expect(braveCalled).toBe(false);
-    delete process.env["INFOBROKER_BRAVE_API_KEY"];
+    expect(exaCalled).toBe(false);
+    delete process.env["INFOBROKER_EXA_API_KEY"];
   });
 
   it("caps the first pass to first_pass_max_providers, highest priority first", async () => {

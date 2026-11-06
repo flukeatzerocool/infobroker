@@ -7,7 +7,6 @@ Posture is derived from each provider's tier and resale flag, with explicit per-
 | Provider | Tier | Query forwarding | Retains query | Account/key | Resells | Notes |
 |----------|------|------------------|---------------|-------------|---------|-------|
 | arxiv | free_http | origin provider | unknown | none | no |  |
-| brave | keyed_http | third party | unknown | required | yes |  |
 | core | free_http | origin provider | unknown | none | no |  |
 | crossref | free_http | origin provider | unknown | none | no |  |
 | duckduckgo | builtin | origin provider | unknown | none | yes |  |

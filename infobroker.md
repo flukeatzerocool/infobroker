@@ -27,7 +27,7 @@ search, structured knowledge, scholarly, and content-extraction APIs behind a
 unified tool surface. Its design goals:
 
 1. **Free first, privacy always.** Zero-config default uses only free, no-auth-required providers that respect user privacy.
-2. **Upgrade path.** Optional API-keyed providers (Brave, Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
+2. **Upgrade path.** Optional API-keyed providers (Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
 3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
 4. **Truth by iteration.** A `verify_claims` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
 5. **Writing pipeline.** The server provides raw research materials; bundled client skills handle writing, summarization, proofreading, and translation, while the orchestrator routes requests to research workflow shapes including fact-checking.
@@ -139,7 +139,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 | Term | Definition |
 |------|-----------|
-| **Provider** | A search or content-extraction backend (DuckDuckGo, Wikipedia, Brave, etc.) |
+| **Provider** | A search or content-extraction backend (DuckDuckGo, Wikipedia, Exa, etc.) |
 | **Provider tier** | Built-in (in-process, zero config) / Free HTTP (keyless or free registration) / Self-hosted HTTP (user runs) / Keyed HTTP (API key required) / Generic HTTP (user-defined endpoint, configuration-defined) |
 | **Fallback chain** | The ordered provider list for a task type (§7.2) as exercised on failure: the first entry is primary and remaining entries are tried in sequence per REQ-031. The same object as the dispatch chain. |
 | **Content renderer** | A backend that fetches and formats a URL's content (Jina Reader, native HTTP). A renderer is a provider (e.g. Jina, Wikipedia) or an inline tool-handler fallback (`native_fetch`, §5.2), and is not necessarily a standalone provider module. A `renderer` parameter value resolves to the provider with that slug when it implements content fetching, or to the inline fallback. Task type for dispatch: `content_fetch`. |
@@ -152,7 +152,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Embedding model** | The in-process component that converts text into the embedding vectors stored in the knowledge base and used for retrieval; it executes within the server instance (REQ-103). |
 | **KB** | Abbreviation for "knowledge base." |
 | **Freshness tier** | A classification assigned to knowledge base content at ingest time that determines how quickly its retrieval confidence decays and when it expires. Tiers range from volatile content that loses accuracy rapidly to stable content that remains accurate indefinitely. |
-| **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `brave`). |
+| **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `exa`). |
 | **Dispatch chain** | The ordered provider list for a task type (§7.2), primary first; used for auto-selection (REQ-020a) and, on failure, as the fallback chain (REQ-031). |
 | **Capability** | A function a provider declares (e.g. `web_search`, `academic`, `content_fetch`). Capability tokens overlap the task types (§7.1); the `web_search` capability serves the `general_web` task type. |
 | **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed) (REQ-013, REQ-034). |
@@ -694,7 +694,7 @@ Tool error responses SHALL NOT expose stack traces, internal file paths, or envi
 Layer 3: Tools                 search_web, fetch_page, verify_claims, get_citations,
                                inspect_providers, manage_kb, reload_config
 
-Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, brave, searxng,
+Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
                                github, jina, internet_archive, exa, tavily, yep,
@@ -746,7 +746,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 
 1. **MCP Skeleton**: stdio transport, tool registration, config loader, env var reader.
 2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
-3. **Free HTTP & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free tiers; see §A.3); Brave, Exa, Tavily, Yep (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
+3. **Free HTTP & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free tiers; see §A.3); Exa, Tavily, Yep (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Corroboration Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
 6. **Client Artifacts**: Generate `search-preferences.md`, skill files, README.
@@ -807,7 +807,6 @@ Tool responses are JSON with this envelope:
 | arXiv | `https://export.arxiv.org/api/query` | 1 call/3 sec |
 | Stack Exchange | `https://api.stackexchange.com/2.3/` | 300/day unauth, 10,000/day keyed |
 | GitHub | `https://api.github.com/search/code` | 60/hr unauth, 5,000/hr token |
-| Brave | `https://api.search.brave.com/res/v1/web/search` | 2,000/mo free tier |
 | SearXNG | User-configured (`/search?format=json`) | Requires Docker, JSON format must be enabled |
 | Marginalia | `https://search.marginalia.nu/search` | HTML scraping, open source |
 | Mojeek | `https://www.mojeek.com/search` | HTML scraping, independent index |
@@ -860,7 +859,7 @@ Task-type classification MAY consider semantic similarity between the query and 
 
 | Task type | Primary | Fallback 1 | Fallback 2 | Fallback 3 | Fallback 4 |
 |-----------|---------|-----------|-----------|-----------|-----------|
-| `general_web` | brave (if keyed) | duckduckgo | marginalia | mojeek | wiby |
+| `general_web` | duckduckgo | marginalia | mojeek | wiby | — |
 | `small_web` | marginalia | mojeek | wiby | duckduckgo | — |
 | `encyclopedia` | wikipedia | duckduckgo | — | — | — |
 | `definition` | wiktionary | duckduckgo | — | — | — |
@@ -869,9 +868,9 @@ Task-type classification MAY consider semantic similarity between the query and 
 | `location` | openstreetmap | wikipedia | duckduckgo | — | — |
 | `academic` | semantic_scholar | arxiv | openalex | europe_pmc | crossref |
 | `code` | stack_exchange | github | duckduckgo | — | — |
-| `news` | brave (if keyed) | duckduckgo | gdelt | hacker_news | — |
+| `news` | duckduckgo | gdelt | hacker_news | — | — |
 | `archive` | internet_archive | duckduckgo | — | — | — |
-| `semantic` | exa (if keyed) | brave (if keyed) | duckduckgo | — | — |
+| `semantic` | exa (if keyed) | duckduckgo | — | — | — |
 | `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo | — | — |
 | `privacy_critical` | duckduckgo | searxng (if configured) | mojeek | — | — |
 | `content_fetch` | jina | native_fetch | — | — | — |
@@ -1461,8 +1460,6 @@ different shipped default (REQ-010).
 **CORE** — `https://api.core.ac.uk/v3/search/works?q={query}`. Free API key; open access research papers.
 
 ### A.4 Keyed HTTP (Free Tier)
-
-**Brave Search** — `https://api.search.brave.com/res/v1/web/search?q={query}`. 2,000 queries/mo free. Independent index (40B+ pages). 669ms average latency. Also has News and Images endpoints.
 
 **Exa** — `https://api.exa.ai/search`. 1,000 searches/mo free. Neural/semantic search. Best for "find companies like X" or conceptual queries. Can filter by date, domain, content type.
 

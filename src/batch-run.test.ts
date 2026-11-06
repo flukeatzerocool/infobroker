@@ -24,7 +24,7 @@ describe("settleBatch (REQ-020i)", () => {
       ["one", "two", "three"],
       async (item) => {
         if (item === "two") throw new Error("unexpected failure");
-        return okEnvelope(item, item === "one" ? "brave" : "wikipedia");
+        return okEnvelope(item, item === "one" ? "duckduckgo" : "wikipedia");
       },
       (item) => errorEnvelope(`internal_error:${item}`),
     );
@@ -49,7 +49,7 @@ describe("settleBatch (REQ-020i)", () => {
   it("keeps a provider error as a per-query entry and still reports the batch as ok", async () => {
     const envelopes = await settleBatch(
       ["good", "bad"],
-      async (item) => (item === "good" ? okEnvelope(item, "brave") : errorEnvelope("rate_limited")),
+      async (item) => (item === "good" ? okEnvelope(item, "duckduckgo") : errorEnvelope("rate_limited")),
       () => errorEnvelope("internal_error"),
     );
     const merged = mergeItems([
@@ -79,7 +79,7 @@ describe("settleBatch (REQ-020i)", () => {
       ["slow", "fast"],
       async (item) => {
         if (item === "slow") await new Promise((resolve) => setTimeout(resolve, 10));
-        return okEnvelope(item, "brave");
+        return okEnvelope(item, "duckduckgo");
       },
       () => errorEnvelope("internal_error"),
     );

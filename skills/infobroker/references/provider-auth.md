@@ -27,7 +27,6 @@ Generated from `config.json`. Do not edit manually.
 | gdelt | free_http | None | — |
 | sec_edgar | free_http | None | — |
 | world_bank | free_http | None | — |
-| brave | keyed_http | API key | `INFOBROKER_BRAVE_API_KEY` |
 | exa | keyed_http | API key | `INFOBROKER_EXA_API_KEY` |
 | tavily | keyed_http | API key | `INFOBROKER_TAVILY_API_KEY` |
 | yep | keyed_http | API key | `INFOBROKER_YEP_API_KEY` |

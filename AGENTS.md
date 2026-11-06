@@ -46,7 +46,6 @@ Knowledge base: src/kb.ts (tool logic) → src/kb-store.ts (seam + artifact pred
 | Marginalia | `src/providers/marginalia.ts` | builtin |
 | Mojeek | `src/providers/mojeek.ts` | builtin |
 | Wiby | `src/providers/wiby.ts` | builtin |
-| Brave Search | `src/providers/brave.ts` | keyed_http |
 | Exa | `src/providers/exa.ts` | keyed_http |
 | Tavily | `src/providers/tavily.ts` | keyed_http |
 | Yep | `src/providers/yep.ts` | keyed_http |
