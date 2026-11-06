@@ -49,6 +49,37 @@ function rowFromElement($: CheerioAPI, el: unknown): InfoboxRow | null {
   return cellsToRow([{ key, value }]);
 }
 
+// A table row can either carry its own <th> key cells (the classic infobox
+// form) or inherit the most recent header row and be zipped with it. The
+// header row itself (no <td> cells) never becomes a key/value row.
+function rowsFromElement($: CheerioAPI, el: unknown, header: string[] | null): InfoboxRow[] {
+  const node = $(el as never);
+  const headers = node
+    .find("th")
+    .toArray()
+    .map((cell) => cleanText($(cell).text()))
+    .filter(Boolean);
+  const values = node
+    .find("td")
+    .toArray()
+    .map((cell) => cleanText($(cell).text()));
+
+  if (headers.length > 0) {
+    const row = cellsToRow([{ key: headers.join(" "), value: values.filter(Boolean).join(" | ") }]);
+    return row ? [row] : [];
+  }
+  // A rowspan/colspan header leaves data rows with a different cell count;
+  // skipping them is safer than pairing the wrong unit with the wrong key.
+  if (!header || header.length !== values.length) return [];
+
+  const rows: InfoboxRow[] = [];
+  for (let i = 0; i < header.length; i++) {
+    if (!header[i] || !values[i] || !/[A-Za-z]/.test(header[i])) continue;
+    rows.push({ key: header[i], value: values[i] });
+  }
+  return rows;
+}
+
 export function collectInfoboxRows($: CheerioAPI): InfoboxRow[] {
   const rows: InfoboxRow[] = [];
   $("table.infobox tr").each((_i, el) => {
@@ -64,14 +95,27 @@ export function collectTableRows($: CheerioAPI): InfoboxRow[] {
   const rows: InfoboxRow[] = [];
   const tables = $("table.wikitable").toArray().slice(0, MAX_TABLES);
   for (const table of tables) {
+    let header: string[] | null = null;
     $(table)
       .find("tr")
       .each((_i, el) => {
         if (rows.length >= MAX_TABLE_ROWS) return false;
-        const row = rowFromElement($, el);
-        // A table row key must contain a letter; numeric-only cells are data,
-        // not a dimension the caller can ask for.
-        if (row && /[A-Za-z]/.test(row.key)) rows.push(row);
+        const node = $(el);
+        if (node.find("td").length === 0) {
+          const headers = node
+            .find("th")
+            .toArray()
+            .map((cell) => cleanText($(cell).text()))
+            .filter(Boolean);
+          if (headers.length > 0) header = headers;
+          return undefined;
+        }
+        for (const row of rowsFromElement($, el, header)) {
+          if (rows.length >= MAX_TABLE_ROWS) break;
+          // A table row key must contain a letter; numeric-only cells are data,
+          // not a dimension the caller can ask for.
+          if (/[A-Za-z]/.test(row.key)) rows.push(row);
+        }
         return undefined;
       });
   }

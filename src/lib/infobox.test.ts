@@ -21,6 +21,16 @@ const HTML = `
 </table>
 `;
 
+const REAL_TABLE_HTML = `
+<table class="wikitable sortable">
+  <tbody>
+    <tr><th>Year</th><th>Attendance</th><th>Venue</th></tr>
+    <tr><td>1996</td><td>17,000</td><td>Molson Centre</td></tr>
+    <tr><td>1997</td><td>20,593</td><td>Molson Centre</td></tr>
+  </tbody>
+</table>
+`;
+
 describe("infobox parsing (REQ-021i)", () => {
   it("keeps infobox key/value rows and strips footnote markers", () => {
     const rows = parseInfobox(HTML);
@@ -40,6 +50,26 @@ describe("infobox parsing (REQ-021i)", () => {
     expect(rows).toContainEqual({ key: "Attendance", value: "18,000" });
     // Numeric-only first cells are data, not a dimension key.
     expect(rows.some((row) => row.key === "1996")).toBe(false);
+  });
+
+  it("zips a header row with its data rows", () => {
+    const rows = parseTables(REAL_TABLE_HTML);
+    expect(rows).toContainEqual({ key: "Attendance", value: "17,000" });
+    expect(rows).toContainEqual({ key: "Attendance", value: "20,593" });
+    expect(rows).toContainEqual({ key: "Venue", value: "Molson Centre" });
+  });
+
+  it("does not turn the header row into a key/value row", () => {
+    const rows = parseTables(REAL_TABLE_HTML);
+    expect(rows.some((row) => row.key === "Year" && /Attendance/.test(row.value))).toBe(false);
+  });
+
+  it("skips a data row whose cell count does not match the header", () => {
+    const html = `<table class="wikitable"><tbody>
+      <tr><th rowspan="2">Year</th><th>Attendance</th></tr>
+      <tr><td>17,000</td></tr>
+    </tbody></table>`;
+    expect(parseTables(html)).toEqual([]);
   });
 
   it("returns no rows for a page without tables", () => {

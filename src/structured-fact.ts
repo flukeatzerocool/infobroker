@@ -25,7 +25,8 @@ const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 
 // Property map verified against Wikidata labels (P1110 attendance, P1082
 // population, P2046 area, P2044 elevation). Dates try point in time, then
-// publication date, then inception.
+// publication date, then inception; a birth or death question names its own
+// property so an unrelated point-in-time claim cannot answer it.
 const FACT_PROPERTIES: Record<StructuredFactKind, string[]> = {
   attendance: ["P1110"],
   population: ["P1082"],
@@ -35,20 +36,35 @@ const FACT_PROPERTIES: Record<StructuredFactKind, string[]> = {
   date: ["P585", "P577", "P571"],
 };
 
+const DATE_INTENT_RULES: Array<[RegExp, string[]]> = [
+  [/\b(?:born|birth date|date of birth)\b/i, ["P569"]],
+  [/\b(?:died|die|death date|date of death)\b/i, ["P570"]],
+];
+
+function dateProperties(query: string): string[] {
+  for (const [rule, properties] of DATE_INTENT_RULES) {
+    if (rule.test(query)) return properties;
+  }
+  return FACT_PROPERTIES.date;
+}
+
 const FACT_RULES: Array<[StructuredFactKind, RegExp]> = [
   ["attendance", /\battendance\b/i],
   ["population", /\bpopulation\b/i],
   ["elevation", /\belevation\b/i],
   ["area", /\barea\b/i],
   ["percentage", /\b(?:percentage|percent|share of)\b/i],
-  ["date", /\b(?:what date|when did|date of|founded|established)\b/i],
+  [
+    "date",
+    /\b(?:when did|when was|what date|date of birth|date of death|birth date|death date|date of|born|died|die|founded|established)\b/i,
+  ],
 ];
 
 // Words a caller uses to name the dimension are removed before the entity
 // lookup, so "Survivor Series 1997 attendance" searches for the event, not the
 // literal phrase (which returns no Wikidata entity).
 const DIMENSION_WORDS_RE =
-  /\b(?:attendance|population|elevation|area|percentage|percent|share of|what date|when did|date of|founded|established|date)\b/gi;
+  /\b(?:date of birth|date of death|birth date|death date|share of|what date|when was|when did|attendance|population|elevation|area|percentage|percent|born|died|die|date of|founded|established|date)\b/gi;
 
 const KEY_RULES: Record<StructuredFactKind, RegExp> = {
   attendance: /^attendance\b/i,
@@ -56,7 +72,7 @@ const KEY_RULES: Record<StructuredFactKind, RegExp> = {
   area: /^area\b/i,
   elevation: /^elevation\b/i,
   percentage: /^(?:share|percentage|percent)\b/i,
-  date: /^(?:date|founded|established|opened|first aired|point in time|occurred)\b/i,
+  date: /^(?:date|born|died|birth date|death date|date of birth|date of death|founded|established|opened|first aired|point in time|occurred)\b/i,
 };
 
 export function detectFactKind(query: string): StructuredFactKind | null {
@@ -66,8 +82,22 @@ export function detectFactKind(query: string): StructuredFactKind | null {
   return null;
 }
 
+const LEADING_PREPOSITION_RE = /^(?:of|in|at|for|from|on|about|by)\b[\s,]*/i;
+// An article is stripped only when a preposition follows it; otherwise a title
+// like "The Hague" would be truncated to "Hague".
+const LEADING_ARTICLE_RE = /^(?:the|a|an)\s+(?=(?:of|in|at|for|from|on|about|by)\b)/i;
+
 export function entityQuery(query: string): string {
-  return query.replace(DIMENSION_WORDS_RE, " ").replace(/\s+/g, " ").replace(/[?.!]+$/, "").trim();
+  let text = query
+    .replace(DIMENSION_WORDS_RE, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[?.!]+$/, "")
+    .trim();
+  for (;;) {
+    const next = text.replace(LEADING_PREPOSITION_RE, "").replace(LEADING_ARTICLE_RE, "").trim();
+    if (next === text) return text;
+    text = next;
+  }
 }
 
 function formatNumber(value: number): string {
@@ -76,10 +106,72 @@ function formatNumber(value: number): string {
   return fraction ? `${grouped}.${fraction}` : grouped;
 }
 
-function unitLabel(unit: string | undefined): string | undefined {
+// Wikidata quantity units arrive as an entity URI; map the ones a structured
+// fact can report to the short label the response carries. An unmapped unit is
+// omitted rather than guessed.
+const UNIT_LABELS: Record<string, string> = {
+  Q5: "people",
+  Q712226: "km²",
+  Q25343: "m²",
+  Q35852: "ha",
+  Q11573: "m",
+  Q3710: "ft",
+};
+
+export function unitLabel(unit: string | undefined): string | undefined {
   if (!unit) return undefined;
-  if (unit.endsWith("/Q5")) return "people";
-  return undefined;
+  const qid = /\/entity\/(Q\d+)$/.exec(unit)?.[1];
+  return qid ? UNIT_LABELS[qid] : undefined;
+}
+
+// A Wikipedia value writes its unit next to the first number; a parenthetical
+// conversion ("1,234 m (4,049 ft)") is not the primary unit.
+const DISPLAY_UNITS: Record<StructuredFactKind, Record<string, string>> = {
+  attendance: {},
+  population: {},
+  area: {
+    km2: "km²",
+    "km²": "km²",
+    "sq km": "km²",
+    "square kilometre": "km²",
+    "square kilometres": "km²",
+    "square kilometer": "km²",
+    "square kilometers": "km²",
+    m2: "m²",
+    "m²": "m²",
+    "sq m": "m²",
+    "square metre": "m²",
+    "square metres": "m²",
+    "square meter": "m²",
+    "square meters": "m²",
+    ha: "ha",
+    hectare: "ha",
+    hectares: "ha",
+    "sq mi": "sq mi",
+    mi2: "sq mi",
+    "mi²": "sq mi",
+    "square mile": "sq mi",
+    "square miles": "sq mi",
+  },
+  elevation: {
+    m: "m",
+    metre: "m",
+    metres: "m",
+    meter: "m",
+    meters: "m",
+    ft: "ft",
+    foot: "ft",
+    feet: "ft",
+  },
+  percentage: {},
+  date: {},
+};
+
+function unitFromDisplay(kind: StructuredFactKind, display: string): string | undefined {
+  const match = /^[^0-9]*[\d.,]+\s*([A-Za-zµ°²³0-9]+(?:\s+[A-Za-z]+)?)/.exec(display);
+  if (!match) return undefined;
+  const token = match[1].toLowerCase().replace(/\s+/g, " ");
+  return DISPLAY_UNITS[kind][token];
 }
 
 function asOfFromQualifiers(qualifiers: Record<string, unknown> | undefined): string | undefined {
@@ -219,6 +311,8 @@ function factFromRows(
   const row = [...byDisplay.values()][0];
   const numeric = kind === "date" ? null : numberFromDisplay(row.value);
   const percent = kind === "percentage" && row.value.includes("%");
+  const displayUnit =
+    kind === "area" || kind === "elevation" ? unitFromDisplay(kind, row.value) : undefined;
   return {
     facts: [
       {
@@ -227,6 +321,7 @@ function factFromRows(
         display: row.value,
         ...(kind === "attendance" ? { unit: "people" } : {}),
         ...(percent ? { unit: "%" } : {}),
+        ...(displayUnit ? { unit: displayUnit } : {}),
         key: row.key,
         source,
         url,
@@ -267,7 +362,7 @@ export async function enrichStructuredFacts(
   if (!kind) return null;
 
   const results = Array.isArray(payload.results) ? payload.results : [];
-  const properties = FACT_PROPERTIES[kind];
+  const properties = kind === "date" ? dateProperties(query) : FACT_PROPERTIES[kind];
 
   try {
     const entityId = qidFromResults(results) ?? (await searchEntity(query));

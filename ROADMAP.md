@@ -12,17 +12,6 @@
   enforces this rule; `## Non-goals` is exempt.
 -->
 
-## Structured-fact fidelity (P1)
-
-- Emit the unit for area and elevation facts (CR-4), parse real header-plus-data
-  wikitables instead of only per-row `<th>` tables (CR-5), and resolve
-  birth/death dates (CR-12); strip leading prepositions from the entity query
-  (CR-14, SR-9).
-- Add a realistic table fixture, a unit-map fixture, and a birth-date fixture.
-
-**Trigger:** Start when a structured-fact query returns a bare number or an
-empty table; close when REQ-021i's "unit when applicable" is exercised by a test.
-
 ## Fetch fallback and raw mode (P1)
 
 - Return the error text in raw mode instead of an empty string (CR-10), and split

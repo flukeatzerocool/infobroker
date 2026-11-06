@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.11.05 — Structured-fact fidelity
+
+- Area and elevation facts carry a unit: a Wikidata unit QID is mapped to its
+  short label (km², m², ha, m, ft), and a Wikipedia value takes the unit written
+  beside its first number. An unmapped unit is omitted rather than guessed.
+  (CR-4, REQ-021i)
+- A header-plus-data `table.wikitable` now yields key/value rows by zipping its
+  header with each data row; per-row `<th>` tables still work, a rowspan or
+  colspan misalignment is skipped, and a table with several distinct values
+  reports `ambiguous` instead of an empty result. (CR-5, REQ-021i)
+- Birth and death questions resolve from Wikidata P569/P570 first and from the
+  "Born"/"Died" infobox keys, so a point-in-time claim cannot answer a birth
+  query; "Birth place" and "death toll" are not read as dates. (CR-12, REQ-021i)
+- The entity lookup drops a leading preposition (and an article before one), so
+  "population of Austin" searches for "Austin" while "population of The Hague"
+  keeps "The Hague". (CR-14, SR-9, REQ-021i)
+
 ## 2026.11.05 — Provider rate limits and privacy defaults
 
 - Stack Exchange is bounded by its documented daily quota (`per_day: 300`) with
