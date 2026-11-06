@@ -21,7 +21,7 @@ dispatch chain, falling back in order.
 | Historical web page | Internet Archive | DuckDuckGo | — |
 | Semantic / "find things like X" | Exa (if keyed) | DuckDuckGo | — |
 | Synthesized answer with citations | Tavily (if keyed) | Exa (if keyed) | DuckDuckGo |
-| Privacy-critical search | DuckDuckGo | SearXNG (if configured) | Mojeek |
+| Privacy-critical search | SearXNG (if configured) | Mojeek | DuckDuckGo |
 | URL content → Markdown | Jina Reader | Native HTTP fetch | — |
 
 ## Provider Capabilities

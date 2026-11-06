@@ -494,7 +494,7 @@ through and through. Nothing in the server requires it, and nothing is
 bundled or installed on its behalf — SearXNG runs as a container you
 operate, and Infobroker queries its JSON endpoint like any other backend.
 Leave it disabled (the default) and you lose nothing: the
-privacy-critical chain still serves via DuckDuckGo and Mojeek. Enable it
+privacy-critical chain still serves via Mojeek and DuckDuckGo. Enable it
 only when you want full query privacy, in which case only your own
 SearXNG instance sees your queries.
 

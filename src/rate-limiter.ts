@@ -1,5 +1,5 @@
 // @implements REQ-030
-import type { Config } from "./types.js";
+import type { Config, ProviderConfig } from "./types.js";
 
 interface RateLimit {
   perSecond: number;
@@ -15,7 +15,7 @@ const queues: Map<string, Promise<void>> = new Map();
 
 export function configureProviderRateLimit(
   slug: string,
-  config: { per_second?: number; jitter_ms?: number },
+  config: ProviderConfig["rate_limit"],
   random: () => number = Math.random,
 ): void {
   const perSecond = config.per_second;

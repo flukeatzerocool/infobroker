@@ -83,7 +83,7 @@
     "stack_exchange": {
       "tier": "free_http",
       "capabilities": ["code"],
-      "rate_limit": { "per_second": 0.003 },
+      "rate_limit": { "per_second": 1, "per_day": 300 },
       "auth_env": "INFOBROKER_STACK_EXCHANGE_API_KEY",
       "auth_optional": true,
       "enabled": true,
@@ -255,7 +255,7 @@
     "archive": ["internet_archive", "duckduckgo"],
     "semantic": ["exa", "duckduckgo"],
     "synthesis": ["tavily", "exa", "duckduckgo"],
-    "privacy_critical": ["duckduckgo", "searxng", "mojeek"],
+    "privacy_critical": ["searxng", "mojeek", "duckduckgo"],
     "content_fetch": ["jina", "native_fetch"]
   },
   "dispatch_append": {},

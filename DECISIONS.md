@@ -2,6 +2,38 @@
 
 ## Active Decisions
 
+### D-084: Provider Rate Limits and Privacy-Chain Ordering (CF-1, CF-2, CF-9, CF-10; 2026.11.06)
+
+Stack Exchange's `per_second: 0.003` was a scraped "one call per five minutes"
+guess, but the throttle is per-provider and serialized, so a second `code`
+query queued ~333 s instead of advancing the chain. The shipped limit is now the
+documented unauth allowance (`per_day: 300`, §A.3) plus ordinary 1 s spacing.
+Throttling still reads only `per_second` and quota only `per_day`/`per_month`
+(REQ-030, REQ-033), so a daily cap cannot become a stall, and
+`src/shipped-config.test.ts` bounds every shipped implied interval at 60 s so the
+failure cannot return silently. A keyed install gets 10,000 calls/day from the
+API, so it raises `per_day` in `config.local.json` rather than overriding the
+shipped baseline. Rejected: keeping the scraped interval (one provider stalls the
+whole chain for minutes), deleting the limit (loses the spacing and the quota
+signal the fallback path reads), and disabling the provider (drops the keyless
+`code` primary).
+
+`privacy_critical` now runs SearXNG → Mojeek → DuckDuckGo: a self-hosted
+instance means only the operator sees the query, Mojeek runs an independent
+index, and DuckDuckGo resells and forwards upstream. SearXNG stays disabled by
+default and `getDispatchChain` drops it until `INFOBROKER_SEARXNG_URL` is set
+(REQ-031), so an unconfigured install starts at Mojeek rather than failing on a
+leading entry. Rejected: leaving DuckDuckGo first, the only shipped chain member
+that resells.
+
+The `academic` and `news` chains are unchanged; `config-tune.md` records their
+rationale (CF-9, CF-10): academic leads with Semantic Scholar's cross-publisher
+coverage and citation graph, then arXiv preprints, then the keyless metadata
+indexes ordered broadest to most specialised; news leads with DuckDuckGo's fresh
+index and snippets, then GDELT's lagged, headline-only global coverage, then
+tech-scoped Hacker News. The roadmap item asks for the rationale rather than a
+reorder; changing either order would be a separate, benchmark-backed decision.
+
 ### D-082: Strict Provider Keys (CF-3, CR-19; 2026.11.06)
 
 Configuration validation rejects an unknown provider key instead of ignoring it,

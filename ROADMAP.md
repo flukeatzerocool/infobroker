@@ -12,18 +12,6 @@
   enforces this rule; `## Non-goals` is exempt.
 -->
 
-## Provider rate-limit and privacy defaults (P0)
-
-- Replace Stack Exchange's `per_second: 0.003` (a 333-second inter-call stall)
-  with `per_day: 300` plus normal spacing, and add a config test that bounds an
-  implied interval (CF-1).
-- Reorder `privacy_critical` to prefer the self-hosted instance and an
-  independent index before DuckDuckGo; record the decision and document the
-  academic-chain and news-ordering rationale (CF-2, CF-9, CF-10).
-
-**Trigger:** Start on the next config change or when a `code` search stalls;
-close when `npm run check` passes and the generated auth reference is refreshed.
-
 ## Structured-fact fidelity (P1)
 
 - Emit the unit for area and elevation facts (CR-4), parse real header-plus-data

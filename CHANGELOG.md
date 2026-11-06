@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.11.05 — Provider rate limits and privacy defaults
+
+- Stack Exchange is bounded by its documented daily quota (`per_day: 300`) with
+  ordinary 1 s spacing instead of `per_second: 0.003`, which serialized a second
+  `code` query behind ~333 s; a `per_day`-only limit installs no throttle, and a
+  shipped-config test bounds every implied interval at 60 s so the stall cannot
+  return. (CF-1, REQ-030, REQ-033)
+- The `privacy_critical` chain runs SearXNG, Mojeek, then DuckDuckGo: the
+  self-hosted instance and the independent index precede the reselling engine,
+  and a disabled or unconfigured SearXNG is still dropped before dispatch.
+  (CF-2, REQ-031)
+- The academic and news chain orders are documented in `config-tune.md` with the
+  rationale recorded in D-084, so the ordering is reviewable rather than
+  implicit. (CF-9, CF-10)
+
 ## 2026.11.05 — Config safety and discoverability
 
 - `validateConfig` reports `dispatch must be an object of task-type arrays`

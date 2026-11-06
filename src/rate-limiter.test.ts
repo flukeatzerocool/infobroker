@@ -66,4 +66,24 @@ describe("throttle (REQ-030)", () => {
     await Promise.all(calls);
     expect(settled).toEqual([0, 1, 2]);
   });
+
+  it("a per_day-only limit installs no throttle (REQ-030)", async () => {
+    // CF-1: quota fields must never become an inter-call interval. A daily cap
+    // alone leaves throttling unconfigured, so calls do not queue behind a
+    // derived interval (the old `per_second: 0.003` stalled for 333 s).
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
+    // `configureAllProviders` hands over the whole rate_limit object, quota
+    // fields included; only `per_second` and `jitter_ms` are throttling inputs.
+    const dailyLimit = { per_day: 300 };
+    configureProviderRateLimit("daily-only", dailyLimit);
+
+    await throttle("daily-only");
+    let settled = false;
+    const second = throttle("daily-only").then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(true);
+    await second;
+  });
 });

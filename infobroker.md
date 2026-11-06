@@ -880,7 +880,7 @@ Task-type classification MAY consider semantic similarity between the query and 
 | `archive` | internet_archive | duckduckgo | — | — | — |
 | `semantic` | exa (if keyed) | duckduckgo | — | — | — |
 | `synthesis` | tavily (if keyed) | exa (if keyed) | duckduckgo | — | — |
-| `privacy_critical` | duckduckgo | searxng (if configured) | mojeek | — | — |
+| `privacy_critical` | searxng (if configured) | mojeek | duckduckgo | — | — |
 | `content_fetch` | jina | native_fetch | — | — | — |
 
 ### 7.3 Provider Deprioritization
@@ -900,7 +900,7 @@ chain with an intent-first selection:
 
 | Priority | Routing behavior |
 |----------|------------------|
-| `privacy` | Use the `privacy_critical` chain (DuckDuckGo, SearXNG if configured, Mojeek); fall back to the task chain if empty |
+| `privacy` | Use the `privacy_critical` chain (SearXNG if configured, Mojeek, DuckDuckGo); fall back to the task chain if empty |
 | `free_only` | Exclude `keyed_http` and `self_hosted_http` providers from the selected chain |
 | `speed` | Order the selected chain by lowest recent average latency; providers with no recorded latency retain configuration priority order |
 | `quality` | Use the default task-type dispatch chain (unchanged) |

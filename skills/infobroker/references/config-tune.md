@@ -84,6 +84,18 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 | `kb_first_confidence_threshold` | 0.5 | Minimum confidence to answer from the KB alone. |
 | `chunk_size` / `chunk_overlap` | 1024 / 64 | Retrieval granularity. |
 
+## Dispatch chain ordering
+
+The shipped `academic`, `news`, and `privacy_critical` chains are ordered by
+source quality, not by cost. A `config.local.json` array replaces a chain
+wholesale; `dispatch_append` adds slugs to the end of one.
+
+| Chain | Shipped order | Why |
+|-------|---------------|-----|
+| `academic` | semantic_scholar, arxiv, openalex, europe_pmc, crossref | Semantic Scholar carries cross-publisher coverage and a citation graph; arXiv serves preprints; OpenAlex, Europe PMC, and Crossref are keyless metadata indexes ordered from broadest to most specialised (open metadata, biomedical, DOI registrations). |
+| `news` | duckduckgo, gdelt, hacker_news | DuckDuckGo has the freshest index with snippets and time filters; GDELT adds global event coverage on a lag and headline-only records; Hacker News is tech-scoped discussion. |
+| `privacy_critical` | searxng, mojeek, duckduckgo | A self-hosted SearXNG means only your instance sees the query; Mojeek runs an independent index; DuckDuckGo resells and forwards upstream. SearXNG is disabled by default and dropped from the chain until `INFOBROKER_SEARXNG_URL` is set, so an unconfigured install starts at Mojeek. |
+
 ## Cheat sheet
 
 - Fewer tokens now: lower `first_pass_max_results`, `first_pass_max_providers`,
