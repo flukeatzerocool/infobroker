@@ -281,6 +281,7 @@ This runs:
 | `npm run version-sync` | Every version reference matches `package.json`   |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
+| `npm run check-roadmap` | Roadmap admission rule: one section per item, 1–3 bullets, a `**Trigger:**` line |
 | `npm run check-report-fixtures` | Report contract fixtures: skeleton, manifest, citations, Source Register (REQ-116) |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax and removed-flag (`--attach`) checks over shell entry points and `scripts/**/*.mjs` |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
@@ -339,6 +340,14 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
   `ROADMAP.md`, closed as informational (P3), or deferred by the user.
   `ROADMAP.md` is the tracking surface for scheduled work; the AAR
   references it and never restates it as recommendations.
+- **Roadmap admission rule.** `ROADMAP.md` holds scheduled work only: a
+  `## <title>` section with an action a maintainer can take, 1–3 bullets, and
+  a `**Trigger:**` line naming what starts or closes it. Standing facts —
+  accepted advisories, by-design limitations — are decisions recorded in
+  `DECISIONS.md`, and a review cites the decision instead of filing a roadmap
+  item. The open-web non-goals live in D-061; `ROADMAP.md` carries a pointer.
+  `npm run check-roadmap` enforces the section shape and the `**Trigger:**`
+  line (`## Non-goals` is exempt).
 - **Loop status.** Every AAR ends with `LOOP PAUSED` or `LOOP OPEN`.
   PAUSED requires: gates green, no open P0/P1 beyond the scheduled
   roadmap. When PAUSED, the AAR lists zero new action items; the next plan

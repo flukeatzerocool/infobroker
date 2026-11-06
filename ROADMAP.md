@@ -1,29 +1,23 @@
 # Roadmap
 
-## Open-web scope boundary
-
-Infobroker is an open-web search, analysis, and reporting tool, not a
-professional OSINT platform. The following are explicit non-goals: SOCMINT
-platform collection; WHOIS/DNS/certificate-transparency/attack-surface data;
-corporate registries and beneficial ownership; sanctions/PEP screening;
-breach/leak indexes; image/video/audio forensics; STIX/MISP/OpenCTI and graph
-link analysis; court-admissible chain-of-custody; multi-user case management
-and ACLs; enterprise scheduling.
-
 <!--
-  Format: one `## <title>` per upcoming item, followed by 1–3 bullet lines.
-  Newest first. Remove entries once they ship (they move to CHANGELOG.md).
-  Update this file when planning a release.
+  Admission rule: a `## <title>` section is a scheduled work item. It needs an
+  action a maintainer can take, 1–3 bullet lines, and a `**Trigger:**` line
+  naming what starts the work or what closes it. Newest first; remove a
+  section when the work ships (it moves to CHANGELOG.md).
+
+  Standing facts are not roadmap items: accepted dependency advisories and
+  by-design limitations are recorded in DECISIONS.md, and a review cites the
+  decision rather than filing a roadmap entry. `npm run check-roadmap`
+  enforces this rule; `## Non-goals` is exempt.
 -->
 
-## Dependency advisories
+No scheduled work.
 
-- `npm audit` reports 5 low/moderate advisories (`@hono/node-server`
-  `serveStatic` double-decode, a `katex` range). The audit gate fails only on
-  high/critical, so `npm run check` is green; upgrade when a compatible
-  release ships. `markdownlint-cli` is now `^0.50.0` and no longer flagged.
+## Non-goals
 
-## Knowledge base
-
-- Streaming/out-of-core LSA: `LsaModel.fit` allocates O(n·v) and O(n·k) matrices,
-  so fitted-model reconciliation remains memory-bound by design.
+Open-web scope boundary: no SOCMINT platform collection, WHOIS/DNS/CT or
+attack-surface data, corporate registries, sanctions/PEP screening, breach
+indexes, media forensics, STIX/MISP link analysis, chain-of-custody, multi-user
+case management, or enterprise scheduling. Authoritative list and rationale:
+`DECISIONS.md` D-061.

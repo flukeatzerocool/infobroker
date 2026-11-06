@@ -2,6 +2,43 @@
 
 ## Active Decisions
 
+### D-081: Roadmap Holds Scheduled Work; Standing Facts Are Decisions (2026.11.06)
+
+`ROADMAP.md` holds scheduled work: a `## <title>` section needs an action a
+maintainer can take and a `**Trigger:**` line naming what starts it or closes
+it. Standing facts — accepted advisories, by-design limitations, and the
+open-web non-goals — are decisions, not work, so they live here and a review
+cites the decision instead of filing a roadmap item. The rule follows a review
+that found two non-items ("Dependency advisories", "Knowledge base" streaming
+LSA) plus a duplicate copy of the D-061 non-goal list occupying the file, which
+meant the roadmap could never read as burned down. Alternatives rejected:
+keeping informational notes on the roadmap behind a status label (the P1/P3
+distinction stays unreadable to the next review); moving them to `README.md`
+(the word budget and `validate-readme` make it a poor home for state that moves
+with every `npm audit`); leaving the rule declarative (the drift already
+happened twice, so `scripts/check-roadmap.ts` enforces the section shape and the
+`**Trigger:**` line deterministically). D-061's non-goal list remains
+authoritative; `ROADMAP.md` carries a one-line pointer to it.
+
+### D-080: Dependency Advisories — Fix the Moderate, Accept the Four Low (2026.11.06)
+
+`npm audit` reports five advisories. The moderate one (`@hono/node-server`
+`serveStatic` double-decode, vulnerable `1.19.10 - 2.1.2`) is fixed by a
+lockfile-only update to `2.1.6`, which stays inside the MCP SDK's
+`^1.19.9 || ^2.0.5` range and needs no `package.json` change. The four low
+advisories are one upstream chain — `markdownlint-cli` (`>=0.44.0`, including
+the current `0.50.0`) → `markdownlint` → `micromark-extension-math` → `katex`
+(`0.11.0 - 0.18.1`) — so no published `markdownlint-cli` is clean and no
+maintainer action closes them; they are accepted, and the audit gate fails only
+at high/critical so `npm run check` stays green. Alternatives rejected:
+`npm audit fix --force`, which downgrades `markdownlint-cli` to `0.43.0` (a
+semver-major downgrade of a lint tool to silence a low); an npm `overrides`
+entry forcing `katex` `0.19.1`, a transitive major bump under a package that
+pins `0.16` and is exercised by `npm run lint:md`; and keeping the item on
+`ROADMAP.md`, where the note had also gone stale by claiming `markdownlint-cli`
+was no longer flagged. Revisit when `markdownlint` ships a `katex`-clean
+`micromark-extension-math`.
+
 ### D-079: User-Defined Provider Hardening (2026.11.06)
 
 A `generic_http` entry that reuses a built-in provider slug is rejected rather

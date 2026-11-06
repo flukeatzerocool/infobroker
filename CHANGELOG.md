@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.11.05 — Roadmap hygiene and dependency advisories
+
+- `ROADMAP.md` now holds scheduled work only: the "Dependency advisories" and
+  "Knowledge base" notes were standing facts, not work, and moved to
+  `DECISIONS.md` (D-080, D-081). The open-web non-goal list stays authoritative
+  in D-061 and the roadmap carries a pointer instead of a copy. (DECISIONS
+  D-081)
+- `npm run check-roadmap` enforces the roadmap admission rule — one section per
+  item, 1–3 bullets, a `**Trigger:**` line — so a standing fact cannot
+  accumulate on the roadmap again. (DECISIONS D-081)
+- `@hono/node-server` updates to 2.1.6, clearing the moderate `serveStatic`
+  double-decode advisory; the four remaining low advisories are one
+  upstream-blocked `markdownlint-cli` → `katex` chain, accepted with the
+  rejected alternatives recorded. (DECISIONS D-080)
+
 ## 2026.11.05 — User-defined provider hardening
 
 - A `generic_http` provider can no longer shadow a built-in slug: validation
