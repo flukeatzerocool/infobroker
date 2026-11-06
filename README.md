@@ -259,12 +259,12 @@ Built-in web fetchers
 return raw HTML; Infobroker gives you clean, readable content from any
 source — ready for summarization or analysis. Fetch also reports the page's
 last-updated date when it can determine one, so you know how current your
-source is. When a page is paywalled or bot-blocked, `fetch_page` reports
-`access_blocked` and falls back to Crossref metadata or an open-access copy
-for a DOI, then to an Internet Archive snapshot. A query that names a
-measurable attribute (attendance, population, a percentage, a date) returns a
-sourced `facts` entry from Wikidata or a Wikipedia infobox/table before the
-prose results.
+source is. When a page is paywalled, access-restricted, or bot-blocked,
+`fetch_page` reports `access_blocked` and falls back to Crossref metadata or
+an open-access copy for a DOI, then to an Internet Archive snapshot. A query
+that names a measurable attribute (attendance, population, a percentage, a
+date) returns a sourced `facts` entry from Wikidata or a Wikipedia
+infobox/table before the prose results.
 
 ### Citations
 

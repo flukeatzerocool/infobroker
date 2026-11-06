@@ -94,11 +94,23 @@ export function rawRequestError(url: unknown, crawl: unknown, extract: unknown):
 }
 
 /**
- * REQ-021j: the plain-text body a raw fetch returns. Question mode keeps the
- * top-ranked passage in `results[].snippet`; the full-content path keeps the
- * extracted text there too. Falls back to the first snippet, then the note.
+ * REQ-021j: the plain-text body a raw fetch returns. An error envelope has no
+ * result snippets, so its message and remediation become the text rather than
+ * an empty string (CR-10). Question mode keeps the top-ranked passage in
+ * `results[].snippet`; the full-content path keeps the extracted text there
+ * too. Falls back to the first snippet, then the note, then a top-level
+ * message.
  */
 export function rawTextFromEnvelope(envelope: Record<string, unknown>): string {
+  const error = envelope.error;
+  if (envelope.status === "error" && error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) {
+      const remediation = (error as { remediation?: unknown }).remediation;
+      return typeof remediation === "string" && remediation.length > 0 ? `${message} ${remediation}` : message;
+    }
+  }
+
   const results = Array.isArray(envelope.results) ? envelope.results : [];
   const first = results[0] as Record<string, unknown> | undefined;
   if (first && typeof first.snippet === "string") return first.snippet;
@@ -107,5 +119,6 @@ export function rawTextFromEnvelope(envelope: Record<string, unknown>): string {
   const firstSnippet = snippets[0] as Record<string, unknown> | undefined;
   if (firstSnippet && typeof firstSnippet.text === "string") return firstSnippet.text;
 
-  return typeof envelope.note === "string" ? envelope.note : "";
+  if (typeof envelope.note === "string") return envelope.note;
+  return typeof envelope.message === "string" ? envelope.message : "";
 }

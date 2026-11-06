@@ -573,11 +573,25 @@ test("fetch_page falls back to an Internet Archive snapshot (REQ-021h)", async (
   expect(out.text).toContain("archived copy of the paywalled article");
 });
 
-test("fetch_page reports a paywall as access_blocked (REQ-021h)", async () => {
+test("fetch_page reports an access restriction as access_blocked (REQ-021h)", async () => {
   scenario = "fetch-access-blocked";
   expectedError = "access_blocked";
   const out = await call("infobroker_fetch_page", {
     url: "https://example.com/blocked",
+    renderer: "jina",
+    detect_date: false,
+  });
+  expect(out.text).toContain("[ERROR]");
+  const body = expectError(out.text, "access_blocked");
+  const details = (body.error as Record<string, unknown>).details as Record<string, unknown>;
+  expect(details.cause).toBe("access_restricted");
+});
+
+test("fetch_page reports a payment requirement as access_blocked with cause paywall (REQ-021h)", async () => {
+  scenario = "fetch-paywall";
+  expectedError = "access_blocked";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://example.com/paid",
     renderer: "jina",
     detect_date: false,
   });

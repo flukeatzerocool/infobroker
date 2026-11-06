@@ -12,16 +12,6 @@
   enforces this rule; `## Non-goals` is exempt.
 -->
 
-## Fetch fallback and raw mode (P1)
-
-- Return the error text in raw mode instead of an empty string (CR-10), and split
-  paywall from access-restricted so a 403/451 is not reported as a paywall
-  (CR-11).
-- Align REQ-021h's taxonomy with the observed error codes and causes (SR-3).
-
-**Trigger:** Start on the next paywalled or blocked fetch, or with the next
-fallback change; close when the taxonomy tests cover every branch.
-
 ## Batch metadata and gate hygiene (P2)
 
 - Report a batch's aggregate time rather than the first item's (CR-16), make the

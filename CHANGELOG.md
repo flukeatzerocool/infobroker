@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.11.05 — Fetch failure taxonomy
+
+- `fetch_page` raw mode returns the error text (message plus remediation) when
+  the fetch failed, instead of an empty string; the structured object still
+  carries the full error envelope. (CR-10, REQ-021j)
+- A payment-required response (402) is reported as `access_blocked` with cause
+  `paywall`, while a 401/403/407/451 is an access restriction with cause
+  `access_restricted`; a 429-only failure reports `rate_limited`, and a
+  404/410-only failure reports a `not_found` cause. (CR-11, REQ-021h)
+- REQ-021h and REQ-002 now name the observed causes and no longer promise a
+  distinct code per cause; the code vocabulary stays within REQ-002. (SR-3,
+  REQ-021h, REQ-002)
+
 ## 2026.11.05 — Structured-fact fidelity
 
 - Area and elevation facts carry a unit: a Wikidata unit QID is mapped to its

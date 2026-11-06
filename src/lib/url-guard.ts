@@ -138,8 +138,8 @@ export async function assertPublicUrlResolved(
 }
 
 // A non-2xx response from a renderer, carrying the status so the fetch layer
-// can distinguish a paywall (401/402/403/407/451) from a missing page or a
-// transient provider error. REQ-021h.
+// can distinguish a payment wall (402) from an access restriction
+// (401/403/407/451), a missing page, or a transient provider error. REQ-021h.
 export class HttpStatusError extends Error {
   status: number;
   constructor(message: string, status: number) {

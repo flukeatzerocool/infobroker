@@ -82,6 +82,23 @@ test("rawTextFromEnvelope prefers the top result, then snippets, then note", () 
   expect(rawTextFromEnvelope({ results: [], note: "no passage addressed the question" })).toBe("no passage addressed the question");
 });
 
+// CR-10: an error envelope has no snippets, so raw mode must return its text
+// instead of an empty string.
+test("rawTextFromEnvelope returns the error message and remediation", () => {
+  const text = rawTextFromEnvelope({
+    status: "error",
+    provider: "none",
+    error: {
+      code: "access_blocked",
+      message: "The page is access-restricted (authentication, geographic, or legal block)",
+      remediation: "Try an open-access copy. Use infobroker_inspect_providers action=health to see provider status.",
+    },
+  });
+  expect(text).toContain("access-restricted");
+  expect(text).toContain("open-access copy");
+  expect(text.length).toBeGreaterThan(0);
+});
+
 interface RpcMessage {
   jsonrpc: "2.0";
   id?: number;
@@ -164,5 +181,25 @@ test("live tools expose structuredContent and reject an invalid raw combination"
     expect(invalid.content[0].text.startsWith("[ERROR]")).toBe(true);
     expect(invalid.structuredContent!.status).toBe("error");
     expect((invalid.structuredContent!.error as { code: string }).code).toBe("invalid_input");
+  });
+}, 30000);
+
+// CR-10: a failed fetch in raw mode returns the error text, not an empty
+// string, while the structured object keeps the full error envelope.
+test("raw mode returns the error text for a failed fetch", async () => {
+  await withServer(async (call) => {
+    const response = await call("tools/call", {
+      name: "infobroker_fetch_page",
+      arguments: { url: "file:///tmp/notes.md", raw: true },
+    });
+    expect(response.error).toBeUndefined();
+    const result = response.result as {
+      content: Array<{ text: string }>;
+      structuredContent?: Record<string, unknown>;
+    };
+    expect(result.content[0].text).toContain("fetch_page only fetches http(s) URLs");
+    expect(result.content[0].text).toContain("read tool");
+    expect(result.structuredContent!.status).toBe("error");
+    expect((result.structuredContent!.error as { code: string }).code).toBe("invalid_input");
   });
 }, 30000);

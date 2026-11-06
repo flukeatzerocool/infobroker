@@ -1,9 +1,9 @@
-// @implements REQ-021h doi-metadata open-access wayback classified-failure
+// @implements REQ-021h doi-metadata open-access wayback classified-failure paywall access-restricted not-found rate-limited
 // Fetch fallback and failure classification. When the renderer chain cannot
-// return a page, this module decides whether the failure is a paywall, an
-// anti-bot gate, a missing page, or a network problem, and tries the fallbacks
-// the roadmap requires: Crossref metadata for a DOI, an open-access copy, then
-// an Internet Archive snapshot.
+// return a page, this module decides whether the failure is a payment wall, an
+// access restriction, an anti-bot gate, a missing page, a rate limit, or a
+// network problem, and tries the fallbacks the roadmap requires: Crossref
+// metadata for a DOI, an open-access copy, then an Internet Archive snapshot.
 import { HttpStatusError } from "./lib/url-guard.js";
 import { BotChallengeError } from "./retry.js";
 import { htmlToText } from "./lib/html.js";
@@ -16,6 +16,7 @@ import type { TruncatedText } from "./truncate.js";
 
 export type FetchFailureKind =
   | "paywall"
+  | "access_restricted"
   | "anti_bot"
   | "not_found"
   | "rate_limited"
@@ -59,10 +60,13 @@ export type FetchFallbackResult =
 const NETWORK_CODES = /ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|TIMEDOUT|network|fetch failed/i;
 
 export function classifyStatus(status: number): FetchFailureKind {
-  if (status === 401 || status === 402 || status === 403 || status === 407 || status === 451) return "paywall";
+  // CR-11: 402 is the only status that means payment. 401/403/407/451 are
+  // access restrictions (authentication, geographic, proxy, or legal block)
+  // and must not be reported as a paywall.
+  if (status === 402) return "paywall";
+  if (status === 401 || status === 403 || status === 407 || status === 451) return "access_restricted";
   if (status === 404 || status === 410) return "not_found";
   if (status === 429) return "rate_limited";
-  if (status >= 500) return "unknown";
   return "unknown";
 }
 
@@ -74,7 +78,8 @@ export function classifyFailure(error: unknown, renderer: string): FetchFailure 
     return { renderer, kind: classifyStatus(error.status), status: error.status, message: error.message };
   }
   // Providers such as Jina throw RetryableError with the HTTP status attached;
-  // a 403 from that path is the same paywall signal as a native fetch 403.
+  // a 403 from that path is the same access-restriction signal as a native
+  // fetch 403.
   if (error && typeof (error as { status?: unknown }).status === "number") {
     const status = (error as { status: number }).status;
     return { renderer, kind: classifyStatus(status), status, message: error instanceof Error ? error.message : String(error) };
@@ -89,38 +94,68 @@ export function classifyFailure(error: unknown, renderer: string): FetchFailure 
 }
 
 /**
- * Map the collected renderer failures to the REQ-002 taxonomy. A paywall or
- * anti-bot gate wins over a generic exhaustion; an all-network failure is a
- * connectivity error; anything else keeps the existing exhaustion code.
- * REQ-038: every provider-attributable remediation names the provider-status
- * surface so the caller can diagnose without guessing.
+ * Map the collected renderer failures to the REQ-002 taxonomy. The most
+ * specific access blocker wins over a generic exhaustion: a payment wall
+ * outranks an anti-bot challenge, which outranks a generic access restriction.
+ * A rate-limited renderer yields the REQ-002 rate_limited code, a missing page
+ * is reported with a not_found cause, and an all-network failure is a
+ * connectivity error. REQ-038: every provider-attributable remediation names
+ * the provider-status surface so the caller can diagnose without guessing.
  */
 export function failureTaxonomy(failures: FetchFailure[]): {
-  code: "access_blocked" | "network_error" | "all_providers_exhausted";
-  cause?: "paywall" | "anti_bot";
+  code: "access_blocked" | "network_error" | "rate_limited" | "all_providers_exhausted";
+  cause?: "paywall" | "access_restricted" | "anti_bot" | "not_found";
   message: string;
   remediation: string;
 } {
-  const paywall = failures.some((f) => f.kind === "paywall");
-  const antiBot = failures.some((f) => f.kind === "anti_bot");
-  if (paywall || antiBot) {
-    const cause = paywall ? "paywall" : "anti_bot";
+  const has = (kind: FetchFailureKind) => failures.some((f) => f.kind === kind);
+  const only = (kind: FetchFailureKind) => failures.length > 0 && failures.every((f) => f.kind === kind);
+  const accessRemediation = "Try an open-access copy or an Internet Archive snapshot, or use the DOI metadata returned when available; do not relax the private-network guard";
+
+  if (has("paywall")) {
     return {
       code: "access_blocked",
-      cause,
-      message: paywall
-        ? "The page is paywalled or access-restricted"
-        : "The page returned an anti-bot challenge instead of content",
-      remediation: providerRemediation(
-        "Try an open-access copy or an Internet Archive snapshot, or use the DOI metadata returned when available; do not relax the private-network guard",
-      ),
+      cause: "paywall",
+      message: "The page requires payment to access",
+      remediation: providerRemediation(accessRemediation),
     };
   }
-  if (failures.length > 0 && failures.every((f) => f.kind === "network")) {
+  if (has("anti_bot")) {
+    return {
+      code: "access_blocked",
+      cause: "anti_bot",
+      message: "The page returned an anti-bot challenge instead of content",
+      remediation: providerRemediation(accessRemediation),
+    };
+  }
+  if (has("access_restricted")) {
+    return {
+      code: "access_blocked",
+      cause: "access_restricted",
+      message: "The page is access-restricted (authentication, geographic, or legal block)",
+      remediation: providerRemediation(accessRemediation),
+    };
+  }
+  if (has("rate_limited")) {
+    return {
+      code: "rate_limited",
+      message: "The page's renderers were rate-limited",
+      remediation: providerRemediation("Retry after the rate-limit window"),
+    };
+  }
+  if (only("network")) {
     return {
       code: "network_error",
       message: "The page could not be reached over the network",
       remediation: providerRemediation("Check network connectivity and the host name, then retry"),
+    };
+  }
+  if (only("not_found")) {
+    return {
+      code: "all_providers_exhausted",
+      cause: "not_found",
+      message: "The page was not found",
+      remediation: providerRemediation("Check the URL for a typo or removed content, then retry"),
     };
   }
   return {

@@ -265,6 +265,37 @@
     {
       "host": "r.jina.ai",
       "method": "GET",
+      "path_regex": "^/https://example\\.com/paid$",
+      "status": 402,
+      "headers": {
+        "content-type": "text/plain"
+      },
+      "body": "payment required"
+    },
+    {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/paid$",
+      "status": 402,
+      "headers": {
+        "content-type": "text/html"
+      },
+      "body": "<html><title>Subscribe to continue</title></html>"
+    },
+    {
+      "host": "archive.org",
+      "method": "GET",
+      "path_regex": "^/wayback/available$",
+      "query_regex": "url=https%3A%2F%2Fexample\\.com%2Fpaid",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"archived_snapshots\": {}}"
+    },
+    {
+      "host": "r.jina.ai",
+      "method": "GET",
       "path_regex": "^/https://example\\.com/network$",
       "error": "getaddrinfo ENOTFOUND r.jina.ai"
     },

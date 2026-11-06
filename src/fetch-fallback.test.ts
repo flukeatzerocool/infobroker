@@ -1,4 +1,4 @@
-// @implements REQ-021h doi-metadata open-access wayback classified-failure
+// @implements REQ-021h doi-metadata open-access wayback classified-failure paywall access-restricted not-found rate-limited
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   classifyFailure,
@@ -33,18 +33,26 @@ const fetched = (content: string, slug = "jina") => ({
 
 describe("fetch failure classification (REQ-021h)", () => {
   it("maps status codes to failure kinds", () => {
-    expect(classifyStatus(401)).toBe("paywall");
-    expect(classifyStatus(403)).toBe("paywall");
-    expect(classifyStatus(451)).toBe("paywall");
+    expect(classifyStatus(402)).toBe("paywall");
+    expect(classifyStatus(401)).toBe("access_restricted");
+    expect(classifyStatus(403)).toBe("access_restricted");
+    expect(classifyStatus(407)).toBe("access_restricted");
+    expect(classifyStatus(451)).toBe("access_restricted");
     expect(classifyStatus(404)).toBe("not_found");
+    expect(classifyStatus(410)).toBe("not_found");
     expect(classifyStatus(429)).toBe("rate_limited");
     expect(classifyStatus(500)).toBe("unknown");
   });
 
   it("recognises typed renderer errors", () => {
-    expect(classifyFailure(new HttpStatusError("HTTP 403", 403), "jina")).toMatchObject({
+    expect(classifyFailure(new HttpStatusError("HTTP 402", 402), "jina")).toMatchObject({
       renderer: "jina",
       kind: "paywall",
+      status: 402,
+    });
+    expect(classifyFailure(new HttpStatusError("HTTP 403", 403), "jina")).toMatchObject({
+      renderer: "jina",
+      kind: "access_restricted",
       status: 403,
     });
     expect(classifyFailure(new BotChallengeError("challenge"), "jina")).toMatchObject({
@@ -64,9 +72,20 @@ describe("fetch failure classification (REQ-021h)", () => {
   });
 
   it("maps collected failures to the REQ-002 taxonomy", () => {
-    expect(failureTaxonomy([{ renderer: "jina", kind: "paywall" }]).code).toBe("access_blocked");
-    expect(failureTaxonomy([{ renderer: "jina", kind: "paywall" }]).cause).toBe("paywall");
+    expect(failureTaxonomy([{ renderer: "jina", kind: "paywall" }])).toMatchObject({
+      code: "access_blocked",
+      cause: "paywall",
+    });
     expect(failureTaxonomy([{ renderer: "jina", kind: "anti_bot" }]).cause).toBe("anti_bot");
+    expect(failureTaxonomy([{ renderer: "jina", kind: "access_restricted" }])).toMatchObject({
+      code: "access_blocked",
+      cause: "access_restricted",
+    });
+    expect(failureTaxonomy([{ renderer: "jina", kind: "rate_limited" }]).code).toBe("rate_limited");
+    expect(failureTaxonomy([{ renderer: "jina", kind: "not_found" }])).toMatchObject({
+      code: "all_providers_exhausted",
+      cause: "not_found",
+    });
     expect(failureTaxonomy([{ renderer: "jina", kind: "network" }]).code).toBe("network_error");
     expect(
       failureTaxonomy([
@@ -74,14 +93,41 @@ describe("fetch failure classification (REQ-021h)", () => {
         { renderer: "native_fetch", kind: "unknown" },
       ]).code
     ).toBe("all_providers_exhausted");
+    expect(failureTaxonomy([]).cause).toBeUndefined();
+  });
+
+  // CR-11: a 403 is an access restriction, not a payment wall, and the most
+  // specific access blocker wins when renderers fail differently.
+  it("reports the most specific cause when renderers fail differently", () => {
+    expect(
+      failureTaxonomy([
+        { renderer: "jina", kind: "access_restricted" },
+        { renderer: "native_fetch", kind: "paywall" },
+      ]).cause
+    ).toBe("paywall");
+    expect(
+      failureTaxonomy([
+        { renderer: "jina", kind: "access_restricted" },
+        { renderer: "native_fetch", kind: "anti_bot" },
+      ]).cause
+    ).toBe("anti_bot");
+    expect(
+      failureTaxonomy([
+        { renderer: "jina", kind: "network" },
+        { renderer: "native_fetch", kind: "rate_limited" },
+      ]).code
+    ).toBe("rate_limited");
   });
 
   // REQ-038: a provider-attributable remediation names the status surface,
-  // including the paywall and connectivity branches, not only exhaustion.
+  // including the access-restriction, rate-limit, and not-found branches.
   it("names the provider-status surface in every remediation", () => {
     const branches = [
       failureTaxonomy([{ renderer: "jina", kind: "paywall" }]),
       failureTaxonomy([{ renderer: "jina", kind: "anti_bot" }]),
+      failureTaxonomy([{ renderer: "jina", kind: "access_restricted" }]),
+      failureTaxonomy([{ renderer: "jina", kind: "rate_limited" }]),
+      failureTaxonomy([{ renderer: "jina", kind: "not_found" }]),
       failureTaxonomy([{ renderer: "jina", kind: "network" }]),
       failureTaxonomy([]),
     ];
@@ -89,7 +135,7 @@ describe("fetch failure classification (REQ-021h)", () => {
       expect(branch.remediation).toMatch(/inspect_providers action=health/);
     }
     // No doubled sentence when the branch already named it.
-    expect(branches[3].remediation.match(/inspect_providers/g)).toHaveLength(1);
+    expect(branches[6].remediation.match(/inspect_providers/g)).toHaveLength(1);
   });
 });
 

@@ -35,10 +35,10 @@ rather than restating them.
   `fetch_page (question)` on a page you are reading to answer a specific question, so only
   the ranked passages that address it are returned. For a one-call
   search-and-read, `search_web (deep)` returns ranked passages per
-  source. A paywalled or blocked page returns `access_blocked`; a DOI
-  resolves to Crossref metadata or an open-access copy, then an Internet
-  Archive snapshot. A measurable-attribute query returns a sourced
-  `facts` entry before prose.
+  source. A paywalled, access-restricted, or blocked page returns
+  `access_blocked`; a DOI resolves to Crossref metadata or an open-access
+  copy, then an Internet Archive snapshot. A measurable-attribute query
+  returns a sourced `facts` entry before prose.
 - **VERIFY** — cross-reference across sources, score confidence on the
   `confidence.md` scale, flag contradictions explicitly. Use `verify_claims`
   for contested claims and read its result per `corroboration.md`.
