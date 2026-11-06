@@ -95,6 +95,27 @@ verify_claims (claims: ["the bridge inspection found the structure sound",
   gap to report, not a failure.
 - Supply either `query` or `claims`, never both.
 
+## Discrete claims vs. interpretive theses
+
+`verify_claims` settles discrete claims. It does not settle an argument.
+
+- **Discrete claim** — a date, number, quotation, attribution, or event. Send
+  it to `verify_claims` and carry the verdict into the report. When the
+  evidence does not support it, attribute it, soften it to the source
+  `modality`, or delete it. Never leave it asserted because the surrounding
+  argument is persuasive.
+- **Interpretive thesis** — a statement about meaning or causation ("X
+  explains Y"). It has no verdict. Decompose it into the premises that carry
+  the argument, verify those as discrete claims, and record the thesis itself
+  in the manifest `assumptions`, with the strongest counter-reading in
+  `Analysis of Alternatives`. A thesis supported only by verified premises is
+  a defensible reading, not a confirmed fact.
+- **Rhetorical quantities are still discrete claims.** "It takes about ten
+  days", "roughly 45", and "the country lost the ability to tell" each assert
+  something checkable and each must pass REDRAFT-CHECK. Narrative register
+  does not relax the contract; an essay is held to the same claims as a
+  report.
+
 ## Spans and modality
 
 Each source carries:

@@ -75,7 +75,10 @@ RECALL       Infobroker `search_web` KB-first (automatic); `manage_kb (action: s
 SEARCH       Infobroker `search_web`; `verify_claims` for contested claims
 EXTRACT      Infobroker `fetch_page` on key URLs (Jina Reader for Markdown); when
              reading a page to answer a specific question, pass `question` to get
-             the ranked passages that address it instead of the whole page
+             the ranked passages that address it instead of the whole page;
+             `search_web (deep)` reads the top results in one call, and
+             `search_web (research)` is the multi-variant fan-out for Deep-Dive,
+             Competitive Evaluation, and Gated Analysis
 VERIFY       cross-reference, score confidence, flag contradictions
 SUMMARIZE    `summarization` skill — condense findings before writing
 WRITE        `technical-writing` skill — hand it the routed shape, audience, and
@@ -87,7 +90,10 @@ REDRAFT-CHECK  FACT-CHECK DRAFT: extract every claim in the draft and verify
              source's `modality` — reported or speculative — or delete it),
              then re-run the batch once to confirm. Carry each claim's
              `modality` and `attribution` into the report manifest; never
-             upgrade a hedged source ("reportedly") to a flat assertion
+             upgrade a hedged source ("reportedly") to a flat assertion.
+             Decompose an interpretive thesis into its checkable premises and
+             verify those; the thesis itself is recorded as a manifest
+             assumption with its strongest counter-reading, never as a verdict
 VALIDATE     `scripts/validate-report.ts --report <file>` — fix every error
              (missing section or shape block, uncited or unlabeled finding,
              unresolved [S#], register row missing a grade, date, or URL,
@@ -160,8 +166,9 @@ Competitive Evaluation, Literature Review, Monitoring/Delta,
 Adversarial/Red-Team, and Vetting/Due-Diligence are defined in
 `references/workflows.md`. Route to the matching shape after Phase 0
 classification; each shape composes the same primitives (recall → search →
-extract → verify → write → polish → cite) into its own sequence and ends with
-its own output block in `references/report-template.md`. To add a shape of
+extract → verify → write → redraft-check → validate → polish → translate →
+revalidate → archive → cite) into its own sequence and ends with its own
+output block in `references/report-template.md`. To add a shape of
 your own, follow `references/skill-authoring.md`.
 
 Always end your reply with the chosen shape's `Token:` line from

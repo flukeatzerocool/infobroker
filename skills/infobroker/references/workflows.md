@@ -65,8 +65,6 @@ rather than restating them.
   keep the canonical section headings.
 - **REVALIDATE** — run the report validator again on the final artifact after
   polish and translation.
-- **ARCHIVE** — ingest the finished report with a receipt; on recall, verify
-  the receipt before reuse.
 - **CITE** — every factual claim carries an inline `[S#]` marker resolving to
   the Source Register, whose row carries the URL.
 
@@ -109,12 +107,16 @@ verdict; hold every claim to primary sources where they exist.
 
 **Trigger:** systematic multi-subtopic investigation with citations.
 
-**Pipeline:** scope & clarify → parallel SEARCH (2–3 query angles per
-subtopic) → EXTRACT primary sources → VERIFY & triangulate → synthesize a
-structured report (theme-grouped, high-confidence findings first).
+**Pipeline:** scope & clarify → RECALL → parallel SEARCH (2–3 query angles per
+subtopic; `search_web (research)` for the multi-variant fan-out) → EXTRACT
+primary sources (`search_web (deep)` for a one-call search-and-read) → VERIFY
+& triangulate → WRITE (theme-grouped, high-confidence findings first) →
+REDRAFT-CHECK → VALIDATE → POLISH → TRANSLATE (if needed) → REVALIDATE →
+ARCHIVE → CITE.
 
-**Technique:** Decomposition (topic tree) to split subtopics; Analysis of
-Competing Hypotheses on any contested finding.
+**Technique:** Decomposition (topic tree) to split subtopics; Key Assumptions
+Check on the central thesis before writing; Analysis of Competing Hypotheses
+on any contested finding.
 
 **Output:** the Deep-Dive block in `report-template.md` — a subtopic coverage
 matrix, theme-grouped synthesis, cross-subtopic contradictions, and open
@@ -142,7 +144,8 @@ best", "X vs Y", "evaluate these options").
 
 **Pipeline:** define explicit criteria → RECALL → SEARCH per option →
 EXTRACT → VERIFY → score each option against criteria → weighted decision
-matrix → recommendation with justification.
+matrix → recommendation with justification → WRITE → REDRAFT-CHECK →
+VALIDATE → POLISH → TRANSLATE (if needed) → REVALIDATE → ARCHIVE → CITE.
 
 **Technique:** Decision Matrix — criteria defined and weighted before scoring.
 
@@ -158,7 +161,9 @@ rationale with confidence. Flag criteria lacking evidence as gaps.
 
 **Pipeline:** define inclusion/exclusion criteria → SEARCH scholarly chains
 (Semantic Scholar, arXiv, CORE) → deduplicate → screen by title/abstract →
-EXTRACT full texts → theme synthesis → gap analysis → related-work section.
+EXTRACT full texts → theme synthesis → gap analysis → related-work section →
+WRITE → REDRAFT-CHECK → VALIDATE → POLISH → TRANSLATE (if needed) →
+REVALIDATE → ARCHIVE → CITE.
 Record identified, deduplicated, screened, excluded (with reasons), and
 included counts in the PRISMA-style flow block.
 
@@ -178,8 +183,9 @@ naming what is absent, and a source register.
 **Pipeline:** establish a baseline report with a receipt → on the next run,
 `manage_kb (action: verify_report)` to surface source drift and unverifiable
 sources → `manage_kb (action: stats)` freshness check → re-SEARCH → compare to
-the baseline → report only the deltas → ingest a new report revision with
-`supersedes` set to the baseline identity.
+the baseline → WRITE (deltas only) → REDRAFT-CHECK → VALIDATE → POLISH →
+TRANSLATE (if needed) → REVALIDATE → ARCHIVE (new revision with `supersedes`
+set to the baseline identity) → CITE.
 
 **Technique:** Indicators — define signposts for the topic before comparing,
 so the delta is reported against what would confirm or weaken change.
@@ -196,7 +202,8 @@ wrong", "argue against", "red-team this").
 
 **Pipeline:** restate the claim → SEARCH for disconfirming evidence →
 attack each assumption → list failure modes and weaknesses → grade each
-by likelihood and impact.
+by likelihood and impact → WRITE → REDRAFT-CHECK → VALIDATE → POLISH →
+TRANSLATE (if needed) → REVALIDATE → ARCHIVE → CITE.
 
 **Technique:** Devil's Advocacy — build the strongest case against the plan,
 then grade each weakness; no softening.
@@ -213,7 +220,8 @@ and an overall robustness verdict. No softening — the job is to find breaks.
 
 **Pipeline:** define the checklist → RECALL → SEARCH per checklist item →
 `verify_claims` on contested items → grade each source for reliability →
-flag red flags.
+flag red flags → WRITE → REDRAFT-CHECK → VALIDATE → POLISH → TRANSLATE
+(if needed) → REVALIDATE → ARCHIVE → CITE.
 
 **Technique:** Quality-of-Information Check — grade each source's
 reliability and each claim's credibility separately.

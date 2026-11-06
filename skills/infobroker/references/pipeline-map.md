@@ -36,7 +36,7 @@ flowchart TD
     end
 
     subgraph DD["Deep-Dive"]
-        DDc["scope & clarify → parallel search → extract → verify"] --> DDs["structured report"]
+        DDc["scope & clarify → search_web (research) → extract → verify"] --> DDs["structured report"]
     end
 
     subgraph EV["Competitive Evaluation"]
@@ -58,6 +58,14 @@ flowchart TD
     subgraph VE["Vetting / Due-Diligence"]
         VEc["checklist → per-item search → verify_claims"] --> VEv["red-flag register"]
     end
+
+    TAIL["write → redraft-check → validate → polish → revalidate → archive → cite"]
+    DDs --> TAIL
+    EVv --> TAIL
+    LRs --> TAIL
+    MOd --> TAIL
+    RTw --> TAIL
+    VEv --> TAIL
 
     subgraph AL["Analysis Loop (escalation)"]
         ALm["scope → collect → analyze → refine"]

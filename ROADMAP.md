@@ -53,15 +53,6 @@ and ACLs; enterprise scheduling.
   `search_web` recall named collections (REQ-020).
 - Link an ingested report to its source URLs.
 
-## [P2] Skill pipeline alignment
-
-- Surface `search_web (deep)` and `research` in the main EXTRACT step; add
-  ARCHIVE and FACT-CHECK DRAFT to the pipeline (REQ-050).
-- Add source grades A/B/C to the report template and a citation-completeness
-  check (REQ-116).
-- Clarify when `verify_claims` applies to interpretive theses vs. discrete
-  facts.
-
 ## [P2] Observability, config, and source quality
 
 - Log per-call provider, latency, and status; expose a session summary and

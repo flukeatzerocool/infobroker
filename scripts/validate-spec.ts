@@ -1,6 +1,7 @@
 #!/usr/bin/env npx tsx
 // validate-spec.ts — gate: spec-code traceability, REQ-body hygiene, manifest
-// and taxonomy reconciliation. Wired into `npm run check` (G3).
+// and taxonomy reconciliation, and per-shape skill pipeline tails. Wired into
+// `npm run check` (G3).
 //
 // A REQ with no `@implements` citation is an error unless it is recorded in
 // the `## Spec Waivers` section of DECISIONS.md (intentionally unimplemented).
@@ -608,6 +609,32 @@ function checkArtifactContent(): void {
       }
       if (!/modality/i.test(workflows)) {
         error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
+      }
+      // REQ-120: every shape's own Pipeline paragraph carries the report tail.
+      // The checks above only prove the phase names exist somewhere in the
+      // file, so a shape could drop its validate/archive steps undetected.
+      const REPORT_TAIL = ["WRITE", "REDRAFT-CHECK", "VALIDATE", "POLISH", "REVALIDATE", "ARCHIVE", "CITE"];
+      for (const section of workflows.split(/^## /m).slice(1)) {
+        const title = section.split("\n", 1)[0]!.trim();
+        const pipeline = section.match(/\*\*Pipeline:\*\*([\s\S]*?)(?:\n\n|\n\*\*)/);
+        if (!pipeline) continue; // Gated Analysis routes out; shared primitives have no pipeline
+        for (const phase of REPORT_TAIL) {
+          if (!pipeline[1]!.includes(phase)) {
+            error(`skills/infobroker/references/workflows.md: ${title} pipeline is missing ${phase} (REQ-120)`);
+          }
+        }
+      }
+    }
+    // REQ-120: the pipeline diagram shows the same report tail for every shape.
+    const pipelineMap = join(ROOT, "skills", "infobroker", "references", "pipeline-map.md");
+    if (existsSync(pipelineMap)) {
+      const diagram = readFileSync(pipelineMap, "utf-8");
+      if (!/TAIL\[/.test(diagram)) {
+        error("skills/infobroker/references/pipeline-map.md: missing the shared report-tail node (REQ-120)");
+      }
+      const tailLinks = (diagram.match(/-->\s*TAIL\b/g) ?? []).length;
+      if (tailLinks < 6) {
+        error(`skills/infobroker/references/pipeline-map.md: ${tailLinks} shape(s) link to the report tail, expected 6 (REQ-120)`);
       }
     }
     // REQ-026g/REQ-026h: the orchestrator's redraft step calls the batch tool

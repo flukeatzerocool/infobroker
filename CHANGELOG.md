@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.11.05 — Skill pipeline alignment
+
+- Every workflow shape now ends with the full report tail — write,
+  redraft-check, validate, polish, translate, revalidate, archive, cite — so
+  Deep-Dive, Competitive Evaluation, Literature Review, Monitoring/Delta,
+  Adversarial/Red-Team, and Vetting no longer stop at their analysis artifact
+  and ship an unvalidated, unarchived report. (REQ-051, REQ-120)
+- The main EXTRACT step names `search_web (deep)` for a one-call
+  search-and-read and `search_web (research)` for the multi-variant fan-out,
+  matching the shape definitions. (REQ-051)
+- `corroboration.md` distinguishes discrete claims (verdict-checkable) from
+  interpretive theses (decomposed into premises; the thesis is recorded as a
+  manifest assumption), and states that rhetorical quantities are still
+  discrete claims. (REQ-051, REQ-115)
+- `validate-spec` now fails when a shape's own pipeline paragraph omits a tail
+  phase or when the pipeline diagram drops the shared report-tail node, closing
+  the gap where a shape could lose its validate/archive steps undetected.
+  (REQ-120)
+- The ROADMAP "Skill pipeline alignment" item is complete and removed. Its
+  source-grade bullet was already satisfied by the Admiralty A–F / 1–6
+  reliability and credibility grades in `confidence.md`, the Source Register
+  columns, the validator, and the `bad-register-grades` fixture; no second
+  scale was added (REQ-115).
+
 ## 2026.11.05 — Structured facts and fetch fallbacks
 
 - Measurable-attribute queries (attendance, population, percentage, date) now
