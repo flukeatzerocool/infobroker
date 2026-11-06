@@ -196,7 +196,7 @@
       "languages": "*",
       "rate_limit": { "per_month": 2000 },
       "auth_env": "INFOBROKER_BRAVE_API_KEY",
-      "enabled": false,
+      "enabled": true,
       "priority": 30,
       "resells": true
     },

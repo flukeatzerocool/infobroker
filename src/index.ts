@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-020h REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-111a REQ-112 REQ-113
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-020h REQ-020i REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-111a REQ-112 REQ-113
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -30,6 +30,8 @@ import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolEr
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { capInputs, coerceStringArray, mergeItems, parseEnvelope } from "./batch.js";
+import { settleBatch } from "./batch-run.js";
+import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
 import { reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
 import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
@@ -110,16 +112,6 @@ function ok(provider: string, results: SearchResult[], meta: Record<string, unkn
     };
   }
   return base;
-}
-
-function err(provider: string, code: string, message: string, remediation: string, details?: Record<string, unknown>): ToolErrorResponse {
-  return {
-    status: "error",
-    provider,
-    // REQ-102: centralize exceptional-condition hygiene so no call site can
-    // leak an absolute path or stack-frame marker in an error message.
-    error: { code, message: sanitizeErrorMessage(message), remediation, ...(details ? { details } : {}) },
-  };
 }
 
 function slugify(title: string): string {
@@ -254,10 +246,14 @@ async function doWebSearch(
     // A shared fetch budget bounds total page reads across the whole batch
     // (REQ-028): a 5-query deep search must not multiply the page budget.
     const deepBudget = deep ? { remaining: getConfig().deep?.max_total_pages ?? 8 } : undefined;
-    const envelopes = await Promise.all(
-      queries.map((q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride)
-      )
+    // REQ-020i: a failed or thrown element is reported per query; it never
+    // fails the batch when another element succeeded.
+    const envelopes = await settleBatch(
+      queries,
+      (q) =>
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride),
+      (_q, e) =>
+        `[ERROR] ${json(err("none", "internal_error", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), providerRemediation("Retry the query individually to isolate the failure")))}`,
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
     return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
@@ -289,7 +285,7 @@ async function doWebSearch(
         lastErr = e instanceof Error ? e.message : String(e);
       }
     }
-    return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", lastErr ?? "No suggestion-capable provider available", "Retry later"))}`;
+    return `[ERROR] ${json(err("duckduckgo", "provider_unavailable", lastErr ?? "No suggestion-capable provider available", providerRemediation("Retry later")))}`;
   }
 
   if (expand) {
@@ -446,7 +442,7 @@ async function doWebSearch(
     // failure so a fully-cooled chain reports exhaustion rather than empty.
     if (inCooldown(slug)) {
       rateLimited = true;
-      lastError = err(slug, "rate_limited", "Provider is cooling down", "Retry after the cooldown window");
+      lastError = err(slug, "rate_limited", "Provider is cooling down", providerRemediation("Retry after the cooldown window"));
       sessionStats.recordAttempt(slug, "cooldown");
       recordAttempt(slug, "cooldown");
       return null;
@@ -525,11 +521,11 @@ async function doWebSearch(
       }
       if (e instanceof RetryableError && e.status === 429) {
         rateLimited = true;
-        lastError = err(slug, "rate_limited", msg, "Retry after the cooldown window");
+        lastError = err(slug, "rate_limited", msg, providerRemediation("Retry after the cooldown window"));
       } else if (e instanceof ParseError) {
-        lastError = err(slug, "parse_error", msg, "Trying next provider in fallback chain");
+        lastError = err(slug, "parse_error", msg, providerRemediation("Trying next provider in fallback chain"));
       } else {
-        lastError = err(slug, "provider_unavailable", msg, "Trying next provider in fallback chain");
+        lastError = err(slug, "provider_unavailable", msg, providerRemediation("Trying next provider in fallback chain"));
       }
       const code =
         e instanceof RetryableError && e.status === 429
@@ -706,25 +702,16 @@ async function doWebSearch(
       }
     }
 
-    // REQ-031: report the remaining daily quota of each quota-exhausted
-    // provider (distinct from provider failure), not merely its slug.
-    const quotaExhaustedList = Object.entries(quotaExhausted).map(([slug, remaining]) => ({
-      slug,
-      remaining_daily: remaining,
-    }));
-    const details: Record<string, unknown> = {
-      exhausted_chain: [...chain, ...crossTaskAttempted],
-      quota_exhausted: quotaExhaustedList,
-      ...(rateLimited
-        ? { retry_after_ms: Math.max(0, ...chain.map((slug) => cooldownRemainingMs(slug))) }
-        : {}),
-    };
-    // REQ-002: rate limiting takes precedence over the generic exhaustion code.
-    const exhaustionCode = rateLimited ? "rate_limited" : "all_providers_exhausted";
-    const exhaustionHint = rateLimited
-      ? "Retry after the cooldown window"
-      : "Retry later or check provider configuration";
-    return `[ERROR] ${json(err("none", exhaustionCode, `Fallback chain exhausted: ${chain.join(", ")}`, exhaustionHint, details))}`;
+    // REQ-031 / REQ-038: report the attempted chain, each quota-exhausted
+    // provider's remaining daily quota, and the real cooldown-derived
+    // retry_after_ms (also when the cooldown came from a bot challenge).
+    return `[ERROR] ${json(
+      chainExhaustion(chain, {
+        rateLimited,
+        quotaExhausted,
+        attempted: [...chain, ...crossTaskAttempted],
+      })
+    )}`;
   }
   return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, task_type: taskType, ignored_params: [], no_results: true }))}`;
 }
@@ -936,8 +923,13 @@ async function doFetchPage(
   }
   if (Array.isArray(url)) {
     const urls = capInputs(url);
-    const envelopes = await Promise.all(
-      urls.map((u) => doFetchPage(u, renderer, maxLength, question, passageSize, maxPassages, detectDate, crawl, extract))
+    // REQ-021: one failed or thrown URL is reported per input; it never
+    // discards the sibling results.
+    const envelopes = await settleBatch(
+      urls,
+      (u) => doFetchPage(u, renderer, maxLength, question, passageSize, maxPassages, detectDate, crawl, extract),
+      (_u, e) =>
+        `[ERROR] ${json(err("none", "internal_error", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), providerRemediation("Retry the URL individually to isolate the failure")))}`,
     );
     const merged = mergeItems(urls.map((u, i) => ({ query: u, envelope: envelopes[i] })));
     return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
@@ -1069,8 +1061,11 @@ async function doFetchPage(
   // the embedded metadata is still present.
   if (extract) {
     let fetched;
+    const extractFailures: FetchFailure[] = [];
     try {
-      fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate);
+      fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate, false, (f) =>
+        extractFailures.push(f)
+      );
     } catch (e) {
       if (e instanceof SsrRefusalError) {
         audit("network_target_refused", url);
@@ -1079,7 +1074,15 @@ async function doFetchPage(
       throw e;
     }
     if (fetched === null) {
-      return `[ERROR] ${json(err("none", "all_providers_exhausted", `All content renderers exhausted for: ${url}`, "Check network connectivity"))}`;
+      // REQ-002 / REQ-021h: distinguish a paywall/anti-bot block from a
+      // connectivity failure instead of always blaming the network.
+      const taxonomy = failureTaxonomy(extractFailures);
+      return `[ERROR] ${json(
+        err("none", taxonomy.code, `${taxonomy.message}: ${url}`, providerRemediation(taxonomy.remediation), {
+          failures: extractFailures,
+          ...(taxonomy.cause ? { cause: taxonomy.cause } : {}),
+        })
+      )}`;
     }
     // REQ-097: the strictest mode refuses flagged content to the caller.
     const policy = await checkContent(fetched.content, url);
@@ -1638,9 +1641,9 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: true` skips KB recall and searches external providers. A measurable attribute (attendance, population, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: true` skips KB recall and searches external providers. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
-      query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5)")]).describe("Search query: a single string, or up to five strings searched in parallel"),
+      query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5); a failed element is reported per input without failing the batch")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
       task_type: z.enum(SEARCHABLE_TASK_TYPES).optional().describe("Force a dispatch chain by task type (auto-classified when omitted)"),
       max_results: z.number().min(1).max(30).optional().default(8).describe("Number of results to return (1-30, default 8)"),
@@ -1876,7 +1879,7 @@ instrumentTool(
         content: [
           {
             type: "text" as const,
-            text: `[ERROR] ${json(err("none", "corroboration_error", e instanceof Error ? e.message : String(e), "Retry with different query"))}`,
+            text: `[ERROR] ${json(err("none", "corroboration_error", e instanceof Error ? e.message : String(e), providerRemediation("Retry with a different query")))}`,
           },
         ],
       };

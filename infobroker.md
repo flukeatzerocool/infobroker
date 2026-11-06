@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020h`, `021a`–`021i`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021i`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -260,6 +260,9 @@ WHEN `search_web` assembles results from more than one provider or query variant
 
 **REQ-020h — Source-quality ordering and domain blocklist**
 WHEN `search_web` returns external results, the tool SHALL order them by semantic relevance adjusted by a configurable source-quality weight that favors primary and trusted domains and disfavors configured low-quality domains. A result whose host matches the configured blocklist SHALL be excluded, and the response SHALL report the number excluded. Blocklisting MAY return fewer results than the caller requested. The quality weight SHALL default to a value that keeps relevance dominant, and a zero weight SHALL leave semantic ordering unchanged. Domain matching SHALL be case-insensitive, and a configured domain SHALL match its subdomains. An invalid configured pattern SHALL be ignored rather than fail the request. _Check:_ G1.
+
+**REQ-020i — `search_web` batch partial results**
+WHEN `search_web` receives an array of queries, a failing element SHALL NOT fail the batch. The response SHALL return every successful element's results with per-input metadata, and SHALL report each failed element's error in that metadata. The batch SHALL report success when at least one element succeeds, and SHALL return an error per REQ-002 only when every element fails. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
@@ -416,7 +419,7 @@ values. On reload, an invalid configuration SHALL leave the previous
 configuration active without interruption. _Check:_ G1.
 
 **REQ-038 — Rate-Limit Cooldown**
-WHEN a provider returns a rate-limit response or an anti-bot challenge, the server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. _Check:_ G1.
+WHEN a provider returns a rate-limit response or an anti-bot challenge, the server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. A rate-limited response SHALL report the remaining cooldown in milliseconds as `retry_after_ms`. Every provider-attributable error's `remediation` SHALL name the provider-status surface. _Check:_ G1.
 
 ### 4.5 State and Configuration
 
@@ -1143,6 +1146,7 @@ verdict is preserved (REQ-026f).
 | REQ-020f | `search_web` research compile | 4.3 | G1 |
 | REQ-020g | Cross-provider result reconciliation | 4.3 | G1 |
 | REQ-020h | Source-quality ordering and domain blocklist | 4.3 | G1 |
+| REQ-020i | `search_web` batch partial results | 4.3 | G1 |
 | REQ-021 | `fetch_page` | 4.3 | G0, G1 |
 | REQ-021a | `fetch_page` network-target safety | 4.3 | G1 |
 | REQ-021b | `fetch_page` question-grounded extraction | 4.3 | G1 |
@@ -1737,7 +1741,7 @@ secondary concerns rather than duplicating the REQ.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |

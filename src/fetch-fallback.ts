@@ -9,6 +9,7 @@ import { BotChallengeError } from "./retry.js";
 import { htmlToText } from "./lib/html.js";
 import { throttle } from "./rate-limiter.js";
 import { inCooldown } from "./cooldown.js";
+import { providerRemediation } from "./error-envelope.js";
 import { PROVIDERS } from "./providers/index.js";
 import type { DoiRecord } from "./types.js";
 import type { TruncatedText } from "./truncate.js";
@@ -91,6 +92,8 @@ export function classifyFailure(error: unknown, renderer: string): FetchFailure 
  * Map the collected renderer failures to the REQ-002 taxonomy. A paywall or
  * anti-bot gate wins over a generic exhaustion; an all-network failure is a
  * connectivity error; anything else keeps the existing exhaustion code.
+ * REQ-038: every provider-attributable remediation names the provider-status
+ * surface so the caller can diagnose without guessing.
  */
 export function failureTaxonomy(failures: FetchFailure[]): {
   code: "access_blocked" | "network_error" | "all_providers_exhausted";
@@ -108,21 +111,22 @@ export function failureTaxonomy(failures: FetchFailure[]): {
       message: paywall
         ? "The page is paywalled or access-restricted"
         : "The page returned an anti-bot challenge instead of content",
-      remediation:
-        "Try an open-access copy or an Internet Archive snapshot, or use the DOI metadata returned when available; do not relax the private-network guard.",
+      remediation: providerRemediation(
+        "Try an open-access copy or an Internet Archive snapshot, or use the DOI metadata returned when available; do not relax the private-network guard",
+      ),
     };
   }
   if (failures.length > 0 && failures.every((f) => f.kind === "network")) {
     return {
       code: "network_error",
       message: "The page could not be reached over the network",
-      remediation: "Check network connectivity and the host name, then retry.",
+      remediation: providerRemediation("Check network connectivity and the host name, then retry"),
     };
   }
   return {
     code: "all_providers_exhausted",
     message: "All content renderers failed",
-    remediation: "Retry later, or check provider status with inspect_providers.",
+    remediation: providerRemediation("Retry later"),
   };
 }
 

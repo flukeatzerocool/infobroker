@@ -200,7 +200,9 @@ with the package but stay inert.
 
 Most free providers work immediately; CORE needs a free API key. The keyed
 providers — Brave, Exa, Tavily, Yep — unlock higher throughput and
-specialized search, and self-hosted SearXNG gives full query privacy:
+specialized search; Brave ships enabled, so exporting its key is enough to
+add a second general-web engine, and self-hosted SearXNG gives full query
+privacy:
 
 ```bash
 export INFOBROKER_BRAVE_API_KEY="your-key"
@@ -468,15 +470,17 @@ Twenty-seven providers. Twenty-one work with zero configuration.
 | SearXNG | Self-hosted | Full privacy | Yes (self) |
 
 Built-in providers and most free-HTTP providers are active out of the box;
-CORE needs a free API key. Keyed providers enable with an API key.
-Self-hosted providers point at a server you run yourself:
+CORE needs a free API key. Brave is enabled by default and joins the general-web
+chain automatically when `INFOBROKER_BRAVE_API_KEY` is set; a keyed provider
+whose key is absent is excluded from dispatch, so nothing changes for a keyless
+install. Exa, Tavily, and Yep ship disabled; set `"enabled": true` in
+`config.json` for those. Self-hosted providers point at a server you run
+yourself:
 
 ```bash
 export INFOBROKER_BRAVE_API_KEY="BSA-..."
 export INFOBROKER_SEARXNG_URL="http://localhost:8080"
 ```
-
-Then set `"enabled": true` in `config.json` for the provider.
 
 Keyed providers also accept an ordered credential pool via
 `INFOBROKER_<NAME>_API_KEYS` (comma-separated). Infobroker rotates to the

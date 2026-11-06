@@ -2,6 +2,39 @@
 
 ## Active Decisions
 
+### D-075: Keyed General-Web Redundancy and Cooldown-Derived Retry Hints (2026.11.06)
+
+Brave now ships `enabled: true` in `config.json`. D-005 required a keyed
+provider to be both credentialed and manually enabled, which predates the
+tier-aware auth filter in `getDispatchChain`: a `keyed_http` provider whose
+`auth_env` is unset is already excluded from every chain. The `enabled: false`
+default was therefore redundant for keyed providers, and it meant an operator
+who followed the README and exported `INFOBROKER_BRAVE_API_KEY` still got
+DuckDuckGo plus three small-web engines — one general index, not two. Brave is
+the general-web redundancy target, so only Brave changes state; Exa, Tavily,
+and Yep stay disabled because enabling them widens the news, semantic,
+synthesis, and corroboration chains in one step, which is a separate decision.
+Keyless installs see no behavioral change: the auth filter drops Brave before
+any dispatch. The alternative — enabling Brave only in the user configuration
+layer — fixes one install and leaves the defect for every keyed install; a new
+keyless general engine was rejected because scraping another general index
+carries the same anti-bot fragility already recorded as risk F2.
+
+`retry_after_ms` is the server's own cooldown remaining, not a provider
+`Retry-After` header. The value is derived from active cooldowns across the
+attempted chain rather than from the `rateLimited` flag, so a bot-challenge
+cooldown (which REQ-038 treats as cooldown-worthy but is not an HTTP 429)
+still reports a non-zero value. It is omitted, never `0`, when nothing is
+cooling down. Parsing provider headers was rejected: provider support is
+inconsistent, and the cooldown is the state the server actually enforces.
+
+Every provider-attributable error remediation now names
+`inspect_providers action=health` through one helper, so the hint cannot drift
+between call sites. The shared batch seam (`settleBatch`) converts a thrown
+item into a per-input error envelope; `mergeItems` already merged partial
+provider failures, and `Promise.all` was the remaining way for one element to
+discard its siblings.
+
 ### D-073: Batch Claim Verification with Advisory Modality (2026.11.05)
 
 `verify_claims` could only take one query string, which it split on

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.11.05 — Provider resilience
+
+- Brave ships enabled, so a keyed install gains a second general-web index
+  without hand-editing `config.json`; a keyless install is unchanged because
+  the chain still drops keyed providers whose credential is absent. (REQ-031)
+- Fallback-chain exhaustion now reports a real `retry_after_ms` derived from
+  the active cooldown, including after a bot challenge, and names each
+  cooling-down provider. When nothing is cooling down the field is omitted
+  rather than reported as `0`. (REQ-038)
+- Every provider-attributable error remediation names
+  `inspect_providers action=health`, and structured-metadata extraction now
+  distinguishes a paywall or anti-bot block from a connectivity failure
+  instead of always blaming the network. (REQ-002, REQ-021h)
+- A batch request now converts a thrown element into a per-input error and
+  returns its successful siblings; only a batch where every element fails
+  returns an error. (REQ-020i)
+- The ROADMAP "Provider resilience" item is complete and removed.
+
 ## 2026.11.05 — Batch response fidelity
 
 - `fetch_page` in array mode now preserves each item's ranked passages, top

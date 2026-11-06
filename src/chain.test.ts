@@ -1,5 +1,5 @@
 // @implements REQ-020c REQ-020d REQ-031a REQ-034 REQ-128
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("./config.js", () => ({
   getConfig: vi.fn(),
@@ -147,6 +147,27 @@ describe("ignoredParams", () => {
 
   it("flags safe_search off for Yep, which applies only strict (REQ-020d)", () => {
     expect(ignoredParams("yep", { safe_search: "off" })).toEqual(["safe_search"]);
+  });
+});
+
+// REQ-031: a keyed provider shipped enabled participates only when its
+// credential is present; without the key the tier-aware filter excludes it.
+describe("keyed provider inclusion (REQ-031)", () => {
+  const saved = process.env.INFOBROKER_BRAVE_API_KEY;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.INFOBROKER_BRAVE_API_KEY;
+    else process.env.INFOBROKER_BRAVE_API_KEY = saved;
+  });
+
+  it("includes Brave with a credential and excludes it without one", async () => {
+    const actual = await vi.importActual<typeof import("./config.js")>("./config.js");
+    actual.loadConfig();
+
+    process.env.INFOBROKER_BRAVE_API_KEY = "test-key";
+    expect(actual.getDispatchChain("general_web")[0]).toBe("brave");
+
+    delete process.env.INFOBROKER_BRAVE_API_KEY;
+    expect(actual.getDispatchChain("general_web")).not.toContain("brave");
   });
 });
 

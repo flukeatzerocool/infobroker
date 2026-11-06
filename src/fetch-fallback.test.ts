@@ -22,7 +22,7 @@ vi.mock("./providers/index.js", () => ({
   },
 }));
 vi.mock("./rate-limiter.js", () => ({ throttle: async () => {} }));
-vi.mock("./cooldown.js", () => ({ inCooldown: () => false }));
+vi.mock("./cooldown.js", () => ({ inCooldown: () => false, cooldownRemainingMs: () => 0 }));
 
 const fetched = (content: string, slug = "jina") => ({
   slug,
@@ -74,6 +74,22 @@ describe("fetch failure classification (REQ-021h)", () => {
         { renderer: "native_fetch", kind: "unknown" },
       ]).code
     ).toBe("all_providers_exhausted");
+  });
+
+  // REQ-038: a provider-attributable remediation names the status surface,
+  // including the paywall and connectivity branches, not only exhaustion.
+  it("names the provider-status surface in every remediation", () => {
+    const branches = [
+      failureTaxonomy([{ renderer: "jina", kind: "paywall" }]),
+      failureTaxonomy([{ renderer: "jina", kind: "anti_bot" }]),
+      failureTaxonomy([{ renderer: "jina", kind: "network" }]),
+      failureTaxonomy([]),
+    ];
+    for (const branch of branches) {
+      expect(branch.remediation).toMatch(/inspect_providers action=health/);
+    }
+    // No doubled sentence when the branch already named it.
+    expect(branches[3].remediation.match(/inspect_providers/g)).toHaveLength(1);
   });
 });
 

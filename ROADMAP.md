@@ -16,16 +16,6 @@ and ACLs; enterprise scheduling.
   Update this file when planning a release.
 -->
 
-## [P0] Provider resilience
-
-- The live `general_web` chain is DuckDuckGo plus three small-web engines
-  because Brave is not configured; enable a keyed provider or add a second
-  general engine (REQ-031).
-- Return the real `retry_after_ms` and name `inspect_providers` in every
-  provider-error remediation (REQ-002, REQ-038).
-- Return partial batch results with per-query errors instead of one
-  `[ERROR]` for the whole batch.
-
 ## [P1] Structured response contract
 
 - Add `structuredContent` and `outputSchema` to all seven tools so Code Mode

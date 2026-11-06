@@ -35,6 +35,20 @@ export interface DebateServer {
   stop(): void;
 }
 
+/**
+ * Deterministic replay: drop inherited provider credentials and self-hosted
+ * URLs so a keyed provider enabled in the shipped config cannot dispatch to a
+ * host with no fixture. Mirrors the REQ-031 auth filter rather than editing
+ * the config.
+ */
+export function withoutProviderCredentials(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = { ...env };
+  for (const key of Object.keys(out)) {
+    if (/^INFOBROKER_.*_(?:API_KEY|API_KEYS|URL)$/.test(key)) delete out[key];
+  }
+  return out;
+}
+
 function rpcContentText(result: unknown): string {
   const r = result as { content?: Array<{ type?: string; text?: string }> } | undefined;
   const first = r?.content?.[0];
@@ -76,7 +90,11 @@ export async function startServer(): Promise<DebateServer> {
       cwd: REPO_ROOT,
       stdio: ["pipe", "pipe", "pipe"],
       env: {
-        ...process.env,
+        // Replay must not depend on the operator's shell: a keyed provider
+        // enabled in the shipped config would otherwise dispatch to a host
+        // with no fixtures. Strip provider credentials and instance URLs;
+        // configuration and TMPDIR stay as the harness sets them.
+        ...withoutProviderCredentials(process.env),
         TMPDIR: tmpDir,
         DEBATE_CLUB_MODE: "replay",
         DEBATE_CLUB_FIXTURES: join(DEBATE_ROOT, "fixtures", "index.json"),
