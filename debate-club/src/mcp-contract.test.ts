@@ -420,6 +420,44 @@ test("manage_kb ingests, searches, and reports stats", async () => {
   expect(Number(statsBody.chunk_count)).toBeGreaterThan(0);
 });
 
+// @implements REQ-076a blend
+test("search_web blend keeps cached KB results beside fresh external results", async () => {
+  scenario = "kb-blend-ingest";
+  expectOk(
+    (
+      await call("infobroker_manage_kb", {
+        action: "ingest",
+        title: "Arena blend note",
+        text: "Survivor Series 1997 attendance was 20,593 at the Rosemont Horizon.",
+        collection: "arena-blend",
+        source_type: "explicit",
+        freshness_tier: "stable",
+      })
+    ).text
+  );
+
+  scenario = "kb-blend";
+  try {
+    const out = expectOk(
+      (
+        await call("infobroker_search_web", {
+          query: "Survivor Series 1997",
+          fresh: "blend",
+          collection: "arena-blend",
+        })
+      ).text
+    );
+    const meta = out.meta as Record<string, unknown>;
+    expect(meta.kb_recall).toBe("blended");
+    expect(Number(meta.kb_results)).toBeGreaterThan(0);
+    expect((out.results as unknown[]).length).toBeGreaterThan(0);
+  } finally {
+    // The Arena shares one KB across tests; remove the blend fixture so the
+    // later KB-first assertion sees its own provider chain.
+    await call("infobroker_manage_kb", { action: "delete", collection: "arena-blend" });
+  }
+});
+
 test("manage_kb stores report manifest metadata and verifies it offline", async () => {
   scenario = "kb-manifest";
   const ingest = expectOk(

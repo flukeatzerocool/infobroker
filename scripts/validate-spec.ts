@@ -593,6 +593,20 @@ function checkArtifactContent(): void {
       }
       cursor = next + phase.length;
     }
+    // REQ-120a: ARCHIVE is required and names the report identity + sources in
+    // both the report pipeline and the fact-check pipeline.
+    let archiveSteps = 0;
+    for (const match of content.matchAll(/^ARCHIVE\s+\(required\)/gm)) {
+      const step = content.slice(match.index, match.index + 600);
+      if (!step.includes("sources") || !step.includes("meta.report_id")) {
+        error("skills/infobroker/SKILL.md: ARCHIVE step must name sources and meta.report_id (REQ-120a)");
+        break;
+      }
+      archiveSteps++;
+    }
+    if (archiveSteps === 0) {
+      error("skills/infobroker/SKILL.md: no ARCHIVE step found (REQ-120a)");
+    }
     const workflowsPath = join(ROOT, "skills", "infobroker", "references", "workflows.md");
     if (!existsSync(workflowsPath)) {
       error("skills/infobroker/references/workflows.md: missing (REQ-120)");
@@ -602,6 +616,11 @@ function checkArtifactContent(): void {
         if (!workflows.includes(phase)) {
           error(`skills/infobroker/references/workflows.md: missing ${phase} phase (REQ-120)`);
         }
+      }
+      // REQ-120a: the shared workflow reference carries the same required
+      // archive contract (deliverable + sources + report identity).
+      if (!/ARCHIVE\*\* \(required\)[\s\S]{0,500}meta\.report_id/.test(workflows)) {
+        error("skills/infobroker/references/workflows.md: ARCHIVE is not required or does not name meta.report_id (REQ-120a)");
       }
       // REQ-026g/REQ-026h: the redraft step names the batch call and modality.
       if (!workflows.includes("FACT-CHECK DRAFT")) {

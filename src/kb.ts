@@ -27,6 +27,7 @@ import type {
   ClaimRecord,
   ReportReceiptInput,
   ReportReceiptRecord,
+  ReportReceiptSource,
   ReportVerificationResult,
 } from "./types.js";
 import {
@@ -937,6 +938,7 @@ export function kbPutReportReceipt(
     reportId,
     contentSha256: sha256Hex(doc.text),
     claims: normalized.value.claims,
+    ...(normalized.value.sources ? { sources: normalized.value.sources } : {}),
     ...(normalized.value.report ? { report: normalized.value.report } : {}),
     cachedDocument,
   });
@@ -948,6 +950,11 @@ export function kbPutReportReceipt(
 export function kbGetReportReceipt(reportId: string): ReportReceiptRecord | null {
   if (!sqliteStore?.getReportReceipt) return null;
   return sqliteStore.getReportReceipt(reportId);
+}
+
+/** REQ-110: the report's linked sources, empty when no receipt is stored. */
+export function kbGetReportSources(reportId: string): ReportReceiptSource[] {
+  return kbGetReportReceipt(reportId)?.manifest.sources ?? [];
 }
 
 /**

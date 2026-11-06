@@ -57,9 +57,13 @@ rather than restating them.
   error before delivering (missing section or shape block, uncited or
   unlabeled finding, unresolved `[S#]`, register row missing a grade, date, or
   URL, invalid manifest value).
-- **ARCHIVE** — ingest the finished report with `source_type: "report"` and a
-  `receipt` carrying the manifest claims and sources; a later `RECALL` runs
-  `verify_report` to surface source drift before reuse.
+- **ARCHIVE** (required) — ingest the finished deliverable, not the style sheet
+  or notes, with `source_type: "report"` and a `receipt` carrying the manifest
+  claims and `sources` (the Source Register URLs). Do not emit the completion
+  token until the call returns `meta.report_id`; when knowledge-base storage is
+  unavailable, append `archive unavailable: <reason>` to the token line
+  instead. A later `RECALL` runs `verify_report` to surface source drift before
+  reuse.
 - **POLISH** — `proofreading` for language quality.
 - **TRANSLATE** — `translation` when the target language is not English;
   keep the canonical section headings.

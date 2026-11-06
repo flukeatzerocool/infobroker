@@ -19,6 +19,7 @@ import type {
 export const RECEIPT_LIMITS = {
   claims: 100,
   sourcesPerClaim: 25,
+  reportSources: 100,
   claimChars: 2000,
   urlChars: 2048,
   snippetChars: 2000,
@@ -147,7 +148,7 @@ function normalizeMeta(raw: unknown): { ok: true; value?: ReportManifestMeta } |
  */
 export function normalizeReceiptInput(
   raw: unknown,
-): { ok: true; value: { claims: ReportReceiptInput["claims"]; report?: ReportManifestMeta } } | { ok: false; error: ReceiptInputError } {
+): { ok: true; value: { claims: ReportReceiptInput["claims"]; sources?: ReportReceiptSourceInput[]; report?: ReportManifestMeta } } | { ok: false; error: ReceiptInputError } {
   if (!isPlainObject(raw)) {
     return { ok: false, error: { code: "invalid_input", message: "receipt must be an object" } };
   }
@@ -232,7 +233,44 @@ export function normalizeReceiptInput(
       sources,
     });
   }
-  return { ok: true, value: { claims, ...(reportResult.value ? { report: reportResult.value } : {}) } };
+  // REQ-110: report-level sources (the Source Register) are optional and
+  // bounded separately from per-claim source edges.
+  const rawReportSources = raw["sources"];
+  let reportSources: ReportReceiptSourceInput[] | undefined;
+  if (rawReportSources !== undefined) {
+    if (!Array.isArray(rawReportSources)) {
+      return { ok: false, error: { code: "invalid_input", message: "receipt.sources must be an array" } };
+    }
+    if (rawReportSources.length > RECEIPT_LIMITS.reportSources) {
+      return {
+        ok: false,
+        error: { code: "invalid_input", message: `receipt.sources exceeds ${RECEIPT_LIMITS.reportSources} entries` },
+      };
+    }
+    const normalized: ReportReceiptSourceInput[] = [];
+    for (const rawSource of rawReportSources) {
+      const source = normalizeSource(rawSource);
+      if (source === null) {
+        return {
+          ok: false,
+          error: {
+            code: "invalid_input",
+            message: `receipt.sources entries need a url of at most ${RECEIPT_LIMITS.urlChars} characters and a snippet of at most ${RECEIPT_LIMITS.snippetChars} characters`,
+          },
+        };
+      }
+      normalized.push(source);
+    }
+    if (normalized.length > 0) reportSources = normalized;
+  }
+  return {
+    ok: true,
+    value: {
+      claims,
+      ...(reportSources ? { sources: reportSources } : {}),
+      ...(reportResult.value ? { report: reportResult.value } : {}),
+    },
+  };
 }
 
 /**
@@ -244,34 +282,49 @@ export function buildReceiptManifest(args: {
   reportId: string;
   contentSha256: string;
   claims: ReportReceiptInput["claims"];
+  sources?: ReportReceiptSourceInput[];
   report?: ReportManifestMeta;
   cachedDocument: (url: string) => { text: string; title: string } | null;
 }): ReportReceiptManifest {
+  const hashSource = (source: ReportReceiptSourceInput): ReportReceiptClaim["sources"][number] => {
+    const cached = args.cachedDocument(source.url);
+    const basis = cached !== null ? ("document" as const) : ("snippet" as const);
+    const hashed = cached !== null ? cached.text : source.snippet ?? "";
+    const retrievedAt = source.retrieved_at ?? (cached !== null ? new Date().toISOString() : undefined);
+    return {
+      url: source.url,
+      title: cached?.title ?? source.title ?? "",
+      ...(retrievedAt ? { retrieved_at: retrievedAt } : {}),
+      hash_basis: basis,
+      source_sha256: sha256Hex(hashed),
+    };
+  };
   const claims: ReportReceiptClaim[] = args.claims.map((claim) => ({
     claim: claim.claim,
     ...(claim.grade ? { grade: claim.grade } : {}),
     ...(claim.verdict ? { verdict: claim.verdict } : {}),
     ...(claim.confidence ? { confidence: claim.confidence } : {}),
     ...(claim.likelihood ? { likelihood: claim.likelihood } : {}),
-    sources: claim.sources.map((source) => {
-      const cached = args.cachedDocument(source.url);
-      const basis = cached !== null ? ("document" as const) : ("snippet" as const);
-      const hashed = cached !== null ? cached.text : source.snippet ?? "";
-      const retrievedAt = source.retrieved_at ?? (cached !== null ? new Date().toISOString() : undefined);
-      return {
-        url: source.url,
-        title: cached?.title ?? source.title ?? "",
-        ...(retrievedAt ? { retrieved_at: retrievedAt } : {}),
-        hash_basis: basis,
-        source_sha256: sha256Hex(hashed),
-      };
-    }),
+    sources: claim.sources.map(hashSource),
   }));
+  // REQ-110: the report links to the deduplicated union of its own sources and
+  // every claim's sources. Sort by URL so the digest is deterministic.
+  const linked = new Map<string, ReportReceiptClaim["sources"][number]>();
+  for (const claim of claims) {
+    for (const source of claim.sources) {
+      if (!linked.has(source.url)) linked.set(source.url, source);
+    }
+  }
+  for (const source of args.sources ?? []) {
+    if (!linked.has(source.url)) linked.set(source.url, hashSource(source));
+  }
+  const sources = [...linked.values()].sort((a, b) => a.url.localeCompare(b.url));
   const manifest: Omit<ReportReceiptManifest, "digest_sha256"> = {
     version: 1,
     report_id: args.reportId,
     content_sha256: args.contentSha256,
     ...(args.report ? { report: args.report } : {}),
+    ...(sources.length > 0 ? { sources } : {}),
     claims,
   };
   return { ...manifest, digest_sha256: receiptDigest(manifest) };
@@ -327,10 +380,26 @@ export function verifyReceipt(args: {
     }
   }
 
+  // REQ-060i: the report's linked sources are verified separately from the
+  // per-claim source edges so `sources` keeps its established meaning.
+  let reportSourcesVerified = 0;
+  let reportSourcesUnverifiable = 0;
+  let reportSourcesDrift = 0;
+  for (const source of manifest.sources ?? []) {
+    if (source.hash_basis !== "document") {
+      reportSourcesUnverifiable++;
+      continue;
+    }
+    const current = args.cachedDocument(source.url);
+    if (current === null) reportSourcesUnverifiable++;
+    else if (sha256Hex(current) === source.source_sha256) reportSourcesVerified++;
+    else reportSourcesDrift++;
+  }
+
   let state: ReportVerificationResult["state"];
   if (!digestMatch) state = "incomplete";
-  else if (reportState === "drift" || sourcesDrift > 0) state = "drift";
-  else if (reportState === "unverifiable" || sourcesUnverifiable > 0) state = "unverifiable";
+  else if (reportState === "drift" || sourcesDrift > 0 || reportSourcesDrift > 0) state = "drift";
+  else if (reportState === "unverifiable" || sourcesUnverifiable > 0 || reportSourcesUnverifiable > 0) state = "unverifiable";
   else state = "verified";
 
   return {
@@ -351,5 +420,15 @@ export function verifyReceipt(args: {
       unverifiable: sourcesUnverifiable,
       details: drifts,
     },
+    ...(manifest.sources
+      ? {
+          report_sources: {
+            total: reportSourcesVerified + reportSourcesUnverifiable + reportSourcesDrift,
+            verified: reportSourcesVerified,
+            drift: reportSourcesDrift,
+            unverifiable: reportSourcesUnverifiable,
+          },
+        }
+      : {}),
   };
 }

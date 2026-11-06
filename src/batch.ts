@@ -1,6 +1,23 @@
-// @implements REQ-020 REQ-021 REQ-021k
+// @implements REQ-020 REQ-021 REQ-021k REQ-076a
 import { matchQuality, type MatchQuality } from "./rerank.js";
+import { canonicalUrl } from "./source-family.js";
+import type { SearchResult } from "./types.js";
 export const MAX_BATCH_INPUTS = 5;
+
+/**
+ * REQ-076a: blend keeps cached KB rows beside the fresh external results.
+ * An external row wins a URL duplicate because it is fresher; the displaced
+ * cached rows are counted rather than silently discarded.
+ */
+export function mergeKnowledgeBaseResults(
+  external: SearchResult[],
+  cached: SearchResult[],
+): { results: SearchResult[]; duplicates: number } {
+  if (cached.length === 0) return { results: external, duplicates: 0 };
+  const externalUrls = new Set(external.map((r) => canonicalUrl(r.url)));
+  const kept = cached.filter((r) => !externalUrls.has(canonicalUrl(r.url)));
+  return { results: [...external, ...kept], duplicates: cached.length - kept.length };
+}
 
 /** REQ-021k: a batch input that is an HTTP(S) URL is echoed as `url`. */
 const HTTP_URL_RE = /^https?:\/\//i;

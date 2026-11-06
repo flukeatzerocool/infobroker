@@ -47,7 +47,12 @@ interface RpcMessage {
 interface ToolDef {
   name: string;
   inputSchema?: {
-    properties?: Record<string, { enum?: unknown[]; type?: string | string[] }>;
+    properties?: Record<string, {
+      enum?: unknown[];
+      type?: string | string[];
+      // A boolean flag with an extra string literal serializes as anyOf.
+      anyOf?: Array<{ type?: string; enum?: unknown[] }>;
+    }>;
   };
 }
 
@@ -109,8 +114,11 @@ function toSchema(tool: ToolDef): ToolSchema {
     const type = Array.isArray(prop.type)
       ? prop.type.find((t) => t !== "null")
       : prop.type;
+    // A union such as `boolean | "blend"` is serialized as anyOf. Keep the
+    // boolean reading so `tool (flag)` remains a valid routing citation.
+    const unionType = type ?? (prop.anyOf?.some((part) => part.type === "boolean") ? "boolean" : undefined);
     properties[name] = {
-      type,
+      type: unionType,
       enum: Array.isArray(prop.enum) ? prop.enum.map(String) : undefined,
     };
   }

@@ -279,6 +279,24 @@ describe("kb search action returns ranked chunks (REQ-060a)", () => {
   });
 });
 
+// @implements REQ-065 collection-recall
+describe("collection recall (REQ-065)", () => {
+  it("returns only the named collection so a style sheet is reusable across sessions", () => {
+    kbIngest(
+      "essay voice short declarative sentences and concrete nouns",
+      "voice sheet",
+      "https://example.com/essay-style",
+      "test",
+      "essay-style",
+      "style",
+    );
+    kbIngest("essay voice content outside the named collection", "other voice", "https://example.com/other-voice", "test");
+    const scoped = kbSearch("essay voice", 10, "essay-style");
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((r) => r.collection === "essay-style")).toBe(true);
+  });
+});
+
 describe("kb ingest action chunks content (REQ-060b)", () => {
   it("reports a positive chunk count and stores the source identifier", () => {
     const chunks = kbIngest(

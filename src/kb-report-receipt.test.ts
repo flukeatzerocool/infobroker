@@ -1,4 +1,4 @@
-// @implements REQ-110 REQ-060i REQ-060b
+// @implements REQ-110 REQ-060i REQ-060b report-sources
 // Report verification receipts (REQ-110) and the read-only offline
 // `verify_report` action (REQ-060i). The receipt is a canonical manifest the
 // server computes at ingest; verification rehashes the cached report and its
@@ -17,6 +17,7 @@ import {
   kbPutReportReceipt,
   kbVerifyReport,
   kbGetReportReceipt,
+  kbGetReportSources,
   kbSupportsReportReceipts,
   getKbLockError,
   rekeyStoreTo,
@@ -592,5 +593,70 @@ describe("report manifest metadata (REQ-114, REQ-110)", () => {
     if (!good.ok) throw new Error("unreachable");
     expect(good.value.report?.shape).toBe("Fact-Check");
     expect(good.value.claims[0]!.confidence).toBe("High");
+  });
+});
+
+// @implements REQ-110 report-sources
+describe("report-to-source link (REQ-110)", () => {
+  it("stores the deduplicated, URL-sorted union of report-level and claim sources", () => {
+    const seeded = seedReport();
+    const stored = kbPutReportReceipt(seeded.reportId, {
+      claims: receipt().claims,
+      sources: [
+        { url: "https://example.com/z-source", title: "Z" },
+        { url: "https://example.com/bridge-inspection", title: "duplicate claim source" },
+        { url: "https://example.com/a-source", title: "A" },
+      ],
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    const urls = stored.record.manifest.sources!.map((s) => s.url);
+    expect(urls).toEqual([...urls].sort());
+    expect(new Set(urls).size).toBe(urls.length);
+    expect(urls).toContain("https://example.com/bridge-inspection");
+    expect(urls).toContain("https://example.com/z-source");
+    expect(urls).toContain("https://example.com/a-source");
+    expect(kbGetReportSources(seeded.reportId).map((s) => s.url)).toEqual(urls);
+  });
+
+  it("verifies linked sources separately from per-claim source edges", () => {
+    const seeded = seedReport();
+    const stored = kbPutReportReceipt(seeded.reportId, {
+      claims: receipt().claims,
+      sources: [{ url: "https://example.com/uncached-register", title: "Uncached register row" }],
+    });
+    expect(stored.ok).toBe(true);
+    const result = kbVerifyReport(seeded.reportId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.result.sources.total).toBe(1);
+    expect(result.result.report_sources?.total).toBe(2);
+    expect(result.result.report_sources?.verified).toBe(1);
+    expect(result.result.report_sources?.unverifiable).toBe(1);
+  });
+
+  it("keeps a manifest written without linked sources backward compatible", () => {
+    const body = "A legacy report written before report-level source links existed.";
+    const reportId = "report://legacy-report";
+    const base = {
+      version: 1 as const,
+      report_id: reportId,
+      content_sha256: createHash("sha256").update(body).digest("hex"),
+      claims: [],
+    };
+    const manifest = { ...base, digest_sha256: receiptDigest(base) };
+    const result = verifyReceipt({ manifest, reportText: body, cachedDocument: () => null });
+    expect(result.state).toBe("verified");
+    expect(result.report_sources).toBeUndefined();
+  });
+
+  it("rejects an oversized report-level source list", () => {
+    const bad = normalizeReceiptInput({
+      claims: [{ claim: "x", sources: [] }],
+      sources: Array.from({ length: RECEIPT_LIMITS.reportSources + 1 }, (_, i) => ({ url: `https://example.com/${i}` })),
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) throw new Error("unreachable");
+    expect(bad.error.code).toBe("invalid_input");
   });
 });

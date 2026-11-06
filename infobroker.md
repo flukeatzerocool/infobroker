@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -235,7 +235,7 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 ### 4.3 Core Tools
 
 **REQ-020 — `search_web`**
-`search_web` is the unified search tool. Parameters: `query` (required) SHALL accept a single value or an array of up to five; plus optional `provider`, `task_type`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `content_type` (default all), `region`, `language`, and the boolean flags `suggest`, `expand`, `research`, `fresh`, `deep`, and `analyze` (each default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain on failure. Array inputs SHALL be searched concurrently and merged into one response. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
+`search_web` is the unified search tool. Parameters: `query` (required) accepts a single value or an array of up to five; plus optional `provider`, `task_type`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `content_type` (default all), `region`, `language`, `collection`, and the flags `suggest`, `expand`, `research`, `fresh` (false, true, or blend), `deep`, and `analyze` (each default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain. Array inputs SHALL be searched concurrently and merged. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
 **REQ-020a — `search_web` task-type selection**
 WHEN `task_type` is supplied, the tool SHALL use that type's chain (§7.2) without reclassifying. WHEN `provider` is supplied, the tool SHALL serve from it, falling back through the selected type's chain. Otherwise the tool SHALL classify the query into a task type (§7.1), matching whole words, not substrings, and treating a DOI, an author–year citation, a journal phrase, or a cited work title as an `academic` signal. WHEN no type clears the confidence floor, the tool SHALL keep the `general_web` chain, and a semantic-only match SHALL NOT select a place, fact, filing, definition, or code chain. Selection SHALL exclude exhausted, disabled, or unauthenticated providers and demote those at quota warning per REQ-034. The response SHALL report the task type and serving provider. _Check:_ G1.
@@ -499,6 +499,9 @@ A report SHALL carry the output block defined for its declared workflow shape in
 **REQ-120 — Report Delivery Verification**
 The orchestrator skill and its reference files SHALL define one pipeline order. The report pipeline SHALL re-verify each drafted claim against the collected evidence before the report quality gate, using the batch claim input of REQ-026g where the draft has several claims. A claim introduced during drafting that the evidence does not support SHALL be removed or marked unverified. The re-verification SHALL preserve each source's modality so a hedged claim is not delivered as a flat assertion. The report quality gate SHALL run on the final artifact after language polish and after translation. A translated report SHALL retain the canonical section headings and record its language in the manifest. _Check:_ G3.
 
+**REQ-120a — Report Archive Tail**
+The report pipeline SHALL archive the finished deliverable, not only its style sheet or notes, before declaring completion. The archive call SHALL pass the report's source URLs with its verification receipt. The pipeline SHALL NOT emit its completion token until the archive call returns a stored report identity. WHEN knowledge-base storage is unavailable, the pipeline SHALL report the archive as unavailable rather than claim a stored report. _Check:_ G3.
+
 **REQ-126 — Report artifact export**
 The report tooling SHALL export a validated report as JSON and CSV in addition to HTML. The JSON export SHALL carry the report manifest, section list, sources, and claims; CSV exports SHALL carry the Source Register and the claims table. Export SHALL be deterministic and SHALL validate the report before writing unless the caller explicitly skips validation. _Check:_ G3.
 
@@ -563,13 +566,13 @@ WHEN action is encryption, the tool SHALL operate on the knowledge base's at-res
 WHEN action is `claims`, the tool SHALL return persisted claim records with their verdict, confidence, last-verified time, and linked sources, sorted newest first. The action SHALL accept an optional `query` to match claim text, an optional `source_url` to return claims linked to that source, and a `max_results` cap. A locked store SHALL return an error per REQ-002 and REQ-084. _Check:_ G0, G1.
 
 **REQ-060i — `manage_kb` verify_report action**
-WHEN action is `verify_report`, the tool SHALL revalidate a stored report receipt against the cached report and its cited sources without network access. The action SHALL report the report state, each source state, the stored digest, whether the digest matches, the report manifest metadata, and the report's revision chain and age. A missing receipt SHALL return an error; a report or source whose hash differs SHALL be reported as drift, and a source absent from the cache SHALL be reported as unverifiable rather than drift. A report older than its freshness decay window SHALL be reported stale while remaining verifiable. _Check:_ G0, G1.
+WHEN action is `verify_report`, the tool SHALL revalidate a stored report receipt against the cached report and its cited sources without network access. The action SHALL report the report state, each source state, the stored digest, whether the digest matches, the report manifest metadata, and the report's revision chain and age. A missing receipt SHALL return an error; a report or source whose hash differs SHALL be reported as drift, and a source absent from the cache SHALL be reported as unverifiable rather than drift. A report older than its freshness decay window SHALL be reported stale while remaining verifiable. The action SHALL verify the report's linked sources in addition to its claim sources. _Check:_ G0, G1.
 
 **REQ-064 — Auto-Indexing**
 Search results from `search_web`, rendered page content from `fetch_page`, and findings from `verify_claims` SHALL be automatically indexed into the knowledge base. Auto-indexing SHALL NOT delay or error the response to the originating tool call, irrespective of auto-indexing success or failure. An auto-indexing failure SHALL NOT surface to the caller of the originating tool. Auto-indexing SHALL be toggleable via configuration. _Check:_ G1.
 
 **REQ-065 — Collection Scoping**
-A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. Querying a collection that has no content returns zero results, not an error. _Check:_ G1.
+A collection exists and is addressable the first time content is assigned to it. The active collection for auto-indexing and for any knowledge base tool call that omits the `collection` parameter SHALL be the most specific collection specifier available, where a tool-provided parameter takes precedence over the environment variable `INFOBROKER_KB_COLLECTION`, which takes precedence over the configured default. Querying a collection that has no content returns zero results, not an error. A search tool call SHALL be able to name the collection its knowledge-base recall uses. _Check:_ G1.
 
 **REQ-066 — Content Expiry**
 Indexed content SHALL be removable by age. The removal interval for content SHALL be determined by its freshness tier, not by its `source_type`. Content whose freshness tier defines no expiry SHALL remain in the knowledge base indefinitely. Expired content SHALL be removed on server startup and at the configured maintenance interval. Auto-removed content SHALL NOT trigger error events. _Check:_ G1.
@@ -588,6 +591,9 @@ Knowledge base search results SHALL include a freshness-adjusted score that acco
 
 **REQ-076 — KB-First Sufficiency**
 When the knowledge base is configured, every web search SHALL query the knowledge base before external providers. If the knowledge base returns results that meet a configurable relevance threshold and a configurable freshness confidence threshold, those results SHALL replace external search; the relevance threshold SHALL be evaluated with the configured embedding capability when one is available. If the knowledge base returns no results, or if the results do not meet both thresholds, external search SHALL proceed without error. A knowledge base that is uninitialized or disabled SHALL NOT prevent external search. Results returned from the knowledge base SHALL include their original source URLs. _Check:_ G1.
+
+**REQ-076a — Knowledge-Base Blend**
+WHEN a search requests the blend mode, the tool SHALL query the knowledge base and the external providers and SHALL return both result sets, with external results preferred on a duplicate URL and the displaced cached count reported. The blend SHALL still return the cached results when every external provider fails. Skip mode SHALL bypass knowledge-base recall, and the default mode SHALL retain KB-first sufficiency per REQ-076. The response SHALL report the recall state and the blended result count. A deep or research request SHALL report recall as not applicable. _Check:_ G1.
 
 **REQ-082 — KB Retrieval Consistency**
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
@@ -614,7 +620,7 @@ The knowledge base SHALL remain operable when the persisted chunk data exceeds t
 WHEN `verify_claims` produces findings, the server SHALL persist each finding as a claim record linked to its corroborating sources with the retrieval time of each source. The ledger SHALL be stored in the local knowledge base and SHALL be sealed at rest whenever at-rest encryption is enabled. A persistence failure SHALL NOT fail or alter the `verify_claims` response. _Check:_ G1.
 
 **REQ-110 — Report Verification Receipt**
-WHEN a report is ingested with a receipt, the server SHALL store a canonical manifest of claim, source, retrieval time, grade, verdict, confidence, likelihood, report metadata, report content hash, and per-source hash. The report metadata SHALL cover shape, audience, methodology, assumptions, alternatives, gaps, and revision chain. The server SHALL compute the report hash from the stored document and SHALL ignore caller-supplied hashes and digests. The manifest SHALL be sealed at rest when at-rest encryption is enabled and SHALL be bounded in claim, source, and metadata count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
+WHEN a report is ingested with a receipt, the server SHALL store a canonical manifest of claim, source, retrieval time, grade, verdict, confidence, likelihood, report metadata, report content hash, and per-source hash. The report metadata SHALL cover shape, audience, methodology, assumptions, alternatives, gaps, and revision chain. The server SHALL compute the hash from the stored document and ignore caller-supplied hashes and digests. The manifest SHALL carry the deduplicated union of report-level and claim-level sources, sorted by URL. The manifest SHALL be sealed at rest when at-rest encryption is enabled and SHALL be bounded in claim, source, and metadata count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
 
 **REQ-103 — Local Embedding Execution**
 Knowledge-base and passage retrieval SHALL be performed with an embedding model that executes within the server instance, and content submitted for embedding SHALL NOT be transmitted to a third party. The model reference SHALL be configurable so an alternative model can be selected without a specification change. WHEN no model is available, retrieval SHALL degrade with a remediation message and SHALL NOT prevent non-knowledge-base operation. Changing the configured model SHALL reconcile stored content per REQ-082. The active model name and availability SHALL be reported per REQ-060c. _Check:_ G1.
@@ -1224,6 +1230,7 @@ verdict is preserved (REQ-026f).
 | REQ-118 | Report Provenance and Grading | 4.7 | G3 |
 | REQ-119 | Shape-Aware Report Contract | 4.7 | G3 |
 | REQ-120 | Report Delivery Verification | 4.7 | G3 |
+| REQ-120a | Report Archive Tail | 4.7 | G3 |
 | REQ-126 | Report artifact export | 4.7 | G3 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
@@ -1248,6 +1255,7 @@ verdict is preserved (REQ-026f).
 | REQ-074 | Freshness Classification | 4.9 | G1 |
 | REQ-075 | Confidence Decay | 4.9 | G1 |
 | REQ-076 | KB-First Sufficiency | 4.9 | G1 |
+| REQ-076a | Knowledge-Base Blend | 4.9 | G1 |
 | REQ-082 | KB Retrieval Consistency | 4.9 | G1 |
 | REQ-083 | Report Storage | 4.9 | G1 |
 | REQ-084 | KB At-Rest Encryption | 4.9 | G1 |
@@ -1753,10 +1761,10 @@ secondary concerns rather than duplicating the REQ.
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
-| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
+| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-125, REQ-126 | G3 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 

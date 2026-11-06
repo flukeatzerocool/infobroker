@@ -347,6 +347,8 @@ export interface ReportManifestMeta {
 
 export interface ReportReceiptInput {
   claims: ReportReceiptClaimInput[];
+  /** Report-level sources not tied to one claim (the Source Register). */
+  sources?: ReportReceiptSourceInput[];
   report?: ReportManifestMeta;
 }
 
@@ -382,6 +384,8 @@ export interface ReportReceiptManifest {
   report_id: string;
   content_sha256: string;
   report?: ReportManifestMeta;
+  /** Deduplicated union of report-level and claim-level sources (REQ-110). */
+  sources?: ReportReceiptSource[];
   claims: ReportReceiptClaim[];
   digest_sha256: string;
 }
@@ -425,6 +429,13 @@ export interface ReportVerificationResult {
     drift: number;
     unverifiable: number;
     details: ReportSourceCheck[];
+  };
+  /** Linked report-level sources, separate from per-claim source edges. */
+  report_sources?: {
+    total: number;
+    verified: number;
+    drift: number;
+    unverifiable: number;
   };
 }
 

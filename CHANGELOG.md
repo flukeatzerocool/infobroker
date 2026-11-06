@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.11.05 — Knowledge-base memory
+
+- `search_web` accepts `fresh: "blend"` and a `collection` name: blend returns
+  cached knowledge-base results alongside a fresh external search (external
+  wins a duplicate URL), and cached results survive total external failure;
+  `collection` scopes recall to a named collection such as `essay-style`.
+  The routing-citation checker recognizes a union-typed boolean flag as a flag,
+  so `search_web (fresh)` stays a valid citation. (REQ-076a, REQ-020, REQ-065, REQ-107)
+- A report ingest accepts `receipt.sources` (the Source Register URLs), stores
+  the deduplicated, URL-sorted union of report-level and claim-level sources in
+  the encrypted receipt, and returns `meta.report_id` plus `meta.report_sources`.
+  `manage_kb` get returns the linked `sources`, and `verify_report` verifies
+  them separately from the per-claim source edges. (REQ-110, REQ-060i)
+- The Infobroker skill's ARCHIVE step is required for Research & Write and the
+  Fact-Check pipeline: it ingests the finished deliverable (not only the style
+  sheet), passes the Source Register URLs, and does not emit the completion
+  token until the ingest returns `meta.report_id`; a KB-unavailable run reports
+  `archive unavailable` instead. (REQ-120a)
+- The ROADMAP "Knowledge-base memory" item is complete and removed.
+
 ## 2026.11.05 — Brave Search removed
 
 - The Brave Search provider is removed from the reference server: its module,

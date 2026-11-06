@@ -1,6 +1,6 @@
-// @implements REQ-020 REQ-021 REQ-021b content-mode full-content-mode match-strong match-moderate match-weak match-none REQ-021k
+// @implements REQ-020 REQ-021 REQ-021b content-mode full-content-mode match-strong match-moderate match-weak match-none REQ-021k REQ-076a blend
 import { describe, it, expect } from "vitest";
-import { capInputs, coerceStringArray, mergeItems, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
+import { capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
 
 describe("capInputs", () => {
   it("caps input arrays at the batch limit", () => {
@@ -304,5 +304,30 @@ describe("self-describing batch items (REQ-021k)", () => {
       provider: "none",
       status: "error",
     });
+  });
+});
+
+// @implements REQ-076a blend
+describe("mergeKnowledgeBaseResults (REQ-076a)", () => {
+  const external = [
+    { title: "fresh copy", url: "https://example.com/a?utm_source=x", snippet: "fresh", provider: "duckduckgo" },
+  ];
+  const cached = [
+    { title: "cached copy", url: "https://example.com/a", snippet: "cached", provider: "knowledge_base" },
+    { title: "cached only", url: "https://example.com/b", snippet: "only cached", provider: "knowledge_base" },
+  ];
+
+  it("keeps the fresh external row and appends only the cached row the external tier missed", () => {
+    const merged = mergeKnowledgeBaseResults(external, cached);
+    expect(merged.results).toHaveLength(2);
+    expect(merged.results[0]?.title).toBe("fresh copy");
+    expect(merged.results[1]?.title).toBe("cached only");
+    expect(merged.duplicates).toBe(1);
+  });
+
+  it("returns the external rows unchanged when there is no cached work", () => {
+    const merged = mergeKnowledgeBaseResults(external, []);
+    expect(merged.results).toEqual(external);
+    expect(merged.duplicates).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-020h REQ-020i REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-111a REQ-112 REQ-113
+// @implements REQ-001 REQ-002 REQ-004 REQ-013 REQ-015 REQ-020 REQ-020a REQ-020b REQ-020c REQ-020d REQ-020e REQ-020f REQ-020h REQ-020i REQ-076a REQ-120a REQ-021 REQ-021a REQ-021b REQ-021c REQ-021d REQ-021e REQ-021f REQ-024 REQ-024a REQ-024b REQ-024c REQ-026 REQ-027 REQ-028 REQ-030 REQ-031 REQ-032 REQ-034 REQ-035 REQ-036 REQ-040 REQ-060 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-060g REQ-064 REQ-065 REQ-066 REQ-067 REQ-070 REQ-074 REQ-075 REQ-076 REQ-079 REQ-081 REQ-083 REQ-086 REQ-097 REQ-098 REQ-099 REQ-102 REQ-105 REQ-060i REQ-110 REQ-111 REQ-111a REQ-112 REQ-113
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -21,7 +21,7 @@ import { sessionStats } from "./session-stats.js";
 import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
@@ -29,7 +29,7 @@ import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
-import { capInputs, coerceStringArray, mergeItems, parseEnvelope } from "./batch.js";
+import { capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope } from "./batch.js";
 import { settleBatch } from "./batch-run.js";
 import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
 import { reconcileResults } from "./dedup.js";
@@ -226,10 +226,11 @@ async function doWebSearch(
   expand = false,
   deep = false,
   research = false,
-  fresh = false,
+  fresh: boolean | "blend" = false,
   analyze = false,
   deepBudget?: { remaining: number },
-  taskTypeOverride?: string
+  taskTypeOverride?: string,
+  collection?: string
 ): Promise<string> {
   // REQ-020: a union-typed input can arrive as a JSON-encoded array string.
   // Coerce before dispatch so a stringified batch is searched as a batch
@@ -253,7 +254,7 @@ async function doWebSearch(
     const envelopes = await settleBatch(
       queries,
       (q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride),
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride, collection),
       (_q, e) =>
         `[ERROR] ${json(err("none", "internal_error", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), providerRemediation("Retry the query individually to isolate the failure")))}`,
     );
@@ -325,7 +326,7 @@ async function doWebSearch(
       return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
         priority, false, contentType, region, language, false, true, false, false, false, budget,
-        taskTypeOverride
+        taskTypeOverride, collection
       );
     });
     return `[OK] ${json({
@@ -343,41 +344,60 @@ async function doWebSearch(
     })}`;
   }
 
+  // REQ-076a: blend keeps the KB rows as a seed for the external response
+  // instead of replacing it. `kbRecall` reports which path the request took.
+  let kbCached: SearchResult[] = [];
+  let kbRecall: "hit" | "miss" | "blended" | "skipped" | "not_applicable" | "unavailable" = "unavailable";
   if (isKbConfigured()) {
-    try {
-      const kbResults = kbSearch(query, maxResults);
-      if (kbResults.length > 0) {
-        const relevanceThreshold = config.kb!.kb_first_relevance_threshold;
-        const confidenceThreshold = config.kb!.kb_first_confidence_threshold;
-        const sufficientResults = kbResults.filter(
-          (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
-        );
-        // REQ-028: a deep or research request must still read pages. The KB
-        // shortcut returns stored snippets and would otherwise silently skip
-        // enrichment, so it applies only to plain searches.
-        const kbMapped = sufficientResults.map((r) => ({
-          title: r.title,
-          url: r.source_url,
-          snippet: r.snippet,
-          source_type: r.source_type,
-        }));
-        // REQ-020h: the blocklist applies to stored results too, so a cached
-        // page from an excluded domain cannot bypass the policy.
-        const kbKept = kbMapped.filter((r) => !isBlocked(r.url, config.source_quality));
-        const kbBlocked = kbMapped.length - kbKept.length;
-        if (!fresh && !deep && !research && kbKept.length > 0) {
-          const kbProvider = "knowledge_base";
-          return `[OK] ${json(ok(kbProvider, kbKept, {
-            query_time_ms: 0,
-            fallback_used: false,
-            quota_remaining: undefined,
-            ...(config.source_quality?.enabled !== false ? { blocked_count: kbBlocked } : {}),
-            ...(analyze ? { analysis: analyzeResults(kbKept, config.analysis) } : {}),
-          }))}`;
+    if (fresh === true) {
+      kbRecall = "skipped";
+    } else if (deep || research) {
+      kbRecall = "not_applicable";
+    } else {
+      try {
+        const kbResults = kbSearch(query, maxResults, collection);
+        kbRecall = "miss";
+        if (kbResults.length > 0) {
+          const relevanceThreshold = config.kb!.kb_first_relevance_threshold;
+          const confidenceThreshold = config.kb!.kb_first_confidence_threshold;
+          const sufficientResults = kbResults.filter(
+            (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
+          );
+          // REQ-028: a deep or research request must still read pages. The KB
+          // shortcut returns stored snippets and would otherwise silently skip
+          // enrichment, so it applies only to plain searches.
+          const kbMapped = sufficientResults.map((r) => ({
+            title: r.title,
+            url: r.source_url,
+            snippet: r.snippet,
+            source_type: r.source_type,
+            provider: "knowledge_base",
+          }));
+          // REQ-020h: the blocklist applies to stored results too, so a cached
+          // page from an excluded domain cannot bypass the policy.
+          const kbKept = kbMapped.filter((r) => !isBlocked(r.url, config.source_quality));
+          const kbBlocked = kbMapped.length - kbKept.length;
+          if (kbKept.length > 0) {
+            kbRecall = fresh === "blend" ? "blended" : "hit";
+            if (fresh === false) {
+              const kbProvider = "knowledge_base";
+              return `[OK] ${json(ok(kbProvider, kbKept, {
+                query_time_ms: 0,
+                fallback_used: false,
+                quota_remaining: undefined,
+                kb_recall: kbRecall,
+                kb_results: kbKept.length,
+                ...(config.source_quality?.enabled !== false ? { blocked_count: kbBlocked } : {}),
+                ...(analyze ? { analysis: analyzeResults(kbKept, config.analysis) } : {}),
+              }))}`;
+            }
+            kbCached = kbKept;
+          }
         }
+      } catch {
+        // KB search failed — proceed to external providers
+        kbRecall = "unavailable";
       }
-    } catch {
-      // KB search failed — proceed to external providers
     }
   }
 
@@ -581,6 +601,15 @@ async function doWebSearch(
       qualityScore: (result) => qualityScore(result.url, sourceQuality),
     });
 
+    // REQ-076a: blend appends the cached KB rows the external tier did not
+    // return. An external row wins a URL duplicate because it is fresher; the
+    // displaced KB rows are counted, not silently dropped.
+    const blended = mergeKnowledgeBaseResults(filtered, kbCached);
+    const finalResults = blended.results;
+    const kbMeta = kbCached.length > 0
+      ? { kb_recall: kbRecall, kb_results: finalResults.length - filtered.length, kb_duplicates: blended.duplicates }
+      : { kb_recall: kbRecall };
+
     if (deep && !compactMode(config)) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
       const maxPages = Math.min(deepConf.max_pages ?? 3, deepBudget ? deepBudget.remaining : (deepConf.max_pages ?? 3));
@@ -634,25 +663,33 @@ async function doWebSearch(
         fallback_used: slug !== primarySlug,
         task_type: taskType,
         quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-        ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+        ignored_params: [
+          ...ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+          ...(fresh === true && collection ? ["collection"] : []),
+        ],
         ignored_operators: ignoredOperators(slug, parsedQuery),
         deep: true,
         pages_read: deepMeta.pages_read,
+        ...kbMeta,
         ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
         ...(analyze ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
         ...(policyNote ?? {}),
       }))}`;
     }
 
-    return `[OK] ${json(ok(slug, filtered, {
+    return `[OK] ${json(ok(slug, finalResults, {
       query_time_ms: elapsed,
       fallback_used: slug !== primarySlug,
       task_type: taskType,
       quota_remaining: checkQuota(slug, config.providers[slug]?.rate_limit).daily.remaining,
-      ignored_params: ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+      ignored_params: [
+        ...ignoredParams(slug, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+        ...(fresh === true && collection ? ["collection"] : []),
+      ],
       ignored_operators: ignoredOperators(slug, parsedQuery),
+      ...kbMeta,
       ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
-      ...(analyze ? { analysis: analyzeResults(filtered, config.analysis) } : {}),
+      ...(analyze ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -702,6 +739,19 @@ async function doWebSearch(
       if (result !== null) {
         return buildSuccess(result.slug, result.filtered, result.elapsed);
       }
+    }
+
+    // REQ-076a: a blend whose external tier failed still returns the cached
+    // work instead of degrading a useful answer into an error.
+    if (kbCached.length > 0) {
+      return `[OK] ${json(ok("knowledge_base", kbCached, {
+        query_time_ms: 0,
+        fallback_used: true,
+        task_type: taskType,
+        kb_recall: "blended",
+        kb_results: kbCached.length,
+        kb_duplicates: 0,
+      }))}`;
     }
 
     // REQ-031 / REQ-038: report the attempted chain, each quota-exhausted
@@ -1648,7 +1698,7 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: true` skips KB recall and searches external providers. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5); a failed element is reported per input without failing the batch")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -1663,7 +1713,8 @@ instrumentTool(
       deep: z.boolean().optional().default(false).describe("Read the top results and return each page's ranked passages against the query"),
       research: z.boolean().optional().default(false).describe("Research compile: fan out to derived query variants and deep-read each, returning passages grouped by variant (default off)"),
       analyze: z.boolean().optional().default(false).describe("Attach in-process analysis to the response: topic terms, entity mentions, semantic result clusters, and a dated timeline. Derived from the returned results only; adds no outbound request (default false)"),
-      fresh: z.boolean().optional().default(false).describe("Skip the knowledge-base recall shortcut and search external providers (default false)"),
+      fresh: z.union([z.boolean(), z.literal("blend")]).optional().default(false).describe("Knowledge-base recall mode: false keeps KB-first sufficiency, true skips recall and searches external providers, blend keeps KB results alongside fresh external results (default false)"),
+      collection: z.string().optional().describe("Knowledge-base collection to recall from (scopes KB recall only; ignored when fresh is true)"),
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
       language: z.string().optional().describe("Preferred result language (ISO 639-1, e.g. 'de'). Providers that cannot honor it report it in meta.ignored_params"),
@@ -1692,10 +1743,11 @@ instrumentTool(
       Boolean(params.expand),
       Boolean(params.deep),
       Boolean(params.research),
-      Boolean(params.fresh),
+      (params.fresh as boolean | "blend" | undefined) ?? false,
       Boolean(params.analyze),
       undefined,
-      params.task_type as string | undefined
+      params.task_type as string | undefined,
+      params.collection as string | undefined
     );
     // REQ-021i: a structured-fact query gets a sourced fact before prose.
     const text = await withStructuredFacts(content, params.query);
@@ -1957,6 +2009,18 @@ instrumentTool(
               })
             )
             .optional(),
+          sources: z
+            .array(
+              z.object({
+                url: z.string(),
+                title: z.string().optional(),
+                retrieved_at: z.string().optional(),
+                snippet: z.string().max(RECEIPT_LIMITS.snippetChars).optional(),
+              })
+            )
+            .max(RECEIPT_LIMITS.reportSources)
+            .optional()
+            .describe("Report-level Source Register URLs, linked to the stored report (REQ-110)"),
           report: z
             .object({
               shape: z.string().optional().describe("Workflow shape that produced the report"),
@@ -1973,7 +2037,7 @@ instrumentTool(
         })
         .optional()
         .describe(
-          "Optional verification receipt for a report ingest (REQ-110): claims with cited sources and optional report metadata (REQ-114). The server computes the report hash, per-source hashes, and the digest; any caller hashes or digest are ignored. Requires source_type 'report' and KB storage."
+          "Optional verification receipt for a report ingest (REQ-110): claims with cited sources, report-level Source Register URLs, and optional report metadata (REQ-114). The server computes the report hash, per-source hashes, and the digest; any caller hashes or digest are ignored. Requires source_type 'report' and KB storage."
         ),
     },
     annotations: {
@@ -2095,7 +2159,19 @@ instrumentTool(
         if (!doc) {
           return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "internal_error", `No document with source_url "${sourceUrl}"`, "Use list action to enumerate stored documents"))}` }] };
         }
-        return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results: [doc] })}` }] };
+        // REQ-110: a stored report exposes its linked Source Register URLs.
+        const linkedSources = doc.source_type === "report" ? kbGetReportSources(sourceUrl) : [];
+        return {
+          content: [{
+            type: "text" as const,
+            text: `[OK] ${json({
+              status: "ok",
+              provider: "knowledge_base",
+              results: [doc],
+              ...(linkedSources.length > 0 ? { sources: linkedSources } : {}),
+            })}`,
+          }],
+        };
       }
       if (action === "ingest") {
         const text = params.text as string | undefined;
@@ -2195,13 +2271,26 @@ instrumentTool(
               content_sha256: stored.record.manifest.content_sha256,
               claims: stored.record.manifest.claims.length,
             },
+            // REQ-110: the linked-source count is the deduplicated union the
+            // manifest stored, not the caller's raw input length.
+            report_sources: stored.record.manifest.sources?.length ?? 0,
           };
         }
         const msg = json({
           status: "ok",
           provider: "knowledge_base",
           results: [{ title: dest.kb ? "ingested" : "saved", url: finalUrl, snippet }],
-          meta: { chunks_ingested: count, ingest_result: existed ? "replaced" : "created", source_type: sourceType, freshness_tier: freshnessTier, saved_to: saveTo, ...(collection ? { collection } : {}), ...(diskPath ? { disk_path: diskPath } : {}), ...receiptMeta },
+          meta: {
+            chunks_ingested: count,
+            ingest_result: existed ? "replaced" : "created",
+            source_type: sourceType,
+            freshness_tier: freshnessTier,
+            saved_to: saveTo,
+            ...(collection ? { collection } : {}),
+            ...(diskPath ? { disk_path: diskPath } : {}),
+            ...(isReport && dest.kb && finalUrl ? { report_id: finalUrl } : {}),
+            ...receiptMeta,
+          },
         });
         return { content: [{ type: "text" as const, text: `[OK] ${msg}` }] };
       }

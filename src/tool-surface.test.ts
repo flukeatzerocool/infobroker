@@ -182,7 +182,8 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
   }
 }, 30000);
 
-// @implements REQ-020
+// @implements REQ-020 fresh-modes
+// @implements REQ-020 collection
 test("search_web advertises the REQ-020 parameter contract and defaults", async () => {
   const { tools } = await listTools();
   const tool = tools.find((t) => t.name === "infobroker_search_web");
@@ -209,10 +210,13 @@ test("search_web advertises the REQ-020 parameter contract and defaults", async 
   }
 
   // REQ-020: optional parameters that carry no declared default.
-  const noDefault = ["provider", "task_type", "time_range", "priority", "region", "language"];
+  const noDefault = ["provider", "task_type", "time_range", "priority", "region", "language", "collection"];
   for (const param of noDefault) {
     expect(props[param], `search_web.${param} is missing from the advertised schema`).toBeDefined();
   }
+
+  // REQ-076a: the fresh mode accepts the blend literal beside the booleans.
+  expect(JSON.stringify(props.fresh)).toContain("blend");
 
   // REQ-020a: the override accepts every searchable task type and rejects the
   // renderer-only content_fetch chain.

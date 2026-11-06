@@ -103,9 +103,14 @@ TRANSLATE    load and apply the `translation` skill when the user asked for a
              non-English output; keep the canonical section headings
 REVALIDATE   run `scripts/validate-report.ts` again on the final artifact after
              polish and translation; fix every error before delivering
-ARCHIVE      `manage_kb (action: ingest, source_type: "report")` with a `receipt`
-             carrying the manifest claims and sources; on recall, run
-             `manage_kb (action: verify_report)` before reusing the report
+ARCHIVE      (required) `manage_kb (action: ingest, source_type: "report")` with a
+             `receipt` carrying the manifest claims and `sources` (the Source
+             Register URLs); ingest the finished deliverable, not the style
+             sheet or notes; do not emit the completion token until the call
+             returns `meta.report_id`; if KB storage is unavailable, append
+             `archive unavailable: <reason>` to the token line instead; on
+             recall, run `manage_kb (action: verify_report)` before reusing
+             the report
 CITE         an inline `[S#]` marker on every factual claim, resolving to the
              Source Register entry that carries the URL
 ```
@@ -124,6 +129,10 @@ not emit the token and drop the translation:
 ```
 research complete. <N> sources | <K> findings | <gap> gaps noted
 ```
+
+If ARCHIVE could not run because knowledge-base storage is unavailable, append
+`| archive unavailable: <reason>` to the token line instead of claiming a
+stored report.
 
 Every report uses one confidence scale, one likelihood lexicon, and one set of
 source grades from `references/confidence.md`. Do not invent a second scale.
@@ -148,7 +157,12 @@ VALIDATE     run `scripts/validate-report.ts --report <file>` before delivery
 POLISH       `proofreading` skill
 TRANSLATE    `translation` skill when the user asked for a non-English output
 REVALIDATE   run the report validator again on the final artifact
-ARCHIVE      `manage_kb (action: ingest, source_type: "report")` with a receipt
+ARCHIVE      (required) `manage_kb (action: ingest, source_type: "report")` with a
+             `receipt` carrying the manifest claims and `sources` (the Source
+             Register URLs); ingest the finished deliverable, not the style
+             sheet or notes; do not emit the completion token until the call
+             returns `meta.report_id`; if KB storage is unavailable, append
+             `archive unavailable: <reason>` to the token line instead
 CITE         source URLs with every verdict
 ```
 
@@ -159,6 +173,10 @@ final line:
 ```
 fact-check complete. <N> claims | <T/M/H/MF/F/U> verdicts
 ```
+
+If ARCHIVE could not run because knowledge-base storage is unavailable, append
+`| archive unavailable: <reason>` to the token line instead of claiming a
+stored report.
 
 ## Other Workflow Shapes
 

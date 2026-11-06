@@ -16,15 +16,6 @@ and ACLs; enterprise scheduling.
   Update this file when planning a release.
 -->
 
-## [P2] Knowledge-base memory
-
-- Make report ingest a required tail step for Deep-Dive and Research &
-  Write; archive the finished report, not just the style sheet (REQ-050
-  family).
-- Add `fresh: "blend"` so fresh search still recalls cached work, and let
-  `search_web` recall named collections (REQ-020).
-- Link an ingested report to its source URLs.
-
 ## Dependency advisories
 
 - `npm audit` reports 5 low/moderate advisories (`@hono/node-server`

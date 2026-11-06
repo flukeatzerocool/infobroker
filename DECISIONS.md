@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-078: KB Blend, Collection Recall, and Report Source Links (2026.11.06)
+
+The knowledge-base memory item resolves three session-observed failures.
+`fresh` becomes a three-state mode: `false` keeps KB-first sufficiency, `true`
+skips recall, and `"blend"` returns cached results beside a fresh external
+search. On a URL duplicate the external result wins because it is fresher; the
+displaced cached row is counted rather than silently dropped, and a blend
+whose external tier fails still returns the cached work instead of an error.
+`collection` scopes recall to a named collection and is ignored when recall is
+skipped. Deep and research requests bypass recall as before, because they must
+read pages.
+
+Report-to-source links live in the existing encrypted receipt manifest rather
+than a new table. A `report_sources` table would duplicate the encrypted
+receipt and add a table to the reseal and migration surface; parsing the report
+body would lose the document-versus-snippet hash basis. `manifest.sources` is
+the deduplicated, URL-sorted union of report-level and claim-level sources, so
+`get` can return the link and `verify_report` can verify it separately from
+the per-claim edges. A manifest written before the field existed remains
+verifiable. Report ingest now returns `meta.report_id`, which the skill's ARCHIVE
+step gates the completion token on.
+
 ### D-077: Brave Search Removed from the Reference Server (2026.11.06)
 
 D-075 shipped Brave enabled as the general-web redundancy target. That is

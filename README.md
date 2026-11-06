@@ -325,17 +325,18 @@ tells you how sure it is.
 > "Search what you already found about the Rebel Alliance fleet."
 > "Ingest this article so it's cached for next time."
 
-Every search, fetch, and corroboration run is cached locally. `manage_kb`
-checks the cache before hitting external providers, falling back to the
-network only when the cached results aren't fresh enough or relevant enough. Its actions ingest text or a URL by hand, report
-what's cached, and remove content. Content is age-scored, expired on a
-freshness schedule, and deduplicated by source. Retrieval runs on your
-machine with a configurable embedding model; your content is never sent to a
-third party. Beyond
-the cache, `manage_kb` archives the reports you generate: ingest with
-`source_type: "report"`
-(and default to the knowledge base) and revisit them with `manage_kb` list and
-`manage_kb` get, or write them to a local directory instead.
+Every search, fetch, and corroboration run is cached. `manage_kb`
+checks the cache before external providers, falling back only when cached
+results aren't fresh or relevant enough. It ingests text or a URL, reports
+what's cached, and removes content. Content is age-scored, expired on a
+schedule, and deduplicated by source. Retrieval runs locally with a
+configurable embedding model; your content never leaves the machine. Beyond
+the cache, `manage_kb` archives generated reports: ingest with
+`source_type: "report"`, pass the Source Register URLs in the receipt, and the
+ingest returns a `report_id` linking the report to them. Revisit them with
+`manage_kb` list/get, or write them to a local directory. `search_web` scopes
+recall to a named `collection`, and `fresh: "blend"` keeps cached results
+beside fresh ones.
 
 Corroboration results are also kept as claim records. Each `verify_claims` run
 stores one ledger entry per finding, linked to the sources that supported it
@@ -348,15 +349,15 @@ with `manage_kb` action=claims, optionally filtered by `query` (claim text) or
 `source_url`, newest first and capped by `max_results` (default 8, max 50).
 The ledger is sealed at rest when encryption is on.
 
-A watchlist runner records due-topic claim deltas; cron owns the schedule. A report can also carry a verification receipt. Ingest it with a `receipt`
-of claims and cited sources; the server hashes the stored report and every
-cached source. `verify_report` rechecks it offline — no network call — and
-reports drift when the report or a source changed, unverifiable for an
-uncached source, and a digest mismatch for a tampered manifest. The manifest
-can also carry report metadata and a revision chain; `verify_report` reports
-age and staleness alongside drift, so monitoring can baseline a report,
-revalidate it, and publish a delta revision. The
-manifest is sealed at rest, and encryption transitions reseal it.
+A watchlist runner records due-topic claim deltas; cron owns the schedule. A
+report can carry a verification receipt: ingest claims, cited sources, and the
+Source Register; the server hashes the report and every cached source.
+`verify_report` rechecks it offline — no network call — and reports drift when
+the report or a source changed, unverifiable for an uncached source, and a
+digest mismatch for a tampered manifest. The manifest carries report metadata
+and a revision chain; `verify_report` reports age and staleness alongside
+drift, so monitoring can baseline, revalidate, and publish a delta revision.
+The manifest is sealed at rest, and encryption transitions reseal it.
 
 ### Research Pipeline
 
