@@ -304,9 +304,10 @@ search across your highest-authority providers — search engines,
 encyclopedias, and scholarly indexes — then claim extraction,
 cross-source reconciliation, and targeted follow-up for gaps, dispatched
 in parallel and stopping early once the truth is pinned down. Hand it a draft
-and it takes a claim list, returning one finding per claim in your order —
-including an explicit `unverified` row for a claim nothing supports, rather
-than dropping it. Claims corroborated across independent sources score high
+and it takes a claim list, returning one finding per distinct claim in your
+order — with every input index for a repeated claim — and an explicit
+`unverified` row for a claim nothing supports, rather than dropping it. Claims
+corroborated across independent sources score high
 confidence, weighted
 by each source's authority; every source is bound to the claim it
 supports, with a span locating the supporting sentence and the claim's

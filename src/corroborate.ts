@@ -224,7 +224,10 @@ export function reconcileClaims(
           best = finding;
         }
       }
-      if (!best || (bestScore <= 0 && findings.size > 1)) continue;
+      // REQ-026b: a source joins a finding only when its text overlaps that
+      // claim. The old lone-claim exception attributed every result to the only
+      // finding, so an unrelated page looked like support (CR-2).
+      if (!best || bestScore <= 0) continue;
       if (!best.sources.some((s) => s.url === r.url)) {
         best.sources.push(attributeSource(r, retrievedAt, best.claim));
       }
@@ -592,26 +595,34 @@ export async function corroborate(
   // External sources are attributed to these claims; page titles never become
   // findings in claim-seeded mode.
   for (const [index, claim] of callerClaims.entries()) {
-    if (findings.has(claim)) {
+    const existing = findings.get(claim);
+    if (existing) {
+      // REQ-026g: a collapsed duplicate reports every input index it covers,
+      // not just the first occurrence.
+      if (isBatch) existing.claim_indices = [...(existing.claim_indices ?? []), index];
       duplicateClaims++;
       continue;
     }
     findings.set(claim, {
       topic: claim.length > 90 ? `${claim.slice(0, 87)}...` : claim,
       claim,
-      ...(isBatch ? { claim_index: index } : {}),
+      ...(isBatch ? { claim_index: index, claim_indices: [index] } : {}),
       confidence: 0.1,
       verdict: "unverified",
       sources: [],
     });
   }
 
+  // REQ-026g: a collapsed claim is verified once; dispatching it per occurrence
+  // would spend the shared budget on duplicate work.
+  const distinctClaims = [...new Set(callerClaims)];
+
   // REQ-026e: prior KB findings participate as corroborating sources before
   // external search. KB recall is derivative (SR-001) and never blocks the
   // external pass when absent, below threshold, or on error. REQ-026g recalls
   // each batch claim separately (local store only, no HTTP).
   if (kbRecall && isKbConfigured()) {
-    for (const claim of callerClaims) {
+    for (const claim of distinctClaims) {
       try {
         const recalled = kbSearch(claim, firstPassMaxResults).map((r) => ({
           title: r.title,
@@ -626,6 +637,14 @@ export async function corroborate(
     }
   }
   let totalCalls = 0;
+  // REQ-026g/CR-1: reserve a slot synchronously before dispatch so a failed
+  // attempt still counts against max_http_calls and concurrent batches in one
+  // wave cannot all pass a stale budget check.
+  const tryReserveCall = (): boolean => {
+    if (totalCalls >= maxCalls) return false;
+    totalCalls++;
+    return true;
+  };
   let iteration = 0;
   const providersUsed = new Set<string>();
   const searchedQueries = new Set<string>();
@@ -644,23 +663,25 @@ export async function corroborate(
         firstPassMaxProviders
       );
       const FIRST_PASS_CONCURRENCY = 4;
-      // REQ-026g: a batch searches each caller claim in order under one shared
-      // HTTP-call budget. A late claim may end up unverified rather than
-      // starving a sibling that was searched first.
-      const firstPassQueries = isBatch ? callerClaims : [query as string];
+      // REQ-026g: a batch searches each distinct claim in order under one
+      // shared HTTP-call budget. A late claim may end up unverified rather
+      // than starving a sibling that was searched first.
+      const firstPassQueries = isBatch ? distinctClaims : [query as string];
 
       for (const passQuery of firstPassQueries) {
         if (totalCalls >= maxCalls) break;
         for (let i = 0; i < firstPassSlugs.length; i += FIRST_PASS_CONCURRENCY) {
           const batch = firstPassSlugs.slice(i, i + FIRST_PASS_CONCURRENCY);
           const searchPromises = batch.map(async (slug) => {
-            if (totalCalls >= maxCalls) return null;
             const q = checkQuota(slug, config.providers[slug]?.rate_limit);
             if (q.exhausted) return null;
+            const searcher = resolveSearcher(slug, searchers);
+            if (!searcher) return null;
+            // Reserve before dispatch: the slot is spent even when the attempt
+            // throws, and the reservation is synchronous.
+            if (!tryReserveCall()) return null;
             try {
               await throttle(slug);
-              const searcher = resolveSearcher(slug, searchers);
-              if (!searcher) return null;
               const results = await retryWithBackoff(
                 timedSearch(searcher, passQuery, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
                 config.providers[slug]
@@ -674,7 +695,6 @@ export async function corroborate(
           const settled = await Promise.allSettled(searchPromises);
           for (const result of settled) {
             if (result.status === "fulfilled" && result.value) {
-              totalCalls++;
               providersUsed.add(result.value.slug);
               increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
               reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
@@ -697,13 +717,15 @@ export async function corroborate(
       // distinct backends.
       const gapTasks: Array<{ slug: string; refinedQuery: string }> = [];
       for (const gapTopic of gaps.slice(0, 3)) {
-        if (gapTasks.length >= Math.max(0, maxCalls - totalCalls)) break;
+        if (totalCalls >= maxCalls) break;
         const refinedQuery = isBatch ? gapTopic : deriveRefinedQuery(gapTopic, query as string);
         if (searchedQueries.has(refinedQuery)) continue;
         searchedQueries.add(refinedQuery);
 
-        const gapProvider = pickGapProvider(availableProviders, config, totalCalls + gapTasks.length);
+        const gapProvider = pickGapProvider(availableProviders, config, totalCalls);
         if (!gapProvider) continue;
+        // Reserve after a provider is chosen so a skipped topic spends no slot.
+        if (!tryReserveCall()) break;
         gapTasks.push({ slug: gapProvider, refinedQuery });
       }
 
@@ -723,7 +745,6 @@ export async function corroborate(
       for (const result of settled) {
         if (result.status === "fulfilled") {
           const { slug, results } = result.value;
-          totalCalls++;
           providersUsed.add(slug);
           increment(slug, config.providers[slug]?.rate_limit);
           reconcileClaims(findings, results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);

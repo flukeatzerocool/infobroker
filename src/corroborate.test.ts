@@ -666,7 +666,7 @@ describe("corroborate", () => {
       corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, archive_sources: true },
     });
 
-    const result = await corroborate("test", {
+    const result = await corroborate("shared claim text", {
       searchers: {
         duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
         wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
@@ -692,7 +692,7 @@ describe("corroborate", () => {
       corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
     });
 
-    const result = await corroborate("test", {
+    const result = await corroborate("shared claim text", {
       searchers: {
         duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
         wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
@@ -715,7 +715,7 @@ describe("corroborate", () => {
       corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
     });
 
-    const result = await corroborate("test", {
+    const result = await corroborate("shared claim text", {
       searchers: {
         duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
         wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
@@ -854,7 +854,7 @@ describe("corroborate", () => {
     });
     vi.mocked(isKbConfigured).mockReturnValue(true);
     vi.mocked(kbSearch).mockReturnValue([
-      { score: 0.9, freshness_score: 0.8, freshness_tier: "stable", source_url: "https://wiki.example/1", title: "Recalled Topic", snippet: "recalled corroborating claim", collection: "default", provider: "knowledge_base", source_type: "encyclopedia", ingested_at: Date.now() },
+      { score: 0.9, freshness_score: 0.8, freshness_tier: "stable", source_url: "https://wiki.example/1", title: "Recalled Topic", snippet: "recalled corroborating claim about the topic", collection: "default", provider: "knowledge_base", source_type: "encyclopedia", ingested_at: Date.now() },
     ]);
 
     const result = await corroborate("topic", {
@@ -1062,7 +1062,11 @@ describe("applyPriority speed ordering (REQ-026)", () => {
 // @implements REQ-026g batch-unsourced
 // @implements REQ-026g batch-partial
 // @implements REQ-026g batch-budget
+// @implements REQ-026g batch-budget-attempts
 // @implements REQ-026g batch-duplicate
+// @implements REQ-026g batch-duplicate-indices
+// @implements REQ-026g batch-lone-claim
+// @implements REQ-026b positive-overlap
 // @implements REQ-026h span-located
 // @implements REQ-026h modality-preserved
 describe("batch claim verification (REQ-026g, REQ-026h)", () => {
@@ -1149,6 +1153,79 @@ describe("batch claim verification (REQ-026g, REQ-026h)", () => {
     });
     expect(result.findings).toHaveLength(1);
     expect(result.duplicate_claims).toBe(1);
+    expect(result.findings[0]!.claim_indices).toEqual([0, 1]);
+  });
+
+  it("reports every input index for a collapsed duplicate claim", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const first = "red teaming reduces model risk";
+    const second = "retrieval augments generation";
+    const calls: string[] = [];
+    const searchers = {
+      wikipedia: async (query: string) => {
+        calls.push(query);
+        return [
+          makeResult(
+            `Source for ${query}`,
+            `https://wiki.example/${encodeURIComponent(query)}`,
+            `${query} is supported by independent evidence.`
+          ),
+        ];
+      },
+    };
+    const result = await corroborate([first, second, first, first], {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers,
+    });
+    expect(result.findings).toHaveLength(2);
+    expect(result.findings.map((f) => f.claim_index)).toEqual([0, 1]);
+    expect(result.findings[0]!.claim_indices).toEqual([0, 2, 3]);
+    expect(result.findings[1]!.claim_indices).toEqual([1]);
+    expect(result.duplicate_claims).toBe(2);
+    // A collapsed claim is verified once, not once per occurrence.
+    expect(calls.filter((q) => q === first)).toHaveLength(1);
+  });
+
+  it("returns a lone claim unverified when every result is unrelated", async () => {
+    mockConfig({ corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const claim = "zxqv plorb wint";
+    const searchers = {
+      wikipedia: async () => [
+        makeResult("Unrelated Page", "https://wiki.example/unrelated", "Completely unrelated words appear here."),
+      ],
+    };
+    const result = await corroborate([claim], {
+      max_iterations: 1,
+      providers: ["wikipedia"],
+      searchers,
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]!.sources).toEqual([]);
+    expect(result.findings[0]!.verdict).toBe("unverified");
+    expect(result.total_sources).toBe(0);
+    expect(result.agreement_map.red).not.toContain(result.findings[0]!.topic);
+  });
+
+  it("counts a failed dispatch against the batch HTTP-call budget", async () => {
+    mockConfig({ corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
+    const providers = ["down_one", "down_two", "down_three", "down_four", "down_five"];
+    const claims = Array.from({ length: 10 }, (_, i) => `distinct claim number ${i}`);
+    let attempts = 0;
+    const searchers: Record<string, () => Promise<SearchResult[]>> = {};
+    for (const slug of providers) {
+      searchers[slug] = async () => {
+        attempts++;
+        throw new Error(`${slug} is down`);
+      };
+    }
+    const result = await corroborate(claims, {
+      providers,
+      searchers,
+    });
+    expect(attempts).toBe(30);
+    expect(result.findings).toHaveLength(10);
+    expect(result.corroboration).toBe("partial");
   });
 
   it("shares one HTTP-call budget across the batch", async () => {

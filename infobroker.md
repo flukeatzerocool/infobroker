@@ -319,7 +319,7 @@ Multi-pass truth-finding search. Parameters: `query` or `claims` (exactly one is
 When `verify_claims` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. A source's authority SHALL reflect its `source_type`: scholarly, encyclopedia, and primary sources SHALL contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
 
 **REQ-026b — corroboration claim attribution**
-Each finding returned by `verify_claims` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. _Check:_ G1.
+Each finding returned by `verify_claims` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. A source SHALL be attributed to a claim only when the source text overlaps that claim's content; unrelated results SHALL NOT be attributed. _Check:_ G1.
 
 **REQ-026c — corroboration source preservation**
 WHEN source preservation is enabled in the configuration, `verify_claims` SHALL attempt to capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
@@ -334,7 +334,7 @@ WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHA
 WHEN `verify_claims` reconciles claims, sources whose claims express the same proposition SHALL be grouped even when paraphrased, and sources whose claims conflict SHALL be reported as contested with their perspectives. Reconciliation SHALL distinguish agreement from contradiction rather than relying on textual overlap alone. A finding SHALL NOT be marked confirmed from sources that express conflicting propositions. _Check:_ G1.
 
 **REQ-026g — Batch claim verification**
-WHEN `verify_claims` receives a claim list, it SHALL verify each claim and return one finding per claim in the caller's order, each carrying the claim, its verdict, its confidence, and its corroborating sources. Identical claims SHALL be collapsed and the collapsed count reported. A claim with no attributed source SHALL be returned unverified rather than dropped. A claim that cannot be verified SHALL NOT fail the batch. The batch SHALL be bounded by configuration and SHALL share one iteration limit and one HTTP-call budget across all claims. Supplying both a single query and a claim list SHALL be rejected as invalid input. _Check:_ G1.
+WHEN `verify_claims` receives a claim list, it SHALL verify each distinct claim and return one finding per distinct claim in the caller's order, each carrying the claim, its verdict, its confidence, and its corroborating sources. Identical claims SHALL be collapsed, and a collapsed finding SHALL report every input index it covers alongside the collapsed count. A claim with no attributed source SHALL be returned unverified rather than dropped. A claim that cannot be verified SHALL NOT fail the batch. The batch SHALL be bounded by configuration and SHALL share one iteration limit and one HTTP-call budget; every dispatched attempt consumes one budget unit, successful or not. Supplying both a single query and a claim list SHALL be rejected as invalid input. _Check:_ G1.
 
 **REQ-026h — Support span and source modality**
 Every corroborating source returned by `verify_claims` SHALL report the modality of the claim it supports: asserted, reported, or speculative. A source whose claim is attributed or hedged SHALL be reported as reported, and one that states a possibility SHALL be reported as speculative. WHEN the source text contains a sentence supporting the claim, the source SHALL report a span locating that sentence within the source text; WHEN no supporting sentence can be located, the span SHALL be omitted rather than fabricated. The reported modality SHALL NOT change confidence, verdict, or source-family count. A report that declares a non-asserted modality SHALL carry an attribution for that claim which appears in the report body. The marker lexicon SHALL be configurable. _Check:_ G1.
@@ -920,9 +920,16 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
   // seeded verbatim (never split); a query is split heuristically. Sources are
   // attributed to these claims; page titles never become findings.
   caller_claims = claims if claims else extract_claims(query)
-  for claim in caller_claims:
-    findings[claim] = { claim, topic: claim, confidence: 0.1,
+  duplicate_claims = 0
+  for i, claim in caller_claims:
+    if findings[claim]:
+      findings[claim].claim_indices.append(i)  // all indices, not just the first
+      duplicate_claims += 1
+      continue
+    findings[claim] = { claim, topic: claim, claim_index: i,
+                        claim_indices: [i], confidence: 0.1,
                         verdict: "unverified", sources: [] }
+  distinct_claims = unique(caller_claims)  // a collapsed claim is searched once
   iteration = 0
 
   // Phase 0: Knowledge-base recall (REQ-026e) — prior findings reconcile as
@@ -936,7 +943,7 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
     // up to first_pass_max_results results each, default 5). Batches stop
     // early once the confidence bar is met; the full pool serves Phase 3.
     first_pass_providers = top_n_by_priority(providers, first_pass_max_providers)
-    raw_results = parallel_search(query, first_pass_providers)
+    raw_results = parallel_search(distinct_claims if claims else query, first_pass_providers)
     // Attribute each result to its closest seeded claim (claim_seeded=true).
     // REQ-026h: every attributed source records a support span when one can be
     // located and the source claim's modality; neither changes the score.
@@ -1015,7 +1022,9 @@ verdict is preserved (REQ-026f).
 ### 8.3 Iteration Limits
 
 - `max_iterations` defaults to 5, capped at 10.
-- Max total HTTP calls per `verify_claims` invocation: 30.
+- Max total HTTP calls per `verify_claims` invocation: 30. A slot is reserved
+  before dispatch, and every dispatched attempt consumes one call whether it
+  succeeds or fails.
 - `first_pass_max_providers` (default 5) bounds how many providers participate
   in the Phase-1 broad pass; the pass runs in concurrency-limited batches and
   stops early once every finding clears the confidence bar. The remaining
@@ -1057,7 +1066,7 @@ verdict is preserved (REQ-026f).
 - Cross-task fallback: mock every provider in a non-`general_web` chain failing → verify the `general_web` chain serves, without re-trying an already-attempted provider (REQ-031a)
 - Normalizer: input from each provider format → verify common output shape
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
-- Batch claim verification: pass two independent claims → verify two findings in caller order with `claim_index`; pass a claim containing "and" → verify it is seeded verbatim; make one claim unsourced → verify it is returned `unverified` rather than dropped; pass duplicate claims → verify the collapsed count (REQ-026g)
+- Batch claim verification: pass two independent claims → verify two findings in caller order with `claim_index`; pass a claim containing "and" → verify it is seeded verbatim; make one claim unsourced → verify it is returned `unverified` rather than dropped; pass duplicate claims at non-adjacent positions → verify the collapsed finding reports every input index; run a 10-claim batch against five failing providers → verify the dispatch count never exceeds `max_http_calls` (REQ-026g)
 - Support span and modality: make a source snippet hedge ("reportedly") → verify the source reports `reported` with the marker, the span slices back to its text, and the verdict is unchanged (REQ-026h)
 - Semantic claim reconciliation: mock two providers with paraphrased agreeing claims → verify one confirmed finding; mock a claim with opposed polarity or a conflicting value → verify the `contested` verdict with perspectives is preserved (REQ-026f)
 - Cross-provider reconciliation: mock results where two providers return the same page at different URLs → verify the results collapse to one representative with provenance retained and distinct results preserved (REQ-020g)

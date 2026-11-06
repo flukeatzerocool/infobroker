@@ -285,6 +285,8 @@ export interface CorroborationFinding {
   claim: string;
   /** Position of this claim in the caller's batch list (REQ-026g). */
   claim_index?: number;
+  /** Every caller index this claim covers (REQ-026g). */
+  claim_indices?: number[];
   confidence: number;
   verdict: "confirmed" | "contested" | "unverified";
   sources: CorroborationSource[];

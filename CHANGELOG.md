@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.05 — Corroboration correctness
+
+- `verify_claims` reserves an HTTP-call slot synchronously before dispatch, so a
+  failed attempt counts against `corroboration.max_http_calls` and a batch
+  stops at the configured budget instead of overrunning it. (CR-1, REQ-026g)
+- A source is attributed to a claim only when its text overlaps that claim, so a
+  lone claim no longer inherits unrelated results and reports `unverified` with
+  no sources. (CR-2, REQ-026b)
+- A collapsed duplicate claim reports every input index it covers through
+  `claim_indices` (with `claim_index` still the first occurrence), and is
+  verified once rather than once per occurrence. (CR-8, SR-2, REQ-026g)
+
 ## 2026.11.05 — Roadmap hygiene and dependency advisories
 
 - `ROADMAP.md` now holds scheduled work only: the "Dependency advisories" and
