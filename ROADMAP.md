@@ -14,17 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Normalize CalVer to valid SemVer
-
-- `today()` and the version-bump path emit `YYYY.M.D` with no leading zeros, so
-  `package.json`, the tag, and the npm-published version are the same string;
-  CHANGELOG headers follow the same spelling while history stays as written.
-- `version-sync` then compares like for like, and the `server.json`
-  normalization becomes redundant rather than corrective (D-086).
-
-**Trigger:** the first version bump after the release-routine plan; closes when
-`npm view infobroker version` equals the `package.json` version for a release.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
