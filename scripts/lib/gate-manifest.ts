@@ -94,6 +94,12 @@ export const GATES: readonly Gate[] = [
     fast: true,
   },
   {
+    name: "test-push-pipeline",
+    description:
+      "Hermetic push-pipeline harness: staging, commit, tag policy, atomic push, resume, and dry-run against a disposable bare remote",
+    fast: true,
+  },
+  {
     name: "check-pack",
     description:
       "Published tarball allowlist/denylist and an MCP handshake from an empty config-less directory",

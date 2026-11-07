@@ -122,16 +122,23 @@ and a fail-closed leftover check, so tracked paths the old allowlist omitted
 dropped. Secret scanning reports `path:line` only and never logs the matched
 value. Push, tag, and mirror operations target the current branch rather than
 a hardcoded `main`. The tag version is read from `package.json` after the sync
-step, so a mid-run version bump cannot relabel an old tag onto new code; a tag
-that is named for the current version but carries different code is refused
-rather than force-moved (`--force-tag` overrides). Branch and tag are pushed
-together, one push per remote. The mirror push is fatal because npm publishing
-is delegated to the mirror's CI (`--no-mirror` opts out deliberately). A full
-`npm run check` on the tree to ship runs before staging; its success exports
-`INFOBROKER_PIPELINE_VERIFIED_SHA`, which lets `.githooks/pre-push` skip its
-own duplicate suite for exactly that commit when the tree is clean and CI is
-unset. An unexpected command failure exits 2; gate failures and required human
-approval exit 1.
+step, so a mid-run version bump cannot relabel an old tag onto new code. A tag
+that already exists on the push remote is never moved: a correction is a new
+version (D-092), and `--force-tag` no longer exists. The only permitted move is
+an interrupted publish's local-only tag that still carries the release version
+and is an ancestor of HEAD. Branch and tag are pushed together with `--atomic`,
+one push per remote, so a rejected tag cannot leave the branch published
+without it. The mirror push is fatal because npm publishing is delegated to
+the mirror's CI (`--no-mirror` opts out deliberately). A full `npm run check`
+on the tree to ship runs before staging; its success writes the tree-keyed run
+record that lets `.githooks/pre-push` skip its own duplicate suite for exactly
+that commit when the tree is clean and CI is unset. An unexpected command
+failure exits 2; gate failures and required human approval exit 1.
+
+`npm run test-push-pipeline` exercises that control flow hermetically: a
+disposable repository, a bare remote, the real pipeline scripts, and a
+toolchain stub that is honored only when `INFOBROKER_PIPELINE_STUB=1` and
+`INFOBROKER_PIPELINE_TEST_ROOT` resolves to the same project directory.
 
 ## Agent Operating Routine
 
@@ -355,6 +362,7 @@ the table.
 | `npm run check-gate-coverage` | Every G1 REQ is backed by a test citation or a recorded exemption (REQ-055) |
 | `npm run check-skill-harness` | Skill-check and event-stream evaluators: advisory exclusion, gating, intermediate-message tokens |
 | `npm run test` | Vitest unit and integration tests |
+| `npm run test-push-pipeline` | Hermetic push-pipeline harness: staging, commit, tag policy, atomic push, resume, and dry-run against a disposable bare remote |
 | `npm run check-pack` | Published tarball allowlist/denylist and an MCP handshake from an empty config-less directory |
 | `npm run test-debate-club` | debate-club Arena: deterministic, offline tool-contract suite (typecheck + fixture replay) |
 | `npm run audit` | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |

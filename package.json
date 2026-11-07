@@ -40,6 +40,7 @@
     "lint:md": "markdownlint infobroker.md",
     "lint:sh": "npx tsx scripts/lint-shell.ts",
     "test": "vitest run",
+    "test-push-pipeline": "npx tsx scripts/test-push-pipeline.ts",
     "test-skills": "bash scripts/test-skills.sh",
     "test-research": "bash scripts/test-research.sh",
     "test-debate-club": "npx tsc -p debate-club/tsconfig.json && bash debate-club/run.sh arena",
