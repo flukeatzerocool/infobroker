@@ -15,6 +15,8 @@
 // unrelated provider) returns a synthetic 599 and is not logged.
 
 import { appendFileSync, readFileSync } from "node:fs";
+import dns from "node:dns";
+import { syncBuiltinESMExports } from "node:module";
 
 const MODE = process.env.DEBATE_CLUB_MODE || "off";
 const FIXTURES = process.env.DEBATE_CLUB_FIXTURES;
@@ -26,6 +28,24 @@ const realFetch = globalThis.fetch;
 let index = null;
 if (MODE === "replay" && FIXTURES) {
   index = JSON.parse(readFileSync(FIXTURES, "utf8"));
+  // The SSRF guard resolves a hostname before fetching (REQ-021a), and a real
+  // lookup would make this "offline" Arena depend on DNS — it failed once when
+  // example.com could not be resolved. Replay therefore answers resolution with
+  // a stable public address for the hosts the fixtures cover. The guard still
+  // applies its private-address deny-list to that value, literal-IP targets
+  // never reach the resolver, and non-fixture hosts keep the real resolver.
+  const fixtureHosts = new Set(
+    (index.fixtureHosts || []).map((host) => String(host).toLowerCase())
+  );
+  const stubAddress = { address: "93.184.216.34", family: 4 };
+  const realLookup = dns.promises.lookup.bind(dns.promises);
+  dns.promises.lookup = async (hostname, options) => {
+    if (fixtureHosts.has(String(hostname).toLowerCase())) {
+      return options && options.all ? [{ ...stubAddress }] : { ...stubAddress };
+    }
+    return realLookup(hostname, options);
+  };
+  syncBuiltinESMExports();
   index._compiled = (index.entries || []).map((e) => ({
     ...e,
     re: new RegExp(e.path_regex),

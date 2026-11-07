@@ -3,9 +3,10 @@
 Persona-driven evaluation environment for the Infobroker MCP server. Two
 planes, never mixed:
 
-- **Arena (mechanical):** spawns the real server under a `fetch`-intercepting
-  preload, serves every request from committed fixtures, and asserts the tool
-  response contracts. Offline, deterministic, no model.
+- **Arena (mechanical):** spawns the real server under a `fetch`- and
+  DNS-intercepting preload, serves every request from committed fixtures, and
+  asserts the tool response contracts. The DNS stub keeps the SSRF guard's
+  hostname resolution offline for fixture hosts. Deterministic, no model.
 - **Lab (agentic):** personas exercise the live MCP through headless
   `opencode`; evaluated mechanically, with an evidence-aware critic pass
   (`critic.md`) run over each final answer plus the scenario rubric and a
