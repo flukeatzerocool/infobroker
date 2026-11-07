@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.11.07 — Immutable release tags and a hermetic pipeline harness
+
+- A tag that exists on the push remote is never moved (D-092, spec C.9). The
+  correction is a new version; `--force-tag` is removed. The only move left is
+  the retry of an interrupted publish: a local-only tag that carries the release
+  version and is an ancestor of HEAD. Branch and tag are pushed with `--atomic`,
+  so a rejected tag cannot leave the branch published without it.
+- `npm run test-push-pipeline` exercises the publication control flow
+  hermetically: seven cases over a disposable repository and bare remote
+  (happy path, `--no-push`, preflight rejection, published-tag refusal,
+  interrupted-publish retry, resume after a failed push, dry-run). The toolchain
+  stub is double-keyed to the scratch root (D-093). It runs in `check:fast` and
+  `check`.
+- `npm run loop-audit` now reports delivery metrics, git-hook invocations, and
+  per-gate cost from the local timing record; `npm run metrics` shares the same
+  computation. Both hooks append a local hook-event line, and `resume` now
+  accepts the commit its own interrupted run created.
+
 ## 2026.11.07 — One gate manifest and a tracked session loop
 
 - The gate suite is one manifest, `scripts/lib/gate-manifest.ts`, instead of an

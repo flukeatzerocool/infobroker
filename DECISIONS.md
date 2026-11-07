@@ -2,7 +2,42 @@
 
 ## Active Decisions
 
-### D-091: Increment Artifacts Replace the Gitignored Session File (2026.11.07)
+### D-092: A Published Tag Is Immutable (2026.11.07)
+
+A moved tag silently changes what every downstream pin resolves to, and the
+2026-11-04 incident (v2026.10.28 moved onto 2026.11.04 code) showed that an
+override flag is too easy to reach for. Decision: a tag that exists on the push
+remote is never moved. A correction is a new version, never a relabelled tag.
+The only permitted move is the retry of an interrupted publish — the tag is
+local-only, carries the version being released, and is an ancestor of HEAD.
+`git ls-remote` decides published-ness; a failed probe is fatal, because an
+unknown remote must never be treated as unpublished. `--force-tag` is retired.
+Rejected: a local-only rule (it refuses the legitimate retry after a failed
+push) and a time-based rule (nondeterministic). Accepted consequence: a second
+release on one calendar day reuses the CalVer and is refused; the operator
+publishes a distinct version. Supersedes D-071's `--force-tag` override clause;
+D-071's version-lookup and post-tag assertion rules still hold. Branch and tag
+are pushed with `--atomic`, so a rejected tag cannot leave the branch published
+alone. The decision lives in `scripts/lib/release-policy.ts` and is rehearsed
+by `scripts/test-push-pipeline.ts`.
+
+### D-093: The Pipeline Harness Stubs the Toolchain Behind Two Keys (2026.11.07)
+
+Testing the publication pipeline used to mean publishing. Decision: a hermetic
+harness builds a disposable repository with a bare remote, copies the real
+`scripts/` tree into it, and stubs only the project toolchain (the full gate,
+auth generation, deterministic scans, the `--no-ai` version precheck, and the
+per-commit typecheck) through `INFOBROKER_PIPELINE_STUB=1`. The stub is honored
+only when `INFOBROKER_PIPELINE_TEST_ROOT` resolves to the pipeline's own
+project directory, so a leaked flag alone cannot skip a real gate; a routine
+release sets neither. State, staging, the deny-list, the secret scan, commit,
+the tag decision, the atomic push, and resume run for real. Rejected: copying a
+fake project (the scans and version checks would then test the fake, not the
+pipeline) and driving the shell from a TypeScript rewrite (a second
+implementation to keep in sync). The harness runs as
+`npm run test-push-pipeline` in both `check:fast` and `check`.
+
+
 
 The session loop's plan, findings, and disposition lived in
 `.opencode/session.md`, which is git-ignored and deleted at close, so the only

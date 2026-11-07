@@ -32,7 +32,9 @@ start over.
 
 No weekly command yet. Until the gate-retirement tooling lands (see
 `ROADMAP.md`), the weekly review is manual: `npm run check` once, then
-`npm run loop-audit` and `npm run metrics`.
+`npm run loop-audit` (increment health, CHANGELOG date drift, delivery
+metrics, hook invocations, and per-gate cost) and `npm run metrics` for the
+standalone delivery print.
 
 This is the **replenishment point**: new findings may enter the schedule here
 and nowhere else, so work in flight is not preempted. Items that are not
@@ -40,9 +42,8 @@ scheduled are explicitly parked, not "in progress".
 
 ## Monthly
 
-- Release (`npm run release`). The tag policy is being aligned with Holonovel —
-  never move a published tag; a correction is a new CalVer. Until that increment
-  lands, `--force-tag` remains available.
+- Release (`npm run release`). A published tag is immutable: never move one; a
+  correction is a new CalVer (D-092). Branch and tag are pushed atomically.
 - Dependency refresh (`npm outdated`, `npm audit`).
 - Gate-retirement review: a gate with no findings across 20 consecutive runs
   should become advisory. The timing record that will drive it is already
@@ -64,7 +65,7 @@ scheduled are explicitly parked, not "in progress".
 | Loop | Signal | Surface |
 |---|---|---|
 | Session | plans, AARs, loop tokens | `docs/plans/` (gated by `check-loop-artifacts`) |
-| Session | increment health, date drift | `npm run loop-audit` |
+| Session | increment health, date drift, hook invocations | `npm run loop-audit` |
 | Publication | step outcomes, resume state | `$TMPDIR/infobroker/pipeline-logs/run-*` |
 | Gates | duration, failure rate | `$TMPDIR/infobroker/gate-timing-*.json` |
-| Delivery | frequency, lead time | `npm run metrics` |
+| Delivery | frequency, lead time, commits/push | `npm run loop-audit`, `npm run metrics` |
