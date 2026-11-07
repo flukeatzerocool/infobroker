@@ -15,14 +15,14 @@ export type TagActionKind = "create" | "move" | "refuse";
 export interface TagState {
   /** Version being released (package.json at release time). */
   currentVersion: string;
-  /** Whether refs/tags/v<currentVersion> exists. */
+  /** Whether refs/tags/v<currentVersion> exists locally. */
   tagExists: boolean;
+  /** Whether refs/tags/v<currentVersion> exists on the push remote. */
+  remoteExists: boolean;
   /** package.json version recorded at that tag, or null when unreadable. */
   tagVersion: string | null;
   /** Whether the existing tag is an ancestor of HEAD. */
   isAncestor: boolean;
-  /** Explicit --force-tag. */
-  force: boolean;
 }
 
 export interface TagDecision {
@@ -31,42 +31,51 @@ export interface TagDecision {
 }
 
 /**
- * tagAction — never relabel a tag that carries a different version.
+ * tagAction — a published tag is immutable.
  *
- * The 2026-11-04 release moved v2026.10.28 onto 2026.11.04 code because the
- * pipeline looked up a stale version. Looking up v<currentVersion> makes that
- * class impossible; the version check below is the backstop for a tag that was
- * already corrupted.
+ * A tag that exists on the remote is never moved: a correction is a new
+ * version (a new CalVer), because a moved tag silently changes what every
+ * downstream pin resolves to. The only move this policy permits is the retry
+ * of an interrupted publish: the tag exists locally, is absent from the
+ * remote, is an ancestor of HEAD, and carries the version being released.
+ *
+ * The 2026-11-04 release moved v2026.10.28 onto 2026.11.04 code; looking up
+ * v<currentVersion> made that class impossible, and the version check below is
+ * the backstop for a tag that was already corrupted. D-092 records why the
+ * old `--force-tag` override was retired.
  */
 export function tagAction(state: TagState): TagDecision {
   const tag = `v${state.currentVersion}`;
+  if (state.remoteExists) {
+    return {
+      action: "refuse",
+      reason: `${tag} is already published; a correction is a new version, never a moved tag`,
+    };
+  }
   if (!state.tagExists) {
     return { action: "create", reason: `no ${tag} tag yet` };
-  }
-  if (state.force) {
-    return { action: "move", reason: `--force-tag set; moving ${tag}` };
   }
   if (state.tagVersion === null) {
     return {
       action: "refuse",
-      reason: `${tag} exists but its package.json version is unreadable; use --force-tag to overwrite`,
+      reason: `${tag} exists locally but its package.json version is unreadable; delete the local tag or bump the version`,
     };
   }
   if (state.tagVersion !== state.currentVersion) {
     return {
       action: "refuse",
-      reason: `${tag} points at code version ${state.tagVersion}, not ${state.currentVersion}; refusing to relabel it — use --force-tag`,
+      reason: `${tag} points at code version ${state.tagVersion}, not ${state.currentVersion}; delete the local tag or bump the version`,
     };
   }
   if (!state.isAncestor) {
     return {
       action: "refuse",
-      reason: `${tag} already exists and is not an ancestor of HEAD; use --force-tag to overwrite`,
+      reason: `${tag} exists locally and is not an ancestor of HEAD; delete the local tag or bump the version`,
     };
   }
   return {
     action: "move",
-    reason: `${tag} already exists for this version; moving it onto HEAD`,
+    reason: `${tag} is local-only (an interrupted publish); moving it onto HEAD`,
   };
 }
 
@@ -190,7 +199,7 @@ export function planCommits(input: CommitPlanInput): PlannedCommit[] {
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────────────
-// tag-action   --current <v> --exists <0|1> --tag-version <v|-> --ancestor <0|1> [--force <0|1>]
+// tag-action   --current <v> --exists <0|1> --remote-exists <0|1> --tag-version <v|-> --ancestor <0|1>
 //   → prints "<action>|<reason>"
 // commit-plan  --paths-file <f> --date <YYYY-MM-DD> --version <v> [--version-changed <0|1>]
 //   → prints "key<TAB>subject<TAB>path" lines, one per path, in commit order
@@ -210,18 +219,19 @@ function main(argv: string[]): number {
   if (command === "tag-action") {
     const current = flag(rest, "current");
     const exists = flag(rest, "exists");
-    if (!current || exists === undefined) {
+    const remoteExists = flag(rest, "remote-exists");
+    if (!current || exists === undefined || remoteExists === undefined) {
       process.stderr.write(
-        "usage: release-policy tag-action --current <v> --exists <0|1> [--tag-version <v|->] [--ancestor <0|1>] [--force <0|1>]\n",
+        "usage: release-policy tag-action --current <v> --exists <0|1> --remote-exists <0|1> [--tag-version <v|->] [--ancestor <0|1>]\n",
       );
       return 1;
     }
     const decision = tagAction({
       currentVersion: current,
       tagExists: truthy(exists),
+      remoteExists: truthy(remoteExists),
       tagVersion: flag(rest, "tag-version") === "-" ? null : (flag(rest, "tag-version") ?? null),
       isAncestor: truthy(flag(rest, "ancestor")),
-      force: truthy(flag(rest, "force")),
     });
     process.stdout.write(`${decision.action}|${decision.reason}\n`);
     return 0;

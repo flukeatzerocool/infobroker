@@ -1750,9 +1750,9 @@ not only modified files that were already tracked — so that the full change
 set passes the verification gates (C.6) before commit. The release tooling
 SHALL run the verification gates and version-consistency checks against the
 change set it is about to ship, before committing or pushing, and SHALL fail
-fast on a dirty working tree before staging. Release tooling SHALL NOT
-silently overwrite an existing version tag; re-tagging a version SHALL
-require explicit confirmation. Release tooling SHALL refuse to commit
+fast on a dirty working tree before staging. Release tooling SHALL NOT move a
+version tag that already exists on the push remote; a correction SHALL be a
+new version, never a relabelled tag. Release tooling SHALL refuse to commit
 material that would expose secret material (REQ-011).
 
 **C.10 Provenance.** Every REQ SHALL be traceable to the spec version and

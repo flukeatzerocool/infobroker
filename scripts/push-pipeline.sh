@@ -14,7 +14,7 @@
 #   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
 #                              [--resume] [--run-id=<id>]
 #                              [--from=<step>] [--to=<step>]
-#                              [--scan-ai] [--force-tag]
+#                              [--scan-ai]
 #                              [--force-push] [--no-mirror] [--allow-secrets]
 #                              [--commit] [--help]
 #   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
@@ -38,7 +38,6 @@
 #   --parallel       Deprecated no-op (auth now runs sequentially before
 #                    read-through to avoid a working-tree race).
 #   --scan-ai        Also run the AI scan prompts (default: deterministic scan only).
-#   --force-tag      Overwrite an existing version tag that is not an ancestor.
 #   --force-push     Force push with lease (otherwise refuse if diverged).
 #   --no-mirror      Publish to origin only; skip the GitHub mirror and its CI.
 #   --allow-secrets  Warn but do not block when staged content matches secret patterns.
@@ -50,7 +49,9 @@
 #
 # Recovery guide
 #   Undo a push:  git revert <sha> && git push origin $(git branch --show-current)
-#   Undo a tag:   git tag -d v<version> && git push origin :refs/tags/v<version>
+#   Tag policy:   a published tag is never moved; publish a corrected version
+#                 (D-092). Drop a local-only tag from an interrupted publish with
+#                 `git tag -d v<version>` before re-running.
 #   Logs:         $TMPDIR/infobroker/pipeline-logs/  (per-run timestamped)
 #   Resume after a mid-pipeline failure: re-run with --resume.
 
@@ -66,7 +67,7 @@ usage() {
 Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
                                   [--resume] [--run-id=<id>]
                                   [--from=<step>] [--to=<step>]
-                                  [--scan-ai] [--force-tag] [--force-push]
+                                  [--scan-ai] [--force-push]
                                   [--no-mirror] [--allow-secrets] [--commit]
                                   [--help]
 
@@ -92,7 +93,6 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --to=S           Stop after step (inclusive); bounded ranges never commit/push.
   --parallel       Deprecated no-op (auth runs before read-through).
   --scan-ai        Also run the AI scan prompts (default: deterministic only).
-  --force-tag      Overwrite an existing version tag that is not an ancestor of HEAD.
   --force-push     Force-push with lease if diverged.
   --no-mirror      Publish to origin only; skip the GitHub mirror (and its CI publish).
   --allow-secrets  Warn only on secret patterns.
@@ -102,7 +102,7 @@ EOF
 
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
-FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
+FORCE_PUSH=false; ALLOW_SECRETS=false
 NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false; NO_AI=false
 SINGLE_COMMIT=false
 DEEP_REVIEW=false; REVIEW_SCOPE=""; REVIEW_SHARD=""; REVIEW_SHARD_COUNT=0
@@ -116,7 +116,6 @@ for arg in "$@"; do
     --run-id=*) RUN_ID="${arg#--run-id=}" ;;
     --parallel) PARALLEL=true ;;
     --scan-ai) SCAN_AI=true ;;
-    --force-tag) FORCE_TAG=true ;;
     --force-push) FORCE_PUSH=true ;;
     --allow-secrets) ALLOW_SECRETS=true ;;
     --no-push) NO_PUSH=true ;;
@@ -289,6 +288,18 @@ state_mark() {
   ' "$STATE_FILE" "$key" 2>/dev/null || true
 }
 # step_skip <key> — true if the step should be skipped (resume journal OR --from/--to).
+# state_head — record the HEAD this run created, so a resume after a later step
+# (e.g. a failed push) is not rejected as "HEAD moved" by its own commit.
+state_head() {
+  node -e '
+    const fs = require("fs");
+    const [p, head] = process.argv.slice(1);
+    let j = {};
+    try { j = JSON.parse(fs.readFileSync(p, "utf8")); } catch { j = {}; }
+    j.head = head;
+    fs.writeFileSync(p, JSON.stringify(j, null, 2));
+  ' "$STATE_FILE" "$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)" 2>/dev/null || true
+}
 STEP_ORDER="readthrough sync auth changelog scan readme"
 # Reject unknown --from/--to steps up front (before pre-flight, so a typo has
 # no side effects) — an unrecognized step would otherwise silently skip nothing
@@ -415,12 +426,15 @@ fi
 # version bump and the CHANGELOG entry belong to prepare, so a release that
 # would ship a stale version fails here rather than after the full gate suite.
 if $NO_AI; then
-  if ! ( cd "$PROJECT_DIR" && npm run version-sync >/dev/null 2>&1 ); then
+  if pipeline_stub_active; then
+    info "Release precheck: STUBBED (hermetic harness)."
+  elif ! ( cd "$PROJECT_DIR" && npm run version-sync >/dev/null 2>&1 ); then
     error "--no-ai needs a prepared tree: version and CHANGELOG are out of sync."
     error "Run 'npm run prepare', review and commit the result, then 'npm run release'."
     exit 1
+  else
+    info "Release precheck: version and CHANGELOG are in sync (prepared tree)."
   fi
-  info "Release precheck: version and CHANGELOG are in sync (prepared tree)."
 fi
 
 # A dry run must not delete prior run logs; it may still write its own.
@@ -697,8 +711,8 @@ info "Step 4: Provider auth sync"
 info "═══════════════════════════════════════════════"
 echo ""
 
-if $DRY_RUN || step_skip auth; then
-  info "Provider auth sync: SKIPPED (dry run / state journal)"
+if $DRY_RUN || step_skip auth || pipeline_stub_active; then
+  info "Provider auth sync: SKIPPED (dry run / state journal / harness stub)"
   status_set auth "skipped"
 else
   # Generation already ran before the read-through. Regenerating here would
@@ -772,6 +786,9 @@ version_only_diff() {
 # a REQ-body edit by scanning the diff with enough context that a body edit is
 # always adjacent to its header.
 spec_req_change() {
+  # The harness repo carries no spec; a deterministic release under the stub
+  # has no REQ-body lane to compare.
+  if pipeline_stub_active; then return 1; fi
   # A letter-case-only diff (e.g. the read-through step title-casing a REQ
   # heading to match its siblings) is cosmetic, not a REQ modification: the
   # contract text is unchanged, so C.10 provenance requires no CHANGELOG
@@ -888,7 +905,10 @@ info "════════════════════════�
 info "Step 6: Reference + git hygiene scan"
 info "═══════════════════════════════════════════════"
 echo ""
-if step_skip scan; then
+if pipeline_stub_active; then
+  info "Scan: STUBBED (hermetic harness)"
+  status_set scan "skipped"
+elif step_skip scan; then
   info "Scan: SKIPPED (state journal / --from / --to)"
   status_set scan "skipped"
 else
@@ -1144,6 +1164,10 @@ EOF
   fi
 fi
 record_timing "$PIPELINE_RUN_DIR/timings" "phase-commit" "$(( $(date +%s) - COMMIT_PHASE_START ))"
+# The commit moved HEAD. Record it so a resume after a later failure (tag or
+# push) accepts the tree this run produced instead of failing closed on
+# "HEAD moved".
+state_head
 
 # The pre-push hook skips its own `npm run check` only for the exact tree this
 # run just verified. The final gate above ran before staging, so the record is
@@ -1211,18 +1235,13 @@ info "Push to origin"
 info "═══════════════════════════════════════════════"
 echo ""
 
-# Tag first, so branch and tag travel together in one push per remote. Two
-# pushes per remote meant two pre-push gate runs and two ways to fail halfway.
-# The tag name follows the version on disk *now*; a tag carrying a different
-# version is refused rather than relabelled.
+# Tag first, so branch and tag travel together in one atomic push per remote.
+# The tag name follows the version on disk *now*; a tag that already exists on
+# the remote is refused (a published tag is immutable, D-092), so the refspec
+# never needs a leading '+'.
 warn "Tagging ${TAG_NAME}..."
-TAG_MOVED=false
-tag_release "$RELEASE_VERSION" "$($FORCE_TAG && echo 1 || echo 0)" "$SCRIPT_DIR/lib/release-policy.ts"
-if $TAG_MOVED; then
-  TAG_REFSPEC="+refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
-else
-  TAG_REFSPEC="refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
-fi
+tag_release "$RELEASE_VERSION" "$SCRIPT_DIR/lib/release-policy.ts"
+TAG_REFSPEC="refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
 info "Tag ${TAG_NAME}: created (local)"
 echo ""
 
@@ -1234,19 +1253,19 @@ if [[ -n "$UPSTREAM" ]]; then
   if [[ "$BEHIND" -gt 0 ]]; then
     if $FORCE_PUSH; then
       warn "Local is behind remote by ${BEHIND} commit(s) — force-pushing with lease."
-      git -C "$PROJECT_DIR" push --force-with-lease origin "$BRANCH" "$TAG_REFSPEC" \
+      git -C "$PROJECT_DIR" push --atomic --force-with-lease origin "$BRANCH" "$TAG_REFSPEC" \
         || die "Push to origin FAILED (force-with-lease). See git output above."
     else
       die "Local is behind remote by ${BEHIND} commit(s). Pull/rebase first, or use --force-push."
     fi
   else
     warn "Pushing ${BRANCH} and ${TAG_NAME}..."
-    git -C "$PROJECT_DIR" push origin "$BRANCH" "$TAG_REFSPEC" \
+    git -C "$PROJECT_DIR" push --atomic origin "$BRANCH" "$TAG_REFSPEC" \
       || die "Push to origin FAILED. See git output above."
   fi
 else
   warn "Pushing ${BRANCH} and ${TAG_NAME}..."
-  git -C "$PROJECT_DIR" push origin "$BRANCH" "$TAG_REFSPEC" \
+  git -C "$PROJECT_DIR" push --atomic origin "$BRANCH" "$TAG_REFSPEC" \
     || die "Push to origin FAILED. See git output above."
 fi
 info "Push: DONE (branch + tag)"
@@ -1262,7 +1281,7 @@ info "════════════════════════�
 if $NO_MIRROR; then
   warn "Mirror sync skipped (--no-mirror): the GitHub mirror and its publish CI will be behind."
 elif git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1; then
-  git -C "$PROJECT_DIR" push github "$BRANCH" "$TAG_REFSPEC" \
+  git -C "$PROJECT_DIR" push --atomic github "$BRANCH" "$TAG_REFSPEC" \
     || die "Mirror push FAILED — npm publishing is delegated to the mirror CI, so nothing was published. Re-run, or pass --no-mirror to publish origin-only."
   info "Mirror sync: DONE (branch + tag)"
 else

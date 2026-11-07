@@ -36,6 +36,22 @@ die() {
   exit 1
 }
 
+# pipeline_stub_active — true only for the hermetic harness (scripts/test-push-pipeline.ts).
+#
+# The harness drives this pipeline against a disposable repository, so the
+# project toolchain (npm run check, generate-auth, the scan scripts) cannot run
+# there. A stub needs two keys: the explicit flag and a test root that resolves
+# to this pipeline's own PROJECT_DIR. A routine release sets neither, so a
+# leaked flag alone cannot skip a real gate.
+pipeline_stub_active() {
+  [[ "${INFOBROKER_PIPELINE_STUB:-}" == "1" ]] || return 1
+  [[ -n "${INFOBROKER_PIPELINE_TEST_ROOT:-}" ]] || return 1
+  local want got
+  want=$(cd "$INFOBROKER_PIPELINE_TEST_ROOT" 2>/dev/null && pwd -P) || return 1
+  got=$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P) || return 1
+  [[ "$want" == "$got" ]]
+}
+
 # ── JSON helpers (node is a pre-flight requirement) ─────────────────────────
 # json_from_file <path> <key>   → prints the value of <key> from a JSON file,
 #                                 or "?" if missing/unparseable.
@@ -378,6 +394,10 @@ time_it() {
 run_gate() {
   local label="$1" log="$2"; shift 2
   local rc saved start end
+  if pipeline_stub_active; then
+    printf 'STUB %s\n' "$label" > "$log"
+    return 0
+  fi
   start=$(date +%s)
   saved=$(trap -p ERR 2>/dev/null || true)
   trap - ERR
@@ -469,7 +489,55 @@ stop_server() {
 }
 
 # ── Release tagging ──────────────────────────────────────────────────────────
-# tag_release <version> <force 0|1> <policy-cli>
+# tag_release <version> <policy-cli>
+# A published tag is immutable: the remote is probed before any local tag is
+# created or moved, and a failed probe is fatal (an unknown remote must never
+# be treated as "not published"). The only move permitted is the retry of an
+# interrupted publish: the tag is local-only, an ancestor of HEAD, and carries
+# the version being released.
+tag_release() {
+  local version="$1" policy="$2"
+  local tag="v${version}" exists=0 remote_exists=0 tag_version="-" ancestor=0
+  local decision action reason tagged remote_tags
+  git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1 && exists=1
+  if [[ "$exists" == "1" ]]; then
+    tag_version=$(git -C "$PROJECT_DIR" show "${tag}:package.json" 2>/dev/null \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).version))}catch{process.stdout.write("-")}})' \
+      || printf '%s' "-")
+    git -C "$PROJECT_DIR" merge-base --is-ancestor "$tag" HEAD 2>/dev/null && ancestor=1
+  fi
+  if ! remote_tags=$(git -C "$PROJECT_DIR" ls-remote --tags origin "refs/tags/${tag}" 2>/dev/null); then
+    die "Cannot verify remote tag ${tag}: git ls-remote origin failed. Retry with network access."
+  fi
+  [[ -n "$remote_tags" ]] && remote_exists=1
+  decision=$(npx tsx "$policy" tag-action \
+    --current "$version" --exists "$exists" --remote-exists "$remote_exists" \
+    --tag-version "$tag_version" --ancestor "$ancestor") \
+    || die "release-policy tag-action FAILED."
+  action="${decision%%|*}"
+  reason="${decision#*|}"
+  case "$action" in
+    create)
+      git -C "$PROJECT_DIR" tag "$tag"
+      ;;
+    move)
+      warn "Tag ${tag} — ${reason}."
+      git -C "$PROJECT_DIR" tag -f "$tag"
+      ;;
+    refuse)
+      die "Tag ${tag}: ${reason}."
+      ;;
+    *)
+      die "release-policy returned an unknown tag action '${action}'."
+      ;;
+  esac
+  tagged=$(git -C "$PROJECT_DIR" show "${tag}:package.json" 2>/dev/null \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).version))}catch{process.stdout.write("-")}})' \
+    || printf '%s' "-")
+  [[ "$tagged" == "$version" ]] \
+    || die "Tag ${tag} points at package.json version '${tagged}', expected '${version}'."
+}
+
 # derive_release_tag <version> — the tag name for a release version. One
 # definition so the shippable probe, the tag command and the refspec cannot
 # disagree about the tag's spelling.
@@ -548,49 +616,8 @@ last_review_shard() {
   printf '\n'
 }
 
-# Creates, moves, or refuses the tag v<version> using release-policy, then
-# asserts the tag's own package.json version equals <version>. Dies on refusal
-# or mismatch — a wrong release identity is never forced through.
-# Requires PROJECT_DIR. Sets TAG_MOVED.
-tag_release() {
-  local version="$1" force="$2" policy="$3"
-  local tag="v${version}" exists=0 tag_version="-" ancestor=0
-  local decision action reason tagged
-  git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1 && exists=1
-  if [[ "$exists" == "1" ]]; then
-    tag_version=$(git -C "$PROJECT_DIR" show "${tag}:package.json" 2>/dev/null \
-      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).version))}catch{process.stdout.write("-")}})' \
-      || printf '%s' "-")
-    git -C "$PROJECT_DIR" merge-base --is-ancestor "$tag" HEAD 2>/dev/null && ancestor=1
-  fi
-  decision=$(npx tsx "$policy" tag-action \
-    --current "$version" --exists "$exists" \
-    --tag-version "$tag_version" --ancestor "$ancestor" --force "$force") \
-    || die "release-policy tag-action FAILED."
-  action="${decision%%|*}"
-  reason="${decision#*|}"
-  case "$action" in
-    create)
-      git -C "$PROJECT_DIR" tag "$tag"
-      ;;
-    move)
-      warn "Tag ${tag} — ${reason} (packages pinning the old tag will diverge)."
-      git -C "$PROJECT_DIR" tag -f "$tag"
-      TAG_MOVED=true
-      ;;
-    refuse)
-      die "Tag ${tag}: ${reason}."
-      ;;
-    *)
-      die "release-policy returned an unknown tag action '${action}'."
-      ;;
-  esac
-  tagged=$(git -C "$PROJECT_DIR" show "${tag}:package.json" 2>/dev/null \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).version))}catch{process.stdout.write("-")}})' \
-    || printf '%s' "-")
-  [[ "$tagged" == "$version" ]] \
-    || die "Tag ${tag} points at package.json version '${tagged}', expected '${version}'."
-}
+# Creates, moves, or refuses the tag v<version>; see the header at the top of
+# this section. Requires PROJECT_DIR.
 
 # classify_gate_failure <gate-exit-code> <attempt> <max> → pass | repair | giveup
 # Pure decision used by repair_loop. A non-zero gate is repaired until
@@ -616,6 +643,11 @@ classify_gate_failure() {
 repair_loop() {
   local label="$1" gate_cmd="$2" prompt_template="$3" max="$4" log="$5" out="$6"
   local attempt=0 rc prompt_file="" decision=""
+  if pipeline_stub_active; then
+    printf 'STUB %s\n' "$label" > "$log"
+    REPAIR_ATTEMPTS["$label"]=0
+    return 0
+  fi
   while :; do
     local saved
     saved=$(trap -p ERR 2>/dev/null || true)
@@ -765,6 +797,9 @@ split_commit_series() {
   # nothing: it already contains every later bucket.
   _split_typecheck_commit() {
     local project_dir="$1" dir="$2" tc_rc=0
+    # The harness repo has no project scripts; its typecheck proves nothing
+    # about the pipeline control flow under test.
+    if pipeline_stub_active; then return 0; fi
     rm -rf "$dir"
     git -C "$project_dir" worktree add -q --detach "$dir" HEAD 2>/dev/null || return 1
     ln -sfn "$project_dir/node_modules" "$dir/node_modules" 2>/dev/null || true

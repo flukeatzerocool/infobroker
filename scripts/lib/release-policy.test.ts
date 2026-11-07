@@ -7,9 +7,9 @@ import { planCommits, resolveRunMode, tagAction } from "./release-policy.js";
 const base = {
   currentVersion: "2026.11.04",
   tagExists: true,
+  remoteExists: false,
   tagVersion: "2026.11.04",
   isAncestor: true,
-  force: false,
 };
 
 describe("tagAction", () => {
@@ -17,8 +17,14 @@ describe("tagAction", () => {
     expect(tagAction({ ...base, tagExists: false }).action).toBe("create");
   });
 
-  it("moves an existing tag for the same version when it is an ancestor", () => {
+  it("moves a local-only tag for the same version when it is an ancestor", () => {
     expect(tagAction(base).action).toBe("move");
+  });
+
+  it("refuses a tag that is already published, even for the same version", () => {
+    const decision = tagAction({ ...base, remoteExists: true });
+    expect(decision.action).toBe("refuse");
+    expect(decision.reason).toContain("already published");
   });
 
   it("refuses a same-version tag that is not an ancestor of HEAD", () => {
@@ -35,8 +41,8 @@ describe("tagAction", () => {
     expect(tagAction({ ...base, tagVersion: null }).action).toBe("refuse");
   });
 
-  it("moves when --force-tag is set, even for a non-ancestor", () => {
-    expect(tagAction({ ...base, isAncestor: false, force: true }).action).toBe("move");
+  it("never moves a published tag regardless of ancestry", () => {
+    expect(tagAction({ ...base, remoteExists: true, isAncestor: false }).action).toBe("refuse");
   });
 });
 
