@@ -70,6 +70,22 @@ describe("operational call log (REQ-111a)", () => {
     }
   });
 
+  it("tightens an existing log file to owner-only without losing records", async () => {
+    const logPath = join(tmp(), "calls.jsonl");
+    writeFileSync(logPath, `${JSON.stringify({ kind: "tool", name: "earlier", status: "ok", duration_ms: 1 })}\n`, { mode: 0o644 });
+    const log = await loadLog({ call_log: "file", call_log_path: logPath });
+
+    log.recordTool("infobroker_search_web", true, 5);
+
+    const lines = readFileSync(logPath, "utf-8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ name: "earlier" });
+    expect(lines[1]).toMatchObject({ kind: "tool", name: "infobroker_search_web" });
+    if (process.platform !== "win32") {
+      expect(statSync(logPath).mode & 0o777).toBe(0o600);
+    }
+  });
+
   it("sanitizes names so a value cannot inject a newline", async () => {
     const logPath = join(tmp(), "calls.jsonl");
     const log = await loadLog({ call_log: "file", call_log_path: logPath });

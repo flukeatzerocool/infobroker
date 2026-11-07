@@ -18,6 +18,11 @@ export interface CallLogTarget {
 
 type Outcome = "ok" | "empty" | "error" | "cooldown" | "quota" | "parse_error" | "http_error" | "network_error";
 
+// REQ-111a: owner-readable is a property of the file, not only of the process
+// that created it. A path is tightened once per process, so a log left behind
+// with a loose mode is fixed on the next write without a chmod per record.
+const permissionsChecked = new Set<string>();
+
 function expandHome(path: string): string {
   return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
 }
@@ -68,8 +73,11 @@ function writeRecord(record: Record<string, unknown>): void {
     rotateIfNeeded(target.path, maxBytes);
     if (!existsSync(target.path)) {
       appendFileSync(target.path, "", { mode: 0o600 });
+    }
+    if (!permissionsChecked.has(target.path)) {
       try {
         chmodSync(target.path, 0o600);
+        permissionsChecked.add(target.path);
       } catch {
         // Best effort: a non-owner-readable log is not a blocker.
       }

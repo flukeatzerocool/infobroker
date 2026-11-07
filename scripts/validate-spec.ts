@@ -562,6 +562,20 @@ checkFeatureTaxonomy();
 
 // --- Client artifact content verification ---
 
+// REQ-026h: the redraft step must preserve modality. The check reads the step's
+// own block rather than any mention in the file, so an unrelated section cannot
+// satisfy the gate for a redraft step that lost the requirement.
+function redraftBlock(text: string, start: RegExp, end: RegExp, lastStart = false): string | null {
+  const flags = start.flags.includes("g") ? start.flags : `${start.flags}g`;
+  const starts = [...text.matchAll(new RegExp(start.source, flags))];
+  if (starts.length === 0) return null;
+  const match = lastStart ? starts[starts.length - 1]! : starts[0]!;
+  const from = (match.index ?? 0) + match[0].length;
+  const endMatch = end.exec(text.slice(from));
+  if (!endMatch) return null;
+  return text.slice(match.index ?? 0, from + endMatch.index);
+}
+
 function checkArtifactContent(): void {
   const prefPath = join(ROOT, "instructions", "search-preferences.md");
   const skillPath = join(ROOT, "skills", "infobroker", "SKILL.md");
@@ -626,7 +640,10 @@ function checkArtifactContent(): void {
       if (!workflows.includes("FACT-CHECK DRAFT")) {
         error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not name the FACT-CHECK DRAFT step (REQ-026g)");
       }
-      if (!/modality/i.test(workflows)) {
+      const redraft = redraftBlock(workflows, /- \*\*REDRAFT-CHECK\*\*/, /\n- \*\*VALIDATE\*\*/);
+      if (!redraft) {
+        error("skills/infobroker/references/workflows.md: REDRAFT-CHECK block not found (REQ-026h)");
+      } else if (!/modality/i.test(redraft)) {
         error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
       }
       // REQ-120: every shape's own Pipeline paragraph carries the report tail.
@@ -661,7 +678,10 @@ function checkArtifactContent(): void {
     if (!/verify_claims \(claims:/.test(content)) {
       error("skills/infobroker/SKILL.md: REDRAFT-CHECK does not call verify_claims with a claims list (REQ-026g)");
     }
-    if (!/modality/i.test(content)) {
+    const redraftSkill = redraftBlock(content, /^REDRAFT-CHECK/m, /^VALIDATE/m, true);
+    if (!redraftSkill) {
+      error("skills/infobroker/SKILL.md: REDRAFT-CHECK block not found (REQ-026h)");
+    } else if (!/modality/i.test(redraftSkill)) {
       error("skills/infobroker/SKILL.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
     }
     const corroborationPath = join(ROOT, "skills", "infobroker", "references", "corroboration.md");

@@ -29,7 +29,7 @@ import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 import { maybeTruncate } from "./truncate.js";
-import { capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope } from "./batch.js";
+import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
 import { settleBatch } from "./batch-run.js";
 import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
 import { reconcileResults } from "./dedup.js";
@@ -348,7 +348,7 @@ async function doWebSearch(
   // REQ-076a: blend keeps the KB rows as a seed for the external response
   // instead of replacing it. `kbRecall` reports which path the request took.
   let kbCached: SearchResult[] = [];
-  let kbRecall: "hit" | "miss" | "blended" | "skipped" | "not_applicable" | "unavailable" = "unavailable";
+  let kbRecall: KbRecallState = "unavailable";
   if (isKbConfigured()) {
     if (fresh === true) {
       kbRecall = "skipped";
@@ -357,7 +357,9 @@ async function doWebSearch(
     } else {
       try {
         const kbResults = kbSearch(query, maxResults, collection);
-        kbRecall = "miss";
+        // REQ-076a: a blend reports "blended" even when the cache contributed no
+        // row; the count is reported as zero rather than omitted.
+        kbRecall = fresh === "blend" ? "blended" : "miss";
         if (kbResults.length > 0) {
           const relevanceThreshold = config.kb!.kb_first_relevance_threshold;
           const confidenceThreshold = config.kb!.kb_first_confidence_threshold;
@@ -602,9 +604,12 @@ async function doWebSearch(
     // displaced KB rows are counted, not silently dropped.
     const blended = mergeKnowledgeBaseResults(filtered, kbCached);
     const finalResults = blended.results;
-    const kbMeta = kbCached.length > 0
-      ? { kb_recall: kbRecall, kb_results: finalResults.length - filtered.length, kb_duplicates: blended.duplicates }
-      : { kb_recall: kbRecall };
+    const kbMeta = blendResponseMeta({
+      kbRecall,
+      externalCount: filtered.length,
+      finalCount: finalResults.length,
+      duplicates: blended.duplicates,
+    });
 
     if (deep && !compactMode(config)) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };

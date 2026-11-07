@@ -12,18 +12,6 @@
   enforces this rule; `## Non-goals` is exempt.
 -->
 
-## Batch metadata and gate hygiene (P2)
-
-- Report a batch's aggregate time rather than the first item's (CR-16), make the
-  per-input passage/truncation fields "when applicable" (SR-4), and chmod an
-  existing call log to owner-only (CR-17).
-- Scope the `validate-spec` modality check to the redraft step (CR-20, SR-10),
-  report the blended count when the cache is empty (SR-8), and normalize the
-  structured-fact hyphenation (SR-7).
-
-**Trigger:** Start with the next batch or gate change; close when `npm run check`
-passes and the REQ wording matches the response shape.
-
 ## Non-goals
 
 Open-web scope boundary: no SOCMINT platform collection, WHOIS/DNS/CT or

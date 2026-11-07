@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.05 — Batch metadata and gate hygiene
+
+- An array request reports the aggregate time its items took, not the first
+  successful item's elapsed time. (CR-16)
+- Per-input metadata states the ranked passage count and truncation only when
+  those fields apply, matching the response shape. (SR-4, REQ-020i, REQ-021k)
+- An existing call log is tightened to owner-only permissions, not only a log
+  created by the current process. (CR-17, REQ-111a)
+- The modality gate reads the redraft step's own block, so a mention in an
+  unrelated section no longer satisfies it, and a missing block fails closed.
+  (CR-20, SR-10, REQ-026h)
+- A blend reports its recall state and blended count even when the cache kept no
+  row. (SR-8, REQ-076a)
+- The spec names the classifier with the `structured_fact` token; the hyphenated
+  adjective stays in prose. (SR-7, REQ-021i)
+
 ## 2026.11.05 — Fetch failure taxonomy
 
 - `fetch_page` raw mode returns the error text (message plus remediation) when

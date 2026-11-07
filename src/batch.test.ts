@@ -1,6 +1,6 @@
 // @implements REQ-020 REQ-021 REQ-021b content-mode full-content-mode match-strong match-moderate match-weak match-none REQ-021k REQ-076a blend
 import { describe, it, expect } from "vitest";
-import { capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
+import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, MAX_BATCH_INPUTS } from "./batch.js";
 
 describe("capInputs", () => {
   it("caps input arrays at the batch limit", () => {
@@ -307,6 +307,37 @@ describe("self-describing batch items (REQ-021k)", () => {
   });
 });
 
+// @implements REQ-020i aggregate-time
+describe("batch aggregate timing (REQ-020i)", () => {
+  const envelope = (elapsed: number): string =>
+    `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "duckduckgo",
+      results: [{ title: "t", url: `https://a.example/${elapsed}`, snippet: "s" }],
+      meta: { query_time_ms: elapsed, fallback_used: false },
+    })}`;
+
+  it("reports the sum of the items' times rather than the first item's", () => {
+    const merged = mergeItems([
+      { query: "q1", envelope: envelope(120) },
+      { query: "q2", envelope: envelope(80) },
+    ]) as unknown as { meta: { query_time_ms?: number } };
+
+    expect(merged.meta.query_time_ms).toBe(200);
+  });
+
+  it("omits the field when no item reports a time", () => {
+    const noTime = `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "none",
+      results: [{ title: "t", url: "https://a.example/x", snippet: "s" }],
+    })}`;
+    const merged = mergeItems([{ query: "q", envelope: noTime }]) as unknown as { meta: Record<string, unknown> };
+
+    expect(merged.meta).not.toHaveProperty("query_time_ms");
+  });
+});
+
 // @implements REQ-076a blend
 describe("mergeKnowledgeBaseResults (REQ-076a)", () => {
   const external = [
@@ -329,5 +360,32 @@ describe("mergeKnowledgeBaseResults (REQ-076a)", () => {
     const merged = mergeKnowledgeBaseResults(external, []);
     expect(merged.results).toEqual(external);
     expect(merged.duplicates).toBe(0);
+  });
+});
+
+// @implements REQ-076a blend
+describe("blendResponseMeta (REQ-076a)", () => {
+  it("reports a zero blended count when the cache kept no row", () => {
+    expect(blendResponseMeta({ kbRecall: "blended", externalCount: 3, finalCount: 3, duplicates: 0 })).toEqual({
+      kb_recall: "blended",
+      kb_results: 0,
+      kb_duplicates: 0,
+    });
+  });
+
+  it("reports the kept cached rows and the displaced duplicates", () => {
+    expect(blendResponseMeta({ kbRecall: "blended", externalCount: 2, finalCount: 3, duplicates: 1 })).toEqual({
+      kb_recall: "blended",
+      kb_results: 1,
+      kb_duplicates: 1,
+    });
+  });
+
+  it("carries only the recall state for every non-blended mode", () => {
+    for (const state of ["hit", "miss", "skipped", "not_applicable", "unavailable"] as const) {
+      expect(blendResponseMeta({ kbRecall: state, externalCount: 1, finalCount: 1, duplicates: 0 })).toEqual({
+        kb_recall: state,
+      });
+    }
   });
 });

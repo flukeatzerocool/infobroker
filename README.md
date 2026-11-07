@@ -340,7 +340,7 @@ the cache, `manage_kb` archives generated reports: ingest with
 ingest returns a `report_id` linking the report to them. Revisit them with
 `manage_kb` list/get, or write them to a local directory. `search_web` scopes
 recall to a named `collection`, and `fresh: "blend"` keeps cached results
-beside fresh ones.
+beside fresh ones, reporting the kept count even when zero.
 
 Corroboration results are also kept as claim records. Each `verify_claims` run
 stores one ledger entry per finding, linked to the sources that supported it

@@ -19,6 +19,28 @@ export function mergeKnowledgeBaseResults(
   return { results: [...external, ...kept], duplicates: cached.length - kept.length };
 }
 
+export type KbRecallState = "hit" | "miss" | "blended" | "skipped" | "not_applicable" | "unavailable";
+
+/**
+ * REQ-076a: the response reports the recall state and the blended result count.
+ * A blend that kept no cached row still reports "blended" with a count of zero,
+ * so a caller can tell "blend ran and found nothing cached" from "blend did not
+ * run"; every other recall state carries no count.
+ */
+export function blendResponseMeta(args: {
+  kbRecall: KbRecallState;
+  externalCount: number;
+  finalCount: number;
+  duplicates: number;
+}): Record<string, unknown> {
+  if (args.kbRecall !== "blended") return { kb_recall: args.kbRecall };
+  return {
+    kb_recall: args.kbRecall,
+    kb_results: args.finalCount - args.externalCount,
+    kb_duplicates: args.duplicates,
+  };
+}
+
 /** REQ-021k: a batch input that is an HTTP(S) URL is echoed as `url`. */
 const HTTP_URL_RE = /^https?:\/\//i;
 
@@ -251,6 +273,13 @@ export function mergeItems(items: BatchItem[]): Envelope {
     .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
   const bestScore = topScores.length > 0 ? Math.max(...topScores) : undefined;
   const totalPassages = okItems.reduce((sum, o) => sum + (o.env.snippets?.length ?? 0), 0);
+  // REQ-020i/REQ-021k: a batch reports the aggregate time its items took. The
+  // items run concurrently and each reports its own elapsed time, so the batch
+  // total is their sum — reporting the first item's time under-reports the work.
+  const elapsedValues = okItems
+    .map((o) => o.env.meta?.["query_time_ms"])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const totalElapsed = elapsedValues.length > 0 ? elapsedValues.reduce((sum, value) => sum + value, 0) : undefined;
   return {
     status: "ok",
     provider: firstOk.provider,
@@ -258,6 +287,7 @@ export function mergeItems(items: BatchItem[]): Envelope {
     results,
     meta: {
       ...(firstOk.meta ?? {}),
+      ...(totalElapsed !== undefined ? { query_time_ms: totalElapsed } : {}),
       ...(hasBlockedCount ? { blocked_count: blockedTotal } : {}),
       ...(bestScore !== undefined ? { top_score: bestScore } : {}),
       match_quality: matchQuality(bestScore, totalPassages),
