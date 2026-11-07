@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.07 — Fetch fallback ordering clarified
+
+- A DOI link now documents the fallback order it already follows: DOI metadata
+  first, then an open-access copy, and an archived snapshot only when no
+  metadata record exists at all. The old wording was ambiguous enough to read
+  as "archive everything that fails," which would have promised an archived
+  copy for links that in fact return a bibliographic record. (REQ-021h)
+- The maintainer notes on state notices now list a cooling-down provider
+  alongside configuration drift, pending migrations, and update notices,
+  matching what the server already sends; a builder following the notes would
+  otherwise omit the cooldown notice entirely. (REQ-111a)
+
 ## 2026.11.07 — Split commits in the pipeline
 
 - The push pipeline now commits one concern per commit — spec, source, tests,

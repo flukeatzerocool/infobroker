@@ -262,8 +262,8 @@ content from any source — ready for summarization or analysis. Fetch also
 reports the page's last-updated date when it can determine one, so you know
 how current your source is. When a page is paywalled, access-restricted, or
 bot-blocked, `fetch_page` reports `access_blocked` and falls back to Crossref
-metadata or an open-access copy for a DOI, then to an Internet Archive
-snapshot.
+metadata or an open-access copy for a DOI, and to an Internet Archive
+snapshot when no metadata record exists.
 
 ### Citations
 
@@ -389,10 +389,11 @@ change into your user layer with a backup. `search_web` doubles as
 DuckDuckGo query autocomplete. `inspect_providers` reports the server's build
 health, request stats, and local state health — configuration drift,
 pending migrations, backend capabilities, and update status. When something
-actionable needs your attention, successful tool responses carry a bounded
-`notices` array with the condition and the fix, so a stale user layer does
-not stay invisible. You always know what your search server is doing and how
-much capacity remains.
+needs your attention — configuration drift, a pending migration, or a
+provider cooling down — successful tool responses carry a bounded `notices`
+array with the condition and, where one exists, the fix, so a stale user
+layer does not stay invisible. You always know what your search server is
+doing and how much capacity remains.
 
 ## Skills
 
