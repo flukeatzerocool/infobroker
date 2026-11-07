@@ -80,7 +80,11 @@ deterministic (`scripts/scan-refs.ts`,
 its two prompts concurrently in isolated sessions. Every failing gate enters a
 bounded auto-repair loop (`PIPELINE_FIX_ATTEMPTS`, default 2) driven by
 `scripts/pipeline/prompts/fix-gate.md`; read-through high findings keep the
-dedicated `fix-high.md` repair plus a fresh re-review. Exhausting the budget
+dedicated `fix-high.md` repair plus a fresh re-review. The server-sync step is
+followed by an independent code review of its source diff in a forked session
+(`sync-review.md`), recorded in `sync-review.json`: it is skipped when the run
+changed no source or config, halts on a critical finding, and repairs high
+findings within the same fix budget. Exhausting the budget
 stops the run for human attention; it never loops unbounded. The default run
 commits in convention buckets — one commit per concern, ordered spec → source →
 tests → pipeline → docs → release, from the pure `planCommits` classifier in

@@ -22,6 +22,18 @@
 - `run-gates --list` marks advisory gates in its plain output; the generated
   `AGENTS.md` table is unchanged.
 
+## 2026.11.7 — Code review is recorded and gated
+
+- The sync step's code review is no longer an unverifiable instruction. A forked
+  session reviews the source diff, writes `sync-review.json`, and ends with a
+  `SYNC REVIEW` token; the pipeline validates the artifact and halts on a
+  critical finding.
+- High findings are repaired within `PIPELINE_FIX_ATTEMPTS` and re-reviewed in a
+  fresh session; a reviewer turn that writes nothing fails the gate instead of
+  passing on the previous attempt's counts.
+- The review is skipped when the run changed no source or config, so a docs-only
+  change set spends no model turn on an empty diff.
+
 ## 2026.11.7 — Gate retirement is opt-in
 
 - A gate becomes advisory only when `scripts/lib/gate-manifest.ts` marks it
