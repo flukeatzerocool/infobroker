@@ -514,6 +514,11 @@ function seedSplitRepo(): { repo: string; snap: string; stampPaths: string } {
   writeFileSync(join(repo, "CHANGELOG.md"), "# Changelog\n\n## 2026.11.06 — Fixture\n\n- Initial.\n");
   copyVersionTooling(repo);
   git(repo, "init", "-q");
+  // The function under test runs plain `git commit`, so the identity must live
+  // in the repo config: a CI runner has no global identity, and per-command
+  // `-c user.name` flags only cover the fixture's own commits.
+  git(repo, "config", "user.email", "test@example.com");
+  git(repo, "config", "user.name", "Test");
   git(repo, "add", "-A");
   git(repo, "commit", "-q", "-m", "Initial");
 
