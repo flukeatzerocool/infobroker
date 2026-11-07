@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.11.07 — Response contract clarity
+
+- A plain-text response mode is now part of the response contract: a tool may
+  return the requested text directly — a fetched page, for example — while the
+  machine-readable envelope travels beside it, so a caller that only wants the
+  content no longer has to unwrap JSON. (REQ-001)
+- Structured-fact extraction is recorded against `search_web`, the tool that
+  actually returns the sourced `facts` entry ahead of the prose, so an
+  implementer is no longer pointed at the page fetcher. (REQ-021i)
+
 ## 2026.11.06 — Spec contract conformance
 
 - Three retrieval contracts now state outcomes instead of implementation
