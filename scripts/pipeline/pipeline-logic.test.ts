@@ -3,7 +3,7 @@
 // helpers in lib.sh: step-range selection, findings parsing, secret redaction,
 // run-directory resume selection, and the CLI surface. Offline and deterministic.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -298,4 +298,80 @@ describe("scan_staged_for_secrets scope", () => {
     const out = runLib("scan_staged_for_secrets", [], { PROJECT_DIR: dir });
     expect(out.trim()).toBe("");
   });
+});
+
+describe("derive_release_tag", () => {
+  it("spells the tag as v<version>", () => {
+    expect(runLib('derive_release_tag "$1"', ["2026.11.06"]).trim()).toBe("v2026.11.06");
+  });
+});
+
+describe("classify_gate_failure", () => {
+  it("passes on exit 0 regardless of attempt budget", () => {
+    expect(runLib('classify_gate_failure "$1" "$2" "$3"', ["0", "5", "2"]).trim()).toBe("pass");
+  });
+
+  it("repairs until the budget is spent, then gives up", () => {
+    const decisions = ["0", "1", "2"].map((attempt) =>
+      runLib('classify_gate_failure "$1" "$2" "$3"', ["1", attempt, "2"]).trim(),
+    );
+    expect(decisions).toEqual(["repair", "repair", "giveup"]);
+  });
+
+  it("never repairs when the budget is zero", () => {
+    expect(runLib('classify_gate_failure "$1" "$2" "$3"', ["1", "0", "0"]).trim()).toBe("giveup");
+  });
+});
+
+describe("stage_denylist", () => {
+  it("reports denied artifacts and ignores clean paths", () => {
+    const staged = [
+      "src/index.ts",
+      "node_modules/pkg/index.js",
+      "dist/server.js",
+      "config.local.json",
+      "secrets/id_rsa",
+      "README.md",
+    ].join("\n");
+    expect(runLib('stage_denylist "$1"', [staged]).trim().split("\n")).toEqual([
+      "node_modules/pkg/index.js",
+      "dist/server.js",
+      "config.local.json",
+      "secrets/id_rsa",
+    ]);
+  });
+
+  it("returns empty for a clean staged set", () => {
+    expect(runLib('stage_denylist "$1"', ["src/index.ts\nREADME.md"]).trim()).toBe("");
+  });
+});
+
+describe("should_commit", () => {
+  it("skips an empty staged diff", () => {
+    expect(runLib('should_commit "$1"', ["0"]).trim()).toBe("skip");
+  });
+
+  it("commits a non-empty staged diff", () => {
+    expect(runLib('should_commit "$1"', ["1"]).trim()).toBe("commit");
+  });
+});
+
+describe("recorded gate outputs", () => {
+  const fixtureDir = join(ROOT, "test-fixtures", "pipeline");
+  const fixtures = readdirSync(fixtureDir).filter((file) => file.endsWith(".txt"));
+
+  it("has at least one recorded fixture", () => {
+    expect(fixtures.length).toBeGreaterThan(0);
+  });
+
+  for (const file of fixtures) {
+    it(`classifies ${file} from its recorded exit code`, () => {
+      const body = readFileSync(join(fixtureDir, file), "utf8");
+      const recorded = /^# rc: (\d+)$/m.exec(body);
+      expect(recorded).not.toBeNull();
+      const rc = Number(recorded![1]);
+      const decision = runLib('classify_gate_failure "$1" "$2" "$3"', [String(rc), "2", "2"]).trim();
+      expect(decision).toBe(rc === 0 ? "pass" : "giveup");
+    });
+  }
 });

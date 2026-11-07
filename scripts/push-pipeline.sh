@@ -939,9 +939,10 @@ git -C "$PROJECT_DIR" add -A -- .
 # Deny-list: artifacts that must never be committed even if a bad .gitignore
 # or a force-add tries to include them.
 STAGED_FILES=$(git -C "$PROJECT_DIR" diff --cached --name-only 2>/dev/null || true)
-if [[ -n "$STAGED_FILES" ]] && grep -qE "$STAGE_DENY_RE" <<<"$STAGED_FILES"; then
+STAGED_DENIED=$(stage_denylist "$STAGED_FILES")
+if [[ -n "$STAGED_DENIED" ]]; then
   error "Denied artifact staged — refusing to commit:"
-  grep -E "$STAGE_DENY_RE" <<<"$STAGED_FILES" | head -20
+  head -20 <<<"$STAGED_DENIED"
   exit 1
 fi
 
@@ -988,7 +989,9 @@ grep -q "CHANGELOG UPDATED." "$OUT_CHANGELOG" 2>/dev/null && COMMIT_SUMMARY="${C
 [[ -n "$SCAN_FINDINGS" && "$SCAN_FINDINGS" != "?" ]] && COMMIT_SUMMARY="${COMMIT_SUMMARY}Dead-code scan: ${SCAN_FINDINGS} findings. "
 COMMIT_SUMMARY="${COMMIT_SUMMARY}Spec audited, README and references refreshed."
 
-if git -C "$PROJECT_DIR" diff --staged --quiet 2>/dev/null; then
+STAGED_DIFF_RC=0
+git -C "$PROJECT_DIR" diff --staged --quiet 2>/dev/null || STAGED_DIFF_RC=$?
+if [[ "$(should_commit "$STAGED_DIFF_RC")" == "skip" ]]; then
   warn "No changes to commit."
 else
   echo ""
@@ -1018,6 +1021,7 @@ if [[ "$RELEASE_VERSION" != "$VERSION" ]]; then
   info "Version changed during this run: ${VERSION} → ${RELEASE_VERSION}"
 fi
 [[ "$RELEASE_VERSION" == "unknown" ]] && die "Cannot read the release version from package.json."
+TAG_NAME=$(derive_release_tag "$RELEASE_VERSION")
 
 # ── readiness report + push approval ────────────────────────────────────────
 # The commit is local and reversible. Publication happens only after the
@@ -1030,7 +1034,7 @@ SHIPPABLE=false
 if $COMMITTED; then SHIPPABLE=true; fi
 [[ "${AHEAD:-0}" -gt 0 ]] && SHIPPABLE=true
 # A moved local tag also needs publishing.
-if ! git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then SHIPPABLE=true; fi
+if ! git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then SHIPPABLE=true; fi
 
 INTERACTIVE=false
 [[ -t 0 ]] && INTERACTIVE=true
@@ -1071,10 +1075,9 @@ echo ""
 # pushes per remote meant two pre-push gate runs and two ways to fail halfway.
 # The tag name follows the version on disk *now*; a tag carrying a different
 # version is refused rather than relabelled.
-warn "Tagging v${RELEASE_VERSION}..."
+warn "Tagging ${TAG_NAME}..."
 TAG_MOVED=false
 tag_release "$RELEASE_VERSION" "$($FORCE_TAG && echo 1 || echo 0)" "$SCRIPT_DIR/lib/release-policy.ts"
-TAG_NAME="v${RELEASE_VERSION}"
 if $TAG_MOVED; then
   TAG_REFSPEC="+refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
 else

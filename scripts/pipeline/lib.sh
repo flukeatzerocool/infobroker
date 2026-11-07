@@ -108,6 +108,18 @@ stage_path_denied() {
   [[ "$1" =~ $STAGE_DENY_RE ]]
 }
 
+# stage_denylist <newline-separated paths> — print the paths that match the
+# deny-list. Empty output means the staged set is clean. Extracted from the
+# driver so the policy can be tested without staging a real tree.
+stage_denylist() {
+  local path
+  while IFS= read -r path; do
+    if [[ -n "$path" && "$path" =~ $STAGE_DENY_RE ]]; then
+      printf '%s\n' "$path"
+    fi
+  done <<<"$1"
+}
+
 # ── git identity guard ───────────────────────────────────────────────────────
 require_git_identity() {
   local name email
@@ -458,6 +470,13 @@ stop_server() {
 
 # ── Release tagging ──────────────────────────────────────────────────────────
 # tag_release <version> <force 0|1> <policy-cli>
+# derive_release_tag <version> — the tag name for a release version. One
+# definition so the shippable probe, the tag command and the refspec cannot
+# disagree about the tag's spelling.
+derive_release_tag() {
+  printf 'v%s\n' "$1"
+}
+
 # Creates, moves, or refuses the tag v<version> using release-policy, then
 # asserts the tag's own package.json version equals <version>. Dies on refusal
 # or mismatch — a wrong release identity is never forced through.
@@ -502,6 +521,21 @@ tag_release() {
     || die "Tag ${tag} points at package.json version '${tagged}', expected '${version}'."
 }
 
+# classify_gate_failure <gate-exit-code> <attempt> <max> → pass | repair | giveup
+# Pure decision used by repair_loop. A non-zero gate is repaired until
+# <attempt> reaches <max>, then given up — which is what bounds the loop.
+# Extracted so the bound is testable without running a gate or an agent.
+classify_gate_failure() {
+  local rc="$1" attempt="$2" max="$3"
+  if [[ "$rc" == "0" ]]; then
+    printf 'pass\n'
+  elif (( attempt >= max )); then
+    printf 'giveup\n'
+  else
+    printf 'repair\n'
+  fi
+}
+
 # ── Bounded auto-repair ──────────────────────────────────────────────────────
 # repair_loop <label> <gate-cmd> <prompt-template> <max> <log> <out>
 # Runs a gate; on failure renders the fix-gate prompt with the failure log and
@@ -510,7 +544,7 @@ tag_release() {
 # required" and stop. The loop is bounded so a repair can never spiral.
 repair_loop() {
   local label="$1" gate_cmd="$2" prompt_template="$3" max="$4" log="$5" out="$6"
-  local attempt=0 rc prompt_file=""
+  local attempt=0 rc prompt_file="" decision=""
   while :; do
     local saved
     saved=$(trap -p ERR 2>/dev/null || true)
@@ -520,19 +554,26 @@ repair_loop() {
     rc=$?
     set -e
     [[ -n "$saved" ]] && eval "$saved"
-    if [[ $rc -eq 0 ]]; then
-      [[ $attempt -gt 0 ]] && info "$label: PASSED after ${attempt} repair attempt(s)."
-      REPAIR_ATTEMPTS["$label"]="$attempt"
-      return 0
-    fi
-    if (( attempt >= max )); then
-      REPAIR_ATTEMPTS["$label"]="$attempt"
-      error "$label: FAILED after ${attempt} repair attempt(s) — human attention required."
-      tail -20 "$log" 2>/dev/null || true
-      return "$rc"
-    fi
-    attempt=$((attempt + 1))
-    warn "$label: FAILED (exit ${rc}) — repair attempt ${attempt}/${max}..."
+    decision=$(classify_gate_failure "$rc" "$attempt" "$max")
+    case "$decision" in
+      pass)
+        if [[ $attempt -gt 0 ]]; then
+          info "$label: PASSED after ${attempt} repair attempt(s)."
+        fi
+        REPAIR_ATTEMPTS["$label"]="$attempt"
+        return 0
+        ;;
+      giveup)
+        REPAIR_ATTEMPTS["$label"]="$attempt"
+        error "$label: FAILED after ${attempt} repair attempt(s) — human attention required."
+        tail -20 "$log" 2>/dev/null || true
+        return "$rc"
+        ;;
+      repair)
+        attempt=$((attempt + 1))
+        warn "$label: FAILED (exit ${rc}) — repair attempt ${attempt}/${max}..."
+        ;;
+    esac
     prompt_file="$PIPELINE_RUN_DIR/repair-$(printf '%s' "$label" | tr ' /' '--')-${attempt}.prompt.md"
     sed -e "s|<LABEL>|$label|g" \
         -e "s|<GATE_CMD>|$gate_cmd|g" \
@@ -547,6 +588,17 @@ repair_loop() {
       warn "$label: repair turn failed (exit ${OPC_RC}); re-checking the gate."
     fi
   done
+}
+
+# should_commit <staged-diff-exit-code> → commit | skip
+# git diff --staged --quiet exits 0 when nothing is staged, so a release with
+# no staged change must not create an empty commit. Extracted for testing.
+should_commit() {
+  if [[ "$1" == "0" ]]; then
+    printf 'skip\n'
+  else
+    printf 'commit\n'
+  fi
 }
 
 # push_action <no_push> <yes> <interactive> <shippable> → one of:

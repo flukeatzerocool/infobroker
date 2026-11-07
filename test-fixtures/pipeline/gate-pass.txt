@@ -1,0 +1,10 @@
+# rc: 0
+# Recorded from a passing `npm run check` tail (2026-11-06).
+
+> infobroker@2026.11.06 test
+> vitest run
+
+ Test Files  78 passed (78)
+      Tests  1240 passed (1240)
+
+Version sync OK. Root version: 2026.11.06

@@ -1,0 +1,10 @@
+# rc: 1
+# Recorded from a failing `npm run validate-spec` tail (2026-11-06).
+
+> infobroker@2026.11.06 validate-spec
+> npx tsx scripts/validate-spec.ts
+
+FAIL  REQ-021h is not cited by any test or waiver.
+FAIL  Appendix B body over the 800-character limit: REQ-076a.
+
+Spec validation FAILED.

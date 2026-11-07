@@ -1,0 +1,6 @@
+# rc: 2
+# Recorded from a gate that died before producing a verdict (2026-11-06).
+
+Error: Cannot find module 'vitest'
+Requires stack trace for ESM module resolution.
+exit 2
