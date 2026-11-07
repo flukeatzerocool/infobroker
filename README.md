@@ -815,8 +815,8 @@ Last updated: 2026-11-07.
 - Validate README structure: `npm run validate-readme`
 - **Versioning:** CalVer (`YYYY.M.D`, no leading zeros). `npm run version-bump`
   stamps today's date into the package, server manifest, and version stamps so
-  the package, tag, and npm-published version are the same string; update the
-  spec stamp and README citation alongside it. Pre-commit hooks verify
+  the package, tag, and npm-published version all name the same release; update
+  the spec stamp and README citation alongside it. Pre-commit hooks verify
   consistency. `npm run push` checks, tags, and pushes.
 - MCP protocol: [modelcontextprotocol.io](https://modelcontextprotocol.io)
 - Providers: [DuckDuckGo](https://duckduckgo.com) ·
