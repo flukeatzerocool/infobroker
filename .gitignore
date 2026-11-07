@@ -28,3 +28,5 @@ vector-store.sqlite*
 vector-store.json.migrated-*
 vector-store.corrupt-*
 vector-store.pre-rollback-*
+# Per-session working notes: local state, never shipped.
+.opencode/session.md

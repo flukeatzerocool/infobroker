@@ -339,6 +339,13 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
 - **Completion bar.** Every plan states its own done-bar — what must pass
   and what must close for *this* plan to be done. Bars are
   session-achievable. "Execute all <unbounded backlog>" is not a bar.
+- **Triggers.** Run the AAR when a session hits a gate failure, an unexpected
+  diff, a finding that repeats an earlier one, or an unpushed backlog older
+  than 24 hours — not after every edit. A trigger that has not fired needs no
+  review.
+- **Session file.** Each session writes `.opencode/session.md` (goal, plan,
+  findings, disposition, loop status) and deletes it at close. It is
+  git-ignored; the durable record is the commit body plus `DECISIONS.md`.
 - **Finding triage (P0–P3).** P0 = demonstrated wrong output or gate
   failure — fix in-session. P1 = normative gap unscheduled — schedule on
   `ROADMAP.md`. P2 = improvement preventing a demonstrated failure —
