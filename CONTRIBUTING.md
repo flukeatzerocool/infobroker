@@ -58,7 +58,7 @@ change the corresponding REQ in the same commit.
 - Keep scripts, specs, and documentation consistent with the conventions in
   `AGENTS.md`.
 - Commit messages: a short summary line; the project's own pipeline uses
-  `YYYY.MM.DD — <title>`.
+  `YYYY.M.D — <title>`.
 
 ## Reporting security issues
 

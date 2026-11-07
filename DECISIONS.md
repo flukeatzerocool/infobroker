@@ -37,6 +37,24 @@ pipeline) and driving the shell from a TypeScript rewrite (a second
 implementation to keep in sync). The harness runs as
 `npm run test-push-pipeline` in both `check:fast` and `check`.
 
+### D-094: CalVer Is Valid SemVer (2026.11.7)
+
+D-086 recorded that npm strips the leading zero from each numeric segment, so
+a repository version `2026.11.07` published as `2026.11.7` and no two
+identities agreed. Decision: the version is always spelled `YYYY.M.D`, which
+is valid SemVer 2.0.0; `today()` and the bump path emit it, and every stamp
+site carries the same string. The three zero-stripping transforms retire —
+`normalizeSemver` in `scripts/lib/version.ts`, the REQ-091 comparison in
+`validate-spec`, and the `publish.yml` local-version transform — and the gate
+now rejects a padded root version. CHANGELOG history keeps its original
+spelling; heading dates are parsed numerically. The README `Last updated`
+date stays ISO-padded as a display date. `set` still accepts a legacy padded
+target so the split-commit rewind can restore a historical stamp. Accepted
+consequence: `2026.11.7` was already on npm when this landed, so the release
+that proves identity must be the first date on or after 2026-11-08; closure is
+`npm view infobroker version` equal to `package.json` and
+`npm view infobroker@<version> gitHead` equal to the tag. Supersedes D-086.
+
 
 
 The session loop's plan, findings, and disposition lived in

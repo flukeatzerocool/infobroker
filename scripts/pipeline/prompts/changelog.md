@@ -10,11 +10,11 @@ Inspect what changed this run:
 2. The spec requires provenance: any modified or new REQ SHALL have a
    CHANGELOG entry citing the REQ ID and the nature of the change.
 3. Add a single date-stamped entry at the top of CHANGELOG.md with the format
-   `## YYYY.MM.DD — <short human title>` matching the existing entries.
+   `## YYYY.M.D — <short human title>` matching the existing entries.
    Group bullets by impact area. Each bullet opens with what changed and why
    it matters in plain English, then the REQ reference in parentheses.
 4. If nothing semantic changed (no REQ added/modified, no behavior change),
-   do not add an entry — and do NOT remove or alter the `## YYYY.MM.DD — `
+   do not add an entry — and do NOT remove or alter the `## YYYY.M.D — `
    version header that `version-bump` seeded at the top of CHANGELOG.md.
    Leave CHANGELOG.md exactly as version-bump left it and report
    `CHANGELOG NO CHANGE.`
