@@ -82,6 +82,22 @@ test("rawTextFromEnvelope prefers the top result, then snippets, then note", () 
   expect(rawTextFromEnvelope({ results: [], note: "no passage addressed the question" })).toBe("no passage addressed the question");
 });
 
+test("plain-text mode returns unprefixed text and carries the envelope", () => {
+  const envelope = {
+    status: "ok",
+    provider: "jina",
+    results: [{ title: "x", url: "https://example.com/x", snippet: "Body text" }],
+  };
+  const text = rawTextFromEnvelope(envelope);
+  expect(text.startsWith("[OK]")).toBe(false);
+  const finalized = finalizeToolResult(
+    { content: [{ type: "text" as const, text }], structuredContent: { ...envelope, raw: true } },
+    [],
+  );
+  expect(finalized.content[0].text).toBe("Body text");
+  expect(finalized.structuredContent).toMatchObject({ status: "ok", provider: "jina", raw: true });
+});
+
 // CR-10: an error envelope has no snippets, so raw mode must return its text
 // instead of an empty string.
 test("rawTextFromEnvelope returns the error message and remediation", () => {

@@ -21,6 +21,37 @@ export interface FactEnrichment {
   source?: string;
 }
 
+/**
+ * REQ-021i: shape a search envelope that carries a resolved fact. The fact
+ * entry is placed ahead of the prose results so a caller sees the sourced
+ * value first; prose order is otherwise preserved, and the fact status is
+ * reported under `meta.fact_status`.
+ */
+export function applyFactsToEnvelope(
+  payload: Record<string, unknown>,
+  enrichment: FactEnrichment,
+): Record<string, unknown> {
+  const factResults = enrichment.facts.map((fact) => ({
+    title: `${fact.kind} — ${fact.source}`,
+    url: fact.url,
+    snippet: fact.display,
+    source_type: "structured_fact",
+    fact,
+  }));
+  const meta = (payload.meta ?? {}) as Record<string, unknown>;
+  const prose = Array.isArray(payload.results) ? payload.results : [];
+  return {
+    ...payload,
+    results: [...factResults, ...prose],
+    facts: enrichment.facts,
+    meta: {
+      ...meta,
+      fact_status: enrichment.fact_status,
+      ...(enrichment.source ? { fact_source: enrichment.source } : {}),
+    },
+  };
+}
+
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 
 // Property map verified against Wikidata labels (P1110 attendance, P1082

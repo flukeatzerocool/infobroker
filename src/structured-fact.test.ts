@@ -1,6 +1,7 @@
 // @implements REQ-021i wikidata-claim wikipedia-infobox wikipedia-table not-found
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  applyFactsToEnvelope,
   detectFactKind,
   entityQuery,
   enrichStructuredFacts,
@@ -444,5 +445,44 @@ describe("structured-fact resolution (REQ-021i)", () => {
       results: [{ title: "Survivor Series", url: "https://en.wikipedia.org/wiki/X", snippet: "" }],
     });
     expect(result?.fact_status).toBe("unavailable");
+  });
+});
+
+describe("search_web response shaping (REQ-021i)", () => {
+  const fact = {
+    kind: "attendance" as const,
+    value: 17000,
+    display: "17,000",
+    property: "P1110",
+    source: "wikidata",
+    url: "https://www.wikidata.org/wiki/Q1",
+  };
+  const prose = { title: "Survivor Series", url: "https://en.wikipedia.org/wiki/X", snippet: "prose" };
+
+  it("places the resolved fact before the prose results and reports its status", () => {
+    const next = applyFactsToEnvelope(
+      { status: "ok", provider: "wikidata", results: [prose], meta: { task_type: "structured_fact" } },
+      { facts: [fact], fact_status: "resolved", source: "wikidata" },
+    );
+    expect(next.results).toEqual([
+      expect.objectContaining({ source_type: "structured_fact", snippet: "17,000", fact }),
+      prose,
+    ]);
+    expect(next.facts).toEqual([fact]);
+    expect(next.meta).toMatchObject({
+      task_type: "structured_fact",
+      fact_status: "resolved",
+      fact_source: "wikidata",
+    });
+  });
+
+  it("keeps the prose order when no fact resolved and omits the source", () => {
+    const second = { title: "Other", url: "https://en.wikipedia.org/wiki/Y", snippet: "more" };
+    const next = applyFactsToEnvelope(
+      { status: "ok", provider: "wikipedia", results: [prose, second] },
+      { facts: [], fact_status: "not_found" },
+    );
+    expect(next.results).toEqual([prose, second]);
+    expect(next.meta).toEqual({ fact_status: "not_found" });
   });
 });

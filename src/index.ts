@@ -56,7 +56,7 @@ import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { withTimeout } from "./lib/timeout.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
-import { enrichStructuredFacts } from "./structured-fact.js";
+import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
 import { classifyFailure, failureTaxonomy, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
 import { collectNotices, computeStateHealth, injectNotices } from "./state-health.js";
 import { configureUpdateCheck } from "./update-check.js";
@@ -1665,25 +1665,7 @@ async function withStructuredFacts(content: string, query: string | string[]): P
   });
   if (!enrichment) return content;
 
-  const facts = enrichment.facts;
-  const factResults = facts.map((fact) => ({
-    title: `${fact.kind} — ${fact.source}`,
-    url: fact.url,
-    snippet: fact.display,
-    source_type: "structured_fact",
-    fact,
-  }));
-  const next: Record<string, unknown> = {
-    ...payload,
-    results: [...factResults, ...(Array.isArray(payload.results) ? payload.results : [])],
-    facts,
-    meta: {
-      ...meta,
-      fact_status: enrichment.fact_status,
-      ...(enrichment.source ? { fact_source: enrichment.source } : {}),
-    },
-  };
-  return `[OK] ${json(next)}`;
+  return `[OK] ${json(applyFactsToEnvelope(payload, enrichment))}`;
 }
 
 // --- search_web ---
