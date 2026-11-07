@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.11.07 — Split commits in the pipeline
+
+- The push pipeline now commits one concern per commit — spec, source, tests,
+  pipeline, docs, release — by default, using the deterministic `planCommits`
+  classifier; `--single-commit` keeps the old bulk behavior for a genuinely
+  atomic change.
+- Version stamps and the new CHANGELOG entry are snapshotted, rewound to the
+  pre-run version, and restored before the release commit, so every commit in
+  the series stays internally consistent and the `version-sync` pre-commit hook
+  passes at each one.
+- `scripts/version.ts` gained `set <version>` and now also stamps the spec
+  version and the README reference, so a rewind covers every site the sync and
+  README steps write.
+
 ## 2026.11.07 — Response contract clarity
 
 - A plain-text response mode is now part of the response contract: a tool may

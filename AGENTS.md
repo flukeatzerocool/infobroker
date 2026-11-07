@@ -82,7 +82,14 @@ bounded auto-repair loop (`PIPELINE_FIX_ATTEMPTS`, default 2) driven by
 `scripts/pipeline/prompts/fix-gate.md`; read-through high findings keep the
 dedicated `fix-high.md` repair plus a fresh re-review. Exhausting the budget
 stops the run for human attention; it never loops unbounded. The default run
-commits locally, prints a readiness report, and then asks for push approval —
+commits in convention buckets — one commit per concern, ordered spec → source →
+tests → pipeline → docs → release, from the pure `planCommits` classifier in
+`scripts/lib/release-policy.ts` — instead of one bulk commit; `--single-commit`
+is the explicit exception for a genuinely atomic change. Each earlier commit is
+`typecheck`-verified, and the version stamps plus the new CHANGELOG entry are
+snapshotted, rewound to the pre-run version, and restored before the final
+release commit, so every commit in the series is internally consistent and the
+`version-sync` pre-commit hook stays green. It then prints a readiness report and asks for push approval —
 `--yes` pre-approves, `--no-push` commits locally and exits 0, and a
 non-interactive run without `--yes` exits 1 rather than publishing. Per-step
 wall times are recorded under the run directory (`timings/`, one file per step,
@@ -147,7 +154,8 @@ commands stay the same. These mappings are the standing agreement.
   first, as its own commit, never folded into the feature work.
 - **"status" / "what's left"** — `npm run status`, plus `npm run metrics` when
   the question is about cadence rather than content.
-- **Split limits** — split is the default for every "commit" and "push". A
+- **Split limits** — split is the default for every "commit" and "push", and
+  for `scripts/push-pipeline.sh` itself (`--single-commit` is its opt-out). A
   single bulk commit is the exception: the whole change is one concern (a
   one-line fix, a dependency bump) or the maintainer explicitly asks for one.
   Running `npm run push` directly is that explicit request. A split commit
