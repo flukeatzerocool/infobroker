@@ -23,8 +23,8 @@
 ## §1 Mission and Capability Model
 
 Infobroker is a configurable, multi-provider MCP server that wraps public web
-search, structured knowledge, scholarly, and content-extraction APIs behind a
-unified tool surface. Its design goals:
+search, structured knowledge, scholarly literature, and content-extraction
+APIs behind a unified tool surface. Its design goals:
 
 1. **Free first, privacy always.** Zero-config default uses only free, no-auth-required providers that respect user privacy.
 2. **Upgrade path.** Optional API-keyed providers (Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
@@ -155,7 +155,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `exa`). |
 | **Dispatch chain** | The ordered provider list for a task type (§7.2), primary first; used for auto-selection (REQ-020a) and, on failure, as the fallback chain (REQ-031). |
 | **Capability** | A function a provider declares (e.g. `web_search`, `academic`, `content_fetch`). Capability tokens overlap the task types (§7.1); the `web_search` capability serves the `general_web` task type. |
-| **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed) (REQ-013, REQ-034). |
+| **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, partial results, or quota at the warning threshold), or `exhausted` (quota consumed; REQ-013, REQ-034). |
 | **Source type** | A label carried by a normalized result, a corroborating source, or a KB document. On results it is the provider-declared content kind (e.g. `academic`, `news`); in corroboration it denotes the source-authority class (REQ-026a); on KB documents it is a caller-assigned tag (e.g. `report`). |
 | **Quota** | Per-provider daily and monthly usage counters, persisted across restarts (REQ-033). |
 | **Throttling** | The per-provider minimum interval between requests (REQ-030); distinct from quota. |
@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–124, 127–128, 130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -1470,7 +1470,9 @@ different shipped default (REQ-010).
 
 **World Bank** — `https://search.worldbank.org/api/v2/wds?format=json&qterm={query}`. Documents, indicators, and economic series.
 
-### A.3 Free HTTP (Registration Required)
+### A.3 Free HTTP (Free Key Optional)
+
+Keys are optional for these providers; CORE requires a free key.
 
 **Semantic Scholar** — `https://api.semanticscholar.org/graph/v1/paper/search?query={query}`. Shared pool at 1,000 RPS; dedicated pool with key at 1 RPS. Covers 214M papers, 2.5B citations.
 
