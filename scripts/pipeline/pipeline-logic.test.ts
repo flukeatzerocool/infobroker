@@ -375,3 +375,74 @@ describe("recorded gate outputs", () => {
     });
   }
 });
+
+describe("review shards", () => {
+  it("starts at S1 when there is no previous marker", () => {
+    expect(runLib('next_review_shard "$1"', [""]).trim()).toBe("S1");
+  });
+
+  it("advances to the next shard", () => {
+    expect(runLib('next_review_shard "$1"', ["S2"]).trim()).toBe("S3");
+  });
+
+  it("wraps from the last shard to the first", () => {
+    const count = Number(runLib("review_shard_count").trim());
+    expect(runLib('next_review_shard "$1"', [`S${count}`]).trim()).toBe("S1");
+  });
+
+  it("falls back to S1 for an unknown id", () => {
+    expect(runLib('next_review_shard "$1"', ["S99"]).trim()).toBe("S1");
+  });
+
+  it("maps every shard id to a non-empty section range", () => {
+    const count = Number(runLib("review_shard_count").trim());
+    for (let i = 1; i <= count; i += 1) {
+      expect(runLib('review_shard_sections "$1"', [`S${i}`]).trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("last_review_shard", () => {
+  it("returns empty when no pipeline subject exists", () => {
+    expect(runLib('last_review_shard "$1"', ["feat: thing\nfix: other"]).trim()).toBe("");
+  });
+
+  it("reads the newest marker", () => {
+    const subjects = [
+      "Push pipeline 2026-11-06 (review S3/6)",
+      "Push pipeline 2026-11-05 (review S2/6)",
+    ].join("\n");
+    expect(runLib('last_review_shard "$1"', [subjects]).trim()).toBe("S3");
+  });
+
+  it("skips non-pipeline commits above the newest pipeline subject", () => {
+    const subjects = ["README: tweak", "Push pipeline 2026-11-06 (review S4/6)"].join("\n");
+    expect(runLib('last_review_shard "$1"', [subjects]).trim()).toBe("S4");
+  });
+
+  it("resets after a deep review", () => {
+    const subjects = [
+      "Push pipeline 2026-11-06 (deep review)",
+      "Push pipeline 2026-11-05 (review S5/6)",
+    ].join("\n");
+    expect(runLib('last_review_shard "$1"', [subjects]).trim()).toBe("");
+  });
+
+  it("resets after an unmarked pipeline commit", () => {
+    const subjects = ["Push pipeline 2026-11-06", "Push pipeline 2026-11-05 (review S5/6)"].join("\n");
+    expect(runLib('last_review_shard "$1"', [subjects]).trim()).toBe("");
+  });
+});
+
+describe("readthrough prompt scope", () => {
+  const prompt = readFileSync(join(ROOT, "scripts", "pipeline", "prompts", "readthrough.md"), "utf8");
+
+  it("takes its scope and base ref from the pipeline", () => {
+    expect(prompt).toContain("<SCOPE>");
+    expect(prompt).toContain("<BASE_REF>");
+  });
+
+  it("does not hardcode an end-to-end read", () => {
+    expect(prompt).not.toContain("Read infobroker.md end to end");
+  });
+});

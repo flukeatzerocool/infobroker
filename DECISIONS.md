@@ -2,6 +2,22 @@
 
 ## Active Decisions
 
+### D-088: Diff-Scoped Review with Rotating Shards (2026.11.06)
+
+The read-through read `infobroker.md` end to end on every run: 617 of the
+pipeline's roughly 1,400 AI seconds, spent mostly re-reading unchanged prose.
+Atomic commits now make the change set legible, so the default review is the
+diff since the last release tag plus every REQ that references a changed tool,
+file, flag, or provider, followed by one rotating spec shard as a drift pass.
+Six shards keyed to section anchors cover the whole file every six releases.
+The cursor is the newest `(review S3/6)` marker in a pipeline commit subject, so
+no state file is needed, and `(deep review)` resets the rotation to the first
+shard. `--deep-review` reads the whole spec in one pass and is rejected
+together with `--no-ai`, which has no backend. Rejected: the whole-spec pass
+every run (617s of re-reading), a periodic full pass (a ten-minute spike every
+fifth release), parallel shards (several summaries must merge into the one
+count gate), and automatic `--no-ai` (review stays on by default).
+
 ### D-086: CalVer Is Normalized on Publish (2026.11.06)
 
 `npm view infobroker versions` returns `2026.11.4`, not the `2026.11.04` stored

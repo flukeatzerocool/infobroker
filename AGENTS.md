@@ -63,6 +63,13 @@ npm run typecheck   # tsc --noEmit
 
 ## Push Pipeline
 
+The read-through reviews the change set since the last release tag plus every
+REQ that references a changed tool, file, flag, or provider, then one rotating
+spec shard as a drift pass. Six shards keyed to section anchors cover the whole
+file every six releases; the cursor is the newest `(review S3/6)` marker in a
+pipeline commit subject, and `(deep review)` resets it. `--deep-review` reads
+the whole spec in one pass instead.
+
 `scripts/push-pipeline.sh` runs its review-only AI steps (read-through,
 changelog, scan, README) under the non-thinking `pipeline-fast` agent
 (`.opencode/agents/pipeline-fast.md`); the server-sync step keeps the full

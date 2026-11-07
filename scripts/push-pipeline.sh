@@ -77,6 +77,8 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --no-ai          Deterministic release only: skip the read-through, sync,
                    changelog, and README steps (and the AI scan). Requires an
                    already-prepared tree; see `npm run prepare`.
+  --deep-review    Read infobroker.md end to end in one pass instead of the
+                   change set plus one rotating shard. Resets the shard cursor.
   --commit         Allow commit and push with --from=<step>; a step range is a
                    testing run without it. Never combines with --to.
   --resume         Continue the newest recorded run for this repo/branch.
@@ -97,6 +99,7 @@ EOF
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
 NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false; NO_AI=false
+DEEP_REVIEW=false; REVIEW_SCOPE=""; REVIEW_SHARD=""; REVIEW_SHARD_COUNT=0
 START_STEP=""; END_STEP=""; RUN_ID=""
 
 for arg in "$@"; do
@@ -114,6 +117,7 @@ for arg in "$@"; do
     --no-mirror) NO_MIRROR=true ;;
     --no-commit) NO_COMMIT=true ;;
     --no-ai) NO_AI=true ;;
+    --deep-review) DEEP_REVIEW=true ;;
     --commit) COMMIT=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --to=*) END_STEP="${arg#--to=}" ;;
@@ -128,6 +132,10 @@ done
 
 if $PARALLEL; then
   warn "--parallel is deprecated: generate-auth now runs sequentially before read-through."
+fi
+# A deep review is an AI step; --no-ai has no backend to run it on.
+if $DEEP_REVIEW && $NO_AI; then
+  die "--deep-review needs the AI backend, which --no-ai disables. Drop one of them."
 fi
 
 # ── Paths, branch, run directory ──
@@ -329,6 +337,11 @@ print_readiness_report() {
   printf '  Branch:        %s\n' "$BRANCH"
   printf '  Version:       %s\n' "${RELEASE_VERSION:-$VERSION}"
   printf '  HEAD:          %s (%s)\n' "$sha" "$stat"
+  if $DEEP_REVIEW; then
+    printf '  Review:        deep (whole spec)\n'
+  elif [[ -n "$REVIEW_SHARD" ]]; then
+    printf '  Review:        change set + shard %s/%s\n' "$REVIEW_SHARD" "$REVIEW_SHARD_COUNT"
+  fi
   for step in $STEP_ORDER; do
     printf '  %-13s %s\n' "$step:" "${STEP_STATUS[$step]:-not run}"
   done
@@ -532,12 +545,38 @@ run_readthrough_pass() {
   fi
 }
 
+# Compute the review scope even for a dry run, so the readiness report states
+# what it would review. A skipped step (--from/--to) computes nothing.
+if ! step_skip readthrough; then
+  # The change set is everything committed since the last release tag (the
+  # pipeline requires a clean tree, so git diff HEAD would be empty). Select
+  # either a deep pass or the next rotating shard.
+  BASE_REF=$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || true)
+  if [[ -z "$BASE_REF" ]]; then
+    BASE_REF=$(git -C "$PROJECT_DIR" rev-parse origin/main 2>/dev/null \
+      || git -C "$PROJECT_DIR" rev-list --max-parents=0 HEAD | tail -1)
+  fi
+  if $DEEP_REVIEW; then
+    REVIEW_SCOPE="Read infobroker.md end to end (deep review)."
+    warn "Read-through scope: deep review (whole spec)."
+  else
+    SUBJECTS=$(git -C "$PROJECT_DIR" log --format=%s 2>/dev/null || true)
+    LAST_SHARD=$(last_review_shard "$SUBJECTS")
+    REVIEW_SHARD=$(next_review_shard "$LAST_SHARD")
+    REVIEW_SHARD_COUNT=$(review_shard_count)
+    REVIEW_SCOPE="Review the change set since ${BASE_REF}, then the spec shard $(review_shard_sections "$REVIEW_SHARD")."
+    info "Read-through scope: change set since ${BASE_REF} + shard ${REVIEW_SHARD}/${REVIEW_SHARD_COUNT}."
+  fi
+fi
+
 if $DRY_RUN || step_skip readthrough; then
   info "Read-through: SKIPPED (dry run / state journal)"
   status_set readthrough "skipped"
 else
-  # Substitute the summary-json path into the prompt.
-  sed "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
+  sed -e "s|<SCOPE>|$REVIEW_SCOPE|g" \
+      -e "s|<BASE_REF>|$BASE_REF|g" \
+      -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" \
+      "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
 
   # generate-auth mutates a tracked file; run it deterministically before the
   # AI steps instead of racing an AI edit on the same working tree. The output
@@ -1035,7 +1074,13 @@ else
   git -C "$PROJECT_DIR" diff --staged --stat
   echo ""
   warn "Committing changes..."
-  git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}
+  REVIEW_SUFFIX=""
+  if $DEEP_REVIEW; then
+    REVIEW_SUFFIX=" (deep review)"
+  elif [[ -n "$REVIEW_SHARD" ]]; then
+    REVIEW_SUFFIX=" (review ${REVIEW_SHARD}/${REVIEW_SHARD_COUNT})"
+  fi
+  git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}${REVIEW_SUFFIX}
 
 ${COMMIT_SUMMARY}"
   COMMITTED=true

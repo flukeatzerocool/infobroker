@@ -477,6 +477,77 @@ derive_release_tag() {
   printf 'v%s\n' "$1"
 }
 
+# ── Review scope ─────────────────────────────────────────────────────────────
+# The read-through reviews the change set every run, then one spec shard as a
+# drift pass. Shards are defined by section anchors, not line numbers, so they
+# survive spec growth. The cursor is the newest "(review SN/K)" marker in a
+# pipeline commit subject; "(deep review)" resets the rotation to S1.
+REVIEW_SHARD_IDS=(S1 S2 S3 S4 S5 S6)
+REVIEW_SHARD_SECTIONS=(
+  "§1-§3 (mission, failure modes, standing rules)"
+  "§4.1-§4.5 (contracts, config, core tools, resilience, state)"
+  "§4.6-§4.11 (providers, artifacts, integrity, knowledge base, deploy, security)"
+  "§5-§8 (build, runtime, dispatch, corroboration)"
+  "§9-§10 (verification, artifacts and handoff)"
+  "§A-§E (appendices)"
+)
+
+# review_shard_count — the number of shards.
+review_shard_count() {
+  printf '%s\n' "${#REVIEW_SHARD_IDS[@]}"
+}
+
+# next_review_shard <last-id> — the shard to review next. An empty or unknown
+# id starts at the first shard; the last shard wraps to the first.
+next_review_shard() {
+  local last="$1" i
+  if [[ -n "$last" ]]; then
+    for i in "${!REVIEW_SHARD_IDS[@]}"; do
+      if [[ "${REVIEW_SHARD_IDS[$i]}" == "$last" ]]; then
+        printf '%s\n' "${REVIEW_SHARD_IDS[$(( (i + 1) % ${#REVIEW_SHARD_IDS[@]} ))]}"
+        return 0
+      fi
+    done
+  fi
+  printf '%s\n' "${REVIEW_SHARD_IDS[0]}"
+}
+
+# review_shard_sections <id> — the human-readable section range for a shard.
+review_shard_sections() {
+  local id="$1" i
+  for i in "${!REVIEW_SHARD_IDS[@]}"; do
+    if [[ "${REVIEW_SHARD_IDS[$i]}" == "$id" ]]; then
+      printf '%s\n' "${REVIEW_SHARD_SECTIONS[$i]}"
+      return 0
+    fi
+  done
+  printf '%s\n' "${REVIEW_SHARD_SECTIONS[0]}"
+}
+
+# last_review_shard <newline-separated commit subjects> — the shard named by
+# the newest pipeline subject carrying a "(review SN/K)" marker, or empty when
+# none exists. Stops at the first match so the caller can pass git log output
+# newest-first. A "(deep review)" subject intentionally yields empty, which
+# restarts the rotation.
+last_review_shard() {
+  local line input="${1:-}"
+  while IFS= read -r line; do
+    case "$line" in
+      "Push pipeline "*)
+        # The newest pipeline run decides the cursor. A marked subject names the
+        # shard it reviewed; an unmarked or deep subject resets to the first.
+        if [[ "$line" =~ \(review\ (S[0-9]+)/[0-9]+\) ]]; then
+          printf '%s\n' "${BASH_REMATCH[1]}"
+        else
+          printf '\n'
+        fi
+        return 0
+        ;;
+    esac
+  done <<<"$input"
+  printf '\n'
+}
+
 # Creates, moves, or refuses the tag v<version> using release-policy, then
 # asserts the tag's own package.json version equals <version>. Dies on refusal
 # or mismatch — a wrong release identity is never forced through.

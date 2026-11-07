@@ -1,6 +1,21 @@
-Read infobroker.md end to end. Apply the proofreading skill to the spec
-prose: grammar, spelling, punctuation, style, and consistency. Then run
-the spec authoring audit directly against every REQ body (the mechanical
+<SCOPE>
+
+Scope rules:
+- Base ref: <BASE_REF>. The change set is everything committed since it, not
+  the working tree (the pipeline requires a clean tree). Use
+  `git log <BASE_REF>..HEAD` to enumerate the change intents and
+  `git diff <BASE_REF>..HEAD` for the exact edits.
+- In a change-set review, cover the changed REQ bodies and every REQ that
+  references a changed tool, file, flag, or provider. Follow a reference out
+  of the changed set when correctness depends on it.
+- In a shard review, cover every REQ and prose block in the named sections,
+  following references out of the shard where needed.
+- A deep review covers the whole file end to end.
+- If the change set is empty, say so and still perform the shard pass.
+
+Apply the proofreading skill to the spec prose in scope: grammar, spelling,
+punctuation, style, and consistency. Then run
+the spec authoring audit directly against every REQ body in scope (the mechanical
 `validate-spec` gate covers structure; this step checks authoring
 conformance): verify every REQ body conforms to the spec's authoring
 conventions (AGENTS.md Appendix B / SR-011): contracts not implementations,
