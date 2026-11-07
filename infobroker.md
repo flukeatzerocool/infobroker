@@ -192,7 +192,7 @@ REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 01
 ### 4.1 Output and Error Contracts
 
 **REQ-001 — Status Prefix Contract**
-Every tool response SHALL be a JSON object with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. Every tool SHALL declare an output schema and SHALL return the same envelope as a machine-readable `structuredContent` object beside the human-readable text. _Check:_ G0.
+Every tool response SHALL carry a JSON envelope with at minimum: `status` (`"ok"` or `"error"`), `provider` (slug of the provider that serviced the request), `results` (array) or `error` (object). Client-facing envelope text in `content` fields MUST use `[OK]` / `[ERROR]` prefixes for human-readable output. Every tool SHALL declare an output schema and SHALL return the envelope as a machine-readable `structuredContent` object beside the human-readable text. A tool with an explicitly requested plain-text mode SHALL return the requested text in `content` without a status prefix, with the envelope still carried in the structured output object. _Check:_ G0.
 
 **REQ-002 — Error Taxonomy**
 Errors SHALL include: `code` (machine-readable slug: `provider_unavailable`, `rate_limited`, `invalid_input`, `config_error`, `parse_error`, `all_providers_exhausted`, `access_blocked`, `network_error`, `corroboration_error`), `message` (human-readable), `provider` (which provider errored), `remediation` (what to try: "retry with fallback", "check API key", "wait 60s"). A failure attributable to rate limiting — including a provider skipped for cooling down — SHALL be reported as `rate_limited` in preference to a generic provider-unavailable error. A fetch blocked by a paywall, access restriction, or anti-bot gate SHALL be reported as `access_blocked` with a cause, and a connectivity failure SHALL be reported as `network_error`. Errors with no defined code SHALL use `internal_error`. _Check:_ G0.
@@ -291,8 +291,8 @@ WHEN a fresh knowledge-base copy of the requested URL exists, the tool SHALL ret
 **REQ-021h — `fetch_page` source fallback**
 WHEN the `fetch_page` renderer chain cannot return content, the tool SHALL classify each failure as payment wall (`paywall`), access restriction (`access_restricted`), anti-bot challenge (`anti_bot`), missing page, rate limit, connectivity, or unknown, and report the dominant cause in the error details. A forbidden or legally restricted response SHALL be access-restricted, never a paywall. WHEN the URL identifies a DOI, the tool SHALL attempt DOI metadata, then an open-access copy, before failing, and otherwise an archived snapshot. A successful fallback SHALL identify itself while preserving the original URL; a metadata-only one SHALL return the bibliographic record noting full text was unavailable. An unsupported protocol SHALL NOT justify permitting private targets. _Check:_ G1.
 
-**REQ-021i — structured-fact extraction**
-WHEN a query names a measurable attribute such as attendance, population, area, elevation, percentage, or date, the tool SHALL classify it as a `structured_fact` query and SHALL return a fact object with the value, unit when applicable, source, and originating property or field key. Facts SHALL be sourced from a structured knowledge record before encyclopedic page content and prose, reporting the source representation the fact resolved from. The response SHALL report a fact status of resolved, not found, ambiguous, or unavailable, and SHALL place resolved facts before prose results. WHEN no source yields a value, the tool SHALL NOT compute or infer one. A fact SHALL carry the source's as-of date when supplied. _Check:_ G1.
+**REQ-021i — `search_web` structured-fact extraction**
+WHEN a query names a measurable attribute such as attendance, population, area, elevation, percentage, or date, `search_web` SHALL classify it as a `structured_fact` query and SHALL return a fact object with the value, unit when applicable, source, and originating property or field key. Facts SHALL be sourced from a structured knowledge record before encyclopedic page content and prose, reporting the source representation the fact resolved from. The response SHALL report a fact status of resolved, not found, ambiguous, or unavailable, and SHALL place resolved facts before prose results. WHEN no source yields a value, `search_web` SHALL NOT compute or infer one. A fact SHALL carry the source's as-of date when supplied. _Check:_ G1.
 
 **REQ-021j — `fetch_page` raw-text response mode**
 WHEN `fetch_page` receives `raw` set to true, the tool SHALL return the extracted page text as plain text content rather than a JSON envelope and SHALL expose the response metadata, including status, provider, URL, extraction mode, passage count, and truncation state, through the structured output object. Raw mode SHALL apply only to a single-URL request without crawl or extract; any other combination SHALL return a REQ-002 error. A question-mode raw response SHALL return the top-ranked passage. _Check:_ G1.
@@ -1182,7 +1182,7 @@ verdict is preserved (REQ-026f).
 | REQ-021f | `fetch_page` anti-bot challenge fall-through | 4.3 | G1 |
 | REQ-021g | `fetch_page` knowledge-base cache | 4.3 | G1 |
 | REQ-021h | `fetch_page` source fallback | 4.3 | G1 |
-| REQ-021i | structured-fact extraction | 4.3 | G1 |
+| REQ-021i | `search_web` structured-fact extraction | 4.3 | G1 |
 | REQ-021j | `fetch_page` raw-text response mode | 4.3 | G1 |
 | REQ-021k | `fetch_page` batch item metadata | 4.3 | G1 |
 | REQ-024 | `inspect_providers` | 4.3 | G0, G1 |
