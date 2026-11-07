@@ -140,10 +140,13 @@ commands stay the same. These mappings are the standing agreement.
   first, as its own commit, never folded into the feature work.
 - **"status" / "what's left"** — `npm run status`, plus `npm run metrics` when
   the question is about cadence rather than content.
-- **Split limits** — a split commit stays under roughly 300 changed lines
-  unless the change is genuinely atomic; an oversized bucket splits by file or
-  feature. When the split would exceed five commits, print the planned grouping
-  before executing.
+- **Split limits** — split is the default for every "commit" and "push". A
+  single bulk commit is the exception: the whole change is one concern (a
+  one-line fix, a dependency bump) or the maintainer explicitly asks for one.
+  Running `npm run push` directly is that explicit request. A split commit
+  stays under roughly 300 changed lines unless the change is genuinely atomic;
+  an oversized bucket splits by file or feature. When the split would exceed
+  five commits, print the planned grouping before executing.
 
 ## Script Discipline
 
