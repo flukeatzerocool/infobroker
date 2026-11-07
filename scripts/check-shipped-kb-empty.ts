@@ -5,7 +5,7 @@
 //
 // Exit codes: 0 = repo ships no KB artifact; 1 = violation found.
 
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, isAbsolute, relative } from "node:path";
 import { homedir } from "node:os";
 import { isKbStoreArtifact } from "../src/kb-store.js";

@@ -154,8 +154,11 @@ const seed = findSeed();
 
 function baseConfig(storagePath: string, keyFile?: string): KbConfig {
   const loaded = loadConfig();
+  // The config layer resolves defaults before the store sees them; the
+  // declared `Config.kb` shape is the pre-resolution input, so the spread is
+  // typed as the resolved shape here.
   return {
-    ...loaded.kb,
+    ...(loaded.kb as KbConfig),
     storage_path: storagePath,
     auto_index: false,
     maintenance_interval_minutes: 0,

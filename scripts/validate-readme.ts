@@ -8,7 +8,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  readReadme, extractHeadings, extractLinks, extractBlockquotes,
+  readReadme, extractHeadings, extractLinks,
   extractBulletLists, proseOnly, proseLines, slugify,
   deriveToolNames, deriveProviderSlugs, deriveSurfaceCounts,
 } from "./lib/parse-readme.js";

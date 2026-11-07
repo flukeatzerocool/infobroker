@@ -82,10 +82,7 @@ interface ToolPart {
   end?: number;
 }
 
-let DatabaseSync: new (path: string, options?: { readOnly?: boolean }) => {
-  prepare: (sql: string) => { all: (...params: unknown[]) => unknown[] };
-  close: () => void;
-};
+let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
 try {
   ({ DatabaseSync } = await import("node:sqlite"));
 } catch {

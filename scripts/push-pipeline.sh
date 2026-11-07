@@ -992,11 +992,10 @@ if $NO_COMMIT; then
 fi
 
 # ── final gate ──────────────────────────────────────────────────────────────
-# The full suite on the tree about to be committed. Its passing lets the
-# pre-push hook skip re-running the same suite for refs this run just verified
-# (INFOBROKER_PIPELINE_VERIFIED_SHA); without it the token is never exported and
-# the hook runs in full. This is also the only full gate that sees the final
-# tree — step 1 ran before any edit.
+# The full suite on the tree about to be committed. The commit that follows
+# writes a tree-keyed run record; the pre-push hook then skips re-running the
+# same suite for the refs this run just verified. This is also the only full
+# gate that sees the final tree — step 1 ran before any edit.
 info "═══════════════════════════════════════════════"
 info "Final gate: npm run check on the tree to ship"
 info "═══════════════════════════════════════════════"
@@ -1146,9 +1145,11 @@ EOF
 fi
 record_timing "$PIPELINE_RUN_DIR/timings" "phase-commit" "$(( $(date +%s) - COMMIT_PHASE_START ))"
 
-# The pre-push hook skips its own `npm run check` only when this token names the
-# exact HEAD and the tree is clean, i.e. for refs the final gate just verified.
-export INFOBROKER_PIPELINE_VERIFIED_SHA=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)
+# The pre-push hook skips its own `npm run check` only for the exact tree this
+# run just verified. The final gate above ran before staging, so the record is
+# written here, after the commit, keyed on the committed tree. A dirty tree
+# records nothing and the hook runs the suite again — safe, just slower.
+npx tsx "$SCRIPT_DIR/run-gates.ts" --record-only || warn "Gate record: could not write (pre-push will re-run the suite)."
 echo ""
 
 # Release identity is re-derived here, after the sync step has had its chance

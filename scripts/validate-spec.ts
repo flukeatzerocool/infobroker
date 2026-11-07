@@ -15,6 +15,7 @@ import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
 import { writeProviderPrivacy, readPrivacyConfig } from "./lib/provider-privacy.js";
+import { GATES } from "./lib/gate-manifest.js";
 
 // @implements REQ-055
 
@@ -224,10 +225,6 @@ for (let i = 0; i < reqBodies.length; i++) {
   if (tokens.length > 5) {
     error(`${tagOf(i)}: REQ body enumerates ${tokens.length} backtick-delimited tokens (>5) — violates Appendix B mechanical limits`);
   }
-}
-
-function reqNum(i: number): number {
-  return i + 1;
 }
 
 // d) duplicate lifecycle descriptions
@@ -490,7 +487,7 @@ function expandReservations(text: string): Set<string> {
   // range regex across the en dash. Strip backticks first so ranges parse.
   const clean = text.replace(/`/g, "");
   const rangeRe = /\b(\d{3})([a-z])?[–-](\d{3})([a-z])?/g;
-  const residual = clean.replace(rangeRe, (m, start, startSuffix, end, endSuffix) => {
+  const residual = clean.replace(rangeRe, (_full, start, startSuffix, end, endSuffix) => {
     if (startSuffix || endSuffix) {
       const base = String(start);
       const from = startSuffix ? startSuffix.charCodeAt(0) : "a".charCodeAt(0);
@@ -949,12 +946,26 @@ function checkSecurityModel(): void {
 checkSecurityModel();
 
 // --- Dependency vulnerability gate wiring (REQ-101) ---
+//
+// The audit gate must be part of `npm run check`, not merely present as an npm
+// script. `check` runs the manifest, so the manifest is the authority: an
+// `audit` gate must exist, run `npm run audit`, and `check` must be the full
+// manifest run. A substring scan of the old `&&` chain did not survive the
+// move to a manifest and would have passed a check that never ran the audit.
 function checkDependencyGate(): void {
+  const audit = GATES.find((gate) => gate.name === "audit");
+  if (!audit) {
+    error("gate manifest has no `audit` gate — REQ-101");
+    return;
+  }
   try {
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
     const check = String(pkg?.scripts?.check ?? "");
-    if (!/\baudit\b/.test(check)) {
-      error("package.json check script does not include a dependency audit — REQ-101");
+    if (!check.includes("run-gates.ts --full")) {
+      error("package.json `check` does not run the full gate manifest — REQ-101");
+    }
+    if (!/\baudit\b/.test(String(pkg?.scripts?.["audit"] ?? ""))) {
+      error("package.json `audit` script is missing — REQ-101");
     }
   } catch {
     error("package.json missing or unparseable — REQ-101 dependency gate check unable to run");
@@ -990,48 +1001,11 @@ checkSpecVersion();
 
 // --- AGENTS.md gate-table parity ---
 //
-// The AGENTS.md Gates table documents the `npm run check` pipeline. It drifted
-// (check-tdqs shipped but was never listed). Reconcile the table's command rows
-// against the actual package.json `check` script so a new gate cannot go
-// undocumented.
-function checkAgentsGateTable(): void {
-  const agentsPath = join(ROOT, "AGENTS.md");
-  if (!existsSync(agentsPath)) return; // checkAgentsDoc reports the missing file
-  const lines = readFileSync(agentsPath, "utf-8").split("\n");
-  const start = lines.findIndex((l) => /^\|\s*Command\s*\|/.test(l));
-  if (start === -1) {
-    error("AGENTS.md Gates table (`| Command |`) not found");
-    return;
-  }
-  const documented = new Set<string>();
-  for (let i = start + 1; i < lines.length && lines[i].trim().startsWith("|"); i++) {
-    const cell = lines[i].split("|")[1] ?? "";
-    const npm = cell.match(/npm run ([a-z0-9-]+)/);
-    if (npm) documented.add(npm[1]);
-    const script = cell.match(/scripts\/([\w.-]+\.ts)/);
-    if (script) documented.add(script[1]);
-  }
+// Moved to `scripts/check-gate-table.ts` (`npm run check-gate-table`): the table
+// is now generated from the gate manifest and compared byte for byte, which
+// subsumes the old command-row reconciliation and also catches a stale
+// description. Keeping both checks would test one surface twice.
 
-  let check: string;
-  try {
-    check = String(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8")).scripts?.check ?? "");
-  } catch {
-    error("package.json missing or unparseable — AGENTS gate-table parity check unable to run");
-    return;
-  }
-  const actual = new Set<string>();
-  for (const m of check.matchAll(/npm run ([a-z0-9-]+)/g)) actual.add(m[1]);
-  for (const m of check.matchAll(/scripts\/([\w.-]+\.ts)/g)) actual.add(m[1]);
-
-  for (const cmd of actual) {
-    if (!documented.has(cmd)) error(`AGENTS.md Gates table omits \`${cmd}\` from the \`npm run check\` pipeline — document it`);
-  }
-  for (const cmd of documented) {
-    if (!actual.has(cmd)) error(`AGENTS.md Gates table lists \`${cmd}\`, which is not in the \`npm run check\` pipeline — stale row`);
-  }
-}
-
-checkAgentsGateTable();
 
 // --- Report ---
 

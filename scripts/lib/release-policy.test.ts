@@ -71,7 +71,7 @@ describe("resolveRunMode", () => {
   });
 
   it("publishes a full run by default", () => {
-    expect(resolveRunMode({}).noCommit).toBe(false);
+    expect(resolveRunMode({})).toEqual({ ok: true, noCommit: false, noPush: false });
   });
 
   it("honours --no-push and --no-commit on a full run", () => {

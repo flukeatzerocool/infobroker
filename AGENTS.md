@@ -320,18 +320,29 @@ reference examples of the imperative form.
 
 ## Gates
 
-Run before committing or after any change to `infobroker.md` or `src/`:
+One manifest, `scripts/lib/gate-manifest.ts`, defines the gate suite. Two
+commands run it:
 
 ```
-npm run check
+npm run check        # every gate, sequential, stops at the first failure
+npm run check:fast   # no network, no build artifact; up to four in flight
 ```
 
-This runs:
+`npm run check` is the pre-push and CI gate. `npm run check:fast` is the
+session-loop gate: it excludes only the gates that cannot run from a bare
+checkout — `audit` (registry access), `check-pack` (packed-tarball handshake),
+and `test-debate-club` (TypeScript build plus Arena). Both write per-gate
+timings to `$TMPDIR/infobroker/` (local, keyed by repository, never committed).
+The table below
+is generated from the manifest by `npm run gates -- --list --format md` and
+compared byte for byte by `npm run check-gate-table`; edit the manifest, not
+the table.
 
-| Command              | What it checks                                     |
-|----------------------|----------------------------------------------------|
-| `npm run typecheck`  | TypeScript type checking (`tsc --noEmit`)          |
-| `npm run version-sync` | Every version reference matches `package.json`   |
+<!-- gates:begin -->
+| Gate | What it checks |
+|---|---|
+| `npm run typecheck` | TypeScript type checking (`tsc --noEmit`) |
+| `npm run version-sync` | Every version reference matches `package.json` |
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-roadmap` | Roadmap admission rule: one section per item, 1–3 bullets, a `**Trigger:**` line |
@@ -340,14 +351,17 @@ This runs:
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax and removed-flag (`--attach`) checks over shell entry points and `scripts/**/*.mjs` |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
 | `npm run check-intent-citations` | Routing citations resolve against the live tool schema; every registered tool and declared operation is cited (REQ-107) |
-| `npm run check-skill-harness` | Skill-check and event-stream evaluators: advisory exclusion, gating, intermediate-message tokens |
 | `npm run check-harness-expectations` | Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators |
 | `npm run check-gate-coverage` | Every G1 REQ is backed by a test citation or a recorded exemption (REQ-055) |
+| `npm run check-skill-harness` | Skill-check and event-stream evaluators: advisory exclusion, gating, intermediate-message tokens |
+| `npm run test` | Vitest unit and integration tests |
 | `npm run check-pack` | Published tarball allowlist/denylist and an MCP handshake from an empty config-less directory |
-| `npm run test`       | Vitest unit and integration tests                  |
 | `npm run test-debate-club` | debate-club Arena: deterministic, offline tool-contract suite (typecheck + fixture replay) |
-| `npm run audit`      | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |
-| `scripts/check-shipped-kb-empty.ts` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
+| `npm run audit` | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |
+| `npm run check-shipped-kb-empty` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
+| `npm run check-gate-table` | The AGENTS.md gates table matches this manifest |
+| `npm run typecheck:scripts` | TypeScript type checking for `scripts/` (`tsc -p tsconfig.scripts.json`) |
+<!-- gates:end -->
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
 REQs with no waiver in the `## Spec Waivers` section of DECISIONS.md,
