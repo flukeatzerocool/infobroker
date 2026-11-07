@@ -5,13 +5,37 @@
 # 1 = checks failed or node is missing, 2 = fatal/unexpected.
 #
 # The gate runner records a full-suite pass keyed on the commit's tree object
-# plus a clean working tree (`.infobroker/gate-run.json`, local and never
-# committed). The push pipeline writes that record after committing; a manual
-# `npm run check` on a clean tree writes it too. When the record covers the
-# current tree, the suite has already run on exactly these objects, so
-# re-running it per ref (branch, tag, mirror) only duplicates work. A stale
-# record, a dirty tree, a `fast`-only record, or CI always runs the suite.
+# plus a clean working tree (`$TMPDIR/infobroker/gate-run-<repo-key>.json`,
+# local and never committed). The push pipeline writes that record after
+# committing; a manual `npm run check` on a clean tree writes it too. When the
+# record covers the current tree, the suite has already run on exactly these
+# objects, so re-running it per ref (branch, tag, mirror) only duplicates work.
+# A stale record, a dirty tree, a `fast`-only record, or CI always runs the
+# suite.
+#
+# Each invocation appends one JSON line to the local hook-event log the loop
+# audit reads. Telemetry is best-effort and never changes the exit code.
 set -euo pipefail
+
+# hook_event <action> <event> — append one invocation record. The repo key is
+# the sha256 of the resolved repository root, first 12 hex chars — the same
+# rule as scripts/lib/gate-run-manifest.ts.
+hook_event() {
+    local action="$1" event="$2" root digest dir
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+    if command -v sha256sum >/dev/null 2>&1; then
+        digest=$(printf '%s' "$(cd "$root" && pwd -P)" | sha256sum | cut -c1-12)
+    else
+        digest=$(printf '%s' "$(cd "$root" && pwd -P)" | shasum -a 256 | cut -c1-12)
+    fi
+    dir="${TMPDIR:-/tmp}/infobroker"
+    mkdir -p "$dir" 2>/dev/null || return 0
+    printf '{"at":"%s","event":"%s","action":"%s","head":"%s"}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$event" "$action" \
+        "$(git -C "$root" rev-parse HEAD 2>/dev/null || true)" \
+        >> "$dir/hook-events-${digest}.jsonl" 2>/dev/null || true
+    return 0
+}
 
 if ! command -v node >/dev/null 2>&1; then
     echo "ERROR: node is required to run pre-push checks but was not found in PATH"
@@ -21,16 +45,21 @@ fi
 if [[ -z "${CI:-}" ]]; then
     recorded="$(npx tsx scripts/run-gates.ts --recorded 2>/dev/null || echo none)"
     if [[ "$recorded" == "full" ]]; then
+        hook_event skipped pre-push
         echo "Pre-push checks skipped: the full suite is recorded for this exact tree."
         exit 0
     fi
 fi
 
+hook_event ran pre-push
 echo "Running pre-push checks..."
 echo "  version sync..."
 npm run version-sync
 
 echo "  gate suite..."
-npm run check
+if ! npm run check; then
+    hook_event failed pre-push
+    exit 1
+fi
 
 echo "Pre-push checks passed."

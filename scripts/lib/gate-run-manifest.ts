@@ -41,7 +41,8 @@ export function stateDir(): string {
   return join(tmpdir(), "infobroker");
 }
 
-function repoKey(root: string): string {
+/** repoKey — a stable short key for one checkout, shared with local state files. */
+export function repoKey(root: string): string {
   let resolved = root;
   try {
     resolved = realpathSync(root);

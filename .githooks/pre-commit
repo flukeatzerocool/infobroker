@@ -1,10 +1,42 @@
 #!/usr/bin/env bash
+# pre-commit — gate: version consistency before a commit object is created.
+#
+# Exit codes: 0 = versions agree (or the check passed), 1 = version drift or
+# node is missing, 2 = fatal/unexpected.
+#
+# Also appends one JSON line to the local hook-event log the loop audit reads
+# ($TMPDIR/infobroker/hook-events-<repo-key>.jsonl). Telemetry is best-effort:
+# a read-only state directory never blocks a commit.
 set -euo pipefail
+
+# hook_event <action> <event> — append one invocation record. The repo key is
+# the sha256 of the resolved repository root, first 12 hex chars — the same
+# rule as scripts/lib/gate-run-manifest.ts.
+hook_event() {
+    local action="$1" event="$2" root digest dir
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+    if command -v sha256sum >/dev/null 2>&1; then
+        digest=$(printf '%s' "$(cd "$root" && pwd -P)" | sha256sum | cut -c1-12)
+    else
+        digest=$(printf '%s' "$(cd "$root" && pwd -P)" | shasum -a 256 | cut -c1-12)
+    fi
+    dir="${TMPDIR:-/tmp}/infobroker"
+    mkdir -p "$dir" 2>/dev/null || return 0
+    printf '{"at":"%s","event":"%s","action":"%s","head":"%s"}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$event" "$action" \
+        "$(git -C "$root" rev-parse HEAD 2>/dev/null || true)" \
+        >> "$dir/hook-events-${digest}.jsonl" 2>/dev/null || true
+    return 0
+}
 
 if ! command -v node >/dev/null 2>&1; then
     echo "ERROR: node is required to run pre-commit checks but was not found in PATH"
     exit 1
 fi
 
+hook_event ran pre-commit
 echo "Running pre-commit checks (npm run version-sync)..."
-npm run version-sync
+if ! npm run version-sync; then
+    hook_event failed pre-commit
+    exit 1
+fi

@@ -13,8 +13,19 @@
  * unreadable, 2 = fatal.
  */
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleHelp, parseFlag, rejectUnknown } from "./lib/args.js";
+import {
+  commitTimes,
+  deliveryReport,
+  hours,
+  percentile,
+  pipelineCommitTimes,
+  pushTimestamps,
+} from "./lib/delivery.js";
+import { timingPath } from "./lib/gate-run-manifest.js";
+import { readHookEvents, summarizeHooks } from "./lib/hook-events.js";
 import { driftRows, type DriftRow } from "./lib/loop-audit.js";
 import { INCREMENTS_DIR, listIncrements, validateIncrements } from "./lib/loop-artifacts.js";
 
@@ -66,6 +77,53 @@ function headingCommits(): Array<{ sha: string; commitDate: string; changelog: s
   return entries;
 }
 
+interface TimingRow {
+  at: string;
+  gate: string;
+  ms: number;
+  status: "pass" | "fail";
+}
+
+interface GateRow {
+  runs: number;
+  failures: number;
+  medianMs: number;
+  p95Ms: number;
+}
+
+/** gateRows — per-gate cost from the local timing record (missing = empty). */
+function gateRows(): Record<string, GateRow> {
+  const path = timingPath(ROOT);
+  if (!existsSync(path)) return {};
+  let rows: TimingRow[];
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as TimingRow[];
+    if (!Array.isArray(parsed)) return {};
+    rows = parsed;
+  } catch {
+    // A corrupt timing file is disposable local state; the audit reports no rows.
+    return {};
+  }
+  const byGate = new Map<string, TimingRow[]>();
+  for (const row of rows) {
+    if (!row.gate || typeof row.ms !== "number") continue;
+    const list = byGate.get(row.gate) ?? [];
+    list.push(row);
+    byGate.set(row.gate, list);
+  }
+  const report: Record<string, GateRow> = {};
+  for (const [gate, list] of byGate) {
+    const durations = list.map((row) => row.ms);
+    report[gate] = {
+      runs: list.length,
+      failures: list.filter((row) => row.status === "fail").length,
+      medianMs: percentile(durations, 0.5),
+      p95Ms: percentile(durations, 0.95),
+    };
+  }
+  return report;
+}
+
 function main(): number {
   const argv = process.argv.slice(2);
   handleHelp(argv, USAGE);
@@ -76,6 +134,9 @@ function main(): number {
   const findings = validateIncrements(ROOT);
   const drifts: DriftRow[] = driftRows(headingCommits());
   const drifted = drifts.filter((row) => row.drift);
+  const delivery = deliveryReport(pushTimestamps(ROOT), commitTimes(ROOT), pipelineCommitTimes(ROOT));
+  const hooks = summarizeHooks(readHookEvents(ROOT));
+  const gates = gateRows();
 
   const report = {
     increments_dir: INCREMENTS_DIR,
@@ -88,6 +149,9 @@ function main(): number {
     artifact_warnings: findings.filter((finding) => finding.level === "warning").length,
     heading_commits: drifts.length,
     date_drift: drifted,
+    delivery,
+    hooks,
+    gates,
   };
 
   if (json) {
@@ -116,6 +180,41 @@ function main(): number {
       );
     }
   }
+  console.log("\nDelivery (origin reflog window)");
+  if (!delivery) {
+    console.log("  unavailable: fewer than two recorded pushes");
+  } else {
+    console.log(
+      `  window: ${delivery.windowDays.toFixed(0)} days, ${delivery.pushes} pushes, ${delivery.deploymentFrequency.toFixed(2)}/day`,
+    );
+    console.log(
+      `  lead time: median ${hours(delivery.leadTimeMedian)}, p90 ${hours(delivery.leadTimeP90)}`,
+    );
+    console.log(
+      `  commits per push: median ${delivery.commitsPerPushMedian}, max ${delivery.commitsPerPushMax}`,
+    );
+    console.log(
+      `  pipeline-fix proxy: ${delivery.pipelineFollowUps}/${delivery.pipelineCommits} within 48h`,
+    );
+  }
+
+  console.log(
+    `\nHook invocations: ran ${hooks.ran}, skipped ${hooks.skipped}, failed ${hooks.failed}`,
+  );
+
+  const gateNames = Object.keys(gates);
+  if (gateNames.length === 0) {
+    console.log("\nGate timing: no record (run `npm run check` with --timing)");
+  } else {
+    console.log("\nGate timing (local record)");
+    for (const name of gateNames.sort()) {
+      const row = gates[name];
+      console.log(
+        `  ${name}: ${row.runs} run(s), ${row.failures} failure(s), median ${(row.medianMs / 1000).toFixed(1)}s, p95 ${(row.p95Ms / 1000).toFixed(1)}s`,
+      );
+    }
+  }
+
   console.log("\nDelivery numbers: npm run metrics\n");
   return 0;
 }
