@@ -1,4 +1,16 @@
 {
   "schema": 1,
-  "gates": {}
+  "gates": {
+    "check-non-goals": {
+      "status": "advisory",
+      "decided_at": "2026-11-07T18:57:01.371Z",
+      "evidence": {
+        "runs": 24,
+        "clean_runs": 24,
+        "median_ms": 424,
+        "p95_ms": 446
+      },
+      "note": "narrowest surface: a docs pointer and list, no product contract; 24 clean runs"
+    }
+  }
 }

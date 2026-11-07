@@ -25,19 +25,6 @@
 **Trigger:** the first version bump after the release-routine plan; closes when
 `npm view infobroker version` equals the `package.json` version for a release.
 
-## Gate retirement and weekly cadence
-
-- Add `scripts/gate-cost-report.ts` and `scripts/weekly.ts` over the timing
-  record `run-gates --timing` already writes: a gate with no findings across 20
-  consecutive runs becomes advisory, and one weekly run produces the gate-cost,
-  loop, and delivery reports together.
-- Keep the retirement decision in a JSON ledger; deleting a gate stays a manual
-  decision.
-
-**Trigger:** the timing record holds 20 consecutive runs for at least one gate;
-closes when a gate is downgraded to advisory by that policy and the weekly run
-writes its report.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
