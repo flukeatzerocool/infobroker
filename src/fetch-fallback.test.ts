@@ -204,6 +204,21 @@ describe("fetch fallback order (REQ-021h)", () => {
     expect(calls[0].renderers).toEqual(["internet_archive"]);
   });
 
+  it("falls back to an archived snapshot when a DOI URL has no metadata record", async () => {
+    lookupDoi.mockResolvedValue(null);
+    const calls: Array<{ url: string; renderers: string[] }> = [];
+    const fetchContent = async (url: string, renderers: string[]) => {
+      calls.push({ url, renderers });
+      return fetched("<html><body><p>archived copy</p></body></html>", "internet_archive");
+    };
+
+    const result = await resolveFetchFallback("https://doi.org/10.1000/missing", fetchContent);
+    expect(result?.kind).toBe("content");
+    if (result?.kind === "content") expect(result.fallback_kind).toBe("wayback");
+    expect(calls[0].renderers).toEqual(["internet_archive"]);
+    expect(openalexLookup).not.toHaveBeenCalled();
+  });
+
   it("returns null when every fallback fails", async () => {
     lookupDoi.mockResolvedValue(null);
     const result = await resolveFetchFallback("https://example.com/gone", async () => null);
