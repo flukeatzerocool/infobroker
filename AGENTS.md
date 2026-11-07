@@ -119,6 +119,32 @@ own duplicate suite for exactly that commit when the tree is clean and CI is
 unset. An unexpected command failure exits 2; gate failures and required human
 approval exit 1.
 
+## Agent Operating Routine
+
+The maintainer's habits are fixed; the agent absorbs the routine so the
+commands stay the same. These mappings are the standing agreement.
+
+- **"commit"** — split the finished session into logical commits, one concern
+  each, instead of one bulk commit. Order: spec/REQ, source plus its tests,
+  pipeline and scripts, docs (README, CHANGELOG, DECISIONS, ROADMAP, AGENTS,
+  skills), then config and manifests. Run `npm run typecheck` after each split
+  commit and the full `npm run check` once on the final tree. Report the commit
+  list. Stop and report rather than commit a failing tree.
+- **"push" / "commit and push" / "ship"** — run `npm run prep` first (the AI
+  steps that used to be folded into publishing), split the resulting diff into
+  commits under the same rules, then `npm run release` (deterministic; no AI
+  steps, no `opencode`). A bare "push" is explicit authorization to publish.
+  If `prep` leaves no diff, skip straight to `release`.
+- **"plan" / "build"** — start with `npm run status` and `npm run check` and
+  report the baseline before planning or editing. A red baseline is fixed
+  first, as its own commit, never folded into the feature work.
+- **"status" / "what's left"** — `npm run status`, plus `npm run metrics` when
+  the question is about cadence rather than content.
+- **Split limits** — a split commit stays under roughly 300 changed lines
+  unless the change is genuinely atomic; an oversized bucket splits by file or
+  feature. When the split would exceed five commits, print the planned grouping
+  before executing.
+
 ## Script Discipline
 
 All scripts in `scripts/` — the spec tooling, shell entry points
