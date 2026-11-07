@@ -851,6 +851,11 @@ else
   DET_FINDINGS=$(scan_findings)
   info "Deterministic scan: ${DET_FINDINGS} finding(s)"
   [[ "$DET_FINDINGS" == "?" ]] && warn "Deterministic scan produced no parseable summary — a scan script may have failed."
+  # --no-ai has no repair turn, so a deterministic finding (or an unparseable
+  # summary) fails the release instead of warning past it.
+  if $NO_AI && [[ "$DET_FINDINGS" != "0" ]]; then
+    die "Deterministic scan reported '${DET_FINDINGS}' — --no-ai does not repair. Fix the findings or run npm run prep."
+  fi
   if $SCAN_AI && $DRY_RUN; then
     warn "Ignoring --scan-ai under --dry-run (deterministic scan only)."
   fi
