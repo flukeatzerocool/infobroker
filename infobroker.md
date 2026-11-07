@@ -1752,7 +1752,7 @@ SHALL run the verification gates and version-consistency checks against the
 change set it is about to ship, before committing or pushing, and SHALL fail
 fast on a dirty working tree before staging. Release tooling SHALL NOT move a
 version tag that already exists on the push remote; a correction SHALL be a
-new version, never a relabelled tag. Release tooling SHALL refuse to commit
+new version, never a relabeled tag. Release tooling SHALL refuse to commit
 material that would expose secret material (REQ-011).
 
 **C.10 Provenance.** Every REQ SHALL be traceable to the spec version and
