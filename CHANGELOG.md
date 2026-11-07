@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.11.07 — One gate manifest and a tracked session loop
+
+- The gate suite is one manifest, `scripts/lib/gate-manifest.ts`, instead of an
+  18-command `&&` chain. `npm run check` runs it in order and `npm run
+  check:fast` runs the subset that needs no network or build artifact, so the
+  session loop has a gate it can afford to run. The AGENTS.md table is generated
+  from the manifest and compared byte for byte, so a shipped gate cannot go
+  undocumented and a deleted one cannot stay listed.
+- The pre-push hook no longer trusts an exported commit SHA: a full run records
+  a pass keyed on HEAD's tree object plus a clean working tree, and a fast run
+  never satisfies it. Record state lives under `$TMPDIR/infobroker/`, keyed by
+  repository, because the shipped-KB gate correctly rejects an `.infobroker/`
+  directory inside the tree. `npm run typecheck` also covers `scripts/` now,
+  with a `typecheck:scripts` gate and the seven pre-existing errors fixed.
+- Session increments are tracked: `docs/plans/<date>-<slug>/` carries a plan
+  with a Done bar, tasks, and an AAR ending in a terminal LOOP token.
+  `check-loop-artifacts` gates the contract, and `session:close` validates the
+  increment, runs the fast suite, records the run, and prints the push cadence.
+  It does not commit — the split-commit series owns commits. (D-091)
+- `npm run loop-audit` reports increment health and CHANGELOG-heading date
+  drift. On the current history it finds ten commits whose heading date and
+  commit date disagree. `docs/workflow-cadence.md` states the session, weekly,
+  and monthly cadence using only commands that exist.
+
 ## 2026.11.07 — Scope non-goals are gate-checked
 
 - The open-web scope boundary now lives in a machine-read `## Scope Non-goals`
