@@ -12,6 +12,22 @@
   enforces this rule; `## Non-goals` is exempt.
 -->
 
+## Workflow convergence with Holonovel
+
+- Share one vocabulary and cadence across both repos: `status`, `check:fast`,
+  `session:close`, durable AARs under `docs/plans/`, and the deterministic
+  `prep` / `release` seam. Keep the split-commit series and AI prep that
+  Holonovel does not need.
+- Port Holonovel's gate runner, run manifest, loop audit, and hermetic pipeline
+  harness; keep Infobroker's AI steps, Arena, and npm + registry publish path.
+- Align the tag policy: never move a published tag; a correction is a new
+  CalVer; push branch and tag atomically.
+
+**Trigger:** the first session after the workflow-convergence plan is approved;
+closes when both repos pass `check:fast` and `check` with the shared commands,
+`docs/workflow-cadence.md` is current, and a real increment closes through
+`session:close`.
+
 ## Normalize CalVer to valid SemVer
 
 - `today()` and the version-bump path emit `YYYY.M.D` with no leading zeros, so
