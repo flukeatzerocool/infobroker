@@ -74,6 +74,21 @@ carry a done bar or a loop token); having `session:close` commit the artifacts
 (a second committer competing with the split series); a dated commit subject
 (nothing to derive it from without rewriting the CHANGELOG heading format).
 
+### D-095: Gate Retirement Requires a Manifest Opt-In (2026.11.07)
+
+A gate may become advisory only when the manifest marks it `retirable`; a clean
+streak alone is a candidate signal, not a decision. `decideRetirement` refuses
+an unmarked gate and `readLedger` ignores a ledger entry that names one, so the
+write and read paths enforce the same rule. Rationale: retiring a gate that
+encodes a spec contract voids that contract silently — `audit` carries REQ-101's
+mandatory dependency check (and is excluded from `check:fast`, so its clean
+streak grows only on full runs), and `validate-spec` is C.6's drift detector,
+which must exit zero before any commit. `check-non-goals` is the only retirable
+gate today: its subject is a documentation pointer and list with no product
+contract. Rejected: a hardcoded deny-list of protected gates, because it fails
+open for every gate added later. Consequence: opting a gate in is a reviewed
+manifest edit, and the committed ledger remains the record of each decision.
+
 ### D-090: Scope Non-Goals Are Gate-Checked (2026.11.07)
 
 The open-web scope boundary lived in D-061's prose with a paraphrase on

@@ -22,10 +22,24 @@
 - `run-gates --list` marks advisory gates in its plain output; the generated
   `AGENTS.md` table is unchanged.
 
+## 2026.11.7 — Gate retirement is opt-in
+
+- A gate becomes advisory only when `scripts/lib/gate-manifest.ts` marks it
+  `retirable`; a clean streak alone is a candidate signal, not a decision.
+  Unknown and unmarked gates are refused, so a gate added later is protected by
+  default.
+- `readLedger` ignores a ledger entry naming an unmarked gate and warns, so a
+  hand-edited `scripts/gate-ledger.json` cannot make a protected gate advisory.
+  `check-non-goals` is the only retirable gate today; its existing entry stays
+  valid.
+- `npm run gate-cost` reports a `protected` state and count, and `--retire`
+  against a protected gate exits 1 with the reason.
+
 ## 2026.11.7 — CalVer is valid SemVer
 
 - `today()` and the bump path emit `YYYY.M.D` with no leading zeros, so the
-  package, the tag, and the npm-published version are the same string; the
+  package, the tag (which carries the conventional `v` prefix), and the
+  npm-published version all carry the same version number; the
   `normalizeSemver` transform and the matching transforms in `validate-spec`
   and `publish.yml` are removed (D-094, superseding D-086).
 - `version-sync` compares exact strings and rejects a padded root version;
