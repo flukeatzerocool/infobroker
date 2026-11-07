@@ -121,7 +121,7 @@ describe("staging safety", () => {
       encoding: "utf8",
     });
     expect(res.status).toBe(0);
-    expect(res.stdout.trim()).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
+    expect(res.stdout.trim()).toMatch(/^\d{4}\.\d{1,2}\.\d{1,2}$/);
   });
 });
 
@@ -470,8 +470,8 @@ function copyVersionTooling(repo: string): void {
 }
 
 function writeStampFiles(repo: string, version: string): void {
-  const iso = version.replace(/\./g, "-");
-  const semver = version.split(".").map((s) => String(Number(s))).join(".");
+  const [year = "", month = "", day = ""] = version.split(".");
+  const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   writeFileSync(
     join(repo, "package.json"),
     JSON.stringify(
@@ -486,7 +486,7 @@ function writeStampFiles(repo: string, version: string): void {
   );
   writeFileSync(
     join(repo, "server.json"),
-    JSON.stringify({ version: semver, packages: [{ version: semver }] }, null, 2) + "\n",
+    JSON.stringify({ version, packages: [{ version }] }, null, 2) + "\n",
   );
   writeFileSync(
     join(repo, "src/index.ts"),
@@ -507,11 +507,14 @@ function git(repo: string, ...args: string[]): string {
   });
 }
 
-function seedSplitRepo(): { repo: string; snap: string; stampPaths: string } {
+function seedSplitRepo(
+  prev = "2026.11.06",
+  next = "2026.11.07",
+): { repo: string; snap: string; stampPaths: string } {
   const repo = tempDir("split-repo-");
   mkdirSync(join(repo, "src"), { recursive: true });
-  writeStampFiles(repo, "2026.11.06");
-  writeFileSync(join(repo, "CHANGELOG.md"), "# Changelog\n\n## 2026.11.06 — Fixture\n\n- Initial.\n");
+  writeStampFiles(repo, prev);
+  writeFileSync(join(repo, "CHANGELOG.md"), `# Changelog\n\n## ${prev} — Fixture\n\n- Initial.\n`);
   copyVersionTooling(repo);
   git(repo, "init", "-q");
   // The function under test runs plain `git commit`, so the identity must live
@@ -523,11 +526,11 @@ function seedSplitRepo(): { repo: string; snap: string; stampPaths: string } {
   git(repo, "commit", "-q", "-m", "Initial");
 
   // Simulate a pipeline run: content changes plus a version bump.
-  writeStampFiles(repo, "2026.11.07");
-  writeFileSync(join(repo, "infobroker.md"), `# Fixture\n\n**Spec version:** 2026.11.07\n\nREQ-001 changed.\n`);
+  writeStampFiles(repo, next);
+  writeFileSync(join(repo, "infobroker.md"), `# Fixture\n\n**Spec version:** ${next}\n\nREQ-001 changed.\n`);
   writeFileSync(
     join(repo, "src/index.ts"),
-    `// content change\nconst server = new McpServer({\n  name: "fixture",\n  version: "2026.11.07",\n});\n`,
+    `// content change\nconst server = new McpServer({\n  name: "fixture",\n  version: "${next}",\n});\n`,
   );
   writeFileSync(join(repo, "README.md"), readFileSync(join(repo, "README.md"), "utf-8") + "\nProse change.\n");
   writeFileSync(join(repo, "src/extra.ts"), "export const extra = 1;\n");
@@ -536,7 +539,7 @@ function seedSplitRepo(): { repo: string; snap: string; stampPaths: string } {
   writeFileSync(join(repo, "test-fixtures", "fixture.json"), "{}\n");
   writeFileSync(
     join(repo, "CHANGELOG.md"),
-    "# Changelog\n\n## 2026.11.07 — Fixture\n\n- Changed.\n\n## 2026.11.06 — Fixture\n\n- Initial.\n",
+    `# Changelog\n\n## ${next} — Fixture\n\n- Changed.\n\n## ${prev} — Fixture\n\n- Initial.\n`,
   );
   git(repo, "add", "-A");
 
@@ -570,10 +573,16 @@ function treeSnapshot(repo: string): Record<string, string> {
   return out;
 }
 
-function runSplit(repo: string, snap: string, stampPaths: string): { status: number; output: string } {
+function runSplit(
+  repo: string,
+  snap: string,
+  stampPaths: string,
+  prev = "2026.11.06",
+  next = "2026.11.07",
+): { status: number; output: string } {
   const script = [
     `source ${LIB}`,
-    `split_commit_series ${repo} 2026-11-07 2026.11.06 2026.11.07 ${snap} ${stampPaths} "Pipeline body."`,
+    `split_commit_series ${repo} 2026-11-07 ${prev} ${next} ${snap} ${stampPaths} "Pipeline body."`,
   ].join("; ");
   const result = spawnSync("bash", ["-c", script], { cwd: ROOT, encoding: "utf8" });
   return { status: result.status ?? -1, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
@@ -610,10 +619,24 @@ describe("split_commit_series", () => {
       expect(at("infobroker.md")).toContain(`**Spec version:** ${version}`);
       expect(at("README.md")).toContain(`(v${version}), which defines`);
       expect((JSON.parse(at("package-lock.json")) as { version: string }).version).toBe(version);
-      const changelogTop = /^## (\d{4}\.\d{2}\.\d{2})/m.exec(at("CHANGELOG.md"));
+      const changelogTop = /^## (\d{4}\.\d{1,2}\.\d{1,2})/m.exec(at("CHANGELOG.md"));
       expect(changelogTop?.[1]).toBe(version);
     }
 
+    expect(treeSnapshot(repo)).toEqual(before);
+    expect(git(repo, "status", "--porcelain")).toBe("");
+  });
+
+  it("rewinds an unpadded CalVer without a legacy spelling", () => {
+    const { repo, snap, stampPaths } = seedSplitRepo("2026.11.6", "2026.11.7");
+    const before = treeSnapshot(repo);
+
+    const result = runSplit(repo, snap, stampPaths, "2026.11.6", "2026.11.7");
+    expect(result.output).not.toContain("FAILED");
+    expect(result.status, result.output).toBe(0);
+
+    const subjects = git(repo, "log", "--format=%s").trim().split("\n");
+    expect(subjects[0]).toBe("Release: 2026.11.7");
     expect(treeSnapshot(repo)).toEqual(before);
     expect(git(repo, "status", "--porcelain")).toBe("");
   });

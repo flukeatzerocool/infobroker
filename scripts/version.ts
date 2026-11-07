@@ -10,16 +10,16 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { today, normalizeSemver, ROOT } from "./lib/version.js";
+import { today, ROOT } from "./lib/version.js";
 import { handleHelp } from "./lib/args.js";
 
-const USAGE = `Usage: npx tsx scripts/version.ts <bump|check|set <YYYY.MM.DD>>
+const USAGE = `Usage: npx tsx scripts/version.ts <bump|check|set <YYYY.M.D>>
 
   bump            Rewrite every version reference to today's calendar date and
                   seed a matching CHANGELOG entry header.
   set <version>   Rewrite every version reference to an explicit CalVer
-                  (2026.11.06). Does not touch CHANGELOG. Used by the push
-                  pipeline to rewind stamps for a split commit series.
+                  (2026.11.7). A legacy padded spelling (2026.11.06) is also
+                  accepted for the pipeline's rewind. Does not touch CHANGELOG.
   check           Verify every version reference is in sync.
 `;
 handleHelp(process.argv, USAGE);
@@ -29,7 +29,8 @@ const README_SPEC_REF_RE = /\(v[0-9]+\.[0-9]+\.[0-9]+\)(?=, which defines every 
 const README_UPDATED_RE = /^Last updated: \d{4}-\d{2}-\d{2}\.(?=\s*$)/m;
 
 function isoDate(version: string): string {
-  return version.replace(/\./g, "-");
+  const [year = "", month = "", day = ""] = version.split(".");
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
 // Rewrite every enumerated version site to `version`. Returns false when a site
@@ -81,13 +82,12 @@ function setVersion(version: string, root: string = ROOT): boolean {
   const serverJsonPath = join(root, "server.json");
   try {
     const serverManifest = JSON.parse(readFileSync(serverJsonPath, "utf-8"));
-    const semver = normalizeSemver(version);
-    serverManifest.version = semver;
+    serverManifest.version = version;
     if (Array.isArray(serverManifest.packages) && serverManifest.packages.length > 0) {
-      serverManifest.packages[0].version = semver;
+      serverManifest.packages[0].version = version;
     }
     writeFileSync(serverJsonPath, JSON.stringify(serverManifest, null, 2) + "\n");
-    console.log(`  OK   server.json: → ${semver}`);
+    console.log(`  OK   server.json: → ${version}`);
   } catch {
     fail("server.json", "missing or unparseable — leaving unchanged");
   }
@@ -193,6 +193,22 @@ function grepVersion(filePath: string, pattern: RegExp): string | null {
   return match ? match[1] : null;
 }
 
+interface CalVerDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+// Headings in the CHANGELOG keep their historical spelling (padded or not), so
+// compare the parsed date components rather than the strings.
+function formatCalVer(date: CalVerDate): string {
+  return `${date.year}.${date.month}.${date.day}`;
+}
+
+function compareCalVer(a: CalVerDate, b: CalVerDate): number {
+  return a.year - b.year || a.month - b.month || a.day - b.day;
+}
+
 function check(root: string = ROOT): boolean {
   const rootVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")).version as string;
   let ok = true;
@@ -204,6 +220,14 @@ function check(root: string = ROOT): boolean {
     }
     console.error(`  FAIL  ${label}: expected ${expected}, got ${value ?? "null"}`);
     return false;
+  }
+
+  const canonicalVersionRe = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+  if (canonicalVersionRe.test(rootVersion)) {
+    console.log(`  OK  package.json version is valid SemVer: ${rootVersion}`);
+  } else {
+    console.error(`  FAIL  package.json version is not valid SemVer (leading zeros?): ${rootVersion}`);
+    ok = false;
   }
 
   const indexPath = join(root, "src", "index.ts");
@@ -228,21 +252,23 @@ function check(root: string = ROOT): boolean {
 
   const changelogPath = join(root, "CHANGELOG.md");
   const changelog = readFileSync(changelogPath, "utf-8");
-  const dateRe = /^##\s+(\d{4})[.-](\d{2})[.-](\d{2})\b/gm;
-  let maxDate = "";
-  let firstDate: string | null = null;
+  const dateRe = /^##\s+(\d{4})[.-](\d{1,2})[.-](\d{1,2})\b/gm;
+  let maxDate: CalVerDate | null = null;
+  let firstDate: CalVerDate | null = null;
   let m: RegExpExecArray | null;
   while ((m = dateRe.exec(changelog)) !== null) {
-    const date = `${m[1]}.${m[2]}.${m[3]}`;
+    const date: CalVerDate = { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
     if (firstDate === null) firstDate = date;
-    if (date > maxDate) maxDate = date;
+    if (maxDate === null || compareCalVer(date, maxDate) > 0) maxDate = date;
   }
-  ok = assert("CHANGELOG latest date", maxDate || null, rootVersion) && ok;
-  ok = assert("CHANGELOG top entry date", firstDate, rootVersion) && ok;
+  const latest = maxDate ? formatCalVer(maxDate) : null;
+  const first = firstDate ? formatCalVer(firstDate) : null;
+  ok = assert("CHANGELOG latest date", latest, rootVersion) && ok;
+  ok = assert("CHANGELOG top entry date", first, rootVersion) && ok;
 
-  if (firstDate !== null && firstDate !== rootVersion) {
+  if (first !== null && first !== rootVersion) {
     console.error("");
-    console.error(`    The CHANGELOG top entry is dated ${firstDate} but package.json is ${rootVersion}.`);
+    console.error(`    The CHANGELOG top entry is dated ${first} but package.json is ${rootVersion}.`);
     console.error("    To add a release dated today, run `npm run version-bump` — it seeds a matching");
     console.error("    CHANGELOG entry header, or: press on with a CHANGELOG entry dated");
     console.error(`    ${rootVersion} to match the current package version.`);
@@ -251,10 +277,9 @@ function check(root: string = ROOT): boolean {
   const serverJsonPath = join(root, "server.json");
   try {
     const serverManifest = JSON.parse(readFileSync(serverJsonPath, "utf-8"));
-    const expectedSemver = normalizeSemver(rootVersion);
-    ok = assert("server.json version", serverManifest.version ?? null, expectedSemver) && ok;
+    ok = assert("server.json version", serverManifest.version ?? null, rootVersion) && ok;
     const pkgVersion = (serverManifest.packages ?? [])[0]?.version ?? null;
-    ok = assert("server.json packages[0].version", pkgVersion, expectedSemver) && ok;
+    ok = assert("server.json packages[0].version", pkgVersion, rootVersion) && ok;
   } catch {
     console.error("  FAIL  server.json version: missing or unparseable server.json");
     ok = false;
@@ -295,8 +320,8 @@ function main(argv: string[]): number {
   }
   if (sub === "set") {
     const target = argv[3];
-    if (!target || !/^\d{4}\.\d{2}\.\d{2}$/.test(target)) {
-      console.error("Usage: npx tsx scripts/version.ts set <YYYY.MM.DD>");
+    if (!target || !/^\d{4}\.\d{1,2}\.\d{1,2}$/.test(target)) {
+      console.error("Usage: npx tsx scripts/version.ts set <YYYY.M.D>");
       return 1;
     }
     if (!setVersion(target)) {

@@ -813,9 +813,10 @@ Last updated: 2026-11-07.
 - `npm install && npm run typecheck`
 - Bundle your own skill in `skills/` to extend the research pipeline.
 - Validate README structure: `npm run validate-readme`
-- **Versioning:** CalVer (`YYYY.MM.DD`). `npm run version-bump` stamps
-  today's date into the package, server manifest, and version stamps; update
-  the spec stamp and README citation alongside it. Pre-commit hooks verify
+- **Versioning:** CalVer (`YYYY.M.D`, no leading zeros). `npm run version-bump`
+  stamps today's date into the package, server manifest, and version stamps so
+  the package, tag, and npm-published version are the same string; update the
+  spec stamp and README citation alongside it. Pre-commit hooks verify
   consistency. `npm run push` checks, tags, and pushes.
 - MCP protocol: [modelcontextprotocol.io](https://modelcontextprotocol.io)
 - Providers: [DuckDuckGo](https://duckduckgo.com) ·
@@ -835,7 +836,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.11.07), which defines every requirement and the gates that verify it.
+(v2026.11.7), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers. The routing gate resolves every cited tool and

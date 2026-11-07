@@ -840,7 +840,7 @@ checkToolDefinitionBar();
 // --- Registry-published distribution (REQ-091) ---
 //
 // server.json and glama.json are distribution artifacts; verify their presence
-// and that the registered version equals the npm-canonical package version.
+// and that the registered version equals the package version exactly.
 function checkRegistryArtifacts(): void {
   const serverJsonPath = join(ROOT, "server.json");
   const glamaJsonPath = join(ROOT, "glama.json");
@@ -858,7 +858,6 @@ function checkRegistryArtifacts(): void {
     error("package.json missing or unparseable — REQ-091 version parity check unable to run");
     return;
   }
-  const canonical = pkgVersion.split(".").map((s) => String(Number(s))).join(".");
   let serverVersion: string;
   try {
     serverVersion = JSON.parse(readFileSync(serverJsonPath, "utf-8")).version;
@@ -866,8 +865,8 @@ function checkRegistryArtifacts(): void {
     error("server.json missing or unparseable — REQ-091");
     return;
   }
-  if (serverVersion !== canonical) {
-    error(`server.json version ${serverVersion} diverges from npm-canonical package.json version ${canonical} — REQ-091`);
+  if (serverVersion !== pkgVersion) {
+    error(`server.json version ${serverVersion} diverges from package.json version ${pkgVersion} — REQ-091`);
   }
 }
 checkRegistryArtifacts();

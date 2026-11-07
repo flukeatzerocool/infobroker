@@ -38,7 +38,7 @@ jobs:
       - name: Determine if version is already published to npm
         id: check
         run: |
-          LOCAL_VERSION=$(node -e "console.log(require('./package.json').version.split('.').map(Number).join('.'))")
+          LOCAL_VERSION=$(node -e "console.log(require('./package.json').version)")
           PUBLISHED_VERSION=$(npm view infobroker version 2>/dev/null || echo "")
           echo "local=$LOCAL_VERSION"
           echo "published=$PUBLISHED_VERSION"

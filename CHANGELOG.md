@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.7 — CalVer is valid SemVer
+
+- `today()` and the bump path emit `YYYY.M.D` with no leading zeros, so the
+  package, the tag, and the npm-published version are the same string; the
+  `normalizeSemver` transform and the matching transforms in `validate-spec`
+  and `publish.yml` are removed (D-094, superseding D-086).
+- `version-sync` compares exact strings and rejects a padded root version;
+  the REQ-091 registry check and the `server.json` manifest test assert exact
+  equality instead of stripping zeros.
+- CHANGELOG history keeps its original spelling; heading dates are compared
+  numerically, and the README `Last updated` date stays ISO-padded.
+
 ## 2026.11.07 — Immutable release tags and a hermetic pipeline harness
 
 - A tag that exists on the push remote is never moved (D-092, spec C.9). The

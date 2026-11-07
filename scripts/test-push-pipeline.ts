@@ -19,7 +19,7 @@ import { handleHelp, parseFlag, rejectUnknown } from "./lib/args.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const SCRATCH_BASE = join("/tmp/opencode", "push-pipeline-harness");
-const VERSION = "2026.11.07";
+const VERSION = "2026.11.7";
 const TAG = `v${VERSION}`;
 
 const USAGE = `Usage: npx tsx scripts/test-push-pipeline.ts [--keep]

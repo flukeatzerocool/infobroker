@@ -41,12 +41,11 @@ describe("server.json manifest (REQ-011)", () => {
     expect(manifest.websiteUrl).toMatch(/^https:\/\//);
   });
 
-  it("keeps the manifest and package versions in sync", () => {
-    // Registry manifests carry canonical semver, which drops a leading zero
-    // from a date-style patch (2026.11.04 -> 2026.11.4), so compare numerically.
-    const parts = (version: string) => version.split(".").map(Number);
-    expect(parts(manifest.version ?? "")).toEqual(parts(pkg.version));
-    expect(parts(manifest.packages?.[0]?.version ?? "")).toEqual(parts(pkg.version));
+  it("keeps the manifest and package versions identical", () => {
+    // The package version is canonical SemVer, and the registry carries the
+    // same string; no transform is applied on either side.
+    expect(manifest.version).toBe(pkg.version);
+    expect(manifest.packages?.[0]?.version).toBe(pkg.version);
   });
 
   it("declares exactly the keyed and self-hosted provider environment variables", () => {

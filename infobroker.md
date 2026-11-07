@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.11.07
+**Spec version:** 2026.11.7
 
 ## Contents
 
@@ -658,7 +658,7 @@ The server SHALL support an opt-in update check comparing its build version with
 WHEN the merged user configuration fails validation, the server SHALL start with the shipped default configuration, SHALL leave the user layer unchanged, and SHALL report the validation failure and its remediation through state health. The server SHALL NOT silently discard the user layer or write to it. A subsequent successful `reload_config` SHALL activate a corrected user layer. _Check:_ G1.
 
 **REQ-091 — Registry-Published Distribution**
-The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the npm-canonical form of the published package version, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1, G3.
+The build SHALL publish the server package to the npm registry and SHALL register the server with the official MCP registry. The version declared in the server registration SHALL equal the published package version exactly, and the registration SHALL reference the published package over the stdio transport. _Check:_ G1, G3.
 
 ### 4.11 Security and Content Safety
 

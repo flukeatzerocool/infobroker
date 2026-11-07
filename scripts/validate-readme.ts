@@ -526,7 +526,7 @@ function checkSpecVersion(text: string): Issue[] {
   }
   const claimed = text.match(/\(v([0-9]+\.[0-9]+\.[0-9]+)\)/)?.[1];
   if (claimed === undefined) {
-    issues.push({ error: true, msg: "README does not cite a spec version `(vYYYY.MM.DD)` in §Spec" });
+    issues.push({ error: true, msg: "README does not cite a spec version `(vYYYY.M.D)` in §Spec" });
     return issues;
   }
   if (claimed !== pkgVersion) {
@@ -672,7 +672,12 @@ function checkDesignLimits(text: string): Issue[] {
   }
   const lastUpdated = text.match(/^Last updated:\s*(\d{4}-\d{2}-\d{2})\.\s*$/m)?.[1];
   if (pkgVersion !== undefined) {
-    const expectedDate = pkgVersion.replace(/\./g, "-").replace(/-(\d)$/, "-0$1");
+    // The README date is ISO 8601: pad both month and day regardless of the
+    // version's SemVer spelling.
+    const parsed = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/.exec(pkgVersion);
+    const expectedDate = parsed
+      ? `${parsed[1]}-${parsed[2].padStart(2, "0")}-${parsed[3].padStart(2, "0")}`
+      : pkgVersion.replace(/\./g, "-").replace(/-(\d)$/, "-0$1");
     if (lastUpdated === undefined) {
       issues.push({ error: true, msg: "README missing `Last updated: YYYY-MM-DD.` line" });
     } else if (lastUpdated !== expectedDate) {
