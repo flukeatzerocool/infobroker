@@ -161,6 +161,10 @@ commands stay the same. These mappings are the standing agreement.
   first, as its own commit, never folded into the feature work.
 - **"status" / "what's left"** — `npm run status`, plus `npm run metrics` when
   the question is about cadence rather than content.
+- **"weekly"** — `npm run check` once, then `npm run weekly`. Act on the
+  gate-cost candidates only through
+  `npm run gate-cost -- --retire <gate> --note "why"`; the ledger is committed
+  and the weekly run never mutates it.
 - **Split limits** — split is the default for every "commit" and "push", and
   for `scripts/push-pipeline.sh` itself (`--single-commit` is its opt-out). A
   single bulk commit is the exception: the whole change is one concern (a
@@ -371,6 +375,10 @@ the table.
 | `npm run check-loop-artifacts` | Increment artifacts under `docs/plans/` carry plan, tasks, and a terminal LOOP token |
 | `npm run typecheck:scripts` | TypeScript type checking for `scripts/` (`tsc -p tsconfig.scripts.json`) |
 <!-- gates:end -->
+
+A gate recorded as advisory in `scripts/gate-ledger.json` still runs and is
+timed, but its failure does not fail `check`; restore it with
+`npm run gate-cost -- --restore <gate>`.
 
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
 REQs with no waiver in the `## Spec Waivers` section of DECISIONS.md,

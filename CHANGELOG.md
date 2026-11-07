@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026.11.7 — Gate retirement and a weekly report
+
+- `npm run gate-cost` reports per-gate cost, clean streaks, and retirement
+  candidates from the local timing record. The policy requires 20 consecutive
+  clean runs; "no findings" is read as "no failing run", because the record
+  carries pass/fail only. Eligibility recommends, it does not act.
+- `npm run gate-cost -- --retire <gate> --note "why"` records one advisory
+  decision in the committed `scripts/gate-ledger.json`; `--restore <gate>`
+  removes it. The runner still runs and times an advisory gate, prints
+  `ADVISORY FAIL <gate>`, and does not fail the suite. Deleting a gate stays a
+  manual manifest edit and a bulk apply is deliberately absent: the current
+  record makes 16 gates eligible at once.
+- `check-non-goals` is the first advisory gate (24 clean runs). Its subject is
+  a documentation pointer and list with no product contract, so it has the
+  smallest blast radius if it ever misses drift.
+- `npm run weekly` combines the gate-cost, loop-health, and delivery reports
+  in one local artifact (`$TMPDIR/infobroker/weekly-<repoKey>-<date>.json`).
+  It does not run the gate suite; the routine stays `npm run check`, then
+  `npm run weekly`.
+- `run-gates --list` marks advisory gates in its plain output; the generated
+  `AGENTS.md` table is unchanged.
+
 ## 2026.11.7 — CalVer is valid SemVer
 
 - `today()` and the bump path emit `YYYY.M.D` with no leading zeros, so the

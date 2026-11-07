@@ -30,11 +30,12 @@ start over.
 
 ## Weekly
 
-No weekly command yet. Until the gate-retirement tooling lands (see
-`ROADMAP.md`), the weekly review is manual: `npm run check` once, then
-`npm run loop-audit` (increment health, CHANGELOG date drift, delivery
-metrics, hook invocations, and per-gate cost) and `npm run metrics` for the
-standalone delivery print.
+One command: `npm run check` once (it writes the timing rows), then
+`npm run weekly`. The report combines gate cost and retirement candidates,
+increment health and CHANGELOG date drift, hook invocations, and the delivery
+numbers, and writes
+`$TMPDIR/infobroker/weekly-<repoKey>-<YYYY-MM-DD>.json`. `npm run loop-audit`
+and `npm run metrics` remain available for a single section.
 
 This is the **replenishment point**: new findings may enter the schedule here
 and nowhere else, so work in flight is not preempted. Items that are not
@@ -45,9 +46,12 @@ scheduled are explicitly parked, not "in progress".
 - Release (`npm run release`). A published tag is immutable: never move one; a
   correction is a new CalVer (D-092). Branch and tag are pushed atomically.
 - Dependency refresh (`npm outdated`, `npm audit`).
-- Gate-retirement review: a gate with no findings across 20 consecutive runs
-  should become advisory. The timing record that will drive it is already
-  written (`$TMPDIR/infobroker/gate-timing-*.json`); the report is scheduled.
+- Gate-retirement review: `npm run gate-cost` lists per-gate cost and the
+  gates eligible under the 20-clean-run policy. Record one decision with
+  `npm run gate-cost -- --retire <gate> --note "why"`; it writes
+  `scripts/gate-ledger.json`, which the runner honors on every checkout.
+  Deleting a gate stays a manual manifest edit. "No findings" means no failing
+  run: the timing record carries pass/fail only.
 
 ## Limits
 
@@ -68,4 +72,6 @@ scheduled are explicitly parked, not "in progress".
 | Session | increment health, date drift, hook invocations | `npm run loop-audit` |
 | Publication | step outcomes, resume state | `$TMPDIR/infobroker/pipeline-logs/run-*` |
 | Gates | duration, failure rate | `$TMPDIR/infobroker/gate-timing-*.json` |
+| Gates | cost, eligibility, advisory decisions | `npm run gate-cost`, `scripts/gate-ledger.json` |
+| Weekly | combined gate/loop/delivery report | `npm run weekly`, `$TMPDIR/infobroker/weekly-*.json` |
 | Delivery | frequency, lead time, commits/push | `npm run loop-audit`, `npm run metrics` |
