@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### D-085: LLM Steps Never Publish (2026.11.06)
+
+The push pipeline ran four LLM steps (read-through, sync, changelog, README)
+that rewrote tracked files, then staged the whole tree and published it. What
+shipped was therefore not the tree the deterministic gates had tested, and a
+failing gate fed another LLM repair that rewrote more of it: 50 of 239 commits
+touched the pipeline and 40 of those had a follow-up within 48 hours. The
+release path is now split. `npm run prep` (`--no-commit`) runs the AI steps and
+stops with a reviewable diff, which the session loop reviews and commits.
+`npm run release` (`--no-ai`) skips all four AI steps and the AI scan, requires
+a clean tree whose version and CHANGELOG already agree, then runs auth, the
+deterministic scan, the full gate suite, the commit, the tag, and the push, with
+no `opencode` dependency. A deterministic release publishes exactly the reviewed
+tree. The entry point is `prep`, not `prepare`, because `prepare` is an npm
+lifecycle hook that would run the pipeline on every `npm install`. Rejected:
+keeping the AI steps in the publish path (unreviewable diffs and a self-repair
+loop at release time); naming the command `prepare` (lifecycle hijack); dropping
+the AI review entirely (it still catches what the deterministic gates cannot,
+just not during publish).
+
 ### D-084: Provider Rate Limits and Privacy-Chain Ordering (CF-1, CF-2, CF-9, CF-10; 2026.11.06)
 
 Stack Exchange's `per_second: 0.003` was a scraped "one call per five minutes"

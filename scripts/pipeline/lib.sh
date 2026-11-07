@@ -555,6 +555,14 @@ repair_loop() {
     set -e
     [[ -n "$saved" ]] && eval "$saved"
     decision=$(classify_gate_failure "$rc" "$attempt" "$max")
+    # --no-ai has no backend to drive a repair turn, so it fails closed on the
+    # first failure instead of looping into "backend not initialized".
+    if [[ "$decision" != "pass" ]] && ${NO_AI:-false}; then
+      REPAIR_ATTEMPTS["$label"]="$attempt"
+      error "$label: FAILED (exit ${rc}) — --no-ai does not repair; human attention required."
+      tail -20 "$log" 2>/dev/null || true
+      return "$rc"
+    fi
     case "$decision" in
       pass)
         if [[ $attempt -gt 0 ]]; then

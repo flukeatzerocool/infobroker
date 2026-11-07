@@ -93,7 +93,16 @@ directory and resumes from its journal when one exists, exactly like
 non-mutating (spec audit + deterministic scans only, working tree left clean;
 run logs still land under TMPDIR);
 `--no-commit` runs all steps including AI edits but stops before staging,
-leaving the tree dirty for inspection. Staging is whole-tree with a deny-list
+leaving the tree dirty for inspection. The release path is split in two:
+`npm run prep` is that `--no-commit` run, so the AI diff is reviewed and
+committed in the session loop; `npm run release` runs `--no-ai`, which skips
+the read-through, sync, changelog, and README steps plus the AI scan, requires
+a clean tree whose version and CHANGELOG already agree (`npm run version-sync`),
+then runs the deterministic auth and scan steps, the full gate suite, the
+commit, the tag, and the push. A deterministic release therefore publishes the
+tree that was prepared and reviewed and never needs `opencode` or `curl`. The
+entry point is `prep`, not `prepare`, because `prepare` is an npm lifecycle
+hook that would run the pipeline on every `npm install`. Staging is whole-tree with a deny-list
 and a fail-closed leftover check, so tracked paths the old allowlist omitted
 (e.g. `test-fixtures/`, `DECISIONS.md`, `bin/`) can no longer be silently
 dropped. Secret scanning reports `path:line` only and never logs the matched

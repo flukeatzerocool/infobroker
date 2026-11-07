@@ -74,6 +74,9 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --yes (-y)       Approve the final push without prompting (unattended/CI).
   --no-push        Commit but skip push, tag, and mirror sync.
   --no-commit      Run all steps (including AI edits) but stop before staging.
+  --no-ai          Deterministic release only: skip the read-through, sync,
+                   changelog, and README steps (and the AI scan). Requires an
+                   already-prepared tree; see `npm run prepare`.
   --commit         Allow commit and push with --from=<step>; a step range is a
                    testing run without it. Never combines with --to.
   --resume         Continue the newest recorded run for this repo/branch.
@@ -93,7 +96,7 @@ EOF
 # ── Flag parsing ──
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
-NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false
+NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false; NO_AI=false
 START_STEP=""; END_STEP=""; RUN_ID=""
 
 for arg in "$@"; do
@@ -110,6 +113,7 @@ for arg in "$@"; do
     --no-push) NO_PUSH=true ;;
     --no-mirror) NO_MIRROR=true ;;
     --no-commit) NO_COMMIT=true ;;
+    --no-ai) NO_AI=true ;;
     --commit) COMMIT=true ;;
     --from=*) START_STEP="${arg#--from=}" ;;
     --to=*) END_STEP="${arg#--to=}" ;;
@@ -285,6 +289,11 @@ if [[ -n "$START_STEP" && -n "$END_STEP" ]]; then
   [[ " $BEFORE_START " == *" $END_STEP "* ]] && die "--from=$START_STEP is after --to=$END_STEP."
 fi
 step_skip() {
+  # --no-ai is a deterministic release: the four AI steps cannot run, and
+  # skipping sync also means the version bump belongs to the prepare step.
+  if $NO_AI && [[ " readthrough sync changelog readme " == *" $1 "* ]]; then
+    return 0
+  fi
   should_skip_step "$STATE_FILE" "$RESUMED" "$1" "$STEP_ORDER" "$START_STEP" "$END_STEP"
 }
 
@@ -340,7 +349,9 @@ print_readiness_report() {
 FAILED_PRECHECKS=""
 required_tools=(node npm git npx)
 # opencode/curl are only needed when AI steps can run.
-$DRY_RUN || required_tools+=(opencode curl)
+if ! $DRY_RUN && ! $NO_AI; then
+  required_tools+=(opencode curl)
+fi
 for tool in "${required_tools[@]}"; do
   command -v "$tool" >/dev/null 2>&1 || FAILED_PRECHECKS="$FAILED_PRECHECKS $tool"
 done
@@ -366,6 +377,9 @@ if $RESUMED; then
 else
   git -C "$PROJECT_DIR" diff --exit-code --quiet 2>/dev/null || {
     error "Working tree has unstaged changes. Commit or stash before running."
+    if $NO_AI; then
+      error "For a deterministic release, run 'npm run prepare' and commit the result first."
+    fi
     git -C "$PROJECT_DIR" status --short
     exit 1
   }
@@ -376,6 +390,19 @@ else
   }
   info "Working tree: clean"
 fi
+
+# --no-ai publishes a tree that prepare already reviewed and committed. The
+# version bump and the CHANGELOG entry belong to prepare, so a release that
+# would ship a stale version fails here rather than after the full gate suite.
+if $NO_AI; then
+  if ! ( cd "$PROJECT_DIR" && npm run version-sync >/dev/null 2>&1 ); then
+    error "--no-ai needs a prepared tree: version and CHANGELOG are out of sync."
+    error "Run 'npm run prepare', review and commit the result, then 'npm run release'."
+    exit 1
+  fi
+  info "Release precheck: version and CHANGELOG are in sync (prepared tree)."
+fi
+
 # A dry run must not delete prior run logs; it may still write its own.
 if ! $DRY_RUN && ! $RESUMED; then
   prune_runs "$PIPELINE_LOG_DIR" "${PIPELINE_KEEP_RUNS:-10}"
@@ -387,9 +414,10 @@ echo ""
 # The backend starts before step 1 because the spec-audit gate has a repair
 # path: if the first `npm run check` fails, repair_loop drives an AI turn, and
 # run_pipeline_step needs PIPELINE_SERVER_URL/PIPELINE_SESSION_ID bound.
-# A dry run performs no AI steps, so it starts no backend.
-if $DRY_RUN; then
-  info "Dry run: skipping the opencode backend and all AI steps."
+# A dry run and a deterministic release (--no-ai) perform no AI steps, so
+# neither starts a backend — which is also why --no-ai needs no opencode.
+if $DRY_RUN || $NO_AI; then
+  info "Skipping the opencode backend and all AI steps."
   echo ""
 else
   ensure_server
@@ -826,7 +854,10 @@ else
   if $SCAN_AI && $DRY_RUN; then
     warn "Ignoring --scan-ai under --dry-run (deterministic scan only)."
   fi
-  if $SCAN_AI && ! $DRY_RUN; then
+  if $SCAN_AI && $NO_AI; then
+    warn "Ignoring --scan-ai under --no-ai (deterministic scan only)."
+  fi
+  if $SCAN_AI && ! $DRY_RUN && ! $NO_AI; then
     warn "AI scan enabled (--scan-ai) — running scan and scan-git concurrently in forked sessions..."
     sed -e "s|<SCAN_DIRS>|$SCAN_DIRS|g" -e "s|<LABEL>|INFOBROKER|g" -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/scan-project.json|g" \
       "$PROMPT_DIR/scan.md" > "$PIPELINE_RUN_DIR/scan.prompt.md"
