@@ -9,8 +9,8 @@
  * reports each gate's own output so a failure is attributed to its gate rather
  * than interleaved with its siblings.
  *
- * `--timing` appends per-gate durations to `.infobroker/gate-timing.json`
- * (local, gitignored) so gate cost is measurable. `--record` writes the tree-
+ * `--timing` appends per-gate durations to `$TMPDIR/infobroker/gate-timing-<repoKey>.json`
+ * (local, never committed) so gate cost is measurable. `--record` writes the tree-
  * keyed run record the pre-push hook reads; it is refused for a dirty tree and
  * only applies to a full run. `--list` prints the manifest, and
  * `--list --format md` prints the block pasted into AGENTS.md.
@@ -31,6 +31,11 @@ import {
   renderGatesBlock,
   type Gate,
 } from "./lib/gate-manifest.js";
+import {
+  advisoryGates,
+  classifyResults,
+  readLedger,
+} from "./lib/gate-retirement.js";
 import { recordedMode, timingPath, writeGateRun } from "./lib/gate-run-manifest.js";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -123,7 +128,7 @@ function printFailure(result: Result): void {
   if (result.stderr) process.stderr.write(result.stderr);
 }
 
-async function runFull(): Promise<SuiteResult> {
+async function runFull(advisory: Set<string>): Promise<SuiteResult> {
   const results: Result[] = [];
   for (const gate of GATES) {
     const result = await runGate(gate, false);
@@ -133,14 +138,18 @@ async function runFull(): Promise<SuiteResult> {
       return { code: 2, results };
     }
     if (result.code !== 0) {
+      if (advisory.has(gate.name)) {
+        process.stderr.write(`ADVISORY FAIL ${gate.name}\n`);
+        continue;
+      }
       process.stderr.write(`FAIL ${gate.name}\n`);
       return { code: 1, results };
     }
   }
-  return { code: 0, results };
+  return { code: classifyResults(results, advisory).code, results };
 }
 
-async function runFast(): Promise<SuiteResult> {
+async function runFast(advisory: Set<string>): Promise<SuiteResult> {
   const gates = fastGates();
   const order = new Map(gates.map((gate, index) => [gate.name, index]));
   const results: Result[] = [];
@@ -160,21 +169,24 @@ async function runFast(): Promise<SuiteResult> {
   results.sort((a, b) => (order.get(a.gate.name) ?? 0) - (order.get(b.gate.name) ?? 0));
 
   let fatal = false;
-  let failed = 0;
   for (const result of results) {
     if (result.fatal) {
       fatal = true;
       process.stderr.write(`FATAL ${result.gate.name}: ${result.fatal}\n`);
     } else if (result.code !== 0) {
-      failed++;
-      process.stderr.write(`FAIL ${result.gate.name}\n`);
-      printFailure(result);
+      if (advisory.has(result.gate.name)) {
+        process.stderr.write(`ADVISORY FAIL ${result.gate.name}\n`);
+      } else {
+        process.stderr.write(`FAIL ${result.gate.name}\n`);
+        printFailure(result);
+      }
     } else {
       process.stdout.write(`PASS ${result.gate.name}\n`);
     }
   }
+  const classification = classifyResults(results, advisory);
   if (fatal) return { code: 2, results };
-  return { code: failed > 0 ? 1 : 0, results };
+  return { code: classification.code, results };
 }
 
 function headSha(): string {
@@ -249,8 +261,10 @@ async function main(): Promise<number> {
     if (format === "md") {
       process.stdout.write(`${renderGatesBlock()}\n`);
     } else if (format === "plain") {
+      const advisory = advisoryGates(readLedger(ROOT).ledger);
       for (const gate of GATES) {
-        process.stdout.write(`${gate.name}\t${gate.description}\n`);
+        const marker = advisory.has(gate.name) ? "  [advisory]" : "";
+        process.stdout.write(`${gate.name}\t${gate.description}${marker}\n`);
       }
     } else {
       process.stderr.write(`unknown --format value: ${format}\n${USAGE}`);
@@ -283,8 +297,11 @@ async function main(): Promise<number> {
   }
 
   const mode: Mode = full ? "full" : "fast";
+  const { ledger, warnings } = readLedger(ROOT);
+  for (const warning of warnings) process.stderr.write(`gates: ${warning}\n`);
+  const advisory = advisoryGates(ledger);
   const started = Date.now();
-  const { code, results } = full ? await runFull() : await runFast();
+  const { code, results } = full ? await runFull(advisory) : await runFast(advisory);
   const elapsed = Date.now() - started;
 
   if (parseFlag(argv, "--timing") && results.length > 0) recordTiming(results, mode);
