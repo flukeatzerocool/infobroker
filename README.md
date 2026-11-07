@@ -234,7 +234,9 @@ fetches the top results, then ranks each page's passages against your query,
 so you get the specific text that answers the question instead of links. Pass
 `analyze: true` and the same response carries topic terms, entity mentions,
 semantic clusters, and a dated timeline derived from those results — computed
-in-process, with no extra request.
+in-process, with no extra request. A query that names a measurable attribute —
+attendance, population, a percentage, a date — resolves a sourced `facts`
+entry from Wikidata or a Wikipedia infobox/table ahead of the prose results.
 Failed providers fall back silently through a configurable chain so you get
 results, not error messages. Other search tools lock you to one engine;
 Infobroker routes every query to the right provider and keeps going when one
@@ -255,16 +257,13 @@ renderers for source-specific extraction. Ask a page a question — pass
 scored and ranked, instead of the whole document. Fetch several URLs at once
 and each result keeps its own renderer, ranked passages, and top score. Pass
 `raw: true` to get the page text directly, without the JSON wrapper.
-Built-in web fetchers
-return raw HTML; Infobroker gives you clean, readable content from any
-source — ready for summarization or analysis. Fetch also reports the page's
-last-updated date when it can determine one, so you know how current your
-source is. When a page is paywalled, access-restricted, or bot-blocked,
-`fetch_page` reports `access_blocked` and falls back to Crossref metadata or
-an open-access copy for a DOI, then to an Internet Archive snapshot. A query
-that names a measurable attribute (attendance, population, a percentage, a
-date) returns a sourced `facts` entry from Wikidata or a Wikipedia
-infobox/table before the prose results.
+Built-in web fetchers return raw HTML; Infobroker gives you clean, readable
+content from any source — ready for summarization or analysis. Fetch also
+reports the page's last-updated date when it can determine one, so you know
+how current your source is. When a page is paywalled, access-restricted, or
+bot-blocked, `fetch_page` reports `access_blocked` and falls back to Crossref
+metadata or an open-access copy for a DOI, then to an Internet Archive
+snapshot.
 
 ### Citations
 
