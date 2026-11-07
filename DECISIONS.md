@@ -2,6 +2,31 @@
 
 ## Active Decisions
 
+### D-086: CalVer Is Normalized on Publish (2026.11.06)
+
+`npm view infobroker versions` returns `2026.11.4`, not the `2026.11.04` stored
+in `package.json`: npm strips the leading zero from each numeric segment, the
+same transform `normalizeSemver` already applies to `server.json`. The registry
+accepts the version, so publishing is not blocked, but the published identity
+never equals the repository identity and `v2026.11.04` names a tag whose
+registry version is `2026.11.4`. Strict SemVer 2.0.0 forbids leading zeros, so
+any tool comparing `package.json` to the registry sees a mismatch. Decision: do
+not change versioning inside the release-routine plan, because it touches
+`today()`, the CHANGELOG header regex, and every historical entry; schedule the
+normalization on `ROADMAP.md` instead. Rejected: leaving it unrecorded (the
+mismatch was previously invisible), and normalizing only `server.json` (already
+done, which is why the mismatch looked handled).
+
+### D-087: Release-Loop Baseline (2026.11.06)
+
+The numbers the release-routine plan is measured against, before its restructure
+lands: 0.46 pushes/day, commit-to-push lead time median 14.9h and p90 347h,
+median 2 commits per push (max 97), 41 of 52 pipeline commits followed by another
+within 48h, 32 commits unpushed, and roughly 30 percent of in-session time spent
+on the pipeline and gates. `npm run metrics` reproduces the first four from the
+origin reflog; `npm run status` reports the unpushed count and age. The next
+review compares against this line rather than relying on recall.
+
 ### D-085: LLM Steps Never Publish (2026.11.06)
 
 The push pipeline ran four LLM steps (read-through, sync, changelog, README)

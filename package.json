@@ -62,6 +62,7 @@
     "version-sync": "npx tsx scripts/version.ts check",
     "audit": "npm audit --audit-level=high",
     "status": "npx tsx scripts/status.ts",
+    "metrics": "npx tsx scripts/metrics.ts",
     "prep": "bash scripts/push-pipeline.sh --no-commit",
     "release": "bash scripts/push-pipeline.sh --no-ai --yes",
     "push": "bash scripts/push-pipeline.sh",
