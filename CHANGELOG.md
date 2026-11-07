@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.07 — Scope non-goals are gate-checked
+
+- The open-web scope boundary now lives in a machine-read `## Scope Non-goals`
+  block in `DECISIONS.md`, and `npm run check-non-goals` fails when the block is
+  missing or empty, an entry cites a decision that is not a heading, a category
+  repeats, or `ROADMAP.md` stops being a short pointer to it. The roadmap section
+  was previously exempt from every check, so a deleted entry or a pasted copy
+  passed silently. (D-061, D-090)
+- The roadmap's `## Non-goals` section is now two lines naming `DECISIONS.md`
+  and the block, instead of restating the category list, so the scope decision
+  has a single surface that can go stale. (D-090)
+
 ## 2026.11.07 — Fetch fallback ordering clarified
 
 - A DOI link now documents the fallback order it already follows: DOI metadata

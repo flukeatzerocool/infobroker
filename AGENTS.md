@@ -335,6 +335,7 @@ This runs:
 | `npm run validate-spec` | Spec-code traceability, REQ body hygiene, bidirectional coverage |
 | `npm run validate-readme` | README structure, tool/provider reconciliation, links, comparison table |
 | `npm run check-roadmap` | Roadmap admission rule: one section per item, 1–3 bullets, a `**Trigger:**` line |
+| `npm run check-non-goals` | Scope non-goals: list integrity in `DECISIONS.md` and a pointer from `ROADMAP.md` |
 | `npm run check-report-fixtures` | Report contract fixtures: skeleton, manifest, citations, Source Register (REQ-116) |
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax and removed-flag (`--attach`) checks over shell entry points and `scripts/**/*.mjs` |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
@@ -405,9 +406,11 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
   a `**Trigger:**` line naming what starts or closes it. Standing facts —
   accepted advisories, by-design limitations — are decisions recorded in
   `DECISIONS.md`, and a review cites the decision instead of filing a roadmap
-  item. The open-web non-goals live in D-061; `ROADMAP.md` carries a pointer.
+  item. The open-web non-goals are listed in the `## Scope Non-goals` block of
+  `DECISIONS.md` (rationale in D-061); `ROADMAP.md` carries only a pointer.
   `npm run check-roadmap` enforces the section shape and the `**Trigger:**`
-  line (`## Non-goals` is exempt).
+  line, and `npm run check-non-goals` checks the list and the pointer
+  (`## Non-goals` is exempt from the item shape because of that check).
 - **Loop status.** Every AAR ends with `LOOP PAUSED` or `LOOP OPEN`.
   PAUSED requires: gates green, no open P0/P1 beyond the scheduled
   roadmap. When PAUSED, the AAR lists zero new action items; the next plan
