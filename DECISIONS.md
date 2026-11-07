@@ -2,6 +2,25 @@
 
 ## Active Decisions
 
+### D-091: Increment Artifacts Replace the Gitignored Session File (2026.11.07)
+
+The session loop's plan, findings, and disposition lived in
+`.opencode/session.md`, which is git-ignored and deleted at close, so the only
+durable trace was the commit body plus a decision line. Nothing could check
+that a session had a plan, a done bar, or an AAR. Decision: the durable record
+is `docs/plans/<YYYY-MM-DD>-<slug>/` carrying `plan.md` (with a
+`**Done bar:**`), `tasks.md`, and `aar.md` ending in `LOOP PAUSED` or
+`LOOP OPEN`; `check-loop-artifacts` gates the contract and `session:close`
+validates it, runs `check:fast`, and records the run for this tree. The scratch
+file stays as local working notes but is no longer the record. `session:close`
+does not commit: the split-commit series (D-089) owns commits, and Holonovel's
+subject derivation needs a dated CHANGELOG heading that this repository does
+not have (its heading carries the CalVer version, which repeats across
+entries). Rejected: keeping only the commit body (a commit subject cannot
+carry a done bar or a loop token); having `session:close` commit the artifacts
+(a second committer competing with the split series); a dated commit subject
+(nothing to derive it from without rewriting the CHANGELOG heading format).
+
 ### D-090: Scope Non-Goals Are Gate-Checked (2026.11.07)
 
 The open-web scope boundary lived in D-061's prose with a paraphrase on

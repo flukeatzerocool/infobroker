@@ -122,6 +122,11 @@ export const GATES: readonly Gate[] = [
     fast: true,
   },
   {
+    name: "check-loop-artifacts",
+    description: "Increment artifacts under `docs/plans/` carry plan, tasks, and a terminal LOOP token",
+    fast: true,
+  },
+  {
     name: "typecheck:scripts",
     description: "TypeScript type checking for `scripts/` (`tsc -p tsconfig.scripts.json`)",
     fast: true,

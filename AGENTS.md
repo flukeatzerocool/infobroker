@@ -360,6 +360,7 @@ the table.
 | `npm run audit` | Dependency vulnerability gate — fails on high/critical `npm audit` findings (REQ-101); requires registry access |
 | `npm run check-shipped-kb-empty` | Repo ships an empty KB — storage_path outside the tree, no KB artifacts |
 | `npm run check-gate-table` | The AGENTS.md gates table matches this manifest |
+| `npm run check-loop-artifacts` | Increment artifacts under `docs/plans/` carry plan, tasks, and a terminal LOOP token |
 | `npm run typecheck:scripts` | TypeScript type checking for `scripts/` (`tsc -p tsconfig.scripts.json`) |
 <!-- gates:end -->
 
@@ -402,9 +403,13 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
   diff, a finding that repeats an earlier one, or an unpushed backlog older
   than 24 hours — not after every edit. A trigger that has not fired needs no
   review.
-- **Session file.** Each session writes `.opencode/session.md` (goal, plan,
-  findings, disposition, loop status) and deletes it at close. It is
-  git-ignored; the durable record is the commit body plus `DECISIONS.md`.
+- **Increment record.** The durable record is `docs/plans/<YYYY-MM-DD>-<slug>/`
+  with `plan.md` (carrying a `**Done bar:**`), `tasks.md`, and `aar.md` ending
+  in `LOOP PAUSED` or `LOOP OPEN`. `npm run check-loop-artifacts` gates the
+  contract; `npm run session:close` validates it, runs `check:fast`, records the
+  run, and prints the push cadence. It does not commit — the split-commit series
+  owns commits (D-089, D-091). `.opencode/session.md` stays available as
+  scratch and is deleted at close.
 - **Finding triage (P0–P3).** P0 = demonstrated wrong output or gate
   failure — fix in-session. P1 = normative gap unscheduled — schedule on
   `ROADMAP.md`. P2 = improvement preventing a demonstrated failure —
