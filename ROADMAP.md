@@ -9,7 +9,9 @@
   Standing facts are not roadmap items: accepted dependency advisories and
   by-design limitations are recorded in DECISIONS.md, and a review cites the
   decision rather than filing a roadmap entry. `npm run check-roadmap`
-  enforces this rule; `## Non-goals` is exempt.
+  enforces this rule; `## Non-goals` is exempt from it because
+  `npm run check-non-goals` verifies that section as a pointer to the
+  `## Scope Non-goals` block in DECISIONS.md.
 -->
 
 ## Workflow convergence with Holonovel
@@ -41,8 +43,5 @@ closes when both repos pass `check:fast` and `check` with the shared commands,
 
 ## Non-goals
 
-Open-web scope boundary: no SOCMINT platform collection, WHOIS/DNS/CT or
-attack-surface data, corporate registries, sanctions/PEP screening, breach
-indexes, media forensics, STIX/MISP link analysis, chain-of-custody, multi-user
-case management, or enterprise scheduling. Authoritative list and rationale:
-`DECISIONS.md` D-061.
+Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
+under `## Scope Non-goals`.

@@ -4,7 +4,8 @@
 // Role: gate (wired into `npm run check`). Each `## <title>` section is a
 // scheduled work item: it carries 1–3 bullet lines and a `**Trigger:**` line
 // naming what starts or closes the work. A section titled exactly `Non-goals`
-// is exempt — it is a pointer to the scope decision, not work. Standing facts
+// is exempt — it is a pointer to the scope decision, not work, and
+// `check-non-goals` verifies that pointer separately. Standing facts
 // (accepted advisories, by-design limitations) belong in `DECISIONS.md`, so
 // this gate is what stops them accumulating on the roadmap again.
 //
@@ -14,10 +15,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
+import { NON_GOALS_TITLE } from "./lib/non-goals.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const ROADMAP = join(ROOT, "ROADMAP.md");
-const EXEMPT = "Non-goals";
 const MAX_BULLETS = 3;
 
 const USAGE = `check-roadmap — roadmap admission-rule gate
@@ -27,7 +28,7 @@ Usage:
 
 Every \`## <title>\` section in ROADMAP.md must hold 1–${MAX_BULLETS} bullet lines
 and a \`**Trigger:**\` line naming what starts or closes the work. A section
-titled \`${EXEMPT}\` is exempt. Standing facts belong in DECISIONS.md.
+titled \`${NON_GOALS_TITLE}\` is exempt. Standing facts belong in DECISIONS.md.
 
 Exit codes: 0 = pass; 1 = finding; 2 = fatal.
 `;
@@ -90,7 +91,7 @@ function evaluate(sections: Section[]): Finding[] {
   const findings: Finding[] = [];
 
   for (const section of sections) {
-    if (section.title === EXEMPT) continue;
+    if (section.title === NON_GOALS_TITLE) continue;
 
     if (section.bullets.length === 0) {
       findings.push({

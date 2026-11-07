@@ -14,6 +14,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
+import { NON_GOALS_TITLE } from "./lib/non-goals.js";
 
 const USAGE = `Usage: npx tsx scripts/status.ts
 
@@ -76,7 +77,7 @@ const roadmapItems = safe("roadmap", () => {
   if (!existsSync(path)) return "0";
   const body = readFileSync(path, "utf8");
   const sections = body.match(/^## .+$/gm) ?? [];
-  return String(sections.filter((line) => line !== "## Non-goals").length);
+  return String(sections.filter((line) => line !== `## ${NON_GOALS_TITLE}`).length);
 });
 
 console.log("Release status");

@@ -2,6 +2,25 @@
 
 ## Active Decisions
 
+### D-090: Scope Non-Goals Are Gate-Checked (2026.11.07)
+
+The open-web scope boundary lived in D-061's prose with a paraphrase on
+`ROADMAP.md`, and no gate read either: an empty section, a stale decision
+reference, or a pasted copy all passed. The list now lives in a machine-read
+`## Scope Non-goals` block in this file, following the `## Spec Waivers` pattern,
+and `npm run check-non-goals` fails when the block is missing or empty, an entry
+cites an ID that is not a `### D-NNN:` heading, a category repeats, or the
+roadmap section stops being a pointer of at most two lines naming `DECISIONS.md`
+and the block. The gate checks list integrity and pointer binding, not capability
+absence: a forbidden capability built inside an allowed provider still passes,
+which is a recorded residual. Rejected: keeping only a roadmap-shape check (it
+never read the list, so a deleted entry stayed green), a provider-registry
+category taxonomy (the 27 providers have no category field, so it needs new
+metadata and 27 edits, and still cannot see a capability added inside an allowed
+provider), and a token scan of provider and document surfaces (false-positives
+on the report template's "Assumptions & Attack Surface" heading and `url-guard`'s
+DNS discussion; deferred, not wired).
+
 ### D-089: Split Commit Series Rewinds Version Stamps (2026.11.07)
 
 The pre-commit hook runs `version-sync`, which fails unless `package.json`,
@@ -1731,3 +1750,20 @@ listed REQ for traceability and reports it as waived; any uncited REQ not
 listed here is an error. Remove a line when its REQ is implemented and cited.
 
 - (none)
+
+## Scope Non-goals
+
+Gate-checked by `npm run check-non-goals`. One category per line, each citing
+the decision that defines it. Adding or removing a line is a scope change and
+requires a decision. `ROADMAP.md` carries only a pointer to this block.
+
+- SOCMINT platform collection — D-061
+- Infrastructure enumeration (WHOIS/DNS/CT/attack-surface data) — D-061
+- Corporate registries — D-061
+- Sanctions/PEP screening — D-061
+- Breach indexes — D-061
+- Media forensics — D-061
+- STIX/MISP link analysis — D-061
+- Chain-of-custody — D-061
+- Multi-user case management — D-061
+- Enterprise scheduling — D-061
