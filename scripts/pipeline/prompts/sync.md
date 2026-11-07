@@ -26,12 +26,12 @@ do NOT re-audit the whole REQ surface.
    src/index.ts to today's date. Leave the `## <version> — ` header that
    version-bump seeds in CHANGELOG.md empty — do not add content to it (the
    changelog step owns CHANGELOG content).
-7. Review: load and apply the code-review skill against the sync diff
-   (`git diff` plus untracked source files). Fix all critical and high
-   findings (auto-confirm — this is a trusted automated pipeline). Do not
-   re-run the gate suite: the single run from step 5 plus the pipeline's own
-   post-sync gate cover it. If any critical finding cannot be fixed, report it
-   as a failure.
+7. Self-check: load and apply the code-review skill against your own sync diff
+   (`git diff` plus untracked source files) and fix what you find. This pass is
+   not the recorded verdict — the pipeline runs an independent, gated code
+   review immediately after this step (forked session, `sync-review.json`,
+   critical halts, high findings repaired). Do not re-run the gate suite: the
+   single run from step 5 plus the pipeline's own post-sync gate cover it.
 8. Smoke test: start the server and call `infobroker_inspect_providers`
    (action spec). Verify:
    - Tool count has not decreased from the baseline

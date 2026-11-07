@@ -634,6 +634,35 @@ classify_gate_failure() {
   fi
 }
 
+# review_required <porcelain-status-output> → true | false
+# The independent code review reads source and configuration only. A docs-only
+# change set has nothing for it to review, so it is skipped rather than spending
+# a model turn on an empty diff. Matches tracked, untracked, and renamed paths.
+review_required() {
+  if printf '%s\n' "$1" | grep -qE '(^|[[:space:]])(src/|config\.json)'; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
+# review_gate_decision <critical> <high> <attempt> <max> → halt | giveup | repair | pass
+# Pure decision for the post-sync code-review gate. A critical finding halts:
+# repairing a correctness defect without a failing test is a human call. High
+# findings are repaired until <attempt> reaches <max>, which bounds the loop.
+review_gate_decision() {
+  local critical="$1" high="$2" attempt="$3" max="$4"
+  if (( critical > 0 )); then
+    printf 'halt\n'
+  elif (( high > 0 && attempt >= max )); then
+    printf 'giveup\n'
+  elif (( high > 0 )); then
+    printf 'repair\n'
+  else
+    printf 'pass\n'
+  fi
+}
+
 # ── Bounded auto-repair ──────────────────────────────────────────────────────
 # repair_loop <label> <gate-cmd> <prompt-template> <max> <log> <out>
 # Runs a gate; on failure renders the fix-gate prompt with the failure log and

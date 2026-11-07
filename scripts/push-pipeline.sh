@@ -234,6 +234,8 @@ OUT_SCAN="$PIPELINE_RUN_DIR/scan.txt"
 OUT_SCAN_GIT="$PIPELINE_RUN_DIR/scan-git.txt"
 OUT_README="$PIPELINE_RUN_DIR/readme.txt"
 OUT_FIX="$PIPELINE_RUN_DIR/fix.txt"
+OUT_SYNC_REVIEW="$PIPELINE_RUN_DIR/sync-review.txt"
+SYNC_REVIEW_JSON="$PIPELINE_RUN_DIR/sync-review.json"
 
 # Default timeout per opencode subprocess (seconds, 0 = no timeout)
 OPC_TIMEOUT="${OPC_TIMEOUT:-1800}"
@@ -259,6 +261,9 @@ status_set() { STEP_STATUS["$1"]="$2"; }
 # Declared before any readiness report so the --no-commit exit path is safe
 # under `set -u`; set true only after a commit actually lands.
 COMMITTED=false
+# Set by the post-sync code review when it runs; empty when skipped, so the
+# readiness report can omit the line rather than print a placeholder.
+SYNC_REVIEW_COUNTS=""
 
 if ! $RESUMED; then
   : > "$PIPELINE_LOG_FILE"
@@ -370,10 +375,29 @@ print_readiness_report() {
       printf '  repaired:      %s (%s attempt(s))\n' "$label" "${REPAIR_ATTEMPTS[$label]}"
     done
   fi
+  if [[ -n "${SYNC_REVIEW_COUNTS:-}" ]]; then
+    printf '  Code review:   %s\n' "$SYNC_REVIEW_COUNTS"
+  fi
   printf '  Scan findings: %s\n' "${SCAN_FINDINGS:-?}"
   printf '  Fixtures:      %s stale\n' "${FIXTURE_STALE:-?}"
   printf '  Run dir:       %s\n' "$PIPELINE_RUN_DIR"
   echo ""
+}
+
+# run_forked_step <prompt.md> <out.txt> <title-suffix> [run_pipeline_step flags...]
+# One AI turn in its own session, so it neither collides with the main transcript
+# nor inherits the prior steps' context. Runs in a subshell: the caller sees only
+# the exit code, so anything the step must persist belongs in the run directory.
+run_forked_step() {
+  local prompt_file="$1" out_file="$2" suffix="$3"
+  shift 3
+  (
+    unset PIPELINE_SESSION_ID
+    PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-$suffix"
+    ensure_session
+    run_pipeline_step "$prompt_file" "$out_file" "$@" --retry
+    exit "$OPC_RC"
+  )
 }
 
 # ── pre-flight checks ────────────────────────────────────────────────────────
@@ -688,6 +712,77 @@ else
   SYNC_RC=$OPC_RC
   [[ $SYNC_RC -ne 0 ]] && die "Server sync FAILED. Check $OUT_SYNC."
 
+  # Independent code review of the sync diff. The sync agent reviews its own
+  # work in-loop (sync.md step 7), but a self-report is not evidence: this pass
+  # runs in a forked session, writes an artifact, and gates the run. Skipped
+  # when the run changed no source or configuration — the common docs-only case.
+  if [[ "$(review_required "$(git -C "$PROJECT_DIR" status --porcelain -- src config.json)")" == "true" ]]; then
+    SYNC_REV_ATTEMPT=0
+    SYNC_REV_PROMPT="$PIPELINE_RUN_DIR/sync-review.prompt.md"
+    SYNC_REV_DISPOSITIONS="$PIPELINE_RUN_DIR/sync-review-dispositions.json"
+    sed -e "s|<SYNC_REVIEW_JSON>|$SYNC_REVIEW_JSON|g" "$PROMPT_DIR/sync-review.md" > "$SYNC_REV_PROMPT"
+    while :; do
+      # Delete the artifact before every reviewer turn. A turn that exits 0
+      # without writing must fail the gate, not pass on the previous attempt's
+      # counts (the read-through reuses its summary across a reconcile turn).
+      rm -f "$SYNC_REVIEW_JSON"
+      warn "Independent code review of the sync diff (attempt $((SYNC_REV_ATTEMPT + 1)))..."
+      if ! run_forked_step "$SYNC_REV_PROMPT" "$OUT_SYNC_REVIEW" "sync-review" --model "$PIPELINE_MODEL"; then
+        die "Code review FAILED. Check $OUT_SYNC_REVIEW."
+      fi
+
+      if ! SYNC_REV_COUNTS=$(summary_counts "$SYNC_REVIEW_JSON"); then
+        die "Code review wrote no parseable summary to ${SYNC_REVIEW_JSON}; the gate cannot run without it."
+      fi
+      read -r SYNC_CRITICAL SYNC_HIGH SYNC_INFO <<<"$SYNC_REV_COUNTS"
+      if [[ "$(json_from_file "$SYNC_REVIEW_JSON" status)" != "complete" ]]; then
+        die "Code review summary status is not 'complete' (${SYNC_REVIEW_JSON})."
+      fi
+      SYNC_REVIEW_COUNTS="${SYNC_CRITICAL} c / ${SYNC_HIGH} h / ${SYNC_INFO} i"
+      # The artifact is authoritative. A token that disagrees is cosmetic here:
+      # unlike the read-through, the JSON is the gate.
+      SYNC_REV_TOKEN=$(grep -oE 'SYNC REVIEW [0-9]+ critical; [0-9]+ high; [0-9]+ info' "$OUT_SYNC_REVIEW" 2>/dev/null | tail -1 || true)
+      if [[ -n "$SYNC_REV_TOKEN" ]]; then
+        SYNC_REV_EXPECTED="SYNC REVIEW ${SYNC_CRITICAL} critical; ${SYNC_HIGH} high; ${SYNC_INFO} info"
+        [[ "$SYNC_REV_TOKEN" == "$SYNC_REV_EXPECTED" ]] \
+          || warn "Code review: closing token disagrees with the artifact (${SYNC_REV_TOKEN}) — artifact wins."
+      else
+        warn "Code review: no closing token in $OUT_SYNC_REVIEW — artifact is authoritative."
+      fi
+
+      SYNC_REV_DECISION=$(review_gate_decision "$SYNC_CRITICAL" "$SYNC_HIGH" "$SYNC_REV_ATTEMPT" "$PIPELINE_FIX_ATTEMPTS")
+      case "$SYNC_REV_DECISION" in
+        pass)
+          info "Code review: PASSED — ${SYNC_REVIEW_COUNTS}"
+          break
+          ;;
+        halt)
+          die "Code review BLOCKED: ${SYNC_CRITICAL} critical finding(s). See $OUT_SYNC_REVIEW."
+          ;;
+        giveup)
+          die "Code review: ${SYNC_HIGH} high finding(s) after ${SYNC_REV_ATTEMPT} repair attempt(s). See $OUT_SYNC_REVIEW and $PIPELINE_RUN_DIR/sync-review-fix.txt."
+          ;;
+        repair)
+          SYNC_REV_ATTEMPT=$((SYNC_REV_ATTEMPT + 1))
+          warn "Code review: ${SYNC_HIGH} high finding(s) — repair attempt ${SYNC_REV_ATTEMPT}/${PIPELINE_FIX_ATTEMPTS}."
+          sed -e "s|<SYNC_REVIEW_TXT>|$OUT_SYNC_REVIEW|g" \
+              -e "s|<SYNC_REVIEW_JSON>|$SYNC_REVIEW_JSON|g" \
+              -e "s|<DISPOSITIONS_JSON>|$SYNC_REV_DISPOSITIONS|g" \
+              -e "s|<FIX_TXT>|$PIPELINE_RUN_DIR/sync-review-fix.txt|g" \
+              "$PROMPT_DIR/fix-review.md" > "$PIPELINE_RUN_DIR/fix-review.prompt.md"
+          run_pipeline_step "$PIPELINE_RUN_DIR/fix-review.prompt.md" "$PIPELINE_RUN_DIR/sync-review-fix.txt" \
+            --agent "$PIPELINE_REPAIR_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
+          [[ $OPC_RC -ne 0 ]] && die "Code review repair FAILED. Check $PIPELINE_RUN_DIR/sync-review-fix.txt."
+          ;;
+      esac
+    done
+    if (( SYNC_REV_ATTEMPT > 0 )); then
+      REPAIR_ATTEMPTS["Code review"]="$SYNC_REV_ATTEMPT"
+    fi
+  else
+    info "Code review: SKIPPED (sync changed no source or config)"
+  fi
+
   # Post-sync gates: tests + version consistency + typecheck, on what we're
   # about to ship. A failure gets the bounded repair loop, then human attention.
   warn "Post-sync gates (test + version-sync + typecheck)..."
@@ -888,16 +983,9 @@ run_scan_deterministic() {
     || warn "fixture-freshness check failed — see $PIPELINE_RUN_DIR/fixture-freshness.txt."
 }
 # run_scan_ai_one <prompt.md> <out.txt> <title-suffix> — one AI scan in its own
-# forked session, so it neither collides with the main transcript nor inherits
-# the prior steps' context.
+# forked session, under the review-tier agent and model.
 run_scan_ai_one() {
-  (
-    unset PIPELINE_SESSION_ID
-    PIPELINE_SESSION_TITLE="${PIPELINE_SESSION_TITLE:-push-pipeline}-$3"
-    ensure_session
-    run_pipeline_step "$1" "$2" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL" --retry
-    exit "$OPC_RC"
-  )
+  run_forked_step "$1" "$2" "$3" --agent "$PIPELINE_LIGHT_AGENT" --model "$PIPELINE_LIGHT_MODEL"
 }
 
 # ── step 6: scan ─────────────────────────────────────────────────────────────

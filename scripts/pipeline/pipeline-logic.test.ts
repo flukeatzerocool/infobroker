@@ -323,6 +323,71 @@ describe("classify_gate_failure", () => {
   });
 });
 
+describe("review_required", () => {
+  it("requires the review for source and configuration changes", () => {
+    expect(runLib('review_required "$1"', [" M src/index.ts"]).trim()).toBe("true");
+    expect(runLib('review_required "$1"', ["?? src/providers/new.ts"]).trim()).toBe("true");
+    expect(runLib('review_required "$1"', [" M config.json"]).trim()).toBe("true");
+  });
+
+  it("finds a source path anywhere in a multi-line status", () => {
+    expect(
+      runLib('review_required "$1"', [" M README.md\n M src/a.ts\n?? notes.txt"]).trim(),
+    ).toBe("true");
+  });
+
+  it("skips the review for a docs-only or empty change set", () => {
+    expect(runLib('review_required "$1"', [" M README.md\n M infobroker.md"]).trim()).toBe("false");
+    expect(runLib('review_required "$1"', [""]).trim()).toBe("false");
+  });
+
+  it("does not match a config.json nested inside another path", () => {
+    expect(runLib('review_required "$1"', [" M docs/config.json.example"]).trim()).toBe("false");
+  });
+});
+
+describe("review_gate_decision", () => {
+  it("halts on any critical finding regardless of budget", () => {
+    expect(runLib('review_gate_decision "$1" "$2" "$3" "$4"', ["3", "0", "0", "2"]).trim()).toBe("halt");
+    expect(runLib('review_gate_decision "$1" "$2" "$3" "$4"', ["1", "9", "9", "2"]).trim()).toBe("halt");
+  });
+
+  it("repairs high findings until the budget is spent, then gives up", () => {
+    const decisions = ["0", "1", "2"].map((attempt) =>
+      runLib('review_gate_decision "$1" "$2" "$3" "$4"', ["0", "2", attempt, "2"]).trim(),
+    );
+    expect(decisions).toEqual(["repair", "repair", "giveup"]);
+  });
+
+  it("passes when only info findings remain", () => {
+    expect(runLib('review_gate_decision "$1" "$2" "$3" "$4"', ["0", "0", "0", "2"]).trim()).toBe("pass");
+    expect(runLib('review_gate_decision "$1" "$2" "$3" "$4"', ["0", "0", "5", "2"]).trim()).toBe("pass");
+  });
+
+  it("never repairs when the budget is zero", () => {
+    expect(runLib('review_gate_decision "$1" "$2" "$3" "$4"', ["0", "1", "0", "0"]).trim()).toBe("giveup");
+  });
+});
+
+describe("summary_counts", () => {
+  it("prints the three counts for a valid artifact", () => {
+    const file = join(tempDir("ib-summary-"), "s.json");
+    writeFileSync(file, JSON.stringify({ status: "complete", critical: 1, high: 2, info: 3 }));
+    expect(runLib('summary_counts "$1"', [file]).trim()).toBe("1 2 3");
+  });
+
+  it("fails closed on a missing file", () => {
+    const missing = join(tempDir("ib-summary-"), "nope.json");
+    expect(runLibStatus('summary_counts "$1"', [missing]).status).not.toBe(0);
+  });
+
+  it("fails closed when a count is not an integer", () => {
+    const file = join(tempDir("ib-summary-"), "bad.json");
+    writeFileSync(file, JSON.stringify({ status: "complete", critical: "1", high: 2, info: 3 }));
+    expect(runLibStatus('summary_counts "$1"', [file]).status).not.toBe(0);
+  });
+});
+
 describe("stage_denylist", () => {
   it("reports denied artifacts and ignores clean paths", () => {
     const staged = [
