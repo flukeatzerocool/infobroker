@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.11.06 — Spec contract conformance
+
+- Three retrieval contracts now state outcomes instead of implementation
+  steps, so a deployment can satisfy them with a different provider stack:
+  `fetch_page` promises DOI metadata, then an open-access copy, then an
+  archived snapshot; structured facts promise source-class precedence; and
+  source-quality ordering promises configured preferences rather than a
+  weighting formula. (REQ-021h, REQ-021i, REQ-020h)
+- Task-type selection now says what a caller observes — a scholarly identifier
+  or citation classifies as `academic`, an ambiguous query stays on
+  `general_web`, and a weak semantic match cannot select a narrow chain —
+  rather than prescribing the matcher's internals. (REQ-020a)
+- Title-only suggestion and expansion entries are explicitly exempt from the
+  URL-required result rule, so the discard contract no longer contradicts
+  autocomplete responses. (REQ-073)
+- The specification's agreement map now describes the confidence bands the
+  server actually applies — green at or above the threshold, yellow below it,
+  red under the corroboration floor or for an unresolved gap — instead of
+  labelling yellow as "contested".
+
 ## 2026.11.05 — Batch metadata and gate hygiene
 
 - An array request reports the aggregate time its items took, not the first

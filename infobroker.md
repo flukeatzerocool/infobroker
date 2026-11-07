@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.11.05
+**Spec version:** 2026.11.06
 
 ## Contents
 
@@ -85,7 +85,7 @@ route to Infobroker first, falling back to built-ins only on error.
 - **SR-001 Outbound by design.** Infobroker's primary operation is outbound HTTP requests. A local knowledge base may cache and index prior research results for semantic retrieval. The knowledge base is derivative — the server must function correctly when the KB is uninitialized or disabled.
 - **SR-002 Single user.** One connection = one config. No multi-tenancy.
 - **SR-003 API keys never surfaced.** Keys from env vars are injected at startup and never appear in tool output, logs, errors, or `inspect_providers` health responses.
-- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek, Wiby (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, OpenAlex, Europe PMC, Hacker News, GDELT, SEC EDGAR, World Bank (free HTTP, no API key required), with CORE on a free API key, provide a functional default.
+- **SR-004 Zero-config works.** DuckDuckGo, Marginalia, Mojeek, Wiby (in-process scraping) + Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, Semantic Scholar, Stack Exchange, GitHub, OpenAlex, Europe PMC, Crossref, Hacker News, GDELT, SEC EDGAR, World Bank (free HTTP, no API key required), with CORE on a free API key, provide a functional default.
 - **SR-005 Providers are standalone modules.** Each search/content backend exports functions matching a common signature convention. Adding, removing, or swapping a provider requires updating the tool dispatch table but does not require modifying the tool surface — tool names, schemas, and response formats remain unchanged.
 - **SR-006 Config hot-reloadable.** The config file is reloaded on `reload_config` invocation (or SIGHUP on the process) without dropping active connections.
 - **SR-007 Quota state persists.** Quota counters survive restarts via a JSON state file.
@@ -162,7 +162,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Finding** | A corroboration output: a claim with a verdict, confidence, and corroborating sources (§8.1). |
 | **Claim** | A statement attributed to one or more corroborating sources (§8.1). |
 | **Verdict** | A finding's agreement outcome — `unverified` (no agreeing source yet), `confirmed`, `contested`, or a gap (§8.1). |
-| **Agreement map** | The corroboration summary grouping findings as `green` (agreed), `yellow` (contested), or `red` (gaps) (§8.2). |
+| **Agreement map** | The corroboration summary grouping findings by confidence: `green` at or above the confidence threshold, `yellow` between the corroboration floor and the threshold, and `red` below the floor or an unresolved gap (§8.2). |
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
 | **Report** | A delivered research artifact that carries the shared skeleton, a report manifest, and a Source Register, produced by a bundled writing skill. |
@@ -204,7 +204,7 @@ All providers SHALL return results in a common shape that includes a title, URL,
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at the truncation location defined in §10.1. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
 
 **REQ-073 — Minimum Viable Result**
-After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. _Check:_ G1.
+After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. Title-only suggestion and expansion entries are exempt from this discard. _Check:_ G1.
 
 **REQ-079 — Output Verbosity**
 The server SHALL support a configurable output verbosity that applies to all tool responses. In compact verbosity, responses SHALL omit optional metadata and per-result fields beyond title, URL, and snippet while retaining the REQ-001 envelope and any required result fields. Action-required notices reported per REQ-111 SHALL be retained in compact verbosity. _Check:_ G1.
@@ -238,7 +238,7 @@ Credential-requiring providers SHALL accept an ordered pool of credentials suppl
 `search_web` is the unified search tool. Parameters: `query` (required) accepts a single value or an array of up to five; plus optional `provider`, `task_type`, `max_results` (default 8, max 30), `safe_search` (default on), `time_range`, `page` (default 1), `priority`, `content_type` (default all), `region`, `language`, `collection`, and the flags `suggest`, `expand`, `research`, `fresh` (false, true, or blend), `deep`, and `analyze` (each default false). `suggest` SHALL return autocomplete strings instead of results. Otherwise it SHALL return normalized results with provenance, enforce `max_results`, and fall back through the configured chain. Array inputs SHALL be searched concurrently and merged. Providers SHALL ignore unsupported parameters without error. _Check:_ G0, G1.
 
 **REQ-020a — `search_web` task-type selection**
-WHEN `task_type` is supplied, the tool SHALL use that type's chain (§7.2) without reclassifying. WHEN `provider` is supplied, the tool SHALL serve from it, falling back through the selected type's chain. Otherwise the tool SHALL classify the query into a task type (§7.1), matching whole words, not substrings, and treating a DOI, a capitalized author–year citation, a journal phrase, or a cited work title as an `academic` signal. WHEN no type clears the confidence floor, the tool SHALL keep the `general_web` chain, and a semantic-only match SHALL NOT select a place, fact, filing, definition, or code chain. Selection SHALL exclude exhausted, disabled, or unauthenticated providers and demote those at quota warning per REQ-034. The response SHALL report the task type and serving provider. _Check:_ G1.
+WHEN `task_type` is supplied, the tool SHALL use that type's chain (§7.2) without reclassifying. WHEN `provider` is supplied, the tool SHALL serve from it, falling back through the selected type's chain. Otherwise the tool SHALL classify the query into a task type (§7.1); a query carrying a scholarly identifier, author–year citation, journal title, or cited work title SHALL classify as `academic`. WHEN no type clears the confidence floor, the tool SHALL keep the `general_web` chain, and a semantic-only match SHALL NOT select a place, fact, filing, definition, or code chain. Selection SHALL exclude exhausted, disabled, or unauthenticated providers and demote those at quota warning per REQ-034. The response SHALL report the task type and serving provider. _Check:_ G1.
 
 **REQ-020b — `search_web` suggestion mode**
 WHEN `suggest` is true, the tool SHALL return autocomplete suggestions for the query from a suggestion-capable provider, presenting each as a result with a title and no URL. Suggestions SHALL be ordered by semantic relatedness to the query; when no embedding capability is available, provider order SHALL be preserved. WHEN the primary suggestion provider fails, the tool SHALL attempt another suggestion-capable provider before returning an error; when none is available or all fail, the tool SHALL return an error per REQ-002. _Check:_ G0, G1.
@@ -259,7 +259,7 @@ WHEN `search_web` receives `research` set to true, the tool SHALL derive multipl
 WHEN `search_web` assembles results from more than one provider or query variant, the tool SHALL collapse results that express the same content into a single representative and SHALL order the returned results by semantic relevance to the query. The representative SHALL preserve the contributing providers and the original source. Collapsing SHALL NOT reduce the count of distinct retrieved results below the caller's requested maximum. Results excluded by the configured blocklist (REQ-020h) SHALL NOT count toward this guarantee. WHEN no embedding capability is available, the tool SHALL still return results ordered by its non-semantic ranking. _Check:_ G1.
 
 **REQ-020h — Source-quality ordering and domain blocklist**
-WHEN `search_web` returns results, including knowledge-base recall used to answer a search, the tool SHALL order them by semantic relevance adjusted by a configurable source-quality weight that favors primary and trusted domains and disfavors configured low-quality domains. A result whose host matches the configured blocklist SHALL be excluded, and the response SHALL report the number excluded. Blocklisting MAY return fewer results than the caller requested. The quality weight SHALL default to a value that keeps relevance dominant, and a zero weight SHALL leave semantic ordering unchanged. Domain matching SHALL be case-insensitive, and a configured domain SHALL match its subdomains. An invalid configured pattern SHALL be ignored rather than fail the request. _Check:_ G1.
+WHEN `search_web` returns results, including knowledge-base recall used to answer a search, the tool SHALL order them by semantic relevance with configured source-quality preferences applied, favoring primary and trusted domains over configured low-quality domains. A result whose host matches the configured blocklist SHALL be excluded, and the response SHALL report the number excluded. Blocklisting MAY return fewer results than the caller requested. A configured source-quality weight of zero SHALL leave semantic ordering unchanged. Domain matching SHALL be case-insensitive, and a configured domain SHALL match its subdomains. An invalid configured pattern SHALL be ignored rather than fail the request. _Check:_ G1.
 
 **REQ-020i — `search_web` batch partial results**
 WHEN `search_web` receives an array of queries, a failing element SHALL NOT fail the batch. The response SHALL return every successful element's results with per-input metadata, and SHALL report each failed element's error in that metadata. The batch SHALL report success when at least one element succeeds, and SHALL return an error per REQ-002 only when every element fails. Per-input metadata SHALL name the input, the serving provider, and the status, and SHALL report the ranked passage count and truncation state when those apply to the element. _Check:_ G1.
@@ -289,10 +289,10 @@ WHEN a `fetch_page` renderer returns content that indicates an anti-bot challeng
 WHEN a fresh knowledge-base copy of the requested URL exists, the tool SHALL return that copy before making an outbound request, SHALL report the cache hit in the response metadata, and SHALL fall through to the network when the copy is stale. The maximum cache age SHALL be configurable. _Check:_ G1.
 
 **REQ-021h — `fetch_page` source fallback**
-WHEN the `fetch_page` renderer chain cannot return content, the tool SHALL classify each failure as payment wall (`paywall`), access restriction (`access_restricted`), anti-bot challenge (`anti_bot`), missing page, rate limit, connectivity, or unknown, and report the dominant cause in the error details. A forbidden or legally restricted response SHALL be access-restricted, never a paywall. WHEN the URL identifies a DOI, the tool SHALL attempt Crossref metadata, then an open-access copy, before failing, and otherwise an Internet Archive snapshot. A successful fallback SHALL identify itself while preserving the original URL; a metadata-only one SHALL return the bibliographic record noting full text was unavailable. An unsupported protocol SHALL NOT justify permitting private targets. _Check:_ G1.
+WHEN the `fetch_page` renderer chain cannot return content, the tool SHALL classify each failure as payment wall (`paywall`), access restriction (`access_restricted`), anti-bot challenge (`anti_bot`), missing page, rate limit, connectivity, or unknown, and report the dominant cause in the error details. A forbidden or legally restricted response SHALL be access-restricted, never a paywall. WHEN the URL identifies a DOI, the tool SHALL attempt DOI metadata, then an open-access copy, before failing, and otherwise an archived snapshot. A successful fallback SHALL identify itself while preserving the original URL; a metadata-only one SHALL return the bibliographic record noting full text was unavailable. An unsupported protocol SHALL NOT justify permitting private targets. _Check:_ G1.
 
 **REQ-021i — structured-fact extraction**
-WHEN a query names a measurable attribute such as attendance, population, area, elevation, percentage, or date, the tool SHALL classify it as a `structured_fact` query and SHALL return a fact object with the value, unit when applicable, source, and originating property or infobox key. Facts SHALL resolve from a Wikidata claim first, then a Wikipedia infobox or table, then prose. The response SHALL report a fact status of resolved, not found, ambiguous, or unavailable, and SHALL place resolved facts before prose results. WHEN no source yields a value, the tool SHALL NOT compute or infer one. A fact SHALL carry the source's as-of date when supplied. _Check:_ G1.
+WHEN a query names a measurable attribute such as attendance, population, area, elevation, percentage, or date, the tool SHALL classify it as a `structured_fact` query and SHALL return a fact object with the value, unit when applicable, source, and originating property or field key. Facts SHALL be sourced from a structured knowledge record before encyclopedic page content and prose, reporting the source representation the fact resolved from. The response SHALL report a fact status of resolved, not found, ambiguous, or unavailable, and SHALL place resolved facts before prose results. WHEN no source yields a value, the tool SHALL NOT compute or infer one. A fact SHALL carry the source's as-of date when supplied. _Check:_ G1.
 
 **REQ-021j — `fetch_page` raw-text response mode**
 WHEN `fetch_page` receives `raw` set to true, the tool SHALL return the extracted page text as plain text content rather than a JSON envelope and SHALL expose the response metadata, including status, provider, URL, extraction mode, passage count, and truncation state, through the structured output object. Raw mode SHALL apply only to a single-URL request without crawl or extract; any other combination SHALL return a REQ-002 error. A question-mode raw response SHALL return the top-ranked passage. _Check:_ G1.
@@ -706,8 +706,8 @@ Layer 2: Provider Backends     duckduckgo, marginalia, mojeek, wiby, searxng,
                                wikipedia, wiktionary, wikidata, openstreetmap,
                                semantic_scholar, arxiv, core, stack_exchange,
                                github, jina, internet_archive, exa, tavily, yep,
-                               openalex, europe_pmc, hacker_news, gdelt, sec_edgar,
-                               world_bank
+                               openalex, europe_pmc, crossref, hacker_news,
+                               gdelt, sec_edgar, world_bank
 
 Layer 1.5: Knowledge Base      Chunking, embedding generation, vector store,
                                auto-indexing hooks, collection scoping, expiry
@@ -753,7 +753,7 @@ search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
 ### 5.4 Build Phases
 
 1. **MCP Skeleton**: stdio transport, tool registration, config loader, env var reader.
-2. **Zero-Config Providers**: DuckDuckGo (HTML scraping), Jina Reader (HTTP), Wikipedia API, Wiktionary API, Internet Archive.
+2. **Zero-Config Providers**: DuckDuckGo, Marginalia, Mojeek, and Wiby (HTML scraping) plus the keyless HTTP providers (Jina Reader, Wikipedia, Wiktionary, Wikidata, OpenStreetMap, Internet Archive, arXiv, OpenAlex, Europe PMC, Crossref, Hacker News, GDELT, SEC EDGAR, World Bank).
 3. **Free HTTP & Keyed Providers** (optional): Semantic Scholar, Stack Exchange, GitHub, CORE (free tiers; see §A.3); Exa, Tavily, Yep (API key required; see §A.4). Generic HTTP provider support (REQ-014): the shared generic-http implementation parameterized by configuration.
 4. **Tools**: Wire providers to tool handlers. Implement fallback chains, rate limiting, quota tracking, normalization.
 5. **Corroboration Engine**: Multi-pass search loop with cross-reference, refinement, and confidence scoring.
@@ -1459,6 +1459,8 @@ different shipped default (REQ-010).
 **OpenAlex** — `https://api.openalex.org/works?search={query}&per-page=10`. 250M+ works, no rate limits on the standard pool (a polite email raises them further).
 
 **Europe PMC** — `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={query}&format=json`. Biomedical and life-science literature with open-access flags.
+
+**Crossref** — `https://api.crossref.org/works?query={query}`. Keyless DOI metadata, bibliographic records, and reference lists; also resolves a DOI when a page cannot be fetched.
 
 **Hacker News** — `https://hn.algolia.com/api/v1/search?query={query}&tags=story`. Story search via the Algolia API.
 

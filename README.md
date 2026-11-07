@@ -790,9 +790,9 @@ chain exhausts, the server retries the `general_web` chain before failing.
 
 | Tool name | What you're used to | How Infobroker differs |
 |-----------|--------------------|-----------------------|
-| Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Twenty zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
+| Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Twenty-one zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
-| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and eighteen other providers work with zero configuration. Upgrade paths for Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
+| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and nineteen other providers work with zero configuration. Upgrade paths for Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
 | Other search MCP servers | Single-provider focus, no fallback, no corroboration, no writing pipeline | Multi-provider with automatic fallback. Corroboration engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
 | AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The corroboration engine verifies facts across independent sources. |
 
@@ -804,7 +804,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-11-05.
+Last updated: 2026-11-06.
 
 ## Contribute
 
@@ -814,7 +814,8 @@ Last updated: 2026-11-05.
 - Bundle your own skill in `skills/` to extend the research pipeline.
 - Validate README structure: `npm run validate-readme`
 - **Versioning:** CalVer (`YYYY.MM.DD`). `npm run version-bump` stamps
-  today's date into all version references. Pre-commit hooks verify
+  today's date into the package, server manifest, and version stamps; update
+  the spec stamp and README citation alongside it. Pre-commit hooks verify
   consistency. `npm run push` checks, tags, and pushes.
 - MCP protocol: [modelcontextprotocol.io](https://modelcontextprotocol.io)
 - Providers: [DuckDuckGo](https://duckduckgo.com) ·
@@ -834,7 +835,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.11.05), which defines every requirement and the gates that verify it.
+(v2026.11.06), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers. The routing gate resolves every cited tool and
