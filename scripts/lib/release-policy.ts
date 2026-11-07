@@ -1,11 +1,14 @@
 // release-policy — pure release decisions for the push pipeline.
 //
-// Role: library + CLI. Holds the two decisions that must not be improvised in
-// shell: (1) what to do with a version tag, and (2) whether a step range may
-// commit and push. Both are pure functions so they are unit-testable without
-// running the pipeline; the CLI wrapper lets push-pipeline.sh call them.
+// Role: library + CLI. Holds the three decisions that must not be improvised in
+// shell: (1) what to do with a version tag, (2) whether a step range may
+// commit and push, and (3) how a run's changed paths split into convention
+// commits. All are pure functions so they are unit-testable without running the
+// pipeline; the CLI wrapper lets push-pipeline.sh call them.
 //
 // Exit codes: 0 = decision printed, 1 = usage error, 2 = unexpected error.
+
+import { readFileSync } from "node:fs";
 
 export type TagActionKind = "create" | "move" | "refuse";
 
@@ -102,9 +105,95 @@ export function resolveRunMode(input: RunModeInput): RunMode {
   };
 }
 
+// ── Commit plan ─────────────────────────────────────────────────────────────
+export interface PlannedCommit {
+  key: string;
+  subject: string;
+  paths: string[];
+}
+
+export interface CommitPlanInput {
+  /** Every path the run changed (added, modified, deleted). */
+  paths: string[];
+  /** Run date, YYYY-MM-DD; used in the per-bucket subject. */
+  date: string;
+  /** Release version; used in the release commit subject. */
+  version: string;
+  /**
+   * Whether this run changed the version. Only then does the CHANGELOG entry
+   * belong to a release commit; a docs-only CHANGELOG edit is documentation.
+   */
+  versionChanged?: boolean;
+}
+
+/** Bucket order follows AGENTS.md: spec → source+tests → pipeline → docs → release. */
+const BUCKET_ORDER = ["spec", "source", "tests", "pipeline", "docs", "release"] as const;
+
+const DOC_PATHS = new Set(["README.md", "DECISIONS.md", "ROADMAP.md", "AGENTS.md"]);
+
+function isTestPath(path: string): boolean {
+  return /\.test\.(ts|tsx|js|mjs)$/.test(path) || path.startsWith("test-fixtures/");
+}
+
+function isPipelinePath(path: string): boolean {
+  return (
+    path.startsWith("scripts/") ||
+    path.startsWith(".githooks/") ||
+    path.startsWith(".github/") ||
+    path.startsWith("bin/")
+  );
+}
+
+function bucketFor(path: string): string {
+  if (path === "infobroker.md") return "spec";
+  // A test travels with the area it tests ("source plus its tests"): splitting
+  // a test into an earlier commit than its module would break that commit.
+  if (path.startsWith("src/")) return "source";
+  if (isPipelinePath(path)) return "pipeline";
+  if (isTestPath(path)) return "tests";
+  if (DOC_PATHS.has(path) || path.startsWith("skills/")) return "docs";
+  return "release";
+}
+
+function subjectFor(key: string, input: CommitPlanInput): string {
+  if (key === "release") return `Release: ${input.version}`;
+  const label = key.charAt(0).toUpperCase() + key.slice(1);
+  return `${label}: update for ${input.date}`;
+}
+
+/**
+ * planCommits — deterministic path→bucket plan for a split commit series.
+ *
+ * Every input path lands in exactly one bucket, buckets are emitted in the
+ * fixed convention order with empty buckets omitted, and the release bucket is
+ * always last. The caller rewinds the version stamps before the earlier
+ * commits, so a spec/source/docs file carries only its content hunks and its
+ * stamp hunk falls out of the final `git add` — no partial-file staging is
+ * needed. `CHANGELOG.md` is the one exception: its new entry is never rewound,
+ * so it always travels with the release commit.
+ */
+export function planCommits(input: CommitPlanInput): PlannedCommit[] {
+  const buckets = new Map<string, string[]>();
+  for (const path of input.paths) {
+    if (!path) continue;
+    const key =
+      path === "CHANGELOG.md" ? (input.versionChanged === false ? "docs" : "release") : bucketFor(path);
+    const list = buckets.get(key);
+    if (!list) buckets.set(key, [path]);
+    else if (!list.includes(path)) list.push(path);
+  }
+  return BUCKET_ORDER.filter((key) => (buckets.get(key)?.length ?? 0) > 0).map((key) => ({
+    key,
+    subject: subjectFor(key, input),
+    paths: buckets.get(key) ?? [],
+  }));
+}
+
 // ── CLI ─────────────────────────────────────────────────────────────────────
 // tag-action   --current <v> --exists <0|1> --tag-version <v|-> --ancestor <0|1> [--force <0|1>]
 //   → prints "<action>|<reason>"
+// commit-plan  --paths-file <f> --date <YYYY-MM-DD> --version <v> [--version-changed <0|1>]
+//   → prints "key<TAB>subject<TAB>path" lines, one per path, in commit order
 // run-mode     --start <s|-> --end <s|-> --commit <0|1> --no-commit <0|1> --no-push <0|1>
 //   → prints "ok|<noCommit>|<noPush>" or "error|<message>"
 function flag(args: string[], name: string): string | undefined {
@@ -135,6 +224,34 @@ function main(argv: string[]): number {
       force: truthy(flag(rest, "force")),
     });
     process.stdout.write(`${decision.action}|${decision.reason}\n`);
+    return 0;
+  }
+  if (command === "commit-plan") {
+    const pathsFile = flag(rest, "paths-file");
+    const date = flag(rest, "date");
+    const version = flag(rest, "version");
+    if (!pathsFile || !date || !version) {
+      process.stderr.write(
+        "usage: release-policy commit-plan --paths-file <f> --date <YYYY-MM-DD> --version <v> [--version-changed <0|1>]\n",
+      );
+      return 1;
+    }
+    const readLines = (path: string): string[] =>
+      readFileSync(path, "utf-8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const plan = planCommits({
+      paths: readLines(pathsFile),
+      date,
+      version,
+      versionChanged: flag(rest, "version-changed") === undefined ? undefined : truthy(flag(rest, "version-changed")),
+    });
+    for (const commit of plan) {
+      for (const path of commit.paths) {
+        process.stdout.write(`${commit.key}\t${commit.subject}\t${path}\n`);
+      }
+    }
     return 0;
   }
   if (command === "run-mode") {

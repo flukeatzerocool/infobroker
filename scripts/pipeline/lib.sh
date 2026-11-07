@@ -691,3 +691,165 @@ push_action() {
   if [[ "$interactive" != "true" ]]; then printf 'require-tty\n'; return 1; fi
   printf 'prompt\n'
 }
+
+# ── Split commit series ──────────────────────────────────────────────────────
+# split_commit_series <project_dir> <date> <prev_version> <new_version> \
+#                     <snapshot_dir> <stamp_paths_file> <body>
+#
+# Commits the staged tree as one commit per AGENTS.md concern bucket instead of
+# one bulk commit. The version stamps and the new CHANGELOG entry are lifted out
+# to a snapshot, the working tree is rewound to <prev_version>, and each earlier
+# commit then carries the pre-run version — so the pre-commit `version-sync`
+# hook and validate-spec/validate-readme stay green at every commit. The stamps
+# and the CHANGELOG entry are restored before the final release commit. Without the rewind, every earlier commit would
+# fail the hook and `validate-spec`/`validate-readme`.
+#
+# Exit: 0 = series committed; 1 = failure (tree restored, no partial series
+# left in history); 3 = nothing staged.
+split_commit_series() {
+  local project_dir="$1" date="$2" prev_version="$3" new_version="$4"
+  local snapshot_dir="$5" stamp_paths_file="$6" body="$7"
+  local pre_head plan_file paths_file snap_dir rc=0 rewound=false
+  pre_head="$(git -C "$project_dir" rev-parse HEAD)"
+  plan_file="$snapshot_dir/commit-plan.tsv"
+  paths_file="$snapshot_dir/changed-paths.txt"
+  snap_dir="$snapshot_dir/stamps"
+  # The planner ships with the pipeline, not with the target tree, so resolve it
+  # from this file's location.
+  local lib_dir policy
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  policy="$(cd "$lib_dir/../lib" && pwd)/release-policy.ts"
+  local f key subject path
+
+  mkdir -p "$snapshot_dir" || return 1
+  git -C "$project_dir" diff --cached --name-only > "$paths_file" || return 1
+  if [[ ! -s "$paths_file" ]]; then
+    warn "Split commit series: nothing staged."
+    return 3
+  fi
+  # Unstage: the index must hold HEAD so each bucket stages only its own paths.
+  # The working tree keeps the full final content.
+  git -C "$project_dir" reset -q || return 1
+
+  local version_changed=0
+  [[ "$prev_version" != "$new_version" && "$prev_version" != "unknown" ]] && version_changed=1
+  if ! npx tsx "$policy" commit-plan --paths-file "$paths_file" --date "$date" --version "$new_version" \
+      --version-changed "$version_changed" > "$plan_file"; then
+    error "Split commit series: commit-plan FAILED."
+    return 1
+  fi
+
+  # Rewind every stamp site to the pre-run version (and drop the new CHANGELOG
+  # entry) so the intermediate commits are fully consistent trees.
+  if [[ "$prev_version" != "$new_version" && "$prev_version" != "unknown" && -s "$stamp_paths_file" ]]; then
+    while IFS= read -r f; do
+      [[ -n "$f" ]] || continue
+      mkdir -p "$snap_dir/$(dirname "$f")"
+      cp "$project_dir/$f" "$snap_dir/$f" || { error "Split commit series: could not snapshot $f."; return 1; }
+    done < "$stamp_paths_file"
+    if ! ( cd "$project_dir" && npx tsx scripts/version.ts set "$prev_version" ) >/dev/null; then
+      error "Split commit series: version rewind FAILED."
+      while IFS= read -r f; do [[ -n "$f" && -f "$snap_dir/$f" ]] && cp "$snap_dir/$f" "$project_dir/$f"; done < "$stamp_paths_file"
+      return 1
+    fi
+    if ! git -C "$project_dir" checkout HEAD -- CHANGELOG.md 2>/dev/null; then
+      error "Split commit series: could not restore the pre-run CHANGELOG.md."
+      while IFS= read -r f; do [[ -n "$f" && -f "$snap_dir/$f" ]] && cp "$snap_dir/$f" "$project_dir/$f"; done < "$stamp_paths_file"
+      return 1
+    fi
+    rewound=true
+  fi
+
+  # _split_typecheck_commit <project_dir> <scratch_dir> — typecheck one commit's
+  # tree in a throwaway worktree. Typechecking the working tree would prove
+  # nothing: it already contains every later bucket.
+  _split_typecheck_commit() {
+    local project_dir="$1" dir="$2" tc_rc=0
+    rm -rf "$dir"
+    git -C "$project_dir" worktree add -q --detach "$dir" HEAD 2>/dev/null || return 1
+    ln -sfn "$project_dir/node_modules" "$dir/node_modules" 2>/dev/null || true
+    ( cd "$dir" && npm run typecheck >/dev/null 2>&1 ) || tc_rc=1
+    git -C "$project_dir" worktree remove --force "$dir" >/dev/null 2>&1 || true
+    return $tc_rc
+  }
+
+  # Read the plan into parallel arrays so the buckets can be walked in order.
+  local -a p_keys=() p_subjects=() p_paths=()
+  while IFS=$'\t' read -r key subject path; do
+    [[ -n "$key" ]] || continue
+    p_keys+=("$key"); p_subjects+=("$subject"); p_paths+=("$path")
+  done < "$plan_file"
+  local n=${#p_keys[@]} i=0
+
+  while (( i < n )); do
+    local bkey="${p_keys[$i]}" bsubject="${p_subjects[$i]}"
+    local -a batch=()
+    while (( i < n )) && [[ "${p_keys[$i]}" == "$bkey" ]]; do
+      batch+=("${p_paths[$i]}")
+      i=$((i + 1))
+    done
+    # The release bucket is committed last, after the stamps are restored.
+    [[ "$bkey" == "release" ]] && continue
+    git -C "$project_dir" add -A -- "${batch[@]}" || { rc=1; break; }
+    if [[ -z "$(git -C "$project_dir" diff --cached --name-only)" ]]; then
+      continue
+    fi
+    if ! git -C "$project_dir" commit -q -m "$bsubject" -m "$body"; then
+      error "Split commit series: ${bkey} commit FAILED."
+      rc=1; break
+    fi
+    if ! _split_typecheck_commit "$project_dir" "$snapshot_dir/verify"; then
+      error "Split commit series: typecheck FAILED for the ${bkey} commit."
+      rc=1; break
+    fi
+    info "  committed: ${bsubject}"
+  done
+
+  # Restore the final stamps and commit what is left: the stamp hunks plus the
+  # new CHANGELOG entry.
+  if (( rc == 0 )) && $rewound; then
+    while IFS= read -r f; do
+      [[ -n "$f" ]] || continue
+      cp "$snap_dir/$f" "$project_dir/$f" || { rc=1; break; }
+    done < "$stamp_paths_file"
+  fi
+  if (( rc == 0 )); then
+    git -C "$project_dir" add -A -- . || rc=1
+  fi
+  if (( rc == 0 )) && [[ -n "$(git -C "$project_dir" diff --cached --name-only)" ]]; then
+    local rel_subject="Release: ${new_version}" j
+    for (( j = 0; j < n; j++ )); do
+      if [[ "${p_keys[$j]}" == "release" ]]; then rel_subject="${p_subjects[$j]}"; break; fi
+    done
+    if git -C "$project_dir" commit -q -m "$rel_subject" -m "$body"; then
+      if _split_typecheck_commit "$project_dir" "$snapshot_dir/verify"; then
+        info "  committed: ${rel_subject}"
+      else
+        error "Split commit series: typecheck FAILED for the release commit."
+        rc=1
+      fi
+    else
+      error "Split commit series: release commit FAILED."
+      rc=1
+    fi
+  fi
+
+  if (( rc == 0 )) && [[ -n "$(git -C "$project_dir" status --porcelain)" ]]; then
+    error "Split commit series: paths left uncommitted after the series."
+    rc=1
+  fi
+
+  if (( rc != 0 )); then
+    # Undo the partial series and restore the final tree: no half-applied
+    # history, no lost work.
+    git -C "$project_dir" reset -q --soft "$pre_head" 2>/dev/null || true
+    if $rewound; then
+      while IFS= read -r f; do
+        [[ -n "$f" && -f "$snap_dir/$f" ]] && cp "$snap_dir/$f" "$project_dir/$f"
+      done < "$stamp_paths_file"
+    fi
+    git -C "$project_dir" reset -q 2>/dev/null || true
+    return 1
+  fi
+  return 0
+}

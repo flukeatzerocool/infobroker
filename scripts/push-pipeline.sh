@@ -24,6 +24,8 @@
 #   --no-push        Commit but skip push, tag, and mirror sync.
 #   --no-commit      Run all steps (including AI edits) but stop before staging;
 #                    leaves the working tree dirty for inspection.
+#   --single-commit  One commit for the whole change set. The default is a split
+#                    series (one commit per AGENTS.md concern bucket).
 #   --commit         Allow commit and push with --from=<step>; a step range is a
 #                    testing run without it. Never combines with --to.
 #   --resume         Continue the newest recorded run for this repo/branch.
@@ -74,6 +76,9 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --yes (-y)       Approve the final push without prompting (unattended/CI).
   --no-push        Commit but skip push, tag, and mirror sync.
   --no-commit      Run all steps (including AI edits) but stop before staging.
+  --single-commit  Commit everything as one commit instead of the default
+                   convention split (spec / source / tests / pipeline / docs /
+                   release). Use only when the change is genuinely atomic.
   --no-ai          Deterministic release only: skip the read-through, sync,
                    changelog, and README steps (and the AI scan). Requires an
                    already-prepared tree; see `npm run prepare`.
@@ -99,6 +104,7 @@ EOF
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_TAG=false; FORCE_PUSH=false; ALLOW_SECRETS=false
 NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false; NO_AI=false
+SINGLE_COMMIT=false
 DEEP_REVIEW=false; REVIEW_SCOPE=""; REVIEW_SHARD=""; REVIEW_SHARD_COUNT=0
 START_STEP=""; END_STEP=""; RUN_ID=""
 
@@ -116,6 +122,7 @@ for arg in "$@"; do
     --no-push) NO_PUSH=true ;;
     --no-mirror) NO_MIRROR=true ;;
     --no-commit) NO_COMMIT=true ;;
+    --single-commit) SINGLE_COMMIT=true ;;
     --no-ai) NO_AI=true ;;
     --deep-review) DEEP_REVIEW=true ;;
     --commit) COMMIT=true ;;
@@ -1073,18 +1080,69 @@ else
   warn "Changes about to be committed:"
   git -C "$PROJECT_DIR" diff --staged --stat
   echo ""
-  warn "Committing changes..."
   REVIEW_SUFFIX=""
   if $DEEP_REVIEW; then
     REVIEW_SUFFIX=" (deep review)"
   elif [[ -n "$REVIEW_SHARD" ]]; then
     REVIEW_SUFFIX=" (review ${REVIEW_SHARD}/${REVIEW_SHARD_COUNT})"
   fi
-  git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}${REVIEW_SUFFIX}
+  COMMIT_BODY="Push pipeline ${COMMIT_DATE}${REVIEW_SUFFIX}
 
 ${COMMIT_SUMMARY}"
-  COMMITTED=true
-  info "Commit: DONE"
+
+  if $SINGLE_COMMIT; then
+    # Explicit exception (AGENTS.md): one atomic change, one commit.
+    warn "Committing changes as a single commit (--single-commit)..."
+    git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}${REVIEW_SUFFIX}
+
+${COMMIT_SUMMARY}"
+    COMMITTED=true
+    info "Commit: DONE"
+  else
+    # Split by concern (AGENTS.md default). PREV_VERSION comes from HEAD, not
+    # the startup snapshot: a resumed run may already carry a bumped tree.
+    PREV_VERSION=$(git -C "$PROJECT_DIR" show HEAD:package.json 2>/dev/null \
+      | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).version' 2>/dev/null || true)
+    [[ -n "$PREV_VERSION" ]] || PREV_VERSION="$VERSION"
+
+    # Files the series snapshots, rewinds, and restores. CHANGELOG.md is here
+    # because the new entry must be lifted out for the intermediate commits and
+    # put back before the release commit.
+    STAMP_PATHS_FILE="$PIPELINE_RUN_DIR/stamp-paths.txt"
+    cat > "$STAMP_PATHS_FILE" <<'EOF'
+package.json
+package-lock.json
+server.json
+src/index.ts
+AGENTS.md
+infobroker.md
+README.md
+CHANGELOG.md
+EOF
+
+    COMMIT_VERSION=$(pipeline_version "$PROJECT_DIR")
+    # A real file, not <(...): some sandboxes deny readFileSync on /proc/self/fd.
+    git -C "$PROJECT_DIR" diff --cached --name-only > "$PIPELINE_RUN_DIR/commit-paths.txt"
+    warn "Planned commit series (version ${PREV_VERSION} → ${COMMIT_VERSION}):"
+    npx tsx "$SCRIPT_DIR/lib/release-policy.ts" commit-plan \
+      --paths-file "$PIPELINE_RUN_DIR/commit-paths.txt" \
+      --date "$COMMIT_DATE" --version "$COMMIT_VERSION" \
+      --version-changed "$([[ "$PREV_VERSION" != "$COMMIT_VERSION" ]] && echo 1 || echo 0)" \
+      | awk -F'\t' '{ if ($1 != last) { printf "  %s:\n", $2; last = $1 } printf "    %s\n", $3 }'
+    echo ""
+
+    split_rc=0
+    split_commit_series "$PROJECT_DIR" "$COMMIT_DATE" "$PREV_VERSION" \
+      "$COMMIT_VERSION" "$PIPELINE_RUN_DIR" "$STAMP_PATHS_FILE" "$COMMIT_BODY" || split_rc=$?
+    if [[ $split_rc -eq 0 ]]; then
+      COMMITTED=true
+      info "Commit: DONE (split series)"
+    elif [[ $split_rc -eq 3 ]]; then
+      warn "No changes to commit."
+    else
+      die "Split commit series FAILED — the working tree was restored (see $PIPELINE_RUN_DIR)."
+    fi
+  fi
 fi
 record_timing "$PIPELINE_RUN_DIR/timings" "phase-commit" "$(( $(date +%s) - COMMIT_PHASE_START ))"
 

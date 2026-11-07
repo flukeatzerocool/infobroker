@@ -3,9 +3,9 @@
 // helpers in lib.sh: step-range selection, findings parsing, secret redaction,
 // run-directory resume selection, and the CLI surface. Offline and deterministic.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -444,5 +444,191 @@ describe("readthrough prompt scope", () => {
 
   it("does not hardcode an end-to-end read", () => {
     expect(prompt).not.toContain("Read infobroker.md end to end");
+  });
+});
+
+// ── split_commit_series ─────────────────────────────────────────────────────
+// A split series must produce one commit per concern bucket, with every commit
+// internally version-consistent (that is what the pre-commit `version-sync`
+// hook enforces in the real repo), and must leave the final tree byte-identical
+// to the tree it started from. The fixture repo carries a copy of the real
+// version stamper so the rewind runs against the fixture root.
+
+const VERSION_FILES = [
+  "scripts/version.ts",
+  "scripts/lib/version.ts",
+  "scripts/lib/args.ts",
+];
+
+function copyVersionTooling(repo: string): void {
+  for (const rel of VERSION_FILES) {
+    const dest = join(repo, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, readFileSync(join(ROOT, rel)));
+  }
+  symlinkSync(join(ROOT, "node_modules"), join(repo, "node_modules"), "dir");
+}
+
+function writeStampFiles(repo: string, version: string): void {
+  const iso = version.replace(/\./g, "-");
+  const semver = version.split(".").map((s) => String(Number(s))).join(".");
+  writeFileSync(
+    join(repo, "package.json"),
+    JSON.stringify(
+      { name: "fixture", version, scripts: { typecheck: "exit 0" } },
+      null,
+      2,
+    ) + "\n",
+  );
+  writeFileSync(
+    join(repo, "package-lock.json"),
+    JSON.stringify({ name: "fixture", version, packages: { "": { version } } }, null, 2) + "\n",
+  );
+  writeFileSync(
+    join(repo, "server.json"),
+    JSON.stringify({ version: semver, packages: [{ version: semver }] }, null, 2) + "\n",
+  );
+  writeFileSync(
+    join(repo, "src/index.ts"),
+    `const server = new McpServer({\n  name: "fixture",\n  version: "${version}",\n});\n`,
+  );
+  writeFileSync(join(repo, "AGENTS.md"), `# AGENTS.md — Fixture (v${version})\n`);
+  writeFileSync(join(repo, "infobroker.md"), `# Fixture\n\n**Spec version:** ${version}\n`);
+  writeFileSync(
+    join(repo, "README.md"),
+    `# Fixture\n\nLast updated: ${iso}.\n\n## Spec\n\nThe server is built from \`infobroker.md\`\n(v${version}), which defines every requirement and the gates that verify it.\n`,
+  );
+}
+
+function git(repo: string, ...args: string[]): string {
+  return execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+    cwd: repo,
+    encoding: "utf8",
+  });
+}
+
+function seedSplitRepo(): { repo: string; snap: string; stampPaths: string } {
+  const repo = tempDir("split-repo-");
+  mkdirSync(join(repo, "src"), { recursive: true });
+  writeStampFiles(repo, "2026.11.06");
+  writeFileSync(join(repo, "CHANGELOG.md"), "# Changelog\n\n## 2026.11.06 — Fixture\n\n- Initial.\n");
+  copyVersionTooling(repo);
+  git(repo, "init", "-q");
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "Initial");
+
+  // Simulate a pipeline run: content changes plus a version bump.
+  writeStampFiles(repo, "2026.11.07");
+  writeFileSync(join(repo, "infobroker.md"), `# Fixture\n\n**Spec version:** 2026.11.07\n\nREQ-001 changed.\n`);
+  writeFileSync(
+    join(repo, "src/index.ts"),
+    `// content change\nconst server = new McpServer({\n  name: "fixture",\n  version: "2026.11.07",\n});\n`,
+  );
+  writeFileSync(join(repo, "README.md"), readFileSync(join(repo, "README.md"), "utf-8") + "\nProse change.\n");
+  writeFileSync(join(repo, "src/extra.ts"), "export const extra = 1;\n");
+  writeFileSync(join(repo, "src/extra.test.ts"), "// test\n");
+  mkdirSync(join(repo, "test-fixtures"), { recursive: true });
+  writeFileSync(join(repo, "test-fixtures", "fixture.json"), "{}\n");
+  writeFileSync(
+    join(repo, "CHANGELOG.md"),
+    "# Changelog\n\n## 2026.11.07 — Fixture\n\n- Changed.\n\n## 2026.11.06 — Fixture\n\n- Initial.\n",
+  );
+  git(repo, "add", "-A");
+
+  const snap = join(repo, ".snapshot");
+  mkdirSync(snap, { recursive: true });
+  const stampPaths = join(snap, "stamp-paths.txt");
+  writeFileSync(
+    stampPaths,
+    ["package.json", "package-lock.json", "server.json", "src/index.ts", "AGENTS.md", "infobroker.md", "README.md", "CHANGELOG.md"].join("\n") + "\n",
+  );
+  return { repo, snap, stampPaths };
+}
+
+function treeSnapshot(repo: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rel of [
+    "package.json",
+    "package-lock.json",
+    "server.json",
+    "src/index.ts",
+    "src/extra.ts",
+    "src/extra.test.ts",
+    "test-fixtures/fixture.json",
+    "AGENTS.md",
+    "infobroker.md",
+    "README.md",
+    "CHANGELOG.md",
+  ]) {
+    out[rel] = readFileSync(join(repo, rel), "utf-8");
+  }
+  return out;
+}
+
+function runSplit(repo: string, snap: string, stampPaths: string): { status: number; output: string } {
+  const script = [
+    `source ${LIB}`,
+    `split_commit_series ${repo} 2026-11-07 2026.11.06 2026.11.07 ${snap} ${stampPaths} "Pipeline body."`,
+  ].join("; ");
+  const result = spawnSync("bash", ["-c", script], { cwd: ROOT, encoding: "utf8" });
+  return { status: result.status ?? -1, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+}
+
+describe("split_commit_series", () => {
+  it("commits one bucket per concern and leaves the final tree intact", () => {
+    const { repo, snap, stampPaths } = seedSplitRepo();
+    const before = treeSnapshot(repo);
+
+    const result = runSplit(repo, snap, stampPaths);
+    expect(result.output).not.toContain("FAILED");
+    expect(result.status, result.output).toBe(0);
+
+    const subjects = git(repo, "log", "--format=%s").trim().split("\n");
+    expect(subjects).toEqual([
+      "Release: 2026.11.07",
+      "Docs: update for 2026-11-07",
+      "Tests: update for 2026-11-07",
+      "Source: update for 2026-11-07",
+      "Spec: update for 2026-11-07",
+      "Initial",
+    ]);
+    // The source commit carries its own test ("source plus its tests").
+    const sourceFiles = git(repo, "show", "--name-only", "--format=", "HEAD~3").trim().split("\n");
+    expect(sourceFiles).toContain("src/extra.test.ts");
+
+    // Every commit is internally version-consistent.
+    for (const sha of git(repo, "rev-list", "HEAD").trim().split("\n")) {
+      const at = (path: string): string => git(repo, "show", `${sha}:${path}`);
+      const version = (JSON.parse(at("package.json")) as { version: string }).version;
+      expect(at("src/index.ts")).toContain(`version: "${version}"`);
+      expect(at("AGENTS.md")).toContain(`(v${version})`);
+      expect(at("infobroker.md")).toContain(`**Spec version:** ${version}`);
+      expect(at("README.md")).toContain(`(v${version}), which defines`);
+      expect((JSON.parse(at("package-lock.json")) as { version: string }).version).toBe(version);
+      const changelogTop = /^## (\d{4}\.\d{2}\.\d{2})/m.exec(at("CHANGELOG.md"));
+      expect(changelogTop?.[1]).toBe(version);
+    }
+
+    expect(treeSnapshot(repo)).toEqual(before);
+    expect(git(repo, "status", "--porcelain")).toBe("");
+  });
+
+  it("restores the tree and leaves no partial series when a step fails", () => {
+    const { repo, snap, stampPaths } = seedSplitRepo();
+    writeFileSync(
+      join(repo, "package.json"),
+      JSON.stringify({ name: "fixture", version: "2026.11.07", scripts: { typecheck: "exit 1" } }, null, 2) + "\n",
+    );
+    git(repo, "add", "-A");
+    const before = treeSnapshot(repo);
+    const head = git(repo, "rev-parse", "HEAD").trim();
+
+    const result = runSplit(repo, snap, stampPaths);
+    expect(result.status).toBe(1);
+    expect(git(repo, "rev-parse", "HEAD").trim()).toBe(head);
+    expect((JSON.parse(readFileSync(join(repo, "package.json"), "utf-8")) as { version: string }).version).toBe(
+      "2026.11.07",
+    );
+    expect(treeSnapshot(repo)).toEqual(before);
   });
 });
