@@ -21,6 +21,7 @@
  */
 import { join } from "node:path";
 import { handleHelp, parseFlag, parseValueFlag, rejectUnknown } from "./lib/args.js";
+import { isRetirable } from "./lib/gate-manifest.js";
 import {
   CLEAN_RUNS,
   advisoryGates,
@@ -75,16 +76,23 @@ function buildReport(
   gates: Record<string, ReportGate>;
   advisory: string[];
   eligible: string[];
+  protected: string[];
 } {
   const gates: Record<string, ReportGate> = {};
   for (const [name, cost] of Object.entries(costs)) {
-    gates[name] = { ...cost, state: retirementState(cost, advisory.has(name)) };
+    gates[name] = {
+      ...cost,
+      state: retirementState(cost, advisory.has(name), { retirable: isRetirable(name) }),
+    };
   }
   const advisoryList = Object.keys(gates)
     .filter((name) => gates[name]?.state === "advisory")
     .sort();
   const eligible = Object.keys(gates)
     .filter((name) => gates[name]?.state === "eligible")
+    .sort();
+  const protectedList = Object.keys(gates)
+    .filter((name) => gates[name]?.state === "protected")
     .sort();
   return {
     schema: 1,
@@ -93,6 +101,7 @@ function buildReport(
     gates,
     advisory: advisoryList,
     eligible,
+    protected: protectedList,
   };
 }
 
@@ -114,7 +123,7 @@ function printReport(report: ReturnType<typeof buildReport>): void {
     );
   }
   process.stdout.write(
-    `\nPolicy: ${CLEAN_RUNS} consecutive clean runs. ${report.eligible.length} eligible, ${report.advisory.length} advisory.\n`,
+    `\nPolicy: ${CLEAN_RUNS} consecutive clean runs. ${report.eligible.length} eligible, ${report.advisory.length} advisory, ${report.protected.length} protected.\n`,
   );
   if (report.eligible.length > 0) {
     process.stdout.write(

@@ -25,6 +25,11 @@ describe("gate manifest", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it("opts in only the retirable gates", () => {
+    const retirable = GATES.filter((gate) => gate.retirable === true).map((gate) => gate.name);
+    expect(retirable).toEqual(["check-non-goals"]);
+  });
+
   it("keeps the fast subset strict and in manifest order", () => {
     const fast = fastGates().map((gate) => gate.name);
     expect(fast.length).toBeGreaterThan(0);

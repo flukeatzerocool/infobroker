@@ -118,6 +118,10 @@ describe("retirementState", () => {
     expect(retirementState(clean(0), true)).toBe("advisory");
   });
 
+  it("reports a gate without the manifest opt-in as protected", () => {
+    expect(retirementState(clean(CLEAN_RUNS), false, { retirable: false })).toBe("protected");
+  });
+
   it("treats a gate with no rows as insufficient", () => {
     expect(retirementState(undefined, false)).toBe("insufficient");
   });
@@ -152,6 +156,20 @@ describe("decideRetirement", () => {
     expect(decision.ok).toBe(false);
     if (decision.ok) return;
     expect(decision.reason).toContain("unknown gate");
+  });
+
+  it("refuses a gate the manifest does not mark retirable", () => {
+    for (const gate of ["validate-spec", "audit"]) {
+      const decision = decideRetirement(
+        emptyLedger(),
+        gate,
+        { ...cost, runs: 30, cleanRuns: 30 },
+        NOW,
+      );
+      expect(decision.ok).toBe(false);
+      if (decision.ok) continue;
+      expect(decision.reason).toContain("not marked retirable");
+    }
   });
 
   it("refuses a gate below the policy", () => {
@@ -236,6 +254,23 @@ describe("readLedger", () => {
     const result = readLedger(root);
     expect(advisoryGates(result.ledger)).toEqual(new Set());
     expect(result.warnings[0]).toContain("unknown gate");
+  });
+
+  it("ignores a protected gate even when the ledger names it", () => {
+    const root = tempRoot();
+    write(root, {
+      schema: 1,
+      gates: {
+        audit: {
+          status: "advisory",
+          decided_at: NOW.toISOString(),
+          evidence: { runs: 30, clean_runs: 30, median_ms: 400, p95_ms: 500 },
+        },
+      },
+    });
+    const result = readLedger(root);
+    expect(advisoryGates(result.ledger)).toEqual(new Set());
+    expect(result.warnings[0]).toContain("not retirable");
   });
 
   it("leaves a malformed entry gating with a warning", () => {

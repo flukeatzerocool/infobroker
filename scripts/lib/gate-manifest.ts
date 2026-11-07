@@ -14,6 +14,14 @@ export interface Gate {
   description: string;
   /** Included in `check:fast` (no network, no build artifact required). */
   fast: boolean;
+  /**
+   * Eligible for `gate-cost --retire`. Default false: a gate without this
+   * opt-in stays gating however long its clean streak, because retiring it
+   * could void a spec contract (REQ-101 calls the dependency gate mandatory;
+   * C.6 requires validate-spec to exit zero). A ledger entry naming an
+   * unmarked gate is ignored at read time.
+   */
+  retirable?: boolean;
 }
 
 // Order matters: it is the order `check` runs, and the old `&&` chain is the
@@ -48,6 +56,7 @@ export const GATES: readonly Gate[] = [
     name: "check-non-goals",
     description: "Scope non-goals: list integrity in `DECISIONS.md` and a pointer from `ROADMAP.md`",
     fast: true,
+    retirable: true,
   },
   {
     name: "check-report-fixtures",
@@ -147,6 +156,15 @@ export function gateCommand(gate: Gate): string[] {
 /** Gates `check:fast` runs, in manifest order. */
 export function fastGates(): Gate[] {
   return GATES.filter((gate) => gate.fast);
+}
+
+/**
+ * isRetirable — the manifest's retirement opt-in for one gate. An unknown or
+ * unmarked gate is protected, so a gate added later cannot become advisory
+ * without an explicit, reviewed manifest edit.
+ */
+export function isRetirable(name: string): boolean {
+  return GATES.some((gate) => gate.name === name && gate.retirable === true);
 }
 
 /** The gates-table block, markers included, as pasted into AGENTS.md. */

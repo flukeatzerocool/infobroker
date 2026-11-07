@@ -9,12 +9,15 @@
 // `pass`/`fail`, so a gate becomes eligible after CLEAN_RUNS consecutive
 // passing rows. Eligibility is a recommendation; only an explicit
 // `gate-cost --retire <gate>` writes a decision. Deleting a gate stays a
-// manual manifest edit.
+// manual manifest edit. Retirement is opt-in per gate: the manifest must mark
+// a gate `retirable`, so a gate added later is protected until a reviewed
+// manifest edit opts it in, and a ledger entry naming an unmarked gate is
+// ignored at read time.
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { percentile } from "./delivery.js";
-import { GATES } from "./gate-manifest.js";
+import { GATES, isRetirable } from "./gate-manifest.js";
 import { timingPath } from "./gate-run-manifest.js";
 
 /** Consecutive passing runs that make a gate a retirement candidate. */
@@ -70,7 +73,7 @@ export interface LedgerRead {
   warnings: string[];
 }
 
-export type RetirementState = "advisory" | "eligible" | "insufficient" | "blocked";
+export type RetirementState = "advisory" | "protected" | "eligible" | "insufficient" | "blocked";
 
 export type Decision =
   | { ok: true; ledger: Ledger }
@@ -225,6 +228,10 @@ export function readLedger(root: string): LedgerRead {
       warnings.push(`gate-ledger.json: unknown gate "${gate}" — stale entry ignored`);
       continue;
     }
+    if (!isRetirable(gate)) {
+      warnings.push(`gate-ledger.json: "${gate}" is not retirable — entry ignored`);
+      continue;
+    }
     if (typeof entry !== "object" || entry === null) {
       warnings.push(`gate-ledger.json: entry "${gate}" is malformed — gate stays gating`);
       continue;
@@ -260,9 +267,10 @@ export function advisoryGates(ledger: Ledger): Set<string> {
 export function retirementState(
   cost: GateCost | undefined,
   advisory: boolean,
-  policy: number = CLEAN_RUNS,
+  { retirable = true, policy = CLEAN_RUNS }: { retirable?: boolean; policy?: number } = {},
 ): RetirementState {
   if (advisory) return "advisory";
+  if (!retirable) return "protected";
   if (!cost || cost.runs === 0) return "insufficient";
   if (cost.cleanRuns === 0) return "blocked";
   return cost.cleanRuns >= policy ? "eligible" : "insufficient";
@@ -281,6 +289,9 @@ export function decideRetirement(
 ): Decision {
   if (!KNOWN_GATES.has(gate)) {
     return { ok: false, reason: `unknown gate "${gate}" (not in the manifest)` };
+  }
+  if (!isRetirable(gate)) {
+    return { ok: false, reason: `"${gate}" is not marked retirable in the manifest` };
   }
   if (ledger.gates[gate]) {
     return { ok: false, reason: `"${gate}" is already advisory` };
