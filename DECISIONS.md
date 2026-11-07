@@ -2,6 +2,22 @@
 
 ## Active Decisions
 
+### D-089: Split Commit Series Rewinds Version Stamps (2026.11.07)
+
+The pre-commit hook runs `version-sync`, which fails unless `package.json`,
+`package-lock.json`, `server.json`, `src/index.ts`, `AGENTS.md`, the CHANGELOG
+top entry, the spec version, and the README spec reference all agree. Every
+pipeline run bumps the version, so those artifacts cannot be spread across
+different commits: a path-bucket split without further work produces commits
+the hook refuses. Decision: `split_commit_series` snapshots the stamps and the
+new CHANGELOG entry, rewinds the working tree to the pre-run version, commits
+one concern per commit, then restores and commits the release. Each commit is
+therefore a fully consistent tree, not just the last one. Rejected:
+`--no-verify` (also bypasses `commit-msg`), an env-var skip inside the hook
+(leaves intermediate commits failing `validate-spec` and `validate-readme`),
+and not splitting when a version bump occurred (every run bumps, so it would
+never split).
+
 ### D-088: Diff-Scoped Review with Rotating Shards (2026.11.06)
 
 The read-through read `infobroker.md` end to end on every run: 617 of the
