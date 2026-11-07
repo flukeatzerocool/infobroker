@@ -74,6 +74,7 @@
     "loop-audit": "npx tsx scripts/loop-audit.ts",
     "metrics": "npx tsx scripts/metrics.ts",
     "gate-cost": "npx tsx scripts/gate-cost-report.ts",
+    "weekly": "npx tsx scripts/weekly.ts",
     "prep": "bash scripts/push-pipeline.sh --no-commit",
     "release": "bash scripts/push-pipeline.sh --no-ai --yes",
     "push": "bash scripts/push-pipeline.sh",
