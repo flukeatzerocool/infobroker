@@ -13,8 +13,10 @@ restart the enumeration from scratch.
 1. Surface enumerated with `file:line` anchors.
 2. Plan reviewed at standard depth with a fresh-context cold pass, then stamped.
 3. Review run with `code-review` (and `drift-report` for a document surface).
-4. Every in-scope REQ has a verdict: `holds`, `finding:<ID>`, or
-   `deferred:<chunk>` only when the predicate lands wholly in a later chunk.
+4. Every in-scope REQ has a verdict — `holds`, `finding:<ID>`, or
+   `deferred:<chunk>` only when the predicate lands wholly in a later chunk —
+   and every chunk-owned prose surface has a prose verdict row
+   (`| Surface | Verdict | Predicate |`).
 5. Every finding has an ID, a `file:line` or `spec:line` predicate, a
    P-severity, and a terminal disposition: fixed · `Scheduled-roadmap` ·
    `Closed-P3` · `Deferred-by-user`.
@@ -35,6 +37,11 @@ restart the enumeration from scratch.
 - **D4 — Plan depth.** Standard; deep only for a chunk that touches release,
   credentials, or schema migration.
 - **D5 — Coverage.** §1–§3, §4, §5–§10, and Appendices A–E. Whole repo.
+- **D11 — Prose ownership split (2026-11-09, R1 cold pass).** §1 goals and the
+  §3 invariants are reviewed by the chunk that owns their behavior, not by R1
+  as a block. R1 keeps §3 SR-009 (determinism in schemas and error contracts)
+  and §6.1–§6.2. The ownership table below is the authority; a prose defect is
+  filed once, under its owner.
 
 ## Calibration rules (apply before the first verdict)
 
@@ -66,14 +73,59 @@ own gate shapes.
 
 Counts sum to 142. Each ID belongs to exactly one chunk.
 
+### Prose ownership (§1 goals and §3 invariants)
+
+The §4 REQ partition is below. The mission and invariants are split here so a
+prose defect is filed once, under the chunk that owns the behavior.
+
+| Prose unit | Owner |
+|---|---|
+| §1 preamble and North Star paragraph | R9 |
+| §1 goal 1 (free first, privacy) | R2 |
+| §1 goal 2 (upgrade path) | R2 |
+| §1 goal 3 (provider intelligence) | R3 |
+| §1 goal 4 (truth by iteration) | R5 |
+| §1 goal 5 (writing pipeline) | R7 |
+| §1 goal 6 (knowledge persistence) | R6 |
+| §2 failure modes | R8 |
+| §3 SR-001 outbound by design | R2 |
+| §3 SR-002 single user | R8 |
+| §3 SR-003 keys never surfaced | R8 |
+| §3 SR-004 zero-config works | R2 |
+| §3 SR-005 standalone provider modules | R2 |
+| §3 SR-006 config hot-reload | R2 |
+| §3 SR-007 quota persists | R8 |
+| §3 SR-008 corroboration bounded | R5 |
+| §3 SR-009 determinism in schemas/error contracts | R1 |
+| §3 SR-010 server-side validation before outbound | R2 |
+| §3 SR-011 contracts not implementations | R9 |
+| §3 SR-012 red-team every REQ | R9 |
+| §6.1 Tool naming | R1 |
+| §6.2 Output format | R1 |
+
 ### R1 — Contracts and envelope (6)
 
 `REQ-001` `REQ-002` `REQ-003` `REQ-004` `REQ-073` `REQ-079`
 
-Spec: §1, §3 Architectural Invariants, §4.1, §6.1–6.2.
-Code: `src/index.ts` envelope/dispatch, `src/error-envelope.ts`,
+Spec: §3 SR-009, §4.1, §6.1–6.2.
+Code: `src/index.ts` envelope/dispatch, `ok()`, `instrumentTool`, the
+`search_web` suggest/expand return paths, `src/error-envelope.ts`,
 `src/output-schema.ts`, `src/structured-output.ts`, `src/truncate.ts`,
-`src/verbosity.ts`, `src/types.ts`.
+`src/verbosity.ts`, `src/normalizer.ts`, `src/types.ts`.
+
+#### R1 verdict table (2026-11-09)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-001 Status Prefix Contract | `holds` | 7/7 tools declare `outputSchema`; live stdio check on all 7 returned `structuredContent` deep-equal to `parseEnvelopeObject(text)` (`src/structured-output.test.ts:168`; R1 cross-tool run) |
+| REQ-002 Error Taxonomy | `holds` | `err()` includes code/message/provider/remediation; `chainExhaustion` prefers `rate_limited`; `access_blocked`/`network_error`/`internal_error` call sites present (`src/error-envelope.ts:11`; `src/error-envelope.test.ts`) |
+| REQ-003 Result Format Normalization | `holds` | every search provider calls `normalize()`; scholarly fields additive; generic-http `original_source` declared by `field_map` (`src/providers/generic-http.test.ts:111`) |
+| REQ-004 Truncation | `finding:F-R1-2` | KB cache-hit path sets `truncated: true` with no `output_path`, no full file, no in-band note (`src/index.ts:1037`); other paths comply (`src/truncate.ts:16`) |
+| REQ-073 Minimum Viable Result | `finding:F-R1-3` | discard works, but invalid rows still consume the requested `max_results` budget (`.slice(0, maxResults)` after `normalize`, `src/index.ts:505`) |
+| REQ-079 Output Verbosity | `finding:F-R1-1` | compact applies only through `ok()`; `fetch_page`, `inspect_providers`, `manage_kb`, `reload_config` build envelopes directly |
+| §3 SR-009 determinism | `holds` | schemas and error envelopes are deterministic; no wall-clock in the contract surface |
+| §6.1 Tool naming | `holds` | seven `infobroker_*` snake_case names; live `tools/list` matches |
+| §6.2 Output format | `holds` | live envelopes carry status/provider/results/meta; `[OK]`/`[ERROR]` prefix present |
 
 ### R2 — Config, providers, resilience (25)
 
@@ -168,7 +220,7 @@ status and any new evidence.
 
 | Chunk | Spec | REQs | Status | Next trigger |
 |---|---|---|---|---|
-| R1 | §1, §3 invariants, §4.1, §6.1–6.2 | 6 | **pending approval** | user approves program |
+| R1 | §3 SR-009, §4.1, §6.1–6.2 | 6 | **closed 2026-11-09** | R2 |
 | R2 | §4.2, §4.4–4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | not started | R1 closed |
 | R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | not started | R2 closed |
 | R4 | §4.3 (021 family), §6.4 | 12 | not started | R3 closed |
@@ -187,7 +239,9 @@ work.
 
 | ID | Chunk | Predicate | Severity | Disposition |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| F-R1-1 | R1 | Compact verbosity applies only through `ok()`; `fetch_page`, `inspect_providers`, `manage_kb`, `reload_config` bypass it (`src/index.ts:103`, `:1142`–`:1390`, `:1490`–`:1590`, `:2046`–`:2290`) | P1 | `Scheduled-roadmap` |
+| F-R1-2 | R1 | KB cache-hit truncation sets `truncated: true` with no `output_path`, full file, or in-band note (`src/index.ts:1037`) | P1 | `Scheduled-roadmap` |
+| F-R1-3 | R1 | Invalid normalized results consume the requested `max_results`; `.slice(0, maxResults)` after `normalize` (`src/index.ts:505`) | P1 | `Scheduled-roadmap` |
 
 ## Program risks / notes
 

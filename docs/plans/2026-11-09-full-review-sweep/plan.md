@@ -53,7 +53,7 @@ Every scope section is assigned to exactly one chunk. The right-hand column repe
 
 | Chunk | Spec surface | REQs | Code surface | Lens | Gates already carrying part |
 |---|---|---|---|---|---|
-| **R1** Contracts and envelope | §1; §3 Architectural Invariants; §4.1; §6.1–6.2 | 6 | `src/index.ts` dispatch/envelope, `error-envelope`, `output-schema`, `structured-output`, `truncate`, `verbosity`, `types.ts` | contract + security | `typecheck`, `test`, `check-pack`, `test-debate-club` |
+| **R1** Contracts and envelope | §3 SR-009; §4.1; §6.1–6.2 | 6 | `src/index.ts` dispatch/envelope, `error-envelope`, `output-schema`, `structured-output`, `truncate`, `verbosity`, `normalizer`, `types.ts` | contract + security | `typecheck`, `test`, `check-pack`, `test-debate-club` |
 | **R2** Config, providers, resilience | §4.2, §4.4, §4.5, §4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | `config*`, `key-pool`, `rate-limiter`, `quota`, `retry`, `cooldown`, `health-status`, `providers/` (29 files) | config + resilience | `test`, `check-gate-coverage` |
 | **R3** `search_web` | §4.3 (REQ-020–020i, 124, 127, 128, 028); §7.4 | 14 | `chain`, `task-type`, `intent-citations`, `dedup`, `source-quality`, `batch`, `expand`, `research`, `deep-search`, `analysis`, `rerank`, `language` | selection + result integrity | `check-intent-citations`, `check-tdqs`, `test` |
 | **R4** `fetch_page` | §4.3 (REQ-021–021k); §6.4 | 12 | `fetch-fallback`, `extract`, `jina`, `preservation`, `modality`, `http`, `truncate`, `structured-fact` | ingestion + safety | `test`, `check-pack` |
@@ -64,7 +64,7 @@ Every scope section is assigned to exactly one chunk. The right-hand column repe
 | **R9** Spec integrity and tool quality | §3 Terminology; §4.3 (REQ-089/090/092/106); §4.8; §9; App B–C | 9 | `tdqs`, `tool-surface`, `intent-citations`, `validate-spec`, `check-*` | traceability + gate honesty | `validate-spec`, `check-tdqs`, `check-intent-citations`, `check-gate-coverage`, `check-gate-table`, `check-loop-artifacts`, `check-harness-expectations` |
 | **M1** Machine evidence | all | — | full gate suite, `check-pack`, debate-club Arena, TDQS, intent citations, fixtures | evidence pass | all |
 
-The counts sum to 142. §1 is R1, §2 is R8, §3's invariants are R1 and its terminology is R9; §7.1–7.3 are R2 and §7.4 is R3. No section is owned twice.
+The counts sum to 142. §2 is R8; §3 terminology is R9; §7.1–7.3 are R2 and §7.4 is R3. The §1 goals and §3 invariants are split per the prose-ownership table in `worklist.md` (D11), so no unit is owned twice.
 
 ## Steps
 
