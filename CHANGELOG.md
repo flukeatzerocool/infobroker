@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.7 — R1 contract remediation
+
+- Compact verbosity now applies to every tool, not only `search_web`:
+  `finalizeToolResult` compacts the text envelope and `structuredContent`
+  together, keeps action-required notices and required `per_query` /
+  `fact_status` meta, and leaves finding-shaped results intact (REQ-079).
+- A truncated knowledge-base cache hit writes the full page, appends the
+  in-band truncation note, and reports `output_path` instead of silently
+  slicing the text (REQ-004).
+- Search providers are asked for bounded headroom so invalid rows discarded
+  during normalization no longer consume the caller's `max_results` (REQ-073).
+
 ## 2026.11.7 — Gate retirement and a weekly report
 
 - `npm run gate-cost` reports per-gate cost, clean streaks, and retirement

@@ -22,14 +22,6 @@
 
 **Trigger:** start chunk R2 after the R1 remediation is scheduled; close this item when every chunk is closed and the final machine-evidence pass is green.
 
-## R1 contract remediation
-
-- Apply compact verbosity uniformly: `fetch_page`, `inspect_providers`, `manage_kb`, and `reload_config` build envelopes directly and bypass `ok()`, so `output.verbose=false` does not trim their metadata or optional per-result fields (REQ-079; `src/index.ts:103`, `:1142`–`:1390`, `:1490`–`:1590`, `:2046`–`:2290`).
-- Write the full content and set `output_path` on the knowledge-base cache-hit truncation path; it currently reports `truncated: true` with no file and no path (REQ-004; `src/index.ts:1037`).
-- Top up `max_results` after invalid normalized results are discarded; the request asks the provider for `max_results` and slices after filtering, so discarded rows reduce the delivered count (REQ-073; `src/index.ts:505`).
-
-**Trigger:** scheduled by chunk R1 on 2026-11-09; close each bullet when its regression test lands.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`

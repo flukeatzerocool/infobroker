@@ -239,9 +239,9 @@ work.
 
 | ID | Chunk | Predicate | Severity | Disposition |
 |---|---|---|---|---|
-| F-R1-1 | R1 | Compact verbosity applies only through `ok()`; `fetch_page`, `inspect_providers`, `manage_kb`, `reload_config` bypass it (`src/index.ts:103`, `:1142`–`:1390`, `:1490`–`:1590`, `:2046`–`:2290`) | P1 | `Scheduled-roadmap` |
-| F-R1-2 | R1 | KB cache-hit truncation sets `truncated: true` with no `output_path`, full file, or in-band note (`src/index.ts:1037`) | P1 | `Scheduled-roadmap` |
-| F-R1-3 | R1 | Invalid normalized results consume the requested `max_results`; `.slice(0, maxResults)` after `normalize` (`src/index.ts:505`) | P1 | `Scheduled-roadmap` |
+| F-R1-1 | R1 | Compact verbosity applies only through `ok()`; `fetch_page`, `inspect_providers`, `manage_kb`, `reload_config` bypass it (`src/index.ts:103`, `:1142`–`:1390`, `:1490`–`:1590`, `:2046`–`:2290`) | P1 | **Resolved 2026-11-09** — `compactEnvelope` at `finalizeToolResult` |
+| F-R1-2 | R1 | KB cache-hit truncation sets `truncated: true` with no `output_path`, full file, or in-band note (`src/index.ts:1037`) | P1 | **Resolved 2026-11-09** — `cacheHitPayload` |
+| F-R1-3 | R1 | Invalid normalized results consume the requested `max_results`; `.slice(0, maxResults)` after `normalize` (`src/index.ts:505`) | P1 | **Resolved 2026-11-09** — `requestLimit` headroom |
 
 ## Program risks / notes
 
