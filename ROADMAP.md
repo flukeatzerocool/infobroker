@@ -14,6 +14,14 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
+## Full-repository review sweep
+
+- Run a whole-repository semantic review one chunk per session: R1 contracts, R2 config/providers/resilience, R3 `search_web`, R4 `fetch_page`, R5 corroboration, R6 knowledge base, R7 client artifacts/reporting, R8 deployment/state/security, R9 spec integrity, then the M1 machine-evidence pass. The tracker is `docs/plans/2026-11-09-full-review-sweep/worklist.md`.
+- Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
+- Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
+
+**Trigger:** start chunk R1 after the program worklist is approved; close this item when every chunk is closed and the final machine-evidence pass is green.
+
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
