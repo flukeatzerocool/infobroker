@@ -7,11 +7,19 @@ const FIELD_OVERRIDES: Record<string, Record<string, string[]>> = {
   internet_archive: { snippet: ["snippet", "text", "body", "description"] },
 };
 
+/**
+ * REQ-073: invalid results are discarded after the provider answers, so the
+ * request must include headroom or the discarded rows consume the caller's
+ * maximum. Bounded so a provider that ignores the limit cannot amplify cost.
+ */
+export function requestLimit(maxResults: number): number {
+  return Math.min(Math.max(maxResults * 2, maxResults + 5), 50);
+}
+
 // A search result's URL must be absolute: deep reading filters on http(s),
 // citations need a scheme, and the KB keys results by source URL. DuckDuckGo
 // in particular returns a scheme-less display URL.
-export function normalizeUrl(raw: string): string | null {
-  const trimmed = raw.trim();
+export function normalizeUrl(raw: string): string | null {  const trimmed = raw.trim();
   if (!trimmed) return null;
   const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed);
   const withScheme = trimmed.startsWith("//")

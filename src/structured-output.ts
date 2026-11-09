@@ -3,6 +3,7 @@
 // text envelope into an object, attach it beside the text as
 // `structuredContent`, and extract raw page text for fetch_page's raw mode.
 // Kept as pure functions so the contract is unit-testable without a server.
+import { compactEnvelope } from "./verbosity.js";
 
 export interface ToolResultLike {
   content?: unknown;
@@ -55,6 +56,7 @@ function firstText(result: ToolResultLike): string | undefined {
 export function finalizeToolResult<T extends ToolResultLike>(
   result: T,
   notices: readonly unknown[],
+  compact = false,
 ): T & { structuredContent: Record<string, unknown> } {
   const base = { ...(result as Record<string, unknown>) };
   let structured =
@@ -77,6 +79,35 @@ export function finalizeToolResult<T extends ToolResultLike>(
 
   if (notices.length > 0 && !Array.isArray(structured.notices)) {
     structured = { ...structured, notices };
+  }
+
+  if (compact) {
+    structured = compactEnvelope(structured);
+
+    // REQ-079: the human-readable text must agree with the compacted
+    // structuredContent. Raw mode has no JSON envelope, so its plain text is
+    // left alone and only the structured object is compacted.
+    const text = firstText(result);
+    if (text !== undefined && parseEnvelopeObject(text) !== undefined) {
+      const prefix = text.trim().startsWith("[ERROR]") ? "[ERROR]" : "[OK]";
+      const rewritten = `${prefix} ${JSON.stringify(structured, null, 2)}`;
+      const content = base.content;
+      if (Array.isArray(content)) {
+        let replaced = false;
+        base.content = content.map((item) => {
+          if (
+            !replaced &&
+            item &&
+            typeof item === "object" &&
+            (item as { type?: unknown }).type === "text"
+          ) {
+            replaced = true;
+            return { ...(item as object), text: rewritten };
+          }
+          return item;
+        });
+      }
+    }
   }
 
   return { ...(base as T), structuredContent: structured };

@@ -1,5 +1,6 @@
 // @implements REQ-001
 // @implements REQ-021j
+// @implements REQ-079
 // Structured-output contract: the text envelope is parsed into
 // `structuredContent` on every tool, and fetch_page's raw mode returns plain
 // text with metadata in the structured object. Unit tests cover the pure
@@ -96,6 +97,32 @@ test("plain-text mode returns unprefixed text and carries the envelope", () => {
   );
   expect(finalized.content[0].text).toBe("Body text");
   expect(finalized.structuredContent).toMatchObject({ status: "ok", provider: "jina", raw: true });
+});
+
+test("compact mode rewrites the text envelope to match structuredContent", () => {
+  const result = textResult(
+    `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "x",
+      results: [{ title: "t", url: "u", snippet: "s", published_date: "2026-01-01" }],
+      meta: { query_time_ms: 4 },
+    })}`,
+  );
+  const finalized = finalizeToolResult(result, [], true);
+  expect(finalized.structuredContent.meta).toBeUndefined();
+  expect(finalized.structuredContent.results).toEqual([{ title: "t", url: "u", snippet: "s" }]);
+  expect(parseEnvelopeObject(finalized.content[0].text)).toEqual(finalized.structuredContent);
+});
+
+test("compact mode leaves raw plain text alone and compacts only the structured object", () => {
+  const result = {
+    ...textResult("raw page text"),
+    structuredContent: { status: "ok", provider: "jina", results: [], raw: true, meta: { cache: "hit" } },
+  };
+  const finalized = finalizeToolResult(result, [], true);
+  expect(finalized.content[0].text).toBe("raw page text");
+  expect(finalized.structuredContent.raw).toBe(true);
+  expect(finalized.structuredContent.meta).toBeUndefined();
 });
 
 // CR-10: an error envelope has no snippets, so raw mode must return its text

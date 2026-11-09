@@ -1,6 +1,6 @@
 // @implements REQ-079
 import { describe, it, expect } from "vitest";
-import { compactMode, compactResults } from "./verbosity.js";
+import { compactEnvelope, compactMode, compactResults } from "./verbosity.js";
 
 describe("compactMode (REQ-079)", () => {
   it("is off when verbose is true or undefined", () => {
@@ -31,5 +31,48 @@ describe("compactResults (REQ-079)", () => {
       { title: "b", url: "2", snippet: "y" },
     ]);
     expect(out.map((r) => r.title)).toEqual(["a", "b"]);
+  });
+});
+
+describe("compactEnvelope (REQ-079)", () => {
+  it("trims search-shaped results and optional meta", () => {
+    const out = compactEnvelope({
+      status: "ok",
+      provider: "x",
+      results: [{ title: "t", url: "u", snippet: "s", published_date: "2026-01-01" }],
+      meta: { query_time_ms: 4, fallback_used: false },
+    });
+    expect(out.results).toEqual([{ title: "t", url: "u", snippet: "s" }]);
+    expect(out).not.toHaveProperty("meta");
+  });
+
+  it("retains action-required notices and drops informational ones", () => {
+    const out = compactEnvelope({
+      status: "ok",
+      provider: "x",
+      results: [],
+      notices: [
+        { code: "config_drift", severity: "action_required", message: "fix", remediation: "reload" },
+        { code: "update", severity: "info", message: "later", remediation: "" },
+      ],
+    });
+    expect(out.notices).toHaveLength(1);
+    expect((out.notices as Array<{ code: string }>)[0].code).toBe("config_drift");
+  });
+
+  it("retains required meta keys", () => {
+    const out = compactEnvelope({
+      status: "ok",
+      provider: "x",
+      results: [],
+      meta: { query_time_ms: 4, per_query: [{ query: "a", status: "ok" }] },
+    });
+    expect(out.meta).toEqual({ per_query: [{ query: "a", status: "ok" }] });
+  });
+
+  it("leaves finding-shaped results intact", () => {
+    const findings = [{ claim: "c", confidence: 0.9, sources: [] }];
+    const out = compactEnvelope({ status: "ok", provider: "corroborate", results: findings });
+    expect(out.results).toEqual(findings);
   });
 });

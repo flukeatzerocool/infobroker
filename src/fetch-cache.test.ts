@@ -1,6 +1,7 @@
 // @implements REQ-021g
 import { describe, it, expect } from "vitest";
-import { shouldUseKbCache } from "./fetch-cache.js";
+import { readFileSync } from "node:fs";
+import { cacheHitPayload, shouldUseKbCache } from "./fetch-cache.js";
 
 describe("fetch cache freshness (REQ-021g)", () => {
   const now = 1_000_000_000;
@@ -20,5 +21,21 @@ describe("fetch cache freshness (REQ-021g)", () => {
 
   it("rejects a malformed timestamp", () => {
     expect(shouldUseKbCache({ ingested_at: Number.NaN }, 60_000, now)).toBe(false);
+  });
+});
+
+describe("cache-hit truncation (REQ-004)", () => {
+  it("passes a short page through unchanged", () => {
+    const out = cacheHitPayload("short", 100);
+    expect(out).toEqual({ snippet: "short", truncated: false });
+  });
+
+  it("writes the full page and reports output_path when clipped", () => {
+    const text = "a".repeat(1000);
+    const out = cacheHitPayload(text, 100);
+    expect(out.truncated).toBe(true);
+    expect(out.outputPath).toBeTruthy();
+    expect(readFileSync(out.outputPath!, "utf8")).toBe(text);
+    expect(out.snippet).toContain("truncated at 100 chars");
   });
 });

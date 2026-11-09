@@ -1,8 +1,13 @@
 // @implements REQ-073 REQ-003
 import { describe, it, expect } from "vitest";
-import { normalize, normalizeUrl } from "./normalizer.js";
+import { normalize, normalizeUrl, requestLimit } from "./normalizer.js";
 
 describe("normalize minimum viable result (REQ-073)", () => {
+  it("asks the provider for headroom so discarded rows do not consume the max", () => {
+    expect(requestLimit(8)).toBeGreaterThan(8);
+    expect(requestLimit(1)).toBeGreaterThan(1);
+    expect(requestLimit(30)).toBeLessThanOrEqual(50);
+  });
   it("discards results with an empty URL", () => {
     const out = normalize(
       [

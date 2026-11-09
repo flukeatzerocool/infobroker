@@ -37,6 +37,7 @@ import { rankDocs } from "./embed.js";
 import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
 import { createLatencyTracker } from "./latency.js";
 import { compactMode, compactResults } from "./verbosity.js";
+import { requestLimit } from "./normalizer.js";
 import { deriveResearchVariants, compileResearchGroups } from "./research.js";
 import { keyPoolStatus } from "./key-pool.js";
 import { matchQuality, rankPassages } from "./rerank.js";
@@ -51,7 +52,7 @@ import { deriveExpansions } from "./expand.js";
 import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
 import { infobrokerFetch } from "./http.js";
 import { htmlToText, stripHtml } from "./lib/html.js";
-import { shouldUseKbCache } from "./fetch-cache.js";
+import { cacheHitPayload, shouldUseKbCache } from "./fetch-cache.js";
 import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { withTimeout } from "./lib/timeout.js";
@@ -496,7 +497,10 @@ async function doWebSearch(
         throw new Error(`Provider ${slug} has no search function`);
       }
 
-      const doCall = async (): Promise<SearchResult[]> => provider.search(query, opts);
+      // REQ-073: ask for headroom so normalized-out rows do not consume the
+      // caller's requested maximum; slice after the provider has normalized.
+      const providerOpts: SearchOptions = { ...opts, max_results: requestLimit(maxResults) };
+      const doCall = async (): Promise<SearchResult[]> => provider.search(query, providerOpts);
 
       const timeoutMs = config.providers[slug]?.timeout;
       const timedCall = async (): Promise<SearchResult[]> =>
@@ -1019,14 +1023,17 @@ async function doFetchPage(
     const cached = kbGet(url);
     const maxAgeMs = (config.fetch?.cache?.kb_max_age_hours ?? 24) * 3_600_000;
     if (cached && shouldUseKbCache(cached, maxAgeMs)) {
-      const text = cached.text.slice(0, effectiveMax);
+      // REQ-004: reuse the same truncation path as a fresh fetch so a clipped
+      // cached page still writes the full text, notes it in-band, and reports
+      // output_path; a raw slice would hide the rest of the document.
+      const cacheTrunc = cacheHitPayload(cached.text, effectiveMax);
       const dateMeta = cached.source_updated_at
         ? { last_updated: cached.source_updated_at, date_source: "knowledge_base", date_confidence: "medium" }
         : {};
       return `[OK] ${json({
         status: "ok",
         provider: "knowledge_base",
-        results: [{ title: new URL(url).hostname, url, snippet: text, ...dateMeta }],
+        results: [{ title: new URL(url).hostname, url, snippet: cacheTrunc.snippet, ...dateMeta }],
         ...dateMeta,
         meta: {
           query_time_ms: 0,
@@ -1034,7 +1041,13 @@ async function doFetchPage(
           cache: "hit",
           cache_age_ms: Date.now() - cached.ingested_at,
         },
-        ...(cached.text.length > effectiveMax ? { truncated: true } : {}),
+        ...(cacheTrunc.truncated
+          ? {
+              truncated: true,
+              output_path: cacheTrunc.outputPath,
+              truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path.",
+            }
+          : {}),
       })}`;
     }
   }
@@ -1678,7 +1691,7 @@ const instrumentTool = (name: string, config: any, handler: any) =>
       toolMetrics.record(name, elapsed, true);
       recordTool(name, true, elapsed);
       const notices = collectNotices();
-      return finalizeToolResult(injectNotices(result, notices), notices);
+      return finalizeToolResult(injectNotices(result, notices), notices, compactMode(getConfig()));
     } catch (error) {
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, false);
