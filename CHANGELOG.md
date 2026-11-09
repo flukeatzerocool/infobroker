@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.7 — R2 review: malformed user layer no longer crashes startup
+
+- A user configuration layer that sets `providers` to a non-object value is
+  now rejected as a structural defect and the server recovers onto shipped
+  defaults with an `invalid_merged_user_layer` startup issue, instead of
+  crashing with a raw `TypeError` before validation (REQ-037, REQ-113).
+
 ## 2026.11.7 — R1 contract remediation
 
 - Compact verbosity now applies to every tool, not only `search_web`:

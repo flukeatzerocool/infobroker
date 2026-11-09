@@ -20,7 +20,15 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R2 after the R1 remediation is scheduled; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R3 after chunk R2 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+
+## R2 findings remediation
+
+- Fix the R2 P1 set: credential-pool coverage for CORE/generic providers, disabled-provider bypasses in `verify_claims`, the explicit-provider auth filter, timeout retry classification, throttle coverage on retries, quota flush on shutdown and reset timing, the exhausted-chain error shape, `fetch_page` `retry_after_ms`, a financial indicator source, the latency-window strategy, the `status:"active"` filter, the disabled-provider health probe, `total_requests_served`, `requires_account` derivation, and the REQ-013 partial-results leg.
+- Close the P2 evidence gaps: REQ-010 inheritance and update preservation, REQ-011 leak clauses, REQ-024a non-active reasons, REQ-024b timestamps, the REQ-034 80/100 boundary, dispatch orchestration, disabled-provider skip, and key-pool restart persistence.
+- Correct the §5.3 interface sketch and the §A.5 SearXNG privacy and POST claims; each ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R3 closes; close when every P1 row in the R2 finding register is `Resolved` and each P2 row is fixed or re-classified.
 
 ## Non-goals
 

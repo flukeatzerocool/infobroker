@@ -128,15 +128,64 @@ Code: `src/index.ts` envelope/dispatch, `ok()`, `instrumentTool`, the
 | §6.2 Output format | `holds` | live envelopes carry status/provider/results/meta; `[OK]`/`[ERROR]` prefix present |
 
 ### R2 — Config, providers, resilience (25)
-
 `REQ-010` `REQ-011` `REQ-013` `REQ-014` `REQ-015` `REQ-129` `REQ-104`
 `REQ-030` `REQ-031` `REQ-031a` `REQ-032` `REQ-033` `REQ-034` `REQ-035`
 `REQ-036` `REQ-037` `REQ-038` `REQ-040` `REQ-070` `REQ-071` `REQ-095`
 `REQ-024` `REQ-024a` `REQ-024b` `REQ-024c`
 
-Spec: §4.2, §4.4, §4.5, §4.6, §5.3, §6.3, §7.1–7.3, App A.
+Spec: §4.2, §4.3 (REQ-024 family), §4.4, §4.5, §4.6, §5.3, §6.3, §7.1–7.3, App A.
 Code: `src/config*`, `src/key-pool.ts`, `src/rate-limiter.ts`, `src/quota.ts`,
 `src/retry.ts`, `src/cooldown.ts`, `src/health-status.ts`, `src/providers/`.
+
+#### R2 verdict table (2026-11-09)
+
+Reviewed at deep depth; split not triggered (8 clusters, 26 carrying tests, 247 tests green). Live evidence: purpose-written stdio probes (`/tmp/opencode/r2-probe/`) with an isolated `TMPDIR` and temp config layer.
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-010 Config File | `finding:F-R2-4` | resolution, precedence, and three-way discovery hold (`src/config.ts:107-153`; `config-path.test.ts:36-80`); defaults-inheritance and update-preservation clauses have no asserting test (`src/config.ts:319-331`), and `rate_limit`/`auth_env` types are not enforced |
+| REQ-011 API Key Safety | `finding:F-R2-7` | no key value reaches config/output/errors/logs/health (`src/config.ts:32-55`, `src/key-pool.ts:132-143`, `src/index.ts:1467-1492`); the only cited test asserts `server.json` env-var names (`server-manifest.test.ts:51-62`), not the missing-key/optional-key/leak clauses |
+| REQ-013 Provider Discovery | `finding:F-R2-19` | active/inactive(missing key)/degraded(latency, quota)/exhausted produced (`src/health-status.ts:19-41`); `inactive` legs carry no clause tag or test, and `degraded`(partial results) has no producer — the test injects `baseStatus` (`health-status.test.ts:28-37`) |
+| REQ-014 Generic HTTP Tier | `holds` | config-defined tier with endpoint/auth/probe/mapping and the same validation on load and reload (`src/providers/generic-http.ts:87-168`; `src/config.ts:483-514`, `:992-997`) |
+| REQ-015 Provider Removal | `finding:F-R2-14` | dispatch, recommendations, and `search_web` skip a disabled provider (`src/config.ts:1023`; `src/index.ts:417-421`), but `verify_claims.providers` bypasses the enabled check (`src/corroborate.ts:566-571`) |
+| REQ-129 Provider Privacy Posture | `finding:F-R2-12` | posture derived from config with overrides, `unknown` only for `retains_query`, live list reports it, generated doc is gated (`src/privacy.ts:27-51`; `src/index.ts:1498`; `scripts/validate-spec.ts:409`); `requires_account` derives from tier only, so CORE (required key) is documented `none` |
+| REQ-104 Key-Pool Rotation | `finding:F-R2-8` | pool honored by keyed providers (`src/key-pool.ts:150-221`); CORE and generic_http are filtered as pool-satisfied (`src/config.ts:1025-1030`) but read only the single-key variable; an empty pool still reports `active` |
+| REQ-030 Per-Provider Throttling | `finding:F-R2-30` | per-slug interval + jitter hold and are tested (`src/rate-limiter.ts:40-65`); `throttle()` runs once outside `retryWithBackoff`, so retries skip the minimum interval (`src/index.ts:492-509`; `src/retry.ts:46-55`) |
+| REQ-031 Fallback Chain | `finding:F-R2-31` | priority, hedging, depth, and cross-provider advancement hold; an explicit `provider` is prepended before the auth filter (`src/index.ts:415-416`), and a fully quota-exhausted chain falls through to empty success instead of exhaustion (`:478-490` → `:773`) |
+| REQ-031a Cross-task fallback | `holds` | `general_web` retried before exhaustion, attempted providers excluded (`src/chain.ts:95-103`; `src/index.ts:739-747`; `chain.test.ts:69-81`) |
+| REQ-032 Retry Policy | `finding:F-R2-33` | retry/backoff/count configurable and tested for 429/5xx; timeouts are not classified retryable (`src/retry.ts:60-66`) |
+| REQ-033 Persistent Quota | `finding:F-R2-32` | counters persist to the §10.1 file and reset on schedule; writes are debounced 30 s with a `beforeExit` flush only, and no signal handler flushes on SIGTERM/SIGINT (`src/quota.ts:32,83-99`), so a restart can lose the window; reset applies a 30 s grace |
+| REQ-034 Quota Warning | `finding:F-R2-26` | 80%/100% logic implemented (`src/quota.ts:193`; `src/health-status.ts:22-25`); no test asserts the boundary, the `quota_warning` field, or the 100% skip (the 034 citation stubs the predicate) |
+| REQ-035 Request Timeout | `finding:F-R2-33` | every call is bounded and the timeout advances the chain (`src/lib/timeout.ts:17-37`; `src/index.ts:505-509`); "treated as a transient failure" is not honored because the timeout error is not retryable |
+| REQ-036 Latency Window | `finding:F-R2-27` | one hard-coded count window; only its size is configurable, and the per-sample timestamps are written and evicted but never read (`src/latency.ts:15,29-33`) |
+| REQ-037 Config Validation | `finding:F-R2-1` | rejection classes hold except the missing-required-field branch, which is untested; a non-object `providers` layer crashed startup before validation (fixed in-session) |
+| REQ-038 Rate-Limit Cooldown | `finding:F-R2-34` | cooldown, skip-without-call, expiry, quota-untouched, and reporting hold (`src/index.ts:469-475`; `cooldown.test.ts`); a rate-limited `fetch_page` omits `retry_after_ms` (`src/fetch-fallback.ts:139-144`) |
+| REQ-040 Configuration Reload | `finding:F-R2-2` | reload, reject, backup, validate, and rollback hold and retention was probed live; a patch merges over the startup snapshot rather than the on-disk layer (`src/config.ts:308`), so a concurrent external edit is overwritten |
+| REQ-070 Provider Registration | `holds` | single `PROVIDERS` map resolves search/health/fetch independent of handlers; disabled backends registered but dropped from dispatch (`src/providers/index.ts:32-80`) |
+| REQ-071 Outbound Identification | `holds` | one identifier applied on every transport (`src/http.ts:27-30`; `src/lib/url-guard.ts:190`; `http.test.ts:27`); duplicates the literal in three places (F-R2-17) |
+| REQ-095 Financial Task Type | `finding:F-R2-36` | `financial` classifies and the chain is zero-config with a filings source (`config.json:254`; `src/providers/sec_edgar.ts`); `world_bank` queries Documents & Reports, not an indicator series, so the economic-indicator clause has no provider |
+| REQ-024 `inspect_providers` | `holds` | action enum, optional provider, health-requires-provider error path, and envelope all live-verified (`src/index.ts:1825-1853`) |
+| REQ-024a list action | `finding:F-R2-20` | all fields, four non-active reasons, and `inline_fallback` hold live; the `status:"active"` filter selects operational-and-not-exhausted rows while rows report assessed status, so degraded rows appear under the active filter (`src/index.ts:1458-1471`) |
+| REQ-024b health action | `finding:F-R2-22` | live status, latency, quota, daily counters, and `last_success` hold (probe); a disabled provider is still probed and can report active (`src/index.ts:1520-1533`), and `last_error`/`last_success` have no test |
+| REQ-024c spec action | `finding:F-R2-24` | build identity, 26/22/21 counts excluding inline fallback, uptime, state paths, and the KB block all hold live; `total_requests_served` counts provider samples only (`src/index.ts:1626`), and `last_spec_review` is boot time (`:67`) |
+
+#### R2 prose verdict table (2026-11-09)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §1 goal 1 free-first/privacy | `holds` | every default dispatch slug is builtin/free_http; posture derived per provider (`config.json:245-259`; `privacy.ts:32-42`) |
+| §1 goal 2 upgrade path | `holds` | keyed and self-hosted providers ship disabled and additive (`config.json:193-234`) |
+| SR-001 KB derivative | `holds` | `kb` optional; shipped KB empty (`src/types.ts:195`; `check-shipped-kb-empty`) |
+| SR-004 zero-config works | `holds` | all named providers present with the stated tiers/auth |
+| SR-005 standalone modules | `holds` | registry mapping, no handler change (`src/providers/index.ts:32-80`) |
+| SR-006 hot reload | `holds` | `reloadConfig` + SIGHUP (`src/config.ts:992`; `src/index.ts:2578-2591`) |
+| SR-010 server-side validation | `holds` | zod input schemas plus a URL guard before any fetch (`src/index.ts:1708-1727`, `:990-997`) |
+| §5.3 plugin interface | `finding:F-R2-38` | `rateLimit` is declared on the interface but no live provider implements it (limits live in `ProviderConfig`); capabilities/health unions are wider in `src/types.ts`; "web_search capability serves general_web" is contradicted by static dispatch (`config.json:245-259`) |
+| §6.3 provider API conventions | `finding:F-R2-39` | endpoint bases match; DuckDuckGo's "3s minimum interval" is 4 s + jitter in config (`config.json:12`) |
+| §7.1 task types | `holds` | 15 table rows = 15 dispatch keys; classification deferred to R3 (D18) |
+| §7.2 dispatch table | `holds` | row-for-row match with `config.json:245-259` |
+| §7.3 deprioritization | `finding:F-R2-40` | demotion and cooldown exclusion hold; prose says ">80%", code demotes at ≥80% (`src/quota.ts:193`) |
+| §A.1–A.7 catalog | `finding:F-R2-41` | every listed provider matches tier/auth/endpoint and no configured provider is missing except `native_fetch`; SearXNG is described as "Full privacy" while config and the generated reference mark it third-party forwarding; "POST /search" is a GET in `src/providers/searxng.ts:22` |
 
 ### R3 — `search_web` (14)
 
@@ -197,7 +246,7 @@ Code: `skills/`, `instructions/`, `README.md`, `src/report-*.ts`,
 `REQ-102`
 
 Spec: §2, §4.10, §4.11, §5.1–5.2, §5.4, §10.1, App E.
-Code: `src/config-path.ts`, `src/config-migrations.ts`, `src/update-check.ts`,
+Code: `src/config-migrations.ts` (path/patch logic lives in `src/config.ts`), `src/update-check.ts`,
 `src/state-health.ts`, `src/audit-log.ts`, `src/content-policy.ts`,
 `src/kb-hardening.ts`, `scripts/`, `.githooks/`.
 
@@ -221,7 +270,7 @@ status and any new evidence.
 | Chunk | Spec | REQs | Status | Next trigger |
 |---|---|---|---|---|
 | R1 | §3 SR-009, §4.1, §6.1–6.2 | 6 | **closed 2026-11-09** | R2 |
-| R2 | §4.2, §4.4–4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | not started | R1 closed |
+| R2 | §4.2, §4.3 (024 family), §4.4–4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | **closed 2026-11-09** | R3 |
 | R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | not started | R2 closed |
 | R4 | §4.3 (021 family), §6.4 | 12 | not started | R3 closed |
 | R5 | §4.3 (026 family, 121–123, 130, 027), §5.5, §8 | 15 | not started | R4 closed |
@@ -242,6 +291,54 @@ work.
 | F-R1-1 | R1 | Compact verbosity applies only through `ok()`; `fetch_page`, `inspect_providers`, `manage_kb`, `reload_config` bypass it (`src/index.ts:103`, `:1142`–`:1390`, `:1490`–`:1590`, `:2046`–`:2290`) | P1 | **Resolved 2026-11-09** — `compactEnvelope` at `finalizeToolResult` |
 | F-R1-2 | R1 | KB cache-hit truncation sets `truncated: true` with no `output_path`, full file, or in-band note (`src/index.ts:1037`) | P1 | **Resolved 2026-11-09** — `cacheHitPayload` |
 | F-R1-3 | R1 | Invalid normalized results consume the requested `max_results`; `.slice(0, maxResults)` after `normalize` (`src/index.ts:505`) | P1 | **Resolved 2026-11-09** — `requestLimit` headroom |
+| F-R2-1 | R2 | A non-object `providers` value in the user layer crashes startup with a raw `TypeError` before validation (`src/config.ts:223,325`) | P0 | **Resolved 2026-11-09** — shape guard in `applyDefaults`, recovery wraps `loadConfigFromDisk`, regression test |
+| F-R2-2 | R2 | `reload_config` patch merges over the startup layer snapshot, overwriting an external edit made while running (`src/config.ts:308`) | P1 | `Scheduled-roadmap` |
+| F-R2-3 | R2 | `auth_env`/`url_env`/`auth_optional` types are unvalidated; a non-string `auth_env` throws in `getDispatchChain` (`src/config.ts:1025`) | P1 | `Scheduled-roadmap` |
+| F-R2-4 | R2 | REQ-010 defaults-inheritance and update-preservation clauses have no asserting test (`src/config.ts:319-331`) | P2 | `Closed-P3` |
+| F-R2-5 | R2 | REQ-037 "missing required provider fields" rejection branch is untested (`src/config.ts:385-415`) | P2 | `Closed-P3` |
+| F-R2-6 | R2 | REQ-040 invalid-reload retention unasserted; the test only expects a throw (`src/config.test.ts:593`) | P2 | `Closed-P3` |
+| F-R2-7 | R2 | REQ-011 citation asserts `server.json` env-var names only; no leak/optional-key/missing-key assertion (`src/server-manifest.test.ts:51-62`) | P2 | `Scheduled-roadmap` |
+| F-R2-8 | R2 | REQ-104 pool is advertised for every required-auth tier but honored only by keyed providers; CORE/generic_http read one variable (`src/config.ts:1025-1030`; `src/providers/core.ts:10-14`) | P1 | `Scheduled-roadmap` |
+| F-R2-9 | R2 | An exhausted key pool is still reported `active`/`auth_ok: true` (`src/index.ts:1410-1420`) | P2 | `Scheduled-roadmap` |
+| F-R2-10 | R2 | REQ-104 restart-persistence test only reloads malformed state, never a valid rejection/cooldown (`src/key-pool.test.ts:83-113`) | P3 | `Closed-P3` |
+| F-R2-11 | R2 | REQ-104's three WHEN branches carry no clause tags (`src/key-pool.test.ts:1`) | P3 | `Closed-P3` |
+| F-R2-12 | R2 | REQ-129 `requires_account` derives from tier only; CORE (required key) is documented `none` (`src/privacy.ts:47`) | P1 | `Scheduled-roadmap` |
+| F-R2-13 | R2 | REQ-129 posture `unknown` is reachable only for `retains_query` (`src/privacy.ts:46`) | P3 | `Closed-P3` |
+| F-R2-14 | R2 | `verify_claims.providers` bypasses the disabled-provider rule (`src/corroborate.ts:566-571`) | P1 | `Scheduled-roadmap` |
+| F-R2-15 | R2 | Disabled-provider exclusion has no test for dispatch or `search_web` (`src/config.ts:1023`; `src/index.ts:417-421`) | P2 | `Scheduled-roadmap` |
+| F-R2-16 | R2 | REQ-014 "added without source changes" is never tested end-to-end (`src/config.test.ts:175-191`, `:301-306`) | P3 | `Closed-P3` |
+| F-R2-17 | R2 | REQ-071 identifier literal is duplicated in three places and caller-overridable (`src/providers/duckduckgo.ts:83`; `src/corroborate.ts:933`; `src/lib/url-guard.ts:190`) | P3 | `Closed-P3` |
+| F-R2-18 | R2 | Credential-pool variables are absent from `server.json` and `provider-auth.md` (`server.json:21-45`) | P3 | `Closed-P3` |
+| F-R2-19 | R2 | REQ-013 `inactive` legs carry no tag or test; `degraded`(partial results) has no producer (`src/health-status.ts:19-41`; `health-status.test.ts:28-37`) | P1 | `Scheduled-roadmap` |
+| F-R2-20 | R2 | `status:"active"` filter returns rows whose reported status is `degraded` (`src/index.ts:1458-1471`) | P1 | `Scheduled-roadmap` |
+| F-R2-21 | R2 | REQ-024a's four non-active reasons are unasserted (`src/index.ts:1417-1421`) | P2 | `Scheduled-roadmap` |
+| F-R2-22 | R2 | `inspect_providers` health probes a config-disabled provider and can report it active (`src/index.ts:1520-1533`) | P1 | `Scheduled-roadmap` |
+| F-R2-23 | R2 | REQ-024b `last_error`/`last_success` are untested and process-local (`src/index.ts:1567-1572`) | P2 | `Scheduled-roadmap` |
+| F-R2-24 | R2 | REQ-024c `total_requests_served` counts provider samples, not server requests (`src/index.ts:1626`) | P1 | `Scheduled-roadmap` |
+| F-R2-25 | R2 | `last_spec_review` reports server boot time (`src/index.ts:67,1633`) | P3 | `Closed-P3` |
+| F-R2-26 | R2 | REQ-034's citation stubs the predicate; the 0.8 boundary, `quota_warning`, and 100% skip are unasserted (`src/chain.test.ts:84-97`) | P2 | `Scheduled-roadmap` |
+| F-R2-27 | R2 | REQ-036 implements a count window only; no configurable strategy or time window (`src/latency.ts:15,29-33`) | P1 | `Scheduled-roadmap` |
+| F-R2-28 | R2 | Retries bypass the per-provider throttle; `throttle()` sits outside `retryWithBackoff` (`src/index.ts:492-509`) | P1 | `Scheduled-roadmap` |
+| F-R2-29 | R2 | An explicit `provider` is prepended before the auth filter (`src/index.ts:415-416`) | P1 | `Scheduled-roadmap` |
+| F-R2-30 | R2 | A fully quota-exhausted chain returns empty success, not exhaustion (`src/index.ts:478-490` → `:773`) | P1 | `Scheduled-roadmap` |
+| F-R2-31 | R2 | Timeouts are not retryable, so REQ-035's transient-failure leg is not honored (`src/retry.ts:60-66`) | P1 | `Scheduled-roadmap` |
+| F-R2-32 | R2 | Quota writes are debounced 30 s with a `beforeExit` flush only; SIGTERM/SIGINT loses the window (`src/quota.ts:32,83-99`) | P1 | `Scheduled-roadmap` |
+| F-R2-33 | R2 | Quota reset applies a 30 s grace and has no reset test (`src/quota.ts:113-115`) | P2 | `Scheduled-roadmap` |
+| F-R2-34 | R2 | A rate-limited `fetch_page` omits `retry_after_ms` (`src/fetch-fallback.ts:139-144`) | P1 | `Scheduled-roadmap` |
+| F-R2-35 | R2 | Dispatch orchestration (hedge switch, cross-task order, all-empty vs all-error, cooldown skip) has no integration test | P2 | `Scheduled-roadmap` |
+| F-R2-36 | R2 | The financial chain has no economic-indicator source; `world_bank` queries Documents & Reports (`src/providers/world_bank.ts:7`) | P1 | `Scheduled-roadmap` |
+| F-R2-37 | R2 | REQ-095 citations overstate coverage (routing and zero-config unasserted) (`src/providers/github.test.ts:1`) | P3 | `Closed-P3` |
+| F-R2-38 | R2 | §5.3 declares `rateLimit` on the provider interface (unimplemented), widens capability/health unions, and claims `web_search` serves `general_web` contrary to static dispatch (`infobroker.md:731,750-751`) | P1 | `Scheduled-roadmap` |
+| F-R2-39 | R2 | §6.3 DuckDuckGo "3s minimum interval" vs 4 s + jitter in config (`infobroker.md:807` → `config.json:12`) | P3 | `Closed-P3` |
+| F-R2-40 | R2 | §7.3 ">80%" vs the code's ≥80% demotion boundary (`infobroker.md:889` → `src/quota.ts:193`) | P3 | `Closed-P3` |
+| F-R2-41 | R2 | §A.5 says SearXNG gives "Full privacy" while config and the generated reference mark it third-party forwarding (`infobroker.md:1495`) | P1 | `Scheduled-roadmap` |
+| F-R2-42 | R2 | §A.5 says the client POSTs `/search`; the module issues GET (`src/providers/searxng.ts:22`) | P3 | `Closed-P3` |
+| F-R2-43 | R2 | The catalog omits the configured, enabled `native_fetch` provider (`config.json:235-242`) | P3 | `Closed-P3` |
+| F-R2-44 | R2 | Tracker drift: the R2 spec column omitted §4.3 and the R8 code line named a nonexistent `src/config-path.ts` (`worklist.md:200,224`) | P3 | **Resolved 2026-11-09** |
+| F-R2-45 | R2 | `quota_remaining` serializes as `null` for uncapped providers (`src/quota.ts:196,201`) | P3 | `Closed-P3` |
+| F-R2-46 | R2 | `resells` is overloaded between `original_source` (D-034) and the privacy surface (`config.json:116,125,134`) | P3 | `Closed-P3` |
+| F-R2-47 | R2 | Key-pool state uses a 32-bit FNV-1a identifier (`src/key-pool.ts:132-143`); state-file threat model is R8's | P3 | `Closed-P3` |
+| F-R2-48 | R2 | A failed reload clears the startup issue, so `state_health.startup_error` stops reporting the fallback (`src/config.ts:170`); R8 surface | P3 | `Closed-P3` |
 
 ## Program risks / notes
 
