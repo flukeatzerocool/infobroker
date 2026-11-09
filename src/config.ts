@@ -317,6 +317,12 @@ export function patchUserConfigLayer(patch: Record<string, unknown>): {
 }
 
 function applyDefaults(config: Config): Config {
+  // REQ-037: a non-object `providers` value is a structural defect, not an
+  // empty map. Reject it here so the caller's recovery path reports it
+  // instead of crashing on Object.values or Object.entries.
+  if (!isPlainObject(config.providers)) {
+    throw new Error("providers must be an object mapping provider slugs to provider configuration");
+  }
   // REQ-010: dispatch_append runs before the defaults early-return so a config
   // without a `defaults` block still receives the append.
   applyDispatchAppend(config);
@@ -962,9 +968,13 @@ export function validateConfig(config: Config): void {
 }
 
 export function loadConfig(): Config {
-  const config = loadConfigFromDisk(true);
+  // REQ-037: structural defects surface from loadConfigFromDisk (e.g. a
+  // non-object `providers` layer), so it runs inside the recovery path too.
   try {
+    const config = loadConfigFromDisk(true);
     validateConfig(config);
+    cachedConfig = config;
+    return config;
   } catch (e) {
     // REQ-113: a stale user layer must not prevent the server from starting.
     // Recover only when the shipped defaults are valid; never write the layer.
@@ -985,8 +995,6 @@ export function loadConfig(): Config {
     cachedConfig = baseOnly;
     return baseOnly;
   }
-  cachedConfig = config;
-  return config;
 }
 
 export function reloadConfig(): Config {

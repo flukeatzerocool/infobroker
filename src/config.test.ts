@@ -580,6 +580,20 @@ describe("startup config recovery and automatic migration (REQ-105, REQ-113)", (
     expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
   });
 
+  it("starts on shipped defaults when the user layer nulls providers", async () => {
+    const overlay = JSON.stringify({ providers: null });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    let cfg: Awaited<ReturnType<typeof mod.loadConfig>> | undefined;
+    expect(() => {
+      cfg = mod.loadConfig();
+    }).not.toThrow();
+    expect(cfg?.output.max_chars).toBe(50000);
+    expect(mod.getStartupConfigIssue()?.code).toBe("invalid_merged_user_layer");
+    expect(mod.getStartupConfigIssue()?.message).toMatch(/providers/);
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+
   it("starts on shipped defaults when the user layer is not valid JSON", async () => {
     const overlay = "{ not json";
     writeFileSync(overlayPath, overlay);
