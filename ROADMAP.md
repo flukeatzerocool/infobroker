@@ -20,7 +20,7 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R4 after chunk R3 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R5 after chunk R4 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
 
 ## R2 findings remediation
 
@@ -37,6 +37,27 @@
 - Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
 
 **Trigger:** start after chunk R4 closes; close when every R3 P1 row in the finding register is `Resolved` and each scheduled P2 is fixed or re-classified.
+
+## R4 fetch-page extraction remediation
+
+- Fix the R4 P1 set in `fetch_page` extraction: report `passages_returned` and `match_quality` on the no-match/full-content branch (F-R4-D-1), expose `extraction_mode` and passage count in the default raw `structuredContent` (F-R4-D-3), and stop emitting publication dates as `last_updated` with high confidence (F-R4-C-2).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R5 closes; close when every R4 P1 row in the extraction group is `Resolved`.
+
+## R4 fetch-page classification remediation
+
+- Fix the R4 P1 set in classification: require a stronger anti-bot marker than a bare "captcha" title (F-R4-B-2), classify `area` and `elevation` as measurable attributes so a fact is emitted (F-R4-E-1), and add named clause tags per REQ-021a branch plus the detector support that observes them (F-R4-A-1).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R5 closes; close when every R4 P1 row in the classification group is `Resolved`.
+
+## R4 fetch-page contract remediation
+
+- Declare the `renderer` schema default and align the §6.4 fallback prose with the race and anti-bot fall-through (F-R4-F-1, F-R4-F-4); also schedule the REQ-021 `raw` parameter omission (F-R4-F-3) with the same prose pass.
+- Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R5 closes; close when every R4 P1 row in the contract group is `Resolved`.
 
 ## Non-goals
 
