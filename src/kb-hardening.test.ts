@@ -1,10 +1,10 @@
 // @implements REQ-060c REQ-066 REQ-100 REQ-067 REQ-085 REQ-108
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { initKb, kbIngest, kbSearch, kbStats, chunkText, flushKbWrites, getKbLockError } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, kbGet, chunkText, flushKbWrites, getKbLockError } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const base = mkdtempSync(join(tmpdir(), "infobroker-kb-hardening-"));
@@ -49,6 +49,105 @@ describe("KB maintenance interval (REQ-066)", () => {
     initKb(makeConfig(dir, { maintenance_interval_minutes: 0 }));
     const count = kbIngest("maintenance disabled still indexes content", "t", "https://example.com/m", "test");
     expect(count).toBeGreaterThan(0);
+  });
+
+  it("removes expired tiers on startup, keeps indefinite and unknown tiers", () => {
+    const dir = join(base, "startup-expiry-store");
+    const config = makeConfig(dir, {
+      maintenance_interval_minutes: 0,
+      freshness: {
+        tiers: {
+          short: { decay_hours: 1, expiry_hours: 1 },
+          keep: { decay_hours: 1, expiry_hours: 0 },
+        },
+        auto_classify: false,
+        default_tier: "keep",
+      },
+    });
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      initKb(config);
+      kbIngest("short lived ephemeral note", "short", "https://example.com/short", "test", undefined, "test", "short");
+      kbIngest("kept forever stable note", "keep", "https://example.com/keep", "test", undefined, "test", "keep");
+      kbIngest("unknown tier note", "unknown", "https://example.com/unknown", "test", undefined, "test", "retired");
+
+      vi.setSystemTime(new Date("2026-01-01T02:00:00.000Z"));
+      initKb(config); // startup maintenance runs inside initKb
+
+      expect(kbGet("https://example.com/short")).toBeNull();
+      expect(kbGet("https://example.com/keep")).not.toBeNull();
+      expect(kbGet("https://example.com/unknown")).not.toBeNull();
+
+      const events = kbStats().events;
+      expect(events.some((event) => /Maintenance at .*: removed \d+ expired chunks/.test(event))).toBe(true);
+      expect(events.some((event) => /error/i.test(event))).toBe(false);
+    } finally {
+      initKb(makeConfig(join(base, "startup-expiry-restore"), { maintenance_interval_minutes: 0 }));
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes expired content at the configured interval without a re-init", () => {
+    const dir = join(base, "interval-expiry-store");
+    const config = makeConfig(dir, {
+      maintenance_interval_minutes: 1,
+      freshness: {
+        tiers: { short: { decay_hours: 1, expiry_hours: 0.001 } },
+        auto_classify: false,
+        default_tier: "short",
+      },
+    });
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      initKb(config);
+      kbIngest("interval tick note", "tick", "https://example.com/tick", "test", undefined, "test", "short");
+      expect(kbGet("https://example.com/tick")).not.toBeNull();
+
+      // The 60 s tick advances the clock past the 3.6 s expiry; no re-init.
+      vi.advanceTimersByTime(60_000);
+      expect(kbGet("https://example.com/tick")).toBeNull();
+      expect(kbStats().events.some((event) => /removed 1 expired chunks/.test(event))).toBe(true);
+    } finally {
+      initKb(makeConfig(join(base, "interval-expiry-restore"), { maintenance_interval_minutes: 0 }));
+      vi.useRealTimers();
+    }
+  });
+
+  it("expires by freshness tier, not by source_type", () => {
+    const dir = join(base, "tier-vs-source-store");
+    const config = makeConfig(dir, {
+      maintenance_interval_minutes: 0,
+      freshness: {
+        tiers: {
+          short: { decay_hours: 1, expiry_hours: 1 },
+          keep: { decay_hours: 1, expiry_hours: 0 },
+        },
+        auto_classify: false,
+        default_tier: "keep",
+      },
+    });
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      initKb(config);
+      // Same tier, different source_type: both expire.
+      kbIngest("short web result", "s1", "https://example.com/s1", "test", undefined, "fetch_page", "short");
+      kbIngest("short claim result", "s2", "https://example.com/s2", "test", undefined, "corroborate", "short");
+      // Same source_type, indefinite tier: retained.
+      kbIngest("kept web result", "k1", "https://example.com/k1", "test", undefined, "fetch_page", "keep");
+
+      vi.setSystemTime(new Date("2026-01-01T02:00:00.000Z"));
+      initKb(config);
+
+      expect(kbGet("https://example.com/s1")).toBeNull();
+      expect(kbGet("https://example.com/s2")).toBeNull();
+      expect(kbGet("https://example.com/k1")).not.toBeNull();
+    } finally {
+      initKb(makeConfig(join(base, "tier-vs-source-restore"), { maintenance_interval_minutes: 0 }));
+      vi.useRealTimers();
+    }
   });
 });
 
