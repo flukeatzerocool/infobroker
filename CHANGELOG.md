@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026.11.7 — R6 review: event reseal, store-format marker, corrupt-store recovery
+
+- A knowledge-base key change no longer loses event history: `rekey` and
+  `disableEncryption` decode and re-seal the `events` table inside the same
+  transition, and a row that was already unreadable under the old key is
+  preserved byte-for-byte instead of aborting the transition or being dropped
+  (REQ-084, REQ-086).
+- `events()` never renders ciphertext as text. A row marked encrypted is opened
+  only when a non-empty key is present and decryption succeeds; otherwise it is
+  skipped, so a store left with encrypted rows by an earlier disable no longer
+  surfaces `INFOKB1…` garbage in `manage_kb stats` (REQ-084, REQ-103).
+- The store format is now persisted and checked before anything opens the file
+  read-write. The marker lives in the SQLite header (`user_version`), a store
+  written by a newer build is refused with every file byte unchanged, and a
+  non-SQLite file is refused as an unrecognized format — both without creating
+  sidecar files (REQ-085).
+- A recognized SQLite store with corrupt content now takes the REQ-108 recovery
+  path: the damaged file (and its sidecars) is renamed to a
+  `vector-store.corrupt-<timestamp>` backup, an empty store is created and
+  verified, and the recovery is reported as a status event carrying the backup
+  path. A failure at any step restores the archive, and a missing key, a busy
+  store, or an I/O fault still reports the lock error with the store untouched
+  (REQ-108, REQ-085).
+- REQ-085 now states that a recognized store with corrupt content is recovered
+  per REQ-108, so the preservation clause and the recovery clause no longer
+  contradict each other.
+
 ## 2026.11.7 — R6 review: recall state and embedding degradation
 
 - `search_web` now reports recall truthfully for non-recall request shapes: a

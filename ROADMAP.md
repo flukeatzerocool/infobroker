@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 encryption and capacity remediation
-
-- Re-seal the `events` table on enable/disable/rekey (F-R6-D-1) and add a persisted store-format marker that refuses a newer SQLite store without rewriting it (F-R6-D-2).
-- Give a corrupt live SQLite store the REQ-108 recovery path: preserve a backup, continue empty, report the event (F-R6-E-1).
-- Each change is a store-format/security change, not a bounded fix; ship with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after chunk R7 closes; close when F-R6-D-1, F-R6-D-2, and F-R6-E-1 are `Resolved`.
-
 ## R6 ledger and receipt remediation
 
 - Persist unsourced findings (F-R6-F-1), seal `claim_sources.retrieved_at` (F-R6-F-2), and stamp or reject a receipt source with no retrieval time (F-R6-F-4).
