@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026.11.7 — R6 review: dedup by meaning, report retention, and revision validation
+
+- `manage_kb` ingest now recognizes a duplicate by meaning in every content
+  class, not only `report://` identities, scoped to the same collection and
+  source type; the best match wins and each collapse is recorded as a knowledge
+  base event (REQ-072). A web or text document re-ingested under a different
+  URL updates the original instead of adding a second copy, and a report that
+  matches one in another collection is no longer collapsed across collections.
+- Report retention no longer depends on the freshness tier: tier expiry keeps
+  `source_type: "report"` content while its confidence still decays with age
+  (REQ-083, REQ-066). REQ-066 gained the precedence clause that lets a content
+  class declare indefinite retention.
+- A report receipt's revision is validated, never invented: a revision not
+  greater than the stored one, a revision above 1 with no `supersedes`, and a
+  revision that supersedes its own report are rejected with remediation
+  (REQ-083).
+- REQ-067 now names the effective knowledge-base configuration: an absent
+  effective section errors, while an invalid user layer follows REQ-113's
+  shipped-defaults fallback. A new test drives the real `reload_config` path and
+  a unit test proves the re-initialized knowledge base reads the new default
+  collection and tier (REQ-067, REQ-040).
+
 ## 2026.11.7 — R6 review: `manage_kb` keeps the ingest source identity
 
 - `manage_kb` ingest no longer discards a caller-supplied `source_url` for

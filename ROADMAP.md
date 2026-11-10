@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 config, dedup, and report remediation
-
-- Reconcile REQ-067's absent/invalid→error clause with the shipped-defaults fallback and add a reload test (F-R6-B-4).
-- Extend meaning-equivalence dedup beyond `report://` identities (F-R6-B-5), and make report retention `source_type`-guarded with a monotonic revision chain (F-R6-B-6).
-
-**Trigger:** start after chunk R7 closes; close when F-R6-B-4, F-R6-B-5, and F-R6-B-6 are `Resolved`.
-
 ## R6 retrieval remediation
 
 - Emit `kb_recall:"not_applicable"` for research requests (F-R6-C-5).
@@ -43,6 +36,13 @@
 
 **Trigger:** start after chunk R7 closes; close when F-R6-F-1, F-R6-F-2, and F-R6-F-4 are `Resolved`.
 
+
+## R6 dedup false-positive bound
+
+- Bound meaning-equivalence collapse on templated corpora: the R6 increment measured 36 of 200 template documents collapsing into each other at the 0.92 LSA threshold (accepted risk D4a, recorded in `docs/plans/2026-11-10-r6-config-dedup-report/aar.md`).
+- Either add a distinguishing-token guard or raise the threshold, and re-measure with the same seeded corpus before changing the constant.
+
+**Trigger:** start when a user reports a collapsed document, or when the seeded templated corpus collapses more than 10% of its documents.
 
 ## R2 findings remediation
 
