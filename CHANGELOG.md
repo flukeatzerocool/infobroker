@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.7 — R6 review: recall state and embedding degradation
+
+- `search_web` now reports recall truthfully for non-recall request shapes: a
+  research compile and a deep read report `kb_recall: "not_applicable"`, deep
+  takes precedence over `fresh: true`, and a deep request with no knowledge base
+  reports the same state instead of `unavailable` (REQ-076a).
+- A `fresh: "blend"` search no longer applies the KB-first sufficiency
+  thresholds to cached rows, so a stored result below the relevance or freshness
+  threshold is still returned beside the external set, including when every
+  external provider fails. The default mode still gates on both thresholds
+  (REQ-076a, REQ-076).
+- An unavailable embedding model now records a remediation in the knowledge
+  base event: the configured reference, the supported references, the built-in
+  fallback, and the `kb.embedding_model` reload action. `manage_kb stats`
+  reports `model_available: false` with the configured name (REQ-103, REQ-060c).
+
 ## 2026.11.7 — R6 review: dedup by meaning, report retention, and revision validation
 
 - `manage_kb` ingest now recognizes a duplicate by meaning in every content

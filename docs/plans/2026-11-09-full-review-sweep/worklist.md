@@ -378,10 +378,10 @@ legs (a)–(d) and constrained-heap leg (g) PASS; cross-tool stdio probe
 | REQ-087 source dates | `holds` | store/report/omit/preserve-on-reingest asserted (`kb.test.ts:199-220`) |
 | REQ-074 freshness | `finding:F-R6-C-2` | tier labels only (`kb.test.ts:371-379`); decay/expiry and hot reload static-only |
 | REQ-075 decay | `finding:F-R6-C-3` | score presence and ordering on equal freshness only (`kb.test.ts:67-73`); decay reduction and zero-decay exemption unasserted |
-| REQ-076 KB-first | `finding:F-R6-C-4` | probe hit/miss and unit freshness fields; below-threshold fall-through and unconfigured-KB bypass static-only |
-| REQ-076a blend | `finding:F-R6-C-6` | probe blend/skip; blend reuses the sufficiency filter so sub-threshold cached rows are dropped, and the all-external-fail path needs `kbCached.length > 0` (`src/index.ts:367-369,398,751`) |
+| REQ-076 KB-first | `finding:F-R6-C-4` | probe hit/miss and unit freshness fields; the below-threshold fall-through is now asserted (default mode reports `miss`) in `debate-club/src/kb-retrieval.test.ts`; the unconfigured-KB bypass stays static-only |
+| REQ-076a blend | `finding:F-R6-C-6` | **Resolved 2026-11-10** — a blend keeps sub-threshold cached rows, the default mode still gates on the thresholds, and deep/research report `not_applicable` (`debate-club/src/kb-retrieval.test.ts`) |
 | REQ-082 consistency | `holds` | earlier content stays retrievable and model change reconciles with an event (`kb.test.ts:76-111`; `kb-model.test.ts:63-112`) |
-| REQ-103 local embedding | `finding:F-R6-C-7` | model/config/reconcile tested (`embed.test.ts:14-20`); degradation appends an event with no remediation message and no test (`src/kb.ts:114-120`) |
+| REQ-103 local embedding | `finding:F-R6-C-7` | **Resolved 2026-11-10** — the degradation event carries a remediation naming the configured reference and fallback, and `stats` reports `model_available: false` (`src/kb-model.test.ts` Embedding-model degradation describe) |
 | REQ-084 encryption | `finding:F-R6-D-3` | lock/refusal/secret-change/readable-when-disabled tested; handler refusal, `stats.encryption`, and key-source precedence static-only |
 | REQ-085 preservation | `finding:F-R6-D-2` | newer legacy JSON refused byte-unchanged and unreadable path errors hold; no SQLite format marker exists, so a newer SQLite store is opened read-write (`src/kb-sqlite.ts:32-71,105-131`) |
 | REQ-086 transitions | `finding:F-R6-D-1` | enable/disable/rekey lossless for chunks/claims/receipts; `resealAll` never re-seals `events`, so encrypted event history is silently lost on rekey/disable (`src/kb-sqlite.ts:702-808,407-423`) |
@@ -812,9 +812,9 @@ work.
 | F-R6-C-2 | R6 | REQ-074's cited test asserts tier labels only; decay/expiry and hot reload are static-only (`src/kb.test.ts:371-379`) | P3 | `Closed-P3` |
 | F-R6-C-3 | R6 | REQ-075's decay reduction, zero-decay exemption, and freshness-adjusted ordering are unasserted (`src/kb.test.ts:67-73`) | P2 | `Scheduled-roadmap` |
 | F-R6-C-4 | R6 | The below-threshold fall-through and unconfigured/disabled-KB bypass are static-only (`src/index.ts:353-369`) | P3 | `Closed-P3` |
-| F-R6-C-5 | R6 | A `research` request early-returns without `kb_recall`, so "not applicable" is unimplemented for research (`src/index.ts:322-346`) | P1 | `Scheduled-roadmap` |
-| F-R6-C-6 | R6 | Blend reuses the KB-first sufficiency filter, dropping sub-threshold cached rows, and the all-external-fail path needs a non-empty filtered cache (`src/index.ts:367-369,398,751`) | P1 | `Scheduled-roadmap` |
-| F-R6-C-7 | R6 | REQ-103 degradation appends an informational event with no remediation message and no test (`src/kb.ts:114-120`; `src/index.ts:2348`) | P1 | `Scheduled-roadmap` |
+| F-R6-C-5 | R6 | A `research` request early-returns without `kb_recall`, so "not applicable" is unimplemented for research (`src/index.ts:322-346`) | P1 | **Resolved 2026-11-10** — research and deep/not-applicable cases in `debate-club/src/kb-retrieval.test.ts` |
+| F-R6-C-6 | R6 | Blend reuses the KB-first sufficiency filter, dropping sub-threshold cached rows, and the all-external-fail path needs a non-empty filtered cache (`src/index.ts:367-369,398,751`) | P1 | **Resolved 2026-11-10** — blend/default contrast and all-external-fail case in `debate-club/src/kb-retrieval.test.ts` |
+| F-R6-C-7 | R6 | REQ-103 degradation appends an informational event with no remediation message and no test (`src/kb.ts:114-120`; `src/index.ts:2348`) | P1 | **Resolved 2026-11-10** — remediation event asserted in `src/kb-model.test.ts` |
 | F-R6-D-1 | R6 | `resealAll` never re-seals the `events` table, so encrypted event history is silently lost on rekey or disable (`src/kb-sqlite.ts:702-808,390-423`) | P1 | `Scheduled-roadmap` |
 | F-R6-D-2 | R6 | No SQLite store format/version marker: a newer store is opened read-write and DDL runs before verification, contrary to "never rewritten" (`src/kb-sqlite.ts:32-71,105-131,893-907`) | P1 | `Scheduled-roadmap` |
 | F-R6-D-3 | R6 | Handler lock refusal, `stats.encryption`, locked status reachability, and key-source precedence are code-reading only (`src/index.ts:2065-2070`; `src/kb.ts:720`; `src/kb-crypto.ts:203-216`) | P2 | `Scheduled-roadmap` |

@@ -1,0 +1,31 @@
+# Tasks — R6 retrieval remediation
+
+- [x] Baseline: HEAD `d4d2f76`, `npm run check:fast` PASS (19 gates, 20.1 s) pre-plan; at build start the only failure was the new increment's missing `aar.md`.
+- [x] Plan review: `plan-review passed.`, independence fresh (cold pass 5 Majors/6 Minors resolved, diff re-review 3 Nits resolved), depth standard; delta amendment for C-3 re-stamped.
+- [x] Build-review passed before the first edit (plan sha `388c5f43…`, cold report `9b859e53…`, 5/5 stages).
+- [x] Step 0.1 HEAD and clean-tree check.
+- [x] Step 0.2 `check-intent-citations` 141/0 and `check-tdqs` 7 tools/0 violations.
+- [x] Step 0.3 `validate-spec` pre-edit (142 REQs, 127 cited).
+- [x] Step 0.4 Existing-coverage discovery: only `src/batch.test.ts` unit coverage and the existing Arena blend test; no duplicate added.
+- [x] Step 0.5 `npm run test` baseline: 1133 tests / 108 files.
+- [x] Step 1.1 Research `meta.kb_recall: "not_applicable"`.
+- [x] Step 1.2 `kbRecall` initialized from `deep`; configured branch ordered deep/research → skip → search.
+- [x] Step 1.3 Blend row set bypasses the sufficiency filter in blend mode only.
+- [x] Step 1.4 Degradation event gains the remediation sentence.
+- [x] Step 2.1 `src/kb-model.test.ts` degradation case → 4 passed.
+- [x] Step 2.2 `debate-club/src/kb-retrieval.test.ts` precondition probes the seeded row's relevance `score` below 0.99.
+- [x] Step 2.3 Arena blend case returns the exact seeded `https://example.com/arena-retrieval-seed` URL.
+- [x] Step 2.4 Arena default-mode contrast reports `miss` and no seeded URL via the encyclopedia fixture.
+- [x] Step 2.5 Arena deep+skip and research cases report `not_applicable`.
+- [x] Step 2.6 Deep-with-no-KB case reports `not_applicable`.
+- [x] Step 2.7 Unit file via root config, Arena file via `debate-club/` config → 6 passed; `npm run test-debate-club` → 7 files / 58 tests.
+- [x] Step 3.1 Blend mutation failed the intended assertion (1 failed); restored.
+- [x] Step 3.2 Research literal mutation failed the intended assertion (1 failed); restored.
+- [x] Step 3.3 Recall-initialization / deep-before-skip mutation failed the intended assertions (2 failed); restored.
+- [x] Step 3.4 Remediation-sentence mutation failed the intended assertion (1 failed); restored.
+- [x] Step 4.1 `worklist.md` F-R6-C-5/6/7 → `Resolved`, evidence rows refreshed.
+- [x] Step 4.2 `ROADMAP.md` section retired (24 → 23 work items).
+- [x] Step 4.3 `CHANGELOG.md` entry under `## 2026.11.7`.
+- [x] Step 5.1 `check:fast` PASS once the AAR existed; `check` PASS (22 gates, 72.6 s); `test` 1134 tests / 108 files.
+- [x] Step 5.2 `aar.md` written after the gates, ending `LOOP PAUSED`.
+- [ ] Step 5.3 Split commits, typecheck between them, report the list.

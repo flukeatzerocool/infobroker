@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 retrieval remediation
-
-- Emit `kb_recall:"not_applicable"` for research requests (F-R6-C-5).
-- Stop blend from applying the sufficiency filter to cached rows and let the all-external-fail path return the unfiltered cache (F-R6-C-6).
-- Give REQ-103 degradation a remediation message and a test (F-R6-C-7).
-
-**Trigger:** start after chunk R7 closes; close when F-R6-C-5, F-R6-C-6, and F-R6-C-7 are `Resolved`.
-
 ## R6 encryption and capacity remediation
 
 - Re-seal the `events` table on enable/disable/rekey (F-R6-D-1) and add a persisted store-format marker that refuses a newer SQLite store without rewriting it (F-R6-D-2).
