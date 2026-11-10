@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.7 — R5 `verify_claims` review: snapshot basis follows the stored text
+
+- A citation-grade snapshot now reports `snippet` as its hash basis when the
+  document fetch fails or returns nothing, instead of recording `document` for
+  a copy that is only the supplied snippet (REQ-122). Covered by a new
+  regression test that throws from the fetch and asserts the basis.
+
 ## 2026.11.7 — R4 `fetch_page` review: bounded crawl recurses again
 
 - `fetch_page` with `crawl: true` now fetches the raw HTML for same-origin
