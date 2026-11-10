@@ -1,7 +1,7 @@
 # AAR — Full-review sweep, chunk R9 (spec integrity and tool quality)
 
 **Date:** 2026-11-10 · **Depth:** standard · **Outcome:** closed
-**Plan:** `plan.md` (self pass + independent cold pass, 5/5 stages, report `plan.cold/report.md`, sha256 `8dde8409…`, verdict `independent-review passed.`)
+**Plan:** `plan.md` (self pass + independent cold pass `plan.cold/report-stage1.md`, plus a docs-only diff re-review `plan.cold/report.md` bound to the final plan hash; verdict `independent-review passed.`)
 **Tracker:** `docs/plans/2026-11-09-full-review-sweep/worklist.md`
 **Next trigger:** M1
 

@@ -1,192 +1,129 @@
-Reviewer: review (independent cold pass; single fresh context, no authoring history)
-Plan sha256: de0e27e28ffebdbd296aab8d097f605d60a2cfe87b64403202516da004989773
-Depth: standard · Read budget: 40 · Reads used: ~27
+Plan sha256: 0a617f9e650e9b367436e44a6f426fee703848447ae16bc423efb4dca0e291f0
+Reviewer: review (cold-stage subagent; diff re-review only, no authoring history)
+Reviewed: 2026-11-10 · Depth: standard · Independence: fresh (cold)
+Re-bound revision: provenance-wording amendment of the revision reviewed at sha256
+`a42a417205734f4692c6def67b3b09ef1d95d05682f3df8b31498fbe096efed4` (scope, steps,
+decisions and evidence unchanged; 151 lines in both revisions)
+Read budget: 10 · Reads used this pass: 4 (sha256sum/wc, head, tail, sidecar head)
 
-# Independent cold review — docs/plans/2026-11-10-full-review-r9/plan.md
+# Diff re-review — docs/plans/2026-11-10-full-review-r9/plan.md (re-bound)
 
-Independence note: all five stages ran sequentially in one fresh context (the
-parent consolidated them). Independence from the author is intact; inter-stage
-isolation required by the skill was not used. Recorded, not hidden.
+**Scope statement.** This is a **diff re-review of the amended revision**, re-bound
+to plan hash `0a617f9e…` after an edit confined to three review-provenance regions:
+the top **Review independence** line (`:5`), **C-2** (`:20`), and the
+**Stage provenance** paragraph (`:151`). No scope, step, decision, or evidence
+line changed. Only those regions were judged; unchanged text that still shows a
+defect is recorded as `Deferred`, not as a blocker, per
+`references/review-prompt.md` § Diff Re-review. The prior resolution record for
+all 14 cold-pass findings is retained in §1.
 
-## Stage 1 — Zoom out (artifact only)
+## 0. Re-bound revision — the four earlier changed-line findings
 
-Claims asserted without support or contradicted elsewhere:
+| # | Earlier finding (on `a42a4172…`) | Status | Evidence in the re-bound text |
+|---|---|---|---|
+| F1 | Stage count overstated as "5/5" against a record whose Stage 4 was not run | **resolved** | `:5` now "stages 1–3 and 5, stage 4 N/A for a read-only reviewer"; `:20` repeats that form; `:151` "completed stages 1–3 and the readiness stage (stage 4 re-zoom is N/A for a read-only reviewer that made no edit)". This matches the record: `report-stage1.md:108-109` says Stage 4 was not run because the reviewer made no edit; stages 1–3 and 5 carry content. The claim no longer contradicts its source. |
+| F2 | Five-stage report misattributed to `plan.cold/report.md` | **resolved** | `:5` and `:20` attribute the five-stage pass to `plan.cold/report-stage1.md` and the diff re-review to `plan.cold/report.md`; `:151` likewise ("then a docs-only diff re-review … (`plan.cold/report.md`); that report is bound to this plan's hash"). Each artifact is named for the record it actually holds. |
+| F3 | Cold subagent's inputs omitted the evidence sidecar | **resolved** | `:151` now "received this plan, its sha256, the target file paths, the evidence sidecar, and the cited standards" — matches `report-stage1.md:36-39`, and the sidecar path-only handoff in the skill. |
+| F4 | Major/Nit tally stated only as "0 Blockers, 7 Majors" | **resolved** | `:20` "0 Blockers / 7 Majors" plus "Every Major and Nit is resolved in this revision"; `:151` "All seven Majors and the seven Nits were resolved". The full tally (0 / 7 / 7) is stated and matches §1. `:3` remains the headline summary "0 Blockers, 7 Majors resolved" — a summary, not a count error. |
 
-1. **D77 is used eight times but never defined in this artifact.** Lines 13,
-   28, 30, 32, 47, 112, 116, 136 invoke "D77 cross-chunk notes", while line 50
-   defines **D88 — Non-R9 defect disposition** with the same function. Step 17
-   (line 112) says "Record D77/D88 notes" as if they differ. D77's definition
-   lives only in `docs/plans/2026-11-10-full-review-r8/plan.md:53`; a cold
-   reader of this artifact must guess whether D77 and D88 are the same rule.
-2. **Split contingency contradicts the close contract.** D79 (line 41) and
-   step 7 (line 96) define a split, but the done bar (line 13) fixes the output
-   at nine REQs + 11 prose rows with no `deferred:R9b` vocabulary, and step 20
-   (line 115) advances the trigger only to M1. A triggered split has no
-   satisfiable close path and no R9b successor routine.
-3. **Eligible P0 pool excludes the surface Cluster B reviews.** Review surface B
-   (line 74) names "the seven tool registrations in `src/index.ts`", but the
-   blast radius (line 80) admits only "the `spec`-action record region of
-   `src/index.ts`" to the P0 pool. A REQ-089/090 violation is fixable only in
-   the registration literals, so the stated pool forbids the fix D79 requires.
-4. **EV11 misstates the tracker.** EV11 (line 66) says the R9 `Code:` line omits
-   `src/intent-citations.ts`; `worklist.md:500` lists it. The same plan calls
-   that module "Evidence-only (read, never changed)" and R7-owned (line 28).
-5. **"Nine REQs across eight primary files"** (line 41) against nine files
-   enumerated in EV4 (line 59).
-6. **Evidence sidecar does not bind to this artifact.** The supplied
-   `plan.evidence.md` records `Plan sha256: ff6036af…` and 152 lines; the
-   artifact is `de0e27e2…` at 151 lines. Its Targets/Requirements tables were
-   computed against a different revision.
+**No new finding** was introduced in the three changed regions. One cosmetic
+observation, not a finding: `:20` reads "a documented docs-only diff re-review"
+(mild redundancy); no meaning is affected.
 
-Everything else the artifact asserts about file existence, line counts, and
-section ranges checked out (see Stage 3 verification).
+**Consistency of the re-bound text.** `:3` (Status), `:5`, `:20` and `:151` now
+agree on: cold pass complete and passed, stage 4 N/A, two-file record, full
+Major/Nit tally. No line claims the `fresh` stamp already exists — `:5` says the
+diff re-review ran "before the `fresh` stamp", which is the accurate sequencing.
 
-## Stage 2 — Comprehension (artifact only, ≤200 words)
+## 1. Cold-pass findings — status (retained from the diff re-review)
 
-R9 is the last review chunk of the repository-wide sweep. It reviews, without
-changing runtime behaviour, nine spec-integrity REQs (`REQ-055`, `077`, `078`,
-`080`, `081`, `089`, `090`, `092`, `106`) and eleven prose units (§1 preamble +
-North Star, §3 SR-011/SR-012, §3 Terminology, §9.1–§9.5, Appendix B, Appendix
-C), using the existing gates, tests, and file-presence artifacts. Phases:
-scaffold + baseline the gate suite (0), enumerate anchors and confirm REQ/check
-kinds (1), review clusters A–D and cross-check gates (2), disposition findings,
-append worklist verdict/prose tables and corrected tracker lines, advance the
-roadmap trigger to M1, write the AAR (3). P0 fixes are bounded (≤2 files, ≤100
-lines); a missing gate is scheduled, never built. Done means: every REQ and
-prose unit has a verdict row, every finding has a predicate, severity, and
-terminal disposition, zero open P0, P1s on `ROADMAP.md`, `npm run check` green
-at steps 19 and 22, AAR ends `LOOP PAUSED`.
+### Major (7) — all resolved
 
-Could not determine: what distinguishes a D77 note from a D88 note; what
-happens to the done bar if step 7 triggers a split.
+| # | Prior finding | Status | Evidence in the amended text |
+|---|---|---|---|
+| M1 | SR-011/SR-012 anchors wrong | **resolved** | D84 `:46` reads `:96-124` / `:125-136` and `worklist.md:101-102`; EV10 `:65` agrees. Verified `infobroker.md:96` = SR-011, `:125` = SR-012; `worklist.md:101-102` = the two R9 prose rows. |
+| M2 | D77 undefined, duplicates D88 | **resolved** | D88 defined at `:50`; `grep -n 'D77' plan.md` returns no match. Cross-chunk references all name D88. |
+| M3 | Split contingency unsatisfiable | **resolved** (Deferred residue at `:24`) | Done bar `:13` carries the `deferred:R9b` split branch and R9b successor; step 7 `:96` partitions before Phase 2; step 20 `:115` sets the R9b successor. |
+| M4 | P0 pool contradicts Cluster B | **resolved** | `:80` admits "the tool-registration literals and the `spec`-action record region of `src/index.ts`", matching `:74`. |
+| M5 | Step 18(i) rests on a false EV11 item | **resolved** (Deferred residue on `check-intent-citations.ts`) | EV11 `:66` no longer lists `src/intent-citations.ts`; `:28`/`:80` keep it evidence-only and R7-owned. |
+| M6 | REQ-106 annotation-contradiction branch dropped | **resolved** | Step 8(ii) `:97` names the branch at `infobroker.md:382` (phrase verified verbatim); step 12 `:104` requires `scripts/check-tdqs.ts`'s exit path. Verified `:110` collects candidates, `:134` exits non-zero only on `violations`. |
+| M7 | Preflight evidence stale | **resolved** | Sidecar regenerated 2026-11-10T17:08:01.862Z at git `11ab3a9`; `Plan sha256: 0a617f9e…` now matches this artifact. Benign: "Plan lines: 152" against a 151-line file (trailing newline). |
 
-Comprehension: **faithful-with-gaps**.
+### Nit (7) — all resolved
 
-## Stage 3 — Critics
+| # | Prior finding | Status | Evidence |
+|---|---|---|---|
+| N1 | EV3 cites `:372-390`, bodies end at `:382` | **resolved** | EV3 `:58` now `:372-382`; `infobroker.md:382` is REQ-106's last body line. |
+| N2 | EV9 cites `:67`, const at `:70` | **resolved** | EV9 `:64` now "artifact-REQ set `:70`". |
+| N3 | "eight primary files" vs nine in EV4 | **resolved** | `:41` reads "nine REQs across nine primary files"; EV4 `:59` lists nine. |
+| N4 | D84 cites `worklist.md:99` | **resolved** | D84 `:46` now `worklist.md:101-102`; rows verified at those lines. |
+| N5 | Step 20 "updates" an already-M1 cell | **resolved** | `:115` "Confirm … verifies rather than rewrites it". |
+| N6 | No step names `code-review` | **resolved** | Steps 11–13 (`:103-105`) each "run the `code-review` skill over the cluster's read set". |
+| N7 | D85 omits gate-table/G1-coverage scripts | **resolved** | `:47` names `scripts/check-gate-table.ts` and `scripts/check-gate-coverage.ts`, matching step 15. |
 
-**Design.** REQ-106's clause enumeration in step 8(ii) (line 97) and step 12
-(line 104) omits "a description that does not contradict those annotations"
-(`infobroker.md:382`). `scripts/check-tdqs.ts:110,134` computes
-`annotationContradictionCandidates` but exits non-zero only on `violations`, so
-this is exactly the gate-assertion gap the chunk exists to find; the plan's
-own step list will not look at it. Also: step 18(i) (line 113) corrects the
-`Code:` line from EV11's false list, so it would add an R7-owned, evidence-only
-module to R9's ownership line. Step 20 (line 115) "updates" a `Next trigger`
-cell that already reads M1 (`worklist.md:521`).
+**Tally: 14 resolved / 0 not resolved** (7 Majors, 7 Nits), plus the 4
+changed-line findings of the prior re-review, all resolved in §0.
 
-**Structural.** D85 (line 47) bounds only `scripts/validate-spec.ts`, but step
-15 (line 107) cross-checks the whole gate suite; `check-gate-table.ts` and
-`check-gate-coverage.ts` also assert every chunk's gates and are not covered by
-the shared-surface rule. Step 23 (line 118) commits after `session:close`
-ordering matches AGENTS D-089/D-091.
+## 2. New findings in the changed lines
 
-**Style.** The `Deferred-by-user`/`Scheduled-roadmap` vocabulary matches
-`worklist.md:20-22`; REQ verdict vocabulary (`holds`/`finding:<ID>`) is not
-restated but the walkthrough steps make it unambiguous.
+None. The three changed regions are internally consistent, consistent with each
+other, and consistent with `report-stage1.md`.
 
-**Verified against sources (hold):**
-- Nine REQ IDs and `_Check:_` kinds match `infobroker.md:1211-1214,1246-1250`
-  exactly (089 G0,G1; 090 G0,G1; 092 G1,G3; 106 G1,G3; 081 G1; 055/077/078/080
-  G3) and `worklist.md:494-501`.
-- All eight dispatched targets exist; `scripts/validate-spec.ts` 1038 L,
-  `src/clause-coverage.ts` 73, `src/tdqs.ts` 439, `scripts/check-tdqs.ts` 140,
-  `src/lib/feature-taxonomy.ts` 106, `src/tool-surface.test.ts` 236 — all match
-  EV4. `src/tool-surface.ts` does **not** exist, as the plan claims.
-- Gate wiring `scripts/lib/gate-manifest.ts:41,73,78,90,135` matches EV6;
-  `validate-spec.ts:73` meta set is `055/077/078/080/096`; tool-default block at
-  `:764-800`; `check-gate-coverage` scans `debate-club/src` and exempts
-  `REQ-091`.
-- `src/tool-surface.test.ts:1` cites 089/090/092 and spawns the server over
-  stdio; `debate-club/src/mcp-contract.test.ts:386-391` asserts only byte fields
-  — EV8's narrow-assertion risk is real.
-- `/ROADMAP.md:17-23` carries the sweep section and program-close clause.
-- Prose anchors correct: §1 `23-60`; Terminology `138-188`; §9 `1039-1297`;
-  Appendix B `1544-1684`; Appendix C `1685-1766`.
+## 3. Independence / C-2 / Stage provenance — truthfulness
 
-## Stage 4 — Re-zoom
+- **Stage record:** now states stages 1–3 and 5 with stage 4 N/A, which is what
+  the record supports for a read-only reviewer. No longer contradicted by
+  `report-stage1.md`.
+- **File attribution:** `report-stage1.md` = five-stage pass; `report.md` = diff
+  re-review. Correct in `:5`, `:20`, `:151`.
+- **Inputs:** the sidecar is now named among the cold subagent's inputs.
+- **No report hash is embedded in the plan.** Nothing in the artifact can drift
+  against the stamp. The only hash present is the abbreviated plan-revision
+  `de0e27e2…` at `:151`, a frozen historical reference to the revision the cold
+  pass read (`report-stage1.md:2`); it names a past revision and therefore cannot
+  drift.
+- **C-2 "Every Major and Nit is resolved in this revision"** — supported: 14/14
+  plus 4/4 of the re-review findings.
+- **Unknown:** whether the `fresh` stamp has been taken at `0a617f9e…` yet; gate
+  state was not read.
 
-Not run: no artifact edit was made in response to Stage 3 findings (reviewer is
-read-only). Stages 4/5 remain unevidenced as a re-check.
+## 4. Deferred findings (unchanged text — not blockers)
 
-## Stage 5 — Readiness
-
-An implementer needs no further decisions for the happy path. Blocking
-ambiguities are listed as Major below; the two that force a decision are the
-D77/D88 equivalence and the P0-pool/registration contradiction. No required
-artifact is missing: `plan.md`, `tasks.md`, `aar.md` stub and `plan.cold/` are
-named, and `check-loop-artifacts` requirements (`scripts/lib/loop-artifacts.ts:39-83`)
-are satisfied by step 0/21.
-
-## Findings (severity-ranked)
-
-### Blocker
-None.
-
-### Major
-1. [design] **SR-011/SR-012 anchors are wrong.** EV10 (`plan.md:65`) and D84
-   (`:46`) give SR-011 `:96-101` and SR-012 `:102-110`. Actual: SR-011 spans
-   `infobroker.md:96-124`, SR-012 spans `:125-136`; `:102-110` is inside
-   SR-011's test list. Fix both citations and D84's `worklist.md:99` (should be
-   `:101`).
-2. [clarity] **D77 is undefined and duplicates D88.** `plan.md:13,28,30,32,47,112,116,136`
-   vs D88 at `:50`. Define D77 in this artifact or replace every use with D88.
-3. [design] **Split contingency is unsatisfiable.** D79 `plan.md:41` + step 7
-   `:96` vs done bar `:13` (nine REQs, no deferred rows) and step 20 `:115`
-   (R9b successor absent). Add the R8-style deferred branch or an explicit
-   "split closes as R9a with R9b trigger".
-4. [design] **P0 pool contradicts Cluster B.** `plan.md:74` reviews the tool
-   registrations in `src/index.ts`; `:80` admits only the `spec`-action region
-   to the P0 pool. Widen the pool or state that registration defects are P1.
-5. [design] **Step 18(i) tracker correction rests on a false EV11 item.**
-   `plan.md:66,113`: `src/intent-citations.ts` is already named at
-   `worklist.md:500`, and `plan.md:28` calls it R7-owned evidence-only. Remove
-   it from the "omitted modules" list.
-6. [design] **REQ-106 annotation-contradiction branch is dropped.** Steps 8(ii)
-   `plan.md:97` and 12 `:104` list deterministic layer, four fields, shadow
-   pairs, but not the "description does not contradict annotations" clause
-   (`infobroker.md:382`); `scripts/check-tdqs.ts:110,134` only reports
-   candidates. Add the branch to the review unit.
-7. [design] **Preflight evidence is stale.** Sidecar sha `ff6036af…` ≠ artifact
-   sha `de0e27e2…`; re-run preflight before the plan is stamped, or the recorded
-   evidence describes a different revision.
-
-### Nit
-1. EV3 (`plan.md:58`) cites `:372-390`; the four REQ bodies end at `:382`.
-2. EV9 (`:64`) cites the artifact-REQ set at `:67`; the const is at
-   `scripts/validate-spec.ts:70`.
-3. "eight primary files" (`:41`) vs nine files listed in EV4 (`:59`).
-4. D84 (`:46`) cites `worklist.md:99` for SR-011; the row is `:101`.
-5. Step 20 (`:115`) updates an already-M1 cell (`worklist.md:521`); say
-   "confirm" rather than "update".
-6. The worklist close contract (`worklist.md:15`) requires a `code-review` run;
-   no step names that skill, only prose verification.
-7. D85 (`:47`) omits `check-gate-table.ts`/`check-gate-coverage.ts` from the
-   shared-surface boundary, yet step 15 (`:107`) reviews the whole gate suite.
+- **`plan.md:24`** "The two are one-to-one; R9 has no split." still contradicts
+  the split contingency at `:13` and steps 7/20 (`:96`, `:115`).
+- **`plan.md:66` (EV11) + `:113` (step 18(i))** would add
+  `scripts/check-intent-citations.ts` to R9's `Code:` line, while
+  `worklist.md:397` places it in R7's Code line and `plan.md:80` calls it
+  evidence-only.
+- **Tracker anchors no longer resolve at HEAD `11ab3a9`.** `plan.md:9`/`:115`
+  cite `worklist.md:520`/`:521`; the status-board header is `:555` and the R9
+  row `:565`, and `:521` does not hold the `Next trigger` cell. `worklist.md:565`
+  already records "R9 … **closed 2026-11-10** … M1" and `:853` records
+  `F-R9-Z-1 … Resolved`, while this plan's Status is "user approval pending".
+  `build-review` should confirm the increment has not already been executed
+  before step 18 appends a second verdict table.
 
 ## Unknowns
-- `npm run check`/`check:fast` and `check-gate-coverage --report` counts (EV1,
-  EV7) were not run under the read-only contract; only their structural claims
-  were verified.
-- Whether D77 has a standing program meaning outside the R8 plan; only the R8
-  artifact defines it.
-- Probe/anchor counts used by D79's split threshold cannot be known until Phase
-  1 runs.
+
+- Whether a `fresh` stamp exists today for `0a617f9e…`.
+- `npm run check` / `check:fast` / `check-gate-coverage --report` counts (EV1,
+  EV7) were not re-run under the read-only contract; only structural claims
+  were checked.
+- Whether the worklist rows at `:524-536`, `:565`, `:847-853` are the product of
+  an execution of this plan artifact (see §4, third item).
+
+## Evidence
+
+- Sidecar: `plan.evidence.md` · generated 2026-11-10T17:08:01.862Z · git
+  `11ab3a9` · `Plan sha256: 0a617f9e…` (matches this artifact).
+- Verification calls this pass: `sha256sum` (matches the declared hash),
+  `wc -l` (151), `head -25` (Status, Review independence, C-2), `tail -6`
+  (Stage provenance), `head -8` (sidecar hash/HEAD).
+- Carried from the prior pass: `grep` on `infobroker.md` (SR-011 `:96`, SR-012
+  `:125`, annotation clause `:382`), `grep` on `worklist.md`
+  (`:101-102`, `:397`, `:499-504`, `:555-565`, `:853`), `grep` on
+  `scripts/check-tdqs.ts` (`:109-110`, `:125-126`, `:131`, `:134`).
 
 ## Verdict
+
 independent-review passed.
-
----
-
-## Parent addendum (authoring context — not part of the cold review)
-
-The plan was amended after this report to resolve every Major and Nit finding:
-SR-011/SR-012 anchors corrected to `:96-124`/`:125-136` and `worklist.md:101-102`
-(Major 1, Nit 4); every `D77` reference replaced with `D88` (Major 2); the done
-bar gained a `deferred:R9b` split branch and step 20 a split successor
-(Major 3, Nit 5); the P0 pool now admits the `src/index.ts` tool-registration
-literals (Major 4); EV11 and step 18(i) drop the false `src/intent-citations.ts`
-claim (Major 5); the REQ-106 annotation-contradiction branch is now a named
-review unit and the `check-tdqs` exit path is read (Major 6); preflight was
-re-run against the amended artifact (Major 7). Nits 1–3 and 5–7 are also applied
-(`:372-382`, `:70`, "nine primary files", "confirm", `code-review` named in
-steps 11–13, D85 widened to the gate-table and G1-coverage scripts).

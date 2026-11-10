@@ -2,7 +2,7 @@
 
 **Status:** draft — self pass complete, independent cold pass complete (0 Blockers, 7 Majors resolved), user approval pending · **Date:** 2026-11-10 · **Depth:** standard — the worklist D4 deep triggers are release, credentials, and schema migration; this chunk touches none of them. It reviews the spec-integrity gates, the tool-definition quality bar, the manifest/taxonomy/default gates, and the §9 verification prose. It changes no runtime state, publishes nothing, and reads no credential.
 **Review route:** standard — self pass, one `independent-review` cold pass, at most one targeted re-review; up to two targeted re-audits only if a hard blocker survives.
-**Review independence:** self pass complete 2026-11-10; the cold pass completed (`plan.cold/report.md`, sha256 `8dde8409…`, 5/5 stages, verdict `independent-review passed.`) and the plan is stamped `fresh`.
+**Review independence:** self pass complete 2026-11-10; the cold pass completed (`plan.cold/report-stage1.md`, stages 1–3 and 5, stage 4 N/A for a read-only reviewer, verdict `independent-review passed.`) and a docs-only diff re-review (`plan.cold/report.md`) re-verified the amended revision before the `fresh` stamp.
 **Rollback cost:** 1 on the 0–2 scale — the increment is documentation plus tracker edits, rising to a bounded source+test commit only if a P0 fix ships. No destructive, irreversible, or external operation is planned.
 **Roadmap item:** `ROADMAP.md` § Full-repository review sweep (program-close clause: "close this item when every chunk is closed and the final machine-evidence pass is green"). R9 closes the last review chunk; it does **not** close the roadmap item — the trigger advances to M1.
 **Tracker:** `docs/plans/2026-11-09-full-review-sweep/worklist.md`
@@ -17,7 +17,7 @@
 ## Conditions
 
 - **C-1 (user decision, non-blocking).** 24 unpushed commits predate this increment (oldest 18.1 h, EV1). Publishing them is a separate authorization under D88; this plan neither publishes them nor treats them as part of its done bar.
-- **C-2 (review independence) — resolved 2026-11-10.** The cold pass completed: `plan.cold/report.md` (sha256 `8dde8409…`, 5 stages, verdict `independent-review passed.`, 0 Blockers / 7 Majors). Every Major and Nit is resolved in this revision; the report's parent addendum records the amendments. No residual condition.
+- **C-2 (review independence) — resolved 2026-11-10.** The cold pass completed (`plan.cold/report-stage1.md`: stages 1–3 and 5, stage 4 N/A for a read-only reviewer; verdict `independent-review passed.`, 0 Blockers / 7 Majors), followed by a documented docs-only diff re-review (`plan.cold/report.md`). Every Major and Nit is resolved in this revision. No residual condition.
 
 ## Scope
 
@@ -148,4 +148,4 @@ The default outcome is additive: the plan/task/AAR files and the tracker/roadmap
 
 ## Review independence
 
-Self pass complete on this artifact (2026-11-10, this session); it verified the nine REQ IDs and check kinds against the manifest, found the nonexistent `src/tool-surface.ts` and the missing §1/SR-011/SR-012 prose units, corrected the cluster map to separate `REQ-107` (R7) from the `§9.4` prose row, and recorded that `REQ-081` is Arena-cited rather than unit-tested. **Stage provenance:** the cold pass ran in a fresh `review` subagent that received only this plan, its sha256, the target file paths, and the cited standards; it read revision `de0e27e2…` and returned `independent-review passed.` with 0 Blockers and 7 Majors. All seven Majors and the seven Nits are resolved in this revision (`plan.cold/report.md`'s parent addendum records each). The report's sha256 is `8dde8409…`; the stamp records `fresh` with that path and hash (C-2).
+Self pass complete on this artifact (2026-11-10, this session); it verified the nine REQ IDs and check kinds against the manifest, found the nonexistent `src/tool-surface.ts` and the missing §1/SR-011/SR-012 prose units, corrected the cluster map to separate `REQ-107` (R7) from the `§9.4` prose row, and recorded that `REQ-081` is Arena-cited rather than unit-tested. **Stage provenance:** the cold pass ran in a fresh `review` subagent that received this plan, its sha256, the target file paths, the evidence sidecar, and the cited standards; it read revision `de0e27e2…`, completed stages 1–3 and the readiness stage (stage 4 re-zoom is N/A for a read-only reviewer that made no edit), and returned `independent-review passed.` with 0 Blockers and 7 Majors. All seven Majors and the seven Nits were resolved, then a docs-only diff re-review in a second fresh context re-verified the resolutions and the final revision (`plan.cold/report.md`); that report is bound to this plan's hash.
