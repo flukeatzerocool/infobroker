@@ -20,7 +20,7 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R8 after chunk R7 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R9 after chunk R8 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
 
 ## R6 `manage_kb` action-contract remediation
 
@@ -174,6 +174,27 @@
 - Make the library exports enforce validation or expose an explicit skip (F-R7-F-2).
 
 **Trigger:** start after chunk R8 closes; close when F-R7-F-1 and F-R7-F-2 are `Resolved`.
+
+## R8 update-preservation evidence
+
+- Add a test that simulates an update (copy or reinstall over the tree) and asserts the user configuration layer, KB content, and quota counters survive without reconfiguration (F-R8-A-1).
+- Reconcile §2 F11's "G1 update-preservation tests guard the guarantee" with the test once it exists.
+
+**Trigger:** start after the sweep reaches R9; close when F-R8-A-1 is `Resolved` and `validate-spec` still passes.
+
+## R8 notice and gate-traceability evidence
+
+- Drive a provider cooldown through a tool call and assert the bounded notice on the response (F-R8-C-1).
+- Assert REQ-096's gate-traceability clause in `validate-spec`, or narrow the sentence to reference presence (F-R8-D-1).
+
+**Trigger:** start after the sweep reaches R9; close when F-R8-C-1 and F-R8-D-1 are `Resolved`.
+
+## R8 state-hardening evidence
+
+- Assert REQ-100's ownership-refusal branch for key-pool/state directories (F-R8-F-1).
+- Assert REQ-099's owner-only creation of an absent keys directory (F-R8-F-2).
+
+**Trigger:** start after the sweep reaches R9; close when F-R8-F-1 and F-R8-F-2 are `Resolved`.
 
 ## Non-goals
 

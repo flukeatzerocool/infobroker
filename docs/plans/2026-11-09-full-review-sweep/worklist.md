@@ -436,11 +436,60 @@ Reviewed at standard depth; split not triggered (34 distinct anchors, 1 probe-de
 `REQ-091` `REQ-096` `REQ-097` `REQ-098` `REQ-099` `REQ-100` `REQ-101`
 `REQ-102`
 
-Spec: §2, §4.10, §4.11, §5.1–5.2, §5.4, §10.1, App E.
-Code: `src/config-migrations.ts` (path/patch logic lives in `src/config.ts`), `src/update-check.ts`,
-`src/state-health.ts`, `src/audit-log.ts`, `src/content-policy.ts`,
-`src/kb-crypto.ts` and `src/kb-sqlite.ts` (KB hardening: startup resilience,
-artifact predicates), `scripts/`, `.githooks/`.
+Spec: §2, §3 SR-002/SR-003/SR-007, §4.10, §4.11, §5.1–5.2, §5.4, §10.1, App E.
+Code: `src/config-migrations.ts` (path/patch logic lives in `src/config.ts`),
+`src/update-check.ts`, `src/state-health.ts`, `src/audit-log.ts`,
+`src/content-policy.ts`, `src/call-log.ts`, `src/session-stats.ts`,
+`src/lib/atomic-write.ts`, `src/lib/sanitize-error.ts`, `src/cooldown.ts`,
+`src/quota.ts`, `src/key-pool.ts`, `src/kb-crypto.ts` and `src/kb-sqlite.ts`
+(KB hardening: startup resilience, artifact predicates — read as key-material
+and state-permission evidence), the notice/`spec`/migration/key-material
+regions of `src/index.ts`, `scripts/validate-spec.ts`,
+`scripts/lib/gate-manifest.ts`, `scripts/check-pack.ts`,
+`scripts/check-shipped-kb-empty.ts`, `server.json`, `glama.json`, `.githooks/`.
+
+#### R8 verdict table (2026-11-10)
+
+Reviewed at deep depth; split **not triggered** (90 distinct anchors; two
+probe-dependent clusters B and C, below the four-cluster threshold —
+`docs/plans/2026-11-10-full-review-r8/phase1-enumeration.md`). Evidence:
+15 carrying test files / 163 tests PASS; Arena 3 files / 37 tests PASS; committed
+probe harness `docs/plans/2026-11-10-full-review-r8/probe.ts` with transcript
+`probe-log.md` — legs a1, a2, b1, b2, c, d-available, d-current, e-flag,
+e-block, e-off, f-audit, f-confinement, f-corrupt-state, g all PASS.
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-042 Source Distribution | `holds` | gate: `check-shipped-kb-empty` asserts no KB directory/artifact and that `kb.storage_path` and `kb.reports_dir` resolve outside the tree; `check-pack` denylists `config.local.json`, `knowledge-base/`, and `.sqlite*`; quota state lives in `$TMPDIR` (§10.1) |
+| REQ-043 Update Preservation | `finding:F-R8-A-1` | static: the user layer (XDG), KB store, reports, and quota all live outside the tree, but **no test simulates an update**; §2 F11's "G1 update-preservation tests guard the guarantee" has no carrier (searched `src/**/*.test.ts` for update/preservation assertions — none) |
+| REQ-105 User-layer migration | `holds` | test: `src/config.test.ts:528` (migrate + backup), `:627` (auto-migrate at startup); `src/config-migrations.test.ts:91` (unknown keys retained), `:106-118` (atomic write + 0600 backup); probe:c, probe:g (version stamped, `kb.store_backend` removed, unknown key retained, backup written) |
+| REQ-111 State health | `holds` | test: `src/state-health.test.ts:117-205` (record fields, notices, ordering, `config_invalid_startup`, `provider_cooldown`); probe:a1 (clean start, no `notices` key), probe:a2 (`config_key_unrecognized` on a tool response); initialization instructions emitted at `src/index.ts:1655`; computation is local-only |
+| REQ-111a Call record | `finding:F-R8-C-1` | test: `src/call-log.test.ts:51` (no query/content), `:69,:85` (0600), `:116` (rotation); `src/session-stats.test.ts:26-35` (session summary counts); probe:a2 shows a notice on a response, but **no test or probe drives a provider cooldown to the response-level notice** — that clause is static-only |
+| REQ-112 Update check | `holds` | test: `src/update-check.test.ts:63` (no request when disabled), `:95` (fresh cache short-circuits), status mapping; probe:d-available, probe:d-current report through `state_health.update` from a pre-seeded cache; live fetch `NOT_RUN` per D73 |
+| REQ-113 Invalid user layer | `holds` | test: `src/config.test.ts:573` (invalid layer → shipped defaults, no write), `:583`, `:597`; probe:b1 (layer byte-identical, failure reported), probe:b2 (corrected `reload_config` activates) |
+| REQ-091 Registry distribution | `holds` (live `NOT_RUN`) | gate: `scripts/validate-spec.ts:842-869` asserts `server.json`/`glama.json` presence and version parity with `package.json`, stdio transport; `check-pack`; publication itself `NOT_RUN` per D73 |
+| REQ-096 Security model | `finding:F-R8-D-1` | gate: `scripts/validate-spec.ts:923-945` asserts §E, both OWASP mappings, and a reference to each security REQ; the "security requirement traceable to a gate" clause is not asserted — the check is reference presence, not gate traceability |
+| REQ-097 Content policy | `holds` | test: `src/content-policy.test.ts` clause tags `policy-flag`, `policy-strict`, `policy-external-fallback` (modes, audit write, external fallback); probe:e-flag (`content_policy:{flagged,mode}`), probe:e-block (`content_policy_flagged` error), probe:e-off |
+| REQ-098 Audit trail | `holds` | test: `src/audit-log.test.ts:48` (timestamped, 0600), `:62` (append-only), `:74` (control-character forging), `:85` (write failure never blocks); probe:f-audit (7 events, mode 0600). Restart survival rests on append semantics, not a restart test (noted) |
+| REQ-099 Key confinement | `finding:F-R8-F-2` | test: `src/kb-encryption-tools.test.ts:171` (outside `keys_dir` refused), probe:f-confinement (refusal, nothing created); the "designated directory SHALL be created with owner-only permissions when absent" clause has no assertion |
+| REQ-100 State-file hardening | `finding:F-R8-F-1` | test: `src/key-pool.test.ts:92` (0700 state dir), `:105` (malformed state reset), `src/quota.test.ts:26,:41` (poisoned counters reset); probe:f-corrupt-state. The "refuse to read or write state in a directory it does not own" branch exists (`src/key-pool.ts:63`) but is untested |
+| REQ-101 Dependency gate | `holds` | gate: `scripts/validate-spec.ts:947-970` asserts the `audit` gate exists in the manifest and runs from `check`; `scripts/lib/gate-manifest.ts` |
+| REQ-102 Exceptional hygiene | `holds` | test: `src/lib/sanitize-error.test.ts` (absolute paths, stack frames, credential shapes, ordinary messages); Arena negative paths; probe:f-confinement returns a redacted path |
+
+#### R8 prose verdict table (2026-11-10)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §2 F1–F10, F12 | `holds` | each failure mode names a mitigation that exists in code (chain advance, normalizer, G0 gate, quota skip, iteration cap, KB recovery, config validation); drift-report found no contradiction |
+| §2 F11 Update overwrites user state | `finding:F-R8-A-1` | the mitigation claim is true structurally (paths outside the tree) but its "G1 update-preservation tests guard the guarantee" sentence is false — no such test exists |
+| §3 SR-002 Single user | `holds` | stdio transport, no auth surface, owner-only state (`src/index.ts` entry, REQ-100 gates) |
+| §3 SR-003 Keys never surfaced | `holds` | config/health/errors expose names only (R2 evidence F-R2-7); key material read by path and never returned (`src/kb-crypto.ts`) |
+| §3 SR-007 Quota persists | `holds` | `src/quota.test.ts:56` (valid counters preserved), state path in `$TMPDIR` (§10.1) |
+| §5.1 Language/runtime | `holds` | TypeScript, Node 24+, `tsx` entry, zod, undici — matches `package.json` |
+| §5.2 Layered architecture | `holds` | tool layer, provider map, KB layer, and the inline `native_fetch` note match the code |
+| §5.4 Build phases | `holds` | phases 1–9 are all present, including generated auth reference and the KB phase; `validate-spec` gates item 7's artifact |
+| §10.1 Project files | `holds` | shipped inventory matches the tree; user-owned inventory matches REQ-043 paths, including `call-log.jsonl` |
+| Appendix E | `holds` | trust boundary, threat actors, both OWASP mappings, residual risks present; `validate-spec:923-945` gates them |
 
 ### R9 — Spec integrity and tool quality (9)
 
@@ -468,7 +517,7 @@ status and any new evidence.
 | R5 | §1 goal 4, §3 SR-008, §4.3 (026 family, 121–123, 130, 027), §5.5, §8.1–8.3 | 15 | **closed 2026-11-09** | R6 |
 | R6 | §1 goal 6, §4.9 | 29 | **closed 2026-11-09** | R7 |
 | R7 | §1 goal 5, §4.7, §10.2–10.3, App D | 17 | **closed 2026-11-09** | R8 |
-| R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | not started | R9 |
+| R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | **closed 2026-11-10** | R9 |
 | R9 | §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | not started | M1 |
 | M1 | all | — | not started | (program close) |
 
@@ -741,6 +790,13 @@ work.
 | F-R7-F-3 | R7 | The export projection drops `likelihood`, `modality`, `attribution`, and register provenance fields (`src/lib/report-export.ts:36,41-46,57-65`) | P3 | `Closed-P3` |
 | F-R7-F-4 | R7 | `render-report` CLI flags are untested (`scripts/render-report.ts:16-61`) | P3 | `Closed-P3` |
 | F-R7-G-4 | R7 | §10.3's `manage_kb` row omits the live `claims` and `verify_report` actions (`infobroker.md:1430`; `src/index.ts:1980`) | P3 | `Closed-P3` |
+| F-R8-A-1 | R8 | REQ-043 update preservation has no asserting test; §2 F11 claims "G1 update-preservation tests guard the guarantee" with no carrier (`infobroker.md:74`; no update/preservation assertion in `src/**/*.test.ts`) | P1 | `Scheduled-roadmap` |
+| F-R8-C-1 | R8 | The cooldown notice on every successful tool response is unobserved; only `collectNotices` unit coverage exists (`src/index.ts:1693-1694`; `src/state-health.test.ts:187`) | P2 | `Scheduled-roadmap` |
+| F-R8-D-1 | R8 | REQ-096's "security requirement traceable to a gate" is asserted as a §E reference, not as gate traceability (`scripts/validate-spec.ts:939-944`) | P2 | `Scheduled-roadmap` |
+| F-R8-F-1 | R8 | REQ-100's "refuse to read or write state in a directory it does not own" branch is implemented but untested (`src/key-pool.ts:63`) | P2 | `Scheduled-roadmap` |
+| F-R8-F-2 | R8 | REQ-099's "designated directory SHALL be created with owner-only permissions when absent" clause has no assertion (`src/kb-crypto.ts` key-file creation) | P2 | `Scheduled-roadmap` |
+| F-R8-F-3 | R8 | Key confinement is refused with `internal_error` rather than a confinement-specific code; REQ-002 taxonomy is R1-owned (D77 note) (`src/index.ts` manage_kb encryption branch) | P3 | `Closed-P3` |
+| F-R8-Z-1 | R8 | Tracker drift: the R8 `Code:` line omitted `call-log.ts`, `session-stats.ts`, `lib/{atomic-write,sanitize-error}.ts`, the `index.ts` handler regions, and the gate scripts; the `Spec:` line and status-board cell omitted §3 SR-002/SR-003/SR-007 | P3 | **Resolved 2026-11-10** |
 
 ## Program risks / notes
 
