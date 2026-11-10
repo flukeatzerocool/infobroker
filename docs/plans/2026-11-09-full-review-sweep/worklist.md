@@ -221,6 +221,14 @@ Reviewed at standard depth; split not triggered (6 clusters, ~40 predicates, 2 c
 | REQ-028 | `finding:F-R3-24` | top-page fetch, REQ-021b ranking reuse, scores, span anchors, snippet fallback, and the page bound hold (`deep-search.test.ts:28-72`; `rerank.test.ts:40-72`); the whole deep branch is gated on `!compactMode`, so `deep:true` silently returns plain results under compact verbosity (`src/index.ts:618`); the unfetchable-page branch has no tag (F-R3-25) |
 | §7.4 Priority Routing | `finding:F-R3-1` | privacy, free_only, and quality rows match `selectChain`, and privacy falls back to the task chain when empty (`chain.test.ts:21-53`); the explicit-provider precedence row is violated (live probe above); the speed tie-order clause is not honored (F-R3-2) |
 
+#### R3 prose verdict table (2026-11-10, M1 reconciliation)
+
+Recorded at the program close: the ownership table (`worklist.md:86`) assigns §1 goal 3 to R3, while R3's D28 recorded §7.4 only (`docs/plans/2026-11-09-full-review-r3/plan.md:33`). The row is written from R3's recorded REQ verdicts, not from a new review (F-M1-1).
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §1 goal 3 provider intelligence | `finding:F-R2-27` | capability, quota, and provider selection hold (`worklist.md:209` REQ-020a classification/override/quota demotion; `:211` REQ-020c priority routing; `:216` REQ-020h source quality); the latency leg is the count-only window deferred by F-R2-27 (`src/latency.ts:15,29-33`; `ROADMAP.md` § R2 findings remediation) |
+
 ### R4 — `fetch_page` (12)
 
 `REQ-021` `REQ-021a` `REQ-021b` `REQ-021c` `REQ-021d` `REQ-021e` `REQ-021f`
@@ -550,6 +558,36 @@ No REQ ownership. Runs the full suite, `check-pack`, debate-club Arena, TDQS,
 intent citations, report fixtures, and the fixture-freshness check; records exit
 status and any new evidence.
 
+#### M1 machine-evidence record (2026-11-10)
+
+HEAD `deab019`, version 2026.11.7, tree clean except this increment's directory.
+Gating legs are exit-status evidence; informational legs record their parsed
+result because their exit code is always 0.
+
+| Leg | Status | Result |
+|---|---|---|
+| `npm run check` (full) | **exit 0**, 51.2 s | 22 gates PASS; `vitest` 106 files / 1101 tests; Arena 3 / 37; `check-pack` 358 files; `audit` exit 0 with 4 low advisories |
+| `npm run check-pack` | exit 0 | 358 files, 392746 bytes, 7 tools |
+| `npm run test-debate-club` | exit 0 | 3 files / 37 tests |
+| `npm run audit` | exit 0 | 4 low-severity advisories (no high/critical) |
+| `npm run check-tdqs -- --report` | informational | 7 tools, 0 shadow candidates, 0 contradiction candidates, 0 violations |
+| `npm run check-gate-coverage -- --report` | informational | 118 G1 REQs: 117 cited, 1 exempt, 0 waived, 0 uncovered |
+| `npm run check-fixtures -- --now=2026-11-10` | informational | 8 fixtures, 0 stale (max 78 days of a 90-day cadence) |
+| Other fast gates (inside the full run) | exit 0 each | typecheck, version-sync, validate-spec, validate-readme, check-roadmap, check-non-goals, check-report-fixtures, check-script-discipline, check-tdqs, check-intent-citations, check-harness-expectations, check-gate-coverage, check-skill-harness, test, test-push-pipeline, check-shipped-kb-empty, check-gate-table, check-loop-artifacts, typecheck:scripts — the runner stops at the first failure, so completing the run proves each exited 0 |
+
+#### M1 reconciliation (2026-11-10)
+
+| Check | Result |
+|---|---|
+| §4 REQ verdict rows | 143 rows over **142 distinct IDs**; 0 missing from the §9.5 manifest, 0 extra. `REQ-106` carries two rows by design. One qualified cell, `REQ-091` = `holds` (live `NOT_RUN`), is the recorded live-publication caveat, not a gap |
+| Finding closure | 272 register rows, 272 distinct IDs; all **119** `finding:<ID>` citations in verdict tables resolve to a register row |
+| Severity census | P0 4 (all `Resolved`), P1 81, P2 97, P3 90 |
+| Disposition census | `Resolved` 10, `Scheduled-roadmap` 168, `Closed-P3` 93, `Deferred-R1` 1; 0 `Deferred-by-user` |
+| Open P0 | **0** |
+| Prose units | 22/22 ownership units now carry a row (the §1 goal 3 row was added at this close, F-M1-1); every chunk `Spec:` line's sections are represented by a prose row or that chunk's REQ rows |
+| Roadmap mapping | 74 rows name their ID in a `ROADMAP.md` section; 42 (R2 27 + R3 15) are covered only by that section's chunk-register trigger; 52 (R4 18, R5 27 + 1 malformed, R6 6) have no roadmap home — census recorded under F-M1-2. `F-R5-B-8` was unparseable (unescaped pipe characters inside its formula) and was repaired |
+| Chunk closure | R1–R9 closed with verdict tables, register blocks, and terminal AAR tokens; M1 closed by this record |
+
 ## Status board
 
 | Chunk | Spec | REQs | Status | Next trigger |
@@ -563,7 +601,7 @@ status and any new evidence.
 | R7 | §1 goal 5, §4.7, §10.2–10.3, App D | 17 | **closed 2026-11-09** | R8 |
 | R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | **closed 2026-11-10** | R9 |
 | R9 | §1 preamble/North Star, §3 SR-011/SR-012, §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | **closed 2026-11-10** | M1 |
-| M1 | all | — | not started | (program close) |
+| M1 | all | — | **closed 2026-11-10** | — (program closed; roadmap item retired) |
 
 ## Finding register
 
@@ -674,7 +712,7 @@ work.
 | F-R4-C-6 | R4 | Metadata date detection is skipped when HEAD redirects or returns 405, so meta/jsonld/time-tag evidence is not consulted (`src/index.ts:791`) | P2 | `Scheduled-roadmap` |
 | F-R4-C-7 | R4 | Date detection is on by default and issues its own HEAD plus a second GET, so a plain fetch costs three outbound requests (`config.json:266`; `src/index.ts:780-803`) | P3 | `Closed-P3` |
 | F-R4-C-8 | R4 | The page cap bounds returned pages, not outbound fetches; refused/unfetchable hops do not consume the cap (`src/index.ts:1065,1081-1086`) | P2 | `Scheduled-roadmap` |
-| F-R4-C-9 | R4 | Crawl and extract use a raw `text.slice` instead of `maybeTruncate`, so truncation metadata is absent (REQ-004, R1-owned) (`src/index.ts:1092,1163`) | P2 | `Deferred-R1` |
+| F-R4-C-9 | R4 | Crawl and extract use a raw `text.slice` instead of `maybeTruncate`, so truncation metadata is absent (REQ-004) (`src/index.ts:1092,1163`) | P2 | `Scheduled-roadmap` |
 | F-R4-C-10 | R4 | REQ-021d/021e/021g branch tests carry bare tags with no named clause tag (`src/extract.test.ts:1`; `src/fetch-cache.test.ts:1`) | P2 | `Scheduled-roadmap` |
 | F-R4-C-11 | R4 | Nested microdata is flattened into the parent item, misattributing properties (`src/extract.ts:38-45`) | P2 | `Scheduled-roadmap` |
 | F-R4-C-12 | R4 | `detect_date:false` still returns a cached date on a cache hit (`src/index.ts:1030-1032`) | P3 | `Closed-P3` |
@@ -714,7 +752,7 @@ work.
 | F-R5-B-5 | R5 | Authority weights and calibration options are never exercised through `reconcileClaims`; a mis-wired argument at any of the four call sites would pass the suite (`corroborate.test.ts:128-384`; `src/corroborate.ts:538-544,628,695,745`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-6 | R5 | The calibration tool hardcodes `{enabled:true}` and never reads `secondary_only_cap`, so its Brier score and curve can diverge from the server's configured correction (`scripts/calibrate-confidence.ts:71-75`; `config.json:339`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-7 | R5 | The calibration measurement never runs in a gate: no `calibrat*` package script and no calibration gate in the manifest (`package.json`; `scripts/lib/gate-manifest.ts`) | P3 | `Closed-P3` |
-| F-R5-B-8 | R5 | `textSimilarity` divides by `min(|A|,|B|)` (asymmetric containment), so a snippet contained in a long article merges into that article's family (`src/source-family.ts:69-76`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-8 | R5 | `textSimilarity` divides by the smaller token set (asymmetric containment), so a snippet contained in a long article merges into that article's family (`src/source-family.ts:69-76`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-9 | R5 | Shipped `web_search:0.7` turns the two-family base 0.7 into 0.49, below the confirm gate, contradicting the §8.2 ladder example and untested at reconcile level (`src/corroborate.ts:371-378`; `config.json:351`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-10 | R5 | `family_similarity_threshold` configurability is unproven: the only explicit pass is the default 0.9 (`source-family.test.ts:19`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-11 | R5 | `reliabilityCurve` bands are half-open and `brierScore([])` returns 0, presenting no data as perfect calibration (`src/calibration.ts:45-72`) | P3 | `Closed-P3` |
@@ -851,6 +889,9 @@ work.
 | F-R9-D-1 | R9 | Appendix C's preamble claims "every rule is enforceable by G3", but C.4, C.9, and C.10 have no G3 carrier — `validate-spec` never reads `CHANGELOG.md` (`infobroker.md:1687-1689`, `:1736-1741`) | P1 | `Scheduled-roadmap` |
 | F-R9-D-2 | R9 | §9.3 advertises a live G2 smoke lane, but no shipped script or package task implements it (`infobroker.md:1106-1111`; no G2 runner in `scripts/` or `package.json`) | P3 | `Closed-P3` |
 | F-R9-Z-1 | R9 | Tracker drift: the R9 `Code:` line named the nonexistent `src/tool-surface.ts` and omitted `clause-coverage.ts`, `feature-taxonomy.ts`, the gate scripts, the `index.ts` registration/spec regions, and the Arena carrier; the `Spec:` line and status-board cell omitted §1 preamble/North Star and §3 SR-011/SR-012 | P3 | **Resolved 2026-11-10** |
+| F-M1-1 | M1 | Tracker drift: the prose-ownership table assigns §1 goal 3 (provider intelligence) to R3 (`worklist.md:86`) while R3's D28 records §7.4 only (`docs/plans/2026-11-09-full-review-r3/plan.md:33`), so the unit carried no verdict row through nine chunks | P3 | **Resolved 2026-11-10** — row recorded at the program close from R3's REQ-020a/020c/020h verdicts plus F-R2-27 (`worklist.md` R3 prose table) |
+| F-M1-2 | M1 | Disposition drift: 52 rows assert `Scheduled-roadmap` with no roadmap home (R4 18, R5 27 plus one malformed, R6 6); R2 27 and R3 15 are covered only by their section's chunk-register trigger; the `F-R5-B-8` row was unparseable (unescaped pipe characters inside its formula, `src/source-family.ts:69-76`) | P3 | `Closed-P3` — census recorded in the M1 record; the malformed row is repaired; re-disposition deferred to a remediation pass |
+| F-M1-3 | M1 | Orphaned deferral: R4 dispositioned F-R4-C-9 `Deferred-R1` although R1 (the REQ-004 owner) closed before R4 filed it, so the deferral never landed on a live surface (`worklist.md` F-R4-C-9; `src/index.ts:1092,1163`) | P3 | **Resolved 2026-11-10** — re-targeted `Scheduled-roadmap` and added to the R4 extraction remediation section and its trigger |
 
 ## Program risks / notes
 
