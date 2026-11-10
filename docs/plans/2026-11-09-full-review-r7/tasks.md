@@ -43,4 +43,5 @@
 - [x] Roadmap trigger advanced to R8; six R7 remediation sections added.
 - [x] `aar.md` rewritten with the terminal token.
 - [x] `check` on the finished tree → recorded.
-- [ ] Split commits; `npm run session:close`.
+- [x] Split commits; `npm run session:close` → fast gates PASS (21.5 s), run `8f5be18`.
+- [x] Final full `npm run check` on the committed tree → PASS (52.9 s).
