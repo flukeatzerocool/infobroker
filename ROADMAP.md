@@ -20,7 +20,7 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R9 after chunk R8 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk M1 after chunk R9 closed; close this item when M1's machine-evidence pass is green.
 
 ## R6 `manage_kb` action-contract remediation
 
@@ -195,6 +195,27 @@
 - Assert REQ-099's owner-only creation of an absent keys directory (F-R8-F-2).
 
 **Trigger:** start after the sweep reaches R9; close when F-R8-F-1 and F-R8-F-2 are `Resolved`.
+
+## R9 traceability and taxonomy gate strength
+
+- Make the clause guard require one named tag per "or"-joined branch rather than two tags for any branch count (F-R9-A-1), and extend the taxonomy check to assert "exactly one feature area" per REQ plus a gate column that matches the §9.5 manifest (F-R9-C-1).
+- Each change ships with a regression test that fails before and passes after, plus a CHANGELOG entry and a re-run of `validate-spec`.
+
+**Trigger:** start after chunk M1 closes; close when F-R9-A-1 and F-R9-C-1 are `Resolved`.
+
+## R9 tool-quality reporting and evidence
+
+- Add the server-side per-tool report REQ-106 requires — parameter counts, schema description coverage, invocation cost, and definition size — or narrow the REQ to the gate-side report (F-R9-B-1).
+- Make the annotation-contradiction branch fail the conformance gate, or narrow REQ-106's deterministic layer to exclude it (F-R9-B-2), and add an assertion for REQ-089's behavioral-consequence clause (F-R9-B-3).
+
+**Trigger:** start after chunk M1 closes; close when F-R9-B-1, F-R9-B-2, and F-R9-B-3 are `Resolved`.
+
+## R9 default-consistency and provenance enforcement
+
+- Reconcile every spec-declared tool default against its schema and every config-vs-tool limit pair (F-R9-C-2), assert the token footprint's derivation from measured responses (F-R9-C-3), and give Appendix C's provenance rule a carrier or narrow its "enforceable by G3" preamble (F-R9-D-1).
+- Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk M1 closes; close when F-R9-C-2, F-R9-C-3, and F-R9-D-1 are `Resolved`.
 
 ## Non-goals
 
