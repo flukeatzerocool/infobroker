@@ -10,6 +10,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { handleHelp } from "./lib/args.js";
@@ -39,12 +40,33 @@ interface RunRecord {
   error?: string;
 }
 
-function parseEnvelope(text: string): { findings?: Array<{ claim?: string; topic?: string }> } | null {
+export interface VerifyParse {
+  ok: boolean;
+  claims: string[];
+  error?: string;
+}
+
+/** Classify a `verify_claims` tool response. An `[ERROR]` body is a failed run,
+ * even though the MCP transport delivers it as ordinary content. */
+export function parseVerifyEnvelope(text: string): VerifyParse {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[ERROR]")) {
+    return { ok: false, claims: [], error: trimmed.slice("[ERROR]".length).trim() };
+  }
+  const body = trimmed.startsWith("[OK] ") ? trimmed.slice(5) : trimmed;
   try {
-    const body = text.startsWith("[OK] ") ? text.slice(5) : text;
-    return JSON.parse(body);
+    const parsed = JSON.parse(body) as { findings?: Array<{ claim?: string; topic?: string }> };
+    if (!Array.isArray(parsed.findings)) {
+      return { ok: false, claims: [], error: "response carried no findings array" };
+    }
+    return {
+      ok: true,
+      claims: parsed.findings.map((finding) => finding.claim ?? finding.topic ?? "").filter(Boolean),
+    };
   } catch {
-    return null;
+    // A non-JSON body is an unreadable response; treat it as a failed run so the
+    // topic is recorded as an error rather than as a successful empty run.
+    return { ok: false, claims: [], error: "response was not JSON" };
   }
 }
 
@@ -127,10 +149,9 @@ async function main(): Promise<void> {
         const text = Array.isArray(result.content)
           ? result.content.map((item) => ("text" in item && typeof item.text === "string" ? item.text : "")).join("")
           : "";
-        const payload = parseEnvelope(text);
-        record.claims = (payload?.findings ?? [])
-          .map((finding) => finding.claim ?? finding.topic ?? "")
-          .filter(Boolean);
+        const payload = parseVerifyEnvelope(text);
+        if (!payload.ok) throw new Error(payload.error ?? "verify_claims failed");
+        record.claims = payload.claims;
         record.delta = diffClaims(previous, record.claims);
       } catch (error) {
         record.status = "error";
@@ -148,7 +169,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(2);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(2);
+  });
+}

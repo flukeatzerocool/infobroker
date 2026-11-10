@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.7 — R7 review: a failed watchlist topic is recorded as an error
+
+- `monitor-watchlist` now classifies a `verify_claims` response by its status
+  prefix: an `[ERROR]` body or an unreadable body is a failed run, recorded
+  `status:"error"` with its message, instead of a successful run with empty
+  claims (REQ-125). Covered by a new regression test over the parser.
+
 ## 2026.11.7 — R5 `verify_claims` review: snapshot basis follows the stored text
 
 - A citation-grade snapshot now reports `snippet` as its hash basis when the
