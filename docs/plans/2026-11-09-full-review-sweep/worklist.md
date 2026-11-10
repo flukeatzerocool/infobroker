@@ -496,9 +496,53 @@ e-block, e-off, f-audit, f-confinement, f-corrupt-state, g all PASS.
 `REQ-055` `REQ-077` `REQ-078` `REQ-080` `REQ-081` `REQ-089` `REQ-090`
 `REQ-092` `REQ-106`
 
-Spec: §3 Terminology, §4.3 (those IDs), §4.8, §9.1–9.5, App B–C.
-Code: `src/tdqs.ts`, `src/tool-surface.ts`, `src/intent-citations.ts`,
-`scripts/validate-spec.ts`, `scripts/check-*.ts`.
+Spec: §1 preamble and North Star, §3 SR-011/SR-012, §3 Terminology, §4.3 (089/090/092/106), §4.8, §9.1–9.5, App B–C.
+Code: `src/tdqs.ts`, `src/clause-coverage.ts`, `src/lib/feature-taxonomy.ts`,
+`src/intent-citations.ts` (evidence only — REQ-107 is R7's), `src/tool-surface.test.ts`
+(there is no `src/tool-surface.ts`), the tool-registration literals and the
+`spec`-action token-footprint region of `src/index.ts`, `scripts/validate-spec.ts`,
+`scripts/check-tdqs.ts`, `scripts/check-intent-citations.ts`,
+`scripts/check-gate-coverage.ts`, `scripts/check-gate-table.ts`, and
+`debate-club/src/mcp-contract.test.ts` (carries REQ-081).
+
+#### R9 verdict table (2026-11-10)
+
+Reviewed at standard depth; split **not triggered** (34 distinct code anchors —
+below the 120 threshold — and zero probe-dependent clusters, since every REQ
+resolves to a gate, a test, or a file-presence artifact). Evidence: baseline
+`npm run check` PASS (full, 51.7 s); carrying tests 5 files / 56 tests PASS;
+Arena 3 files / 37 tests PASS; `check:fast` PASS (19.7 s); TDQS report over the
+seven live tools.
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-055 Spec-code traceability | `finding:F-R9-A-1` | gate: `scripts/validate-spec.ts:128-155` (every §4 REQ cited, artifact/meta/waiver aware), `:161-176` (every `src/` file cited), `:321-370` (clause guard); the guard delegates to `src/clause-coverage.ts:68-73`, which passes any REQ with ≥2 tags whenever it has ≥2 "or" branches — a REQ with three or more branches passes on two tags, while AGENTS.md requires one tag per branch |
+| REQ-077 REQ manifest | `holds` | gate: `scripts/validate-spec.ts:427-457` asserts both directions (body→manifest, manifest→body) and `:464` resolves every REQ token in the spec to the manifest |
+| REQ-078 Feature taxonomy | `finding:F-R9-C-1` | gate: `scripts/validate-spec.ts:534-555` asserts presence only — every tool and every REQ appears, but "exactly one feature area" is not asserted, and the §D gate column is unchecked: group 6 claims `G0` (`infobroker.md:1787`) while its REQs carry G0+G1 and G1+G3 (`:1211-1214`). The README link is gated (`scripts/validate-readme.ts:412`) |
+| REQ-080 Tool default consistency | `finding:F-R9-C-2` | gate: `scripts/validate-spec.ts:764-800` — check A scans `config.X ?? <digit>` in four files only; check B reconciles exactly two defaults (`search_web` and `manage_kb` `max_results`). `fetch_page.max_length` (`src/index.ts:1773`), `verify_claims.max_iterations`/`confidence_threshold` (`:1865-1866`), and `get_citations.max_results` (`:2490`) are unverified, and no config-vs-tool limit pair beyond `max_results` is reconciled |
+| REQ-081 Token footprint | `finding:F-R9-C-3` | live: `src/index.ts:1596-1618` derives `tool_schema_bytes` from the live registration and `median_response_bytes` from the bounded `responseBytes` window (`:82,150-160`); Arena `debate-club/src/mcp-contract.test.ts:386-391` asserts only presence, `>0`, and `>=0` — the "derived … rather than static literals" clause is unasserted, so a hardcoded number would pass |
+| REQ-089 Tool-definition quality | `finding:F-R9-B-3` | gate: `scripts/validate-spec.ts:809-838` and live test `src/tool-surface.test.ts:140-205` assert purpose, when-to/when-not plus an alternative, `[OK]`/`[ERROR]`, annotation presence, parameter descriptions, and coupling notes; descriptions do disclose state effects, external calls, rate limits, auth, and destructive operations (e.g. `src/index.ts:1707,1824,1978`), but no assertion exercises the REQ's behavioral-consequence clause — the evidence is static-only |
+| REQ-090 Tool naming convention | `holds` | live test: `src/tool-surface.test.ts:120-137` asserts the seven-slug surface, the `verb_noun` shape, and a known operation verb; the static gate (`scripts/validate-spec.ts:812-820`) keys every block on `infobroker_<slug>` |
+| REQ-092 Tool-definition quality bar | `finding:F-R9-B-3` | gate: the conformance gate **exists** (`scripts/validate-spec.ts:803-840` static bar + `scripts/check-tdqs.ts` structural layer) and fails on a departing definition; what it enforces is the structural subset of the REQ-089 bar, so the quality-bar clause is co-extensive with F-R9-B-3 |
+| REQ-106 TDQS 1.2 conformance | `finding:F-R9-B-1` | gate: `scripts/check-tdqs.ts:118-135` reports per-tool `invocationCost`, `definitionBytes`, `schemaDescriptionCoverage`, depth, and unions, and gates structural violations; **no server-side report** of parameter counts, description coverage, invocation cost, or definition size exists — `inspect_providers spec` reports tool-schema bytes and median response only (`src/index.ts:1613-1618`), and `paramCount` (`src/tdqs.ts:270`) is computed but never emitted |
+| REQ-106 TDQS 1.2 conformance | `finding:F-R9-B-2` | gate: the annotation-contradiction branch is report-only — `src/tdqs.ts:424-438` labels the candidates as heuristic and `scripts/check-tdqs.ts:134` fails only on `structuralViolations`, so a description that contradicts its annotations passes the gate although the REQ places that clause inside the layer the gate SHALL enforce |
+
+#### R9 prose verdict table (2026-11-10)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §1 preamble and North Star | `holds` | goal-by-goal evidence is in the closed chunks (R2 goals 1–2, R3 goal 3, R5 goal 4, R6 goal 6, R7 goal 5); the North Star's "doesn't collect secrets, cultivate sources, or pick sides" matches the provider-tier and audit model (R8); no drift found |
+| §3 SR-011 Contracts, not implementations | `holds` | the rule's own tests are enforced partly mechanically (parameter types, standalone `Default:`, backtick catalogues, `REQ-body hygiene` at `scripts/validate-spec.ts:200-320`) and partly by review; the text claims gate enforcement only for "a verification gate catches a deviation", which holds |
+| §3 SR-012 Red-team every REQ | `holds` | self-describing authoring discipline that explicitly attaches no `_Check:_`; the spec does not claim a mechanical carrier, so no contradiction |
+| §3 Terminology | `holds` | spot-checked the load-bearing terms: provider status maps to `REQ-013` (R2), freshness tier and chunk to `REQ-060`/`REQ-065` (R6), verdict and agreement map to `REQ-026`/§8.2 (R5), routing priority to `REQ-020c` (R3); no stale definition found |
+| §9.1 G0 MCP conformance | `holds` | handshake, `tools/list`, and `tools/call` are exercised live by `src/structured-output.test.ts:180-225`, `src/tool-surface.test.ts:84-104`, and `debate-club/src/client.ts:146-152`; invalid params return `invalid_input` envelopes (`debate-club/src/mcp-contract.test.ts:163,340,352,634`); protocol negotiation is SDK-provided by `McpServer` and observed by every handshake |
+| §9.2 G1 integration tests | `holds` | every named scenario resolves to a carrying test or gate; the fixture bullet matches `scripts/push-pipeline.sh:982` and `test-fixtures/fixtures-meta.json` (90-day cadence). The update-preservation bullet has no carrier, but that is F-R8-A-1's (R8, open) and is not re-filed (D80) |
+| §9.3 G2 live smoke tests | `finding:F-R9-D-2` | prose: the section advertises live endpoint runs with key-skip semantics, but no shipped script or package task implements G2 (searched `scripts/`, `package.json`, and the gate manifest — `check-fixtures` is the only live-adjacent task); the section is marked optional, so this is informational |
+| §9.4 G3 spec validation gate | `holds` | every named gate exists in `scripts/lib/gate-manifest.ts` (`validate-spec` `:41`, `check-tdqs` `:73`, `check-intent-citations` `:78`, `check-gate-coverage` `:90`, `check-gate-table` `:135`) and `check-gate-table` reconciles the AGENTS table; the REQ-053/051/052 artifact checks are implemented in `validate-spec` |
+| §9.5 REQ Manifest | `holds` | the table's own integrity is gated bidirectionally (`scripts/validate-spec.ts:427-464`); a manifest-table defect that violated REQ-077 would be filed there (D84), and none was found |
+| Appendix B REQ authoring conventions | `holds` | the stated mechanical limits are exactly the ones `scripts/validate-spec.ts:200-320` enforces (800 chars, 8 sentences, 8 SHALL, one paragraph, 5 backticks, ID form, no standalone `Default:`), and the judgment dimensions are warnings as the appendix says |
+| Appendix C SDD discipline | `finding:F-R9-D-1` | the preamble claims "every rule is enforceable by G3 (§9.4)", but C.4 (update-after-change), C.9 (release discipline), and C.10 (CHANGELOG/REQ provenance) have no G3 carrier — `scripts/validate-spec.ts` never reads `CHANGELOG.md`, and C.9 is enforced by the push pipeline instead; the preamble overstates G3's reach |
+
 
 ### M1 — Machine evidence
 
@@ -518,7 +562,7 @@ status and any new evidence.
 | R6 | §1 goal 6, §4.9 | 29 | **closed 2026-11-09** | R7 |
 | R7 | §1 goal 5, §4.7, §10.2–10.3, App D | 17 | **closed 2026-11-09** | R8 |
 | R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | **closed 2026-11-10** | R9 |
-| R9 | §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | not started | M1 |
+| R9 | §1 preamble/North Star, §3 SR-011/SR-012, §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | **closed 2026-11-10** | M1 |
 | M1 | all | — | not started | (program close) |
 
 ## Finding register
@@ -797,6 +841,16 @@ work.
 | F-R8-F-2 | R8 | REQ-099's "designated directory SHALL be created with owner-only permissions when absent" clause has no assertion (`src/kb-crypto.ts` key-file creation) | P2 | `Scheduled-roadmap` |
 | F-R8-F-3 | R8 | Key confinement is refused with `internal_error` rather than a confinement-specific code; REQ-002 taxonomy is R1-owned (D77 note) (`src/index.ts` manage_kb encryption branch) | P3 | `Closed-P3` |
 | F-R8-Z-1 | R8 | Tracker drift: the R8 `Code:` line omitted `call-log.ts`, `session-stats.ts`, `lib/{atomic-write,sanitize-error}.ts`, the `index.ts` handler regions, and the gate scripts; the `Spec:` line and status-board cell omitted §3 SR-002/SR-003/SR-007 | P3 | **Resolved 2026-11-10** |
+| F-R9-A-1 | R9 | REQ-055's clause guard requires ≥2 tags for any REQ with ≥2 "or" branches instead of one tag per branch (`src/clause-coverage.ts:68-73`; `scripts/validate-spec.ts:321-370`) | P1 | `Scheduled-roadmap` |
+| F-R9-B-1 | R9 | REQ-106's server-reporting clause is unimplemented: no tool response reports per-tool parameter counts, description coverage, invocation cost, or definition size (`src/index.ts:1613-1618`; `src/tdqs.ts:270` computes `paramCount`, never emitted) | P1 | `Scheduled-roadmap` |
+| F-R9-B-2 | R9 | REQ-106's annotation-contradiction clause is report-only: candidates never fail `check-tdqs`, which exits on `structuralViolations` alone (`src/tdqs.ts:424-438`; `scripts/check-tdqs.ts:134`) | P1 | `Scheduled-roadmap` |
+| F-R9-B-3 | R9 | REQ-089's behavioral-consequence clause (state effects, external calls, rate limits, auth, destructive ops) has no asserting test; the bar gate and live test assert only structural markers (`scripts/validate-spec.ts:809-838`; `src/tool-surface.test.ts:140-205`) | P1 | `Scheduled-roadmap` |
+| F-R9-C-1 | R9 | REQ-078's taxonomy gate checks presence only: "exactly one feature area" is unasserted, and §D group 6 declares gate `G0` while its REQs carry G0+G1 and G1+G3 (`infobroker.md:1787` vs `:1211-1214`; `scripts/validate-spec.ts:534-555`) | P1 | `Scheduled-roadmap` |
+| F-R9-C-2 | R9 | REQ-080's default-consistency gate reconciles two defaults and scans one fallback pattern in four files; `fetch_page.max_length`, `verify_claims.max_iterations`/`confidence_threshold`, and `get_citations.max_results` are unchecked (`scripts/validate-spec.ts:764-800`) | P1 | `Scheduled-roadmap` |
+| F-R9-C-3 | R9 | REQ-081's "derived … rather than static literals" clause is unasserted; the Arena test checks presence and positivity only (`debate-club/src/mcp-contract.test.ts:386-391`) | P2 | `Scheduled-roadmap` |
+| F-R9-D-1 | R9 | Appendix C's preamble claims "every rule is enforceable by G3", but C.4, C.9, and C.10 have no G3 carrier — `validate-spec` never reads `CHANGELOG.md` (`infobroker.md:1687-1689`, `:1736-1741`) | P1 | `Scheduled-roadmap` |
+| F-R9-D-2 | R9 | §9.3 advertises a live G2 smoke lane, but no shipped script or package task implements it (`infobroker.md:1106-1111`; no G2 runner in `scripts/` or `package.json`) | P3 | `Closed-P3` |
+| F-R9-Z-1 | R9 | Tracker drift: the R9 `Code:` line named the nonexistent `src/tool-surface.ts` and omitted `clause-coverage.ts`, `feature-taxonomy.ts`, the gate scripts, the `index.ts` registration/spec regions, and the Arena carrier; the `Spec:` line and status-board cell omitted §1 preamble/North Star and §3 SR-011/SR-012 | P3 | **Resolved 2026-11-10** |
 
 ## Program risks / notes
 
