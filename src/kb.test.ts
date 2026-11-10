@@ -237,15 +237,23 @@ describe("report storage and retrieval (REQ-060e, REQ-060f)", () => {
   it("resolveCollection honors explicit > env var > config default > literal default (REQ-065)", () => {
     const prevEnv = process.env["INFOBROKER_KB_COLLECTION"];
     try {
+      // A configured default distinct from the literal fallback: with
+      // `default_collection: "default"` the two tiers were indistinguishable.
+      initKb(makeConfig({ default_collection: "config-col", storage_path: join(dir, "collection-tiers") }));
       expect(resolveCollection("explicit")).toBe("explicit");
       process.env["INFOBROKER_KB_COLLECTION"] = "env-col";
       expect(resolveCollection(undefined)).toBe("env-col");
       expect(resolveCollection("explicit")).toBe("explicit");
       delete process.env["INFOBROKER_KB_COLLECTION"];
+      expect(resolveCollection(undefined)).toBe("config-col");
+
+      // An empty configured default is falsy, so the literal tier is reached.
+      initKb(makeConfig({ default_collection: "", storage_path: join(dir, "collection-literal") }));
       expect(resolveCollection(undefined)).toBe("default");
     } finally {
       if (prevEnv === undefined) delete process.env["INFOBROKER_KB_COLLECTION"];
       else process.env["INFOBROKER_KB_COLLECTION"] = prevEnv;
+      initKb(makeConfig());
     }
   });
 });
