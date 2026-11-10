@@ -393,9 +393,42 @@ legs (a)–(d) and constrained-heap leg (g) PASS; cross-tool stdio probe
 `REQ-114` `REQ-115` `REQ-117` `REQ-116` `REQ-125` `REQ-118` `REQ-119`
 `REQ-120` `REQ-120a` `REQ-126`
 
-Spec: §4.7, §10.2–10.3, App D.
-Code: `skills/`, `instructions/`, `README.md`, `src/report-*.ts`,
-`src/monitor-*.ts`, `scripts/validate-readme.ts`.
+Spec: §1 goal 5, §4.7, §10.2–10.3, App D (group 7).
+Code: `instructions/search-preferences.md`, `skills/{infobroker,analysis-loop,summarization,technical-writing,proofreading,translation}/` (six `SKILL.md` files plus 16 reference files), `README.md`, `src/lib/report-{manifest,render,delta,export}.ts`, `src/lib/watchlist.ts`, `src/intent-citations.ts`, `scripts/{validate-readme,validate-report,render-report,check-report-fixtures,check-intent-citations,monitor-delta,monitor-watchlist}.ts`, `test-fixtures/reports/` (including `delta/`).
+Reading list: 7 carrying tests (`report-contract`, `report-modality`, `report-render`, `monitor-delta`, `report-export`, `watchlist`, `intent-citations`) plus `scripts/monitor-watchlist.test.ts`; gates `validate-spec` (:576-760), `check-report-fixtures`, `check-intent-citations`, `validate-readme`, `check-skill-harness`.
+
+#### R7 verdict table (2026-11-09)
+
+Reviewed at standard depth; split not triggered (34 distinct anchors, 1 probe-dependent cluster E). Evidence: 7 carrying test files / 60 tests PASS plus the new `monitor-watchlist.test.ts` / 3 tests PASS; Arena 3 files / 37 tests PASS; offline probes (a)–(e) PASS.
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-050 `search-preferences.md` | `finding:F-R7-A-1` | static: the file states KB-first recall, external fallback, and the `manage_kb` reservation (`instructions/search-preferences.md:17-22`); gate: `scripts/validate-spec.ts:580-585` asserts only a KB token and warns, so the content clauses can be deleted without failing |
+| REQ-051 Orchestrator Skill | `finding:F-R7-A-2` | static: two pipelines, escalation, manifest, quality gate, and archive present (`skills/infobroker/SKILL.md:69-167`); gate: `validate-spec.ts:589-596` warns on the KB phase and errors only on a completion-token clause REQ-051 does not state |
+| REQ-052 Bundled Skills | `holds` | static/gate: four pipeline skills referenced by name and `workflows.md` cited (`SKILL.md:83-102,150-158`; `validate-spec.ts:688-696`); P3 gate-presence note F-R7-B-6 |
+| REQ-053 Pipeline Reference | `finding:F-R7-A-5` | static: five artifacts present; `journeys.md` maps intent and tools but not a recovery procedure per journey (`journeys.md:10-50`); gate checks presence + Mermaid only (`validate-spec.ts:699-709`, F-R7-A-6) |
+| REQ-088 Gated-Analysis Selection | `finding:F-R7-B-2` | static/gate: eight techniques each with Fit/Method/Output and a selection mechanism (`techniques.md:30-139`; `SKILL.md:188-210`); no technique is mapped to a family and the gate counts headings (`validate-spec.ts:726-729`) |
+| REQ-115 Confidence Model | `finding:F-R7-B-1` | test/gate: three labels, lexicon, and independent grades hold (`confidence.md:8-69`); the analysis skill assigns a fourth label, `No confidence` (`skills/analysis-loop/SKILL.md:180`) |
+| REQ-114 Report Manifest | `finding:F-R7-C-5` | gate: fixtures reject shape, audience, placement, and confidence vocabulary; `manifest-likelihood` and `manifest-verdict` have no fixture or test (`report-manifest.ts:306-310`) |
+| REQ-116 Report Quality Gate | `finding:F-R7-C-1` | test/gate: skeleton, unresolved citation, uncited finding, and attribution branches hold; `register-url` is emitted at `report-manifest.ts:413-415` with no fixture or asserting test |
+| REQ-118 Provenance and Grading | `finding:F-R7-C-3` | test/gate: dates, grades, DOI, as-of, handling, and supersession hold; the `undeterminable` publication-date branch has no positive or negative fixture (`report-manifest.ts:438-440`) |
+| REQ-119 Shape-Aware Contract | `finding:F-R7-C-2` | static/test: the Literature Review block is enforced; `SHAPE_BLOCKS["Fact-Check"]` is empty (`report-manifest.ts:136-137`) while `report-template.md:125-136` defines a verdict table, so a non-conforming Fact-Check report validates (`good-report.md`) |
+| REQ-120 Delivery Verification | `finding:F-R7-D-1` | static/gate: re-verify-before-gate, batch claims, and post-translation ordering hold (`validate-spec.ts:597-606`); `pipeline-map.md:62` defines the TAIL without TRANSLATE, contradicting SKILL.md |
+| REQ-120a Archive Tail | `finding:F-R7-D-2` | static/gate: ARCHIVE names sources and `meta.report_id` and gates the token (`validate-spec.ts:609-620`); `workflows.md:60-70` places ARCHIVE before POLISH/TRANSLATE/REVALIDATE |
+| REQ-117 Monitoring Baseline/Delta | `finding:F-R7-E-1` | static: `report-delta.ts:24-85` is a pure Markdown diff — no receipt baseline, no `verify_report` revalidation, no source drift/unverifiable set; probe (a) confirms only id-set source diffing |
+| REQ-125 Watchlist Runner | `finding:F-R7-E-4` | test: parse/due/diff hold (`src/lib/watchlist.test.ts`); a failed `verify_claims` was recorded `ok` — **fixed in-session** and covered by `scripts/monitor-watchlist.test.ts`; dry-run unobserved (F-R7-E-5) |
+| REQ-126 Report Export | `finding:F-R7-F-2` | test/static: JSON/CSV/HTML coverage and field presence hold (`report-export.test.ts`); the library exports do not enforce validation and discard `validation.ok` (`report-export.ts:34-56`) |
+| REQ-054 User Documentation | `finding:F-R7-G-3` | static/gate: setup, snippet, pipeline overview, and add-provider sections hold; the provider-enable instruction points at the shipped `config.json` instead of the user layer (`README.md:476-477` vs `:516-522`) |
+| REQ-107 Routing Citations | `finding:F-R7-G-2` | gate: tool/operation resolution, coverage, and gate failure on unresolved hold; a renamed **bare** tool in a skill file is ignored (`intent-citations.ts:89-96`), so the acceptance criterion fails for that shape |
+
+#### R7 prose verdict table (2026-11-09)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §1 goal 5 writing pipeline | `holds` | `infobroker.md:33` matches the six shipped skills and the orchestrator routing (`SKILL.md:46-67`) |
+| §10.2 client integration | `holds` | both snippets match the shipped entry points (`package.json:7-9,36`; `bin/infobroker.js:2`) |
+| §10.3 what replaces what | `finding:F-R7-G-4` | `infobroker.md:1430` lists seven `manage_kb` actions but omits the live `claims` and `verify_report` (`src/index.ts:1980`) |
+| Appendix D group 7 | `holds` | `infobroker.md:1788` lists exactly the 17 R7 REQs and gate G3 |
 
 ### R8 — Deployment, state, security (15)
 
@@ -434,10 +467,10 @@ status and any new evidence.
 | R4 | §4.3 (021 family), §6.4 | 12 | **closed 2026-11-10** | R5 |
 | R5 | §1 goal 4, §3 SR-008, §4.3 (026 family, 121–123, 130, 027), §5.5, §8.1–8.3 | 15 | **closed 2026-11-09** | R6 |
 | R6 | §1 goal 6, §4.9 | 29 | **closed 2026-11-09** | R7 |
-| R7 | §4.7, §10.2–10.3, App D | 17 | not started | R6 closed |
-| R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | not started | R7 closed |
-| R9 | §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | not started | R8 closed |
-| M1 | all | — | not started | R9 closed |
+| R7 | §1 goal 5, §4.7, §10.2–10.3, App D | 17 | **closed 2026-11-09** | R8 |
+| R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | not started | R9 |
+| R9 | §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | not started | M1 |
+| M1 | all | — | not started | (program close) |
 
 ## Finding register
 
@@ -666,6 +699,48 @@ work.
 | F-R6-F-4 | R6 | A snippet-basis receipt source without `retrieved_at` loses the retrieval time from the canonical manifest (`src/kb-receipt.ts:293`) | P2 | `Scheduled-roadmap` |
 | F-R6-F-5 | R6 | `grade` and `retrieved_at` are stored without the length bounds applied to sibling fields (`src/kb-receipt.ts:217,89`) | P3 | `Closed-P3` |
 | F-R6-F-6 | R6 | Disk-only-plus-receipt and non-report-plus-receipt refusals have no tool-level test (`src/index.ts:2225-2227`) | P3 | `Closed-P3` |
+| F-R7-E-4 | R7 | A failed `verify_claims` run returns an `[ERROR]` envelope as ordinary content; the runner's parser returned `null`, so the topic was recorded `status:"ok"` with empty claims (`scripts/monitor-watchlist.ts:42-49,122-138`) | P0 | **Resolved 2026-11-09** — `parseVerifyEnvelope` classifies `[ERROR]`/unreadable bodies as failures; `scripts/monitor-watchlist.test.ts` |
+| F-R7-B-1 | R7 | The analysis skill assigns a fourth confidence label, `No confidence`, against REQ-115's three-label scale (`skills/analysis-loop/SKILL.md:180`) | P1 | `Scheduled-roadmap` |
+| F-R7-C-1 | R7 | The `register-url` rejection branch has no defect fixture and no asserting test (`src/lib/report-manifest.ts:413-415`) | P1 | `Scheduled-roadmap` |
+| F-R7-C-2 | R7 | `SHAPE_BLOCKS["Fact-Check"]` is empty while the template defines a verdict table, so a Fact-Check report missing its block validates (`src/lib/report-manifest.ts:136-137`; `skills/infobroker/references/report-template.md:125-136`) | P1 | `Scheduled-roadmap` |
+| F-R7-C-3 | R7 | The `undeterminable` publication-date branch has no positive or negative fixture (`src/lib/report-manifest.ts:438-440`) | P1 | `Scheduled-roadmap` |
+| F-R7-E-1 | R7 | The monitoring path is a pure Markdown diff: no receipt baseline and no `verify_report` revalidation before comparison (`src/lib/report-delta.ts:24-36`; `scripts/monitor-delta.ts:56-61`) | P1 | `Scheduled-roadmap` |
+| F-R7-E-2 | R7 | Source comparison is id-set membership only; same-id URL/grade/hash drift is reported unchanged and there is no unverifiable field (`src/lib/report-delta.ts:34,76-84`) | P1 | `Scheduled-roadmap` |
+| F-R7-G-2 | R7 | A renamed bare tool in a skill file is treated as prose, so the gate stays green; only a renamed prefixed tool is caught (`src/intent-citations.ts:89-96`) | P1 | `Scheduled-roadmap` |
+| F-R7-A-1 | R7 | REQ-050's content check is warn-only; the KB-first paragraph can be deleted without failing a gate (`scripts/validate-spec.ts:580-585`) | P2 | `Scheduled-roadmap` |
+| F-R7-A-2 | R7 | No failing assertion covers REQ-051's escalation, manifest, quality-gate, or revalidate clauses; the only error is a token clause REQ-051 does not state (`scripts/validate-spec.ts:589-596`) | P2 | `Scheduled-roadmap` |
+| F-R7-B-2 | R7 | The technique catalog claims six families but assigns no technique to a family; the "cause and effect" family has no mapped method (`skills/analysis-loop/references/techniques.md:8-12,30-139`) | P2 | `Scheduled-roadmap` |
+| F-R7-C-4 | R7 | Register `interests`, `source`, and `type` fields and their rejection branches are unasserted (`src/lib/report-manifest.ts:420-437`) | P2 | `Scheduled-roadmap` |
+| F-R7-C-5 | R7 | `manifest-likelihood` and `manifest-verdict` vocabularies have no fixture or test; finding-level likelihood is unvalidated (`src/lib/report-manifest.ts:306-310`) | P2 | `Scheduled-roadmap` |
+| F-R7-D-1 | R7 | `pipeline-map.md` defines the shared TAIL without TRANSLATE, contradicting the canonical order (`skills/infobroker/references/pipeline-map.md:62`) | P2 | `Scheduled-roadmap` |
+| F-R7-D-3 | R7 | No instruction sets the manifest language after translation and no gate rejects a stale value (`skills/infobroker/SKILL.md:102-103`; `src/lib/report-manifest.ts:260-270`) | P2 | `Scheduled-roadmap` |
+| F-R7-D-4 | R7 | An unsupported drafted claim may be attributed or softened instead of removed or marked unverified (`skills/infobroker/SKILL.md:89-90`) | P2 | `Scheduled-roadmap` |
+| F-R7-E-3 | R7 | The delta product has no revision/supersedes output, and `revision` is optional so a changed report can ship at revision 1 (`src/lib/report-delta.ts:9-17`; `src/lib/report-manifest.ts:287-291`) | P2 | `Scheduled-roadmap` |
+| F-R7-E-5 | R7 | The dry-run early return and per-topic error isolation are unobserved by the lib test; only the new parser test covers the error path (`src/lib/watchlist.test.ts`; `scripts/monitor-watchlist.ts:95-100`) | P2 | `Scheduled-roadmap` |
+| F-R7-E-6 | R7 | The run record is overwritten unconditionally, so an error/empty run erases prior claims and the next run restates them as new (`scripts/monitor-watchlist.ts:115-139`) | P2 | `Scheduled-roadmap` |
+| F-R7-E-7 | R7 | Due-ness reads `last_run` but the runner never writes it back, so repeated invocations reselect the same topics (`scripts/monitor-watchlist.ts:112-141`; `src/lib/watchlist.ts:39-46`) | P2 | `Scheduled-roadmap` |
+| F-R7-F-1 | R7 | Export determinism is implied by pure functions but never asserted by a repeat-and-compare test (`src/lib/report-export.test.ts:9-26`) | P2 | `Scheduled-roadmap` |
+| F-R7-F-2 | R7 | Library exports call `validateReport` but ignore `ok`; `reportToSourcesCsv` does not validate at all (`src/lib/report-export.ts:34-56`) | P2 | `Scheduled-roadmap` |
+| F-R7-G-1 | R7 | The routing surface is a hand-maintained five-file list; `troubleshooting.md`, `config-tune.md`, and `provider-map.md` are never parsed (`src/intent-citations.ts:57-63`) | P2 | `Scheduled-roadmap` |
+| F-R7-G-3 | R7 | The README provider section says to enable optional providers in the shipped `config.json`, contradicting the user-layer rule (`README.md:476-477` vs `:516-522`) | P2 | `Scheduled-roadmap` |
+| F-R7-A-3 | R7 | The SKILL.md KB phases omit the "knowledge-base inspection" reservation for direct `manage_kb` search (`skills/infobroker/SKILL.md:74,145`) | P3 | `Closed-P3` |
+| F-R7-A-4 | R7 | The Fact-Check pipeline archives with a receipt but omits the verify-before-reuse step (`skills/infobroker/SKILL.md:160-166`) | P3 | `Closed-P3` |
+| F-R7-A-5 | R7 | `journeys.md` does not state a recovery procedure per journey (`skills/infobroker/references/journeys.md:10-50`) | P3 | `Closed-P3` |
+| F-R7-A-6 | R7 | REQ-053's gate checks file presence and the Mermaid token only (`scripts/validate-spec.ts:699-709`) | P3 | `Closed-P3` |
+| F-R7-B-3 | R7 | The analysis step says "assumption or alternative" where REQ-088 says both (`skills/analysis-loop/SKILL.md:181-182`) | P3 | `Closed-P3` |
+| F-R7-B-4 | R7 | The analysis skill restates a grade-based confidence rule instead of citing the canonical bands (`skills/analysis-loop/SKILL.md:175-180`) | P3 | `Closed-P3` |
+| F-R7-B-5 | R7 | `workflows.md` cites `references/techniques.md`, which does not resolve from `skills/infobroker/` (`skills/infobroker/references/workflows.md:139-140`) | P3 | `Closed-P3` |
+| F-R7-B-6 | R7 | REQ-052's gate asserts name strings, not that the four skill files exist or ship (`scripts/validate-spec.ts:688-696`) | P3 | `Closed-P3` |
+| F-R7-C-6 | R7 | The fixture gate asserts pass/fail by filename, never the finding code (`scripts/check-report-fixtures.ts:39-73`) | P3 | `Closed-P3` |
+| F-R7-C-7 | R7 | The fixture gate's non-recursive readdir skips `test-fixtures/reports/delta/` (`scripts/check-report-fixtures.ts:56`) | P3 | `Closed-P3` |
+| F-R7-C-8 | R7 | The archived manifest is a subset missing `as_of`, `handling`, `language`, and `target_length` (`src/types.ts:362-371`) | P3 | `Closed-P3` |
+| F-R7-C-9 | R7 | An invalid finding-level confidence value is untested; only absence is covered (`src/lib/report-manifest.ts:512`) | P3 | `Closed-P3` |
+| F-R7-C-10 | R7 | Skeleton absence is tested for one required section only (`src/report-contract.test.ts:47-52`) | P3 | `Closed-P3` |
+| F-R7-C-11 | R7 | The non-subsection Key Findings path and `finding-missing` branch are untested (`src/lib/report-manifest.ts:527-531`) | P3 | `Closed-P3` |
+| F-R7-D-2 | R7 | `workflows.md` lists ARCHIVE before POLISH/TRANSLATE/REVALIDATE (`skills/infobroker/references/workflows.md:60-70`) | P3 | `Closed-P3` |
+| F-R7-F-3 | R7 | The export projection drops `likelihood`, `modality`, `attribution`, and register provenance fields (`src/lib/report-export.ts:36,41-46,57-65`) | P3 | `Closed-P3` |
+| F-R7-F-4 | R7 | `render-report` CLI flags are untested (`scripts/render-report.ts:16-61`) | P3 | `Closed-P3` |
+| F-R7-G-4 | R7 | §10.3's `manage_kb` row omits the live `claims` and `verify_report` actions (`infobroker.md:1430`; `src/index.ts:1980`) | P3 | `Closed-P3` |
 
 ## Program risks / notes
 
