@@ -1,0 +1,32 @@
+# Tasks — R6 config, dedup, and report remediation
+
+- [x] Baseline: HEAD `c7b0089`, tree clean, `npm run check:fast` PASS (19 gates, 20.2 s), `npm run status` 24 open items / 40 unpushed.
+- [x] Plan review: stamp `plan-review passed.` sha `13ae5c9c…`, independence fresh (cold pass + diff re-review), depth standard; C-1…C-5 acknowledged.
+- [x] Build-review passed before the first edit.
+- [x] Step 0.2 `check-intent-citations` → 141 citations, 0 findings; `check-tdqs` → 7 tools, 0 violations. No routing edit needed.
+- [x] Step 0.3 `README.md` retention/dedup/revision claims (`:335`, `:361`) remain true; no README edit.
+- [x] Step 0.4 REQ bodies measured: REQ-066 506 chars / 7 sentences / 6 SHALL; REQ-067 798 / 6 / 5; REQ-072 689 / 6 / 5; REQ-083 793 / 7 / 8 — all within Appendix B.
+- [x] Step 0.5 `npm run validate-spec` pre-edit: 142 REQs, 127 cited, all checks passed.
+- [x] Step 0.6 `npm audit --json` answered (exit 1 on a pre-existing low advisory only); the full gate path is available.
+- [x] Step 0.7 Clause detector: no "or"-joined parenthesized branch and no "when … declares" conditional in the revised bodies; no branch tags required.
+- [x] Step 1.1 REQ-066 precedence clause, REQ-067 effective-config narrowing, REQ-072 class/collection clause, REQ-083 retention and revision rules.
+- [x] Step 1.2 `src/config.test.ts` KB reload describe → 75 passed (new default collection and tier reach the re-initialized KB).
+- [x] Step 1.3 Arena `reload_config` → `manage_kb` test in `debate-club/src/kb-contract.test.ts`; the existing absent-KB case at `:131-143` covers the absent half.
+- [x] Step 2.1 `resolveMeaningIdentity` replaces the report-only block; every ingest uses it; same class + collection, lexical gate 0.5, LSA threshold 0.92, best match, dedup event.
+- [x] Step 2.2 `src/kb.test.ts` dedup describe → 34 passed (web-duplicate, best-match, cross-class, cross-collection, boilerplate, dedup-event, plus the existing report cases).
+- [x] Step 3.1 `runMaintenance` skips `source_type: "report"`.
+- [x] Step 3.2 `kbPutReportReceipt` rejects a non-increasing revision, a self-supersedes, and an inverted predecessor; accepts an absent revision as an in-place update and an unknown predecessor.
+- [x] Step 3.3 `src/kb-receipt.ts` requires `supersedes` when `revision > 1`.
+- [x] Step 3.4 `src/kb-hardening.test.ts` report-retention test → 12 passed; `src/kb-report-receipt.test.ts` revision-chain describe → 37 passed.
+- [x] Step 2.3 Delta amendment: `src/kb-model.test.ts` seed now uses ten distinct subjects (the templated seed collapsed under the intended dedup); `src/kb-model.test.ts` → 3 passed; plan blast radius amended and re-stamped.
+- [x] Step 4.1 Dedup mutation (`resolveMeaningIdentity` → `undefined`): 4 failed (near-duplicate, web-duplicate, best-match, dedup-event); restored; `src/kb.ts` diff back to 101 insertions / 16 deletions.
+- [x] Step 4.2 Retention mutation (`"report"` → `"never-a-report"`): 1 failed (retains reports through an expiring tier); restored.
+- [x] Step 4.3 Monotonicity mutation (`requested <= priorRevision` → `requested < 0`): 1 failed (rejects a revision not greater than the stored one); restored.
+- [x] Step 4.4 Reload-wiring mutation (removed `initKb(newConfig.kb)` at `src/index.ts:2415`): 2 failed, including "reload_config applies a KB configuration change without a restart"; restored; `src/index.ts` diff empty.
+- [x] Step 4.5 Cost measurement (200-document seeded store, 5 reps): duplicate ingest median 33.56 ms, novel ingest median 20.00 ms, 164 documents stored. The 36 missing documents are templated texts that crossed the 0.92 threshold — the accepted risk D4a, measured; scheduled on `ROADMAP.md`.
+- [x] Step 5.1 `worklist.md` F-R6-B-4/5/6 marked `Resolved` and the three REQ evidence rows refreshed.
+- [x] Step 5.2 `ROADMAP.md` R6 config/dedup/report section retired.
+- [x] Step 5.3 `CHANGELOG.md` entry naming the four behavior changes.
+- [x] Step 5.4 `aar.md` written.
+- [x] Step 6.1 `check:fast` after Step 3 (the only failure was the not-yet-written `aar.md`), after Step 5, and on the final tree; full `check` on the final tree.
+- [x] Step 6.2 Split commits with typecheck between them.
