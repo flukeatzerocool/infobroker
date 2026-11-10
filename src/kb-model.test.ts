@@ -45,14 +45,24 @@ function storedDims(storagePath: string): number[] {
 
 function seed(storagePath: string, model: string): void {
   initKb(makeConfig(storagePath, model));
-  for (let i = 0; i < 10; i++) {
-    kbIngest(
-      `document ${i} about automobiles engines transmissions maintenance and repair procedures`,
-      `doc ${i}`,
-      `https://example.com/${i}`,
-      "test"
-    );
-  }
+  // Distinct subjects: REQ-072 deduplication now collapses documents whose
+  // meaning substantially matches, so a templated seed would store one
+  // document and defeat the model-reconciliation assertion.
+  const subjects = [
+    "automobile engines and transmissions need scheduled maintenance",
+    "glacier moraine sediment records centuries of retreat",
+    "orchestral brass sections rehearse intonation and balance",
+    "pottery kilns fire clay above twelve hundred degrees",
+    "tidal turbines convert reversing currents into electricity",
+    "municipal archives preserve deeds and tax registers",
+    "quarries extract granite blocks for harbour walls",
+    "lighthouse beacons sweep the shipping channel at night",
+    "meadow grasses host pollinators through the summer",
+    "paper lanterns lit the festival procession",
+  ];
+  subjects.forEach((subject, i) => {
+    kbIngest(subject, `doc ${i}`, `https://example.com/${i}`, "test");
+  });
   flushKbWrites();
 }
 

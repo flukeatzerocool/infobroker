@@ -1,4 +1,4 @@
-// @implements REQ-110 REQ-060i REQ-060b report-sources
+// @implements REQ-110 REQ-060i REQ-060b REQ-083 report-sources
 // Report verification receipts (REQ-110) and the read-only offline
 // `verify_report` action (REQ-060i). The receipt is a canonical manifest the
 // server computes at ingest; verification rehashes the cached report and its
@@ -689,5 +689,82 @@ describe("report-to-source link (REQ-110)", () => {
     expect(bad.ok).toBe(false);
     if (bad.ok) throw new Error("unreachable");
     expect(bad.error.code).toBe("invalid_input");
+  });
+});
+
+describe("report revision chain (REQ-083)", () => {
+  it("treats a receipt with no revision as an in-place update", () => {
+    const seeded = seedReport();
+    expect(kbPutReportReceipt(seeded.reportId, receipt()).ok).toBe(true);
+    const updated = kbPutReportReceipt(seeded.reportId, receipt());
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error("unreachable");
+    expect(updated.record.manifest.report?.revision).toBeUndefined();
+  });
+
+  it("rejects a revision that is not greater than the stored one", () => {
+    const seeded = seedReport();
+    const later: ReportReceiptInput = { ...receipt(), report: { revision: 2, supersedes: "report://previous" } };
+    expect(kbPutReportReceipt(seeded.reportId, later).ok).toBe(true);
+    const repeat = kbPutReportReceipt(seeded.reportId, later);
+    expect(repeat.ok).toBe(false);
+    if (repeat.ok) throw new Error("unreachable");
+    expect(repeat.error.message).toMatch(/not greater than the stored revision 2/);
+  });
+
+  it("rejects a revision that supersedes the report itself", () => {
+    const seeded = seedReport();
+    const selfSuperseding: ReportReceiptInput = {
+      ...receipt(),
+      report: { revision: 2, supersedes: seeded.reportId },
+    };
+    const stored = kbPutReportReceipt(seeded.reportId, selfSuperseding);
+    expect(stored.ok).toBe(false);
+    if (stored.ok) throw new Error("unreachable");
+    expect(stored.error.message).toMatch(/different report/);
+  });
+
+  it("rejects a revision that is not greater than its named predecessor", () => {
+    const dir = tempDir("ibk-receipt-chain-");
+    const olderId = ingestReport(dir, "A harbour survey found the eastern wall intact and the western wall bowed.");
+    expect(
+      kbPutReportReceipt(olderId, { ...receipt(), report: { revision: 3, supersedes: "report://harbour-origin" } }).ok
+    ).toBe(true);
+
+    const newerId = "report://tram-depot";
+    initKb(baseConfig(dir));
+    kbIngest(
+      "A tram depot inspection found the overhead wiring worn and the sheds dry.",
+      "Tram depot report",
+      newerId,
+      "explicit",
+      "reports",
+      "report",
+      "report"
+    );
+    const stored = kbPutReportReceipt(newerId, { ...receipt(), report: { revision: 2, supersedes: olderId } });
+    expect(stored.ok).toBe(false);
+    if (stored.ok) throw new Error("unreachable");
+    expect(stored.error.message).toMatch(/must be greater than the revision 3/);
+  });
+
+  it("records a supersedes link to a report that is not stored", () => {
+    const seeded = seedReport();
+    const stored = kbPutReportReceipt(seeded.reportId, {
+      ...receipt(),
+      report: { revision: 2, supersedes: "report://never-stored" },
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) throw new Error("unreachable");
+    expect(stored.record.manifest.report?.supersedes).toBe("report://never-stored");
+    expect(stored.record.manifest.report?.revision).toBe(2);
+  });
+
+  it("rejects a later revision that names no predecessor", () => {
+    const seeded = seedReport();
+    const stored = kbPutReportReceipt(seeded.reportId, { ...receipt(), report: { revision: 2 } });
+    expect(stored.ok).toBe(false);
+    if (stored.ok) throw new Error("unreachable");
+    expect(stored.error.message).toMatch(/must name the report it supersedes/);
   });
 });

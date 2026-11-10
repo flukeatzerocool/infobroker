@@ -263,6 +263,15 @@ export function normalizeReceiptInput(
     }
     if (normalized.length > 0) reportSources = normalized;
   }
+  // REQ-083: a later revision must name the report it revises, mirroring the
+  // report-manifest rule. Without a predecessor a revision is not
+  // distinguishable from the report it replaces.
+  if (reportResult.value?.revision !== undefined && reportResult.value.revision > 1 && !reportResult.value.supersedes) {
+    return {
+      ok: false,
+      error: { code: "invalid_input", message: "receipt.report.revision > 1 must name the report it supersedes" },
+    };
+  }
   return {
     ok: true,
     value: {

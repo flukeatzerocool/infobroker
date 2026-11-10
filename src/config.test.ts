@@ -1,4 +1,4 @@
-// @implements REQ-010 REQ-042 REQ-043 REQ-037 REQ-015 REQ-067 REQ-105 REQ-113
+// @implements REQ-010 REQ-042 REQ-043 REQ-037 REQ-015 REQ-040 REQ-067 REQ-105 REQ-113
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -827,5 +827,65 @@ describe("keyed provider activation (REQ-031)", () => {
 
     delete process.env["INFOBROKER_EXA_API_KEY"];
     expect(mod.getDispatchChain("general_web")).not.toContain("exa");
+  });
+});
+
+describe("knowledge base configuration reload (REQ-067, REQ-040)", () => {
+  let dir: string;
+  let basePath: string;
+  let overlayPath: string;
+
+  const layer = (store: string, collection: string, tier: string) => ({
+    kb: {
+      storage_path: store,
+      default_collection: collection,
+      freshness: {
+        default_tier: tier,
+        tiers: {
+          "reload-tier": { decay_hours: 1, expiry_hours: 0 },
+          stable: { decay_hours: 1, expiry_hours: 0 },
+        },
+      },
+    },
+  });
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ib-cfg-kbreload-"));
+    basePath = join(dir, "config.json");
+    overlayPath = join(dir, "config.local.json");
+    writeFileSync(basePath, JSON.stringify(BASE));
+    process.env["INFOBROKER_CONFIG"] = basePath;
+    process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
+    delete process.env["INFOBROKER_KB_COLLECTION"];
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+    vi.resetModules();
+  });
+
+  it("applies a changed default collection and tier after reload", async () => {
+    const store = join(dir, "kb");
+    writeFileSync(overlayPath, JSON.stringify(layer(store, "before-reload", "reload-tier")));
+
+    const mod = await import("./config.js");
+    const kbMod = await import("./kb.js");
+
+    const first = mod.loadConfig();
+    kbMod.initKb(first.kb!);
+    expect(kbMod.resolveCollection(undefined)).toBe("before-reload");
+    expect(kbMod.kbIngest("reload body text one", "r1", "https://example.com/reload-1", "test")).toBeGreaterThan(0);
+    expect(kbMod.kbList()[0]?.freshness_tier).toBe("reload-tier");
+
+    writeFileSync(overlayPath, JSON.stringify(layer(store, "after-reload", "stable")));
+    const second = mod.reloadConfig();
+    kbMod.initKb(second.kb!);
+
+    expect(kbMod.resolveCollection(undefined)).toBe("after-reload");
+    expect(kbMod.kbIngest("reload body text two", "r2", "https://example.com/reload-2", "test")).toBeGreaterThan(0);
+    expect(kbMod.kbList("after-reload")[0]?.freshness_tier).toBe("stable");
   });
 });

@@ -1,4 +1,4 @@
-// @implements REQ-060 REQ-060a REQ-060b REQ-060e REQ-060f REQ-060g
+// @implements REQ-040 REQ-060 REQ-060a REQ-060b REQ-060e REQ-060f REQ-060g REQ-067
 // Debate-club Arena: manage_kb action-contract remediation (R6 F-R6-A-1..3).
 // Drives the real server over stdio: ingest identity, the advertised
 // max_results cap, the unconfigured/unopenable-KB errors, and the receipt and
@@ -100,12 +100,29 @@ test("a report keeps its supplied identity and its receipt verifies under it", a
 
 // @implements REQ-060a max-results-default
 test("search honors the advertised default and maximum result counts", async () => {
-  for (let i = 0; i < 12; i++) {
+  // Distinct subjects: REQ-072 deduplication now collapses documents whose
+  // meaning substantially matches, so a templated seed would store one
+  // document and the cap assertions would be vacuous.
+  const subjects = [
+    "capmarker glacier moraine sediment records retreat",
+    "capmarker orchestral brass intonation rehearsal",
+    "capmarker pottery kiln firing temperature",
+    "capmarker tidal turbine current generation",
+    "capmarker municipal archive deed register",
+    "capmarker granite quarry block extraction",
+    "capmarker lighthouse beacon shipping channel",
+    "capmarker meadow grass pollinator habitat",
+    "capmarker paper lantern festival procession",
+    "capmarker copper wiring harbour corrosion",
+    "capmarker drought harvest soil moisture",
+    "capmarker chess engine pawn structure",
+  ];
+  for (const [i, subject] of subjects.entries()) {
     expectOk(
       await call({
         action: "ingest",
         title: `arena cap document ${i}`,
-        text: `capmarker document number ${i} about arena result capacity.`,
+        text: `${subject}, arena result capacity note ${i}.`,
         collection: "arena-cap",
         source_type: "explicit",
         source_url: `https://example.com/arena-cap-${i}`,
@@ -198,4 +215,44 @@ test("a receipt outside a KB-backed report is refused without writing", async ()
 
   const listed = expectOk(await call({ action: "list", collection: "arena-refusal" }));
   expect(results(listed)).toHaveLength(0);
+});
+
+// @implements REQ-067 reload
+// @implements REQ-040 kb-reload
+test("reload_config applies a KB configuration change without a restart", async () => {
+  const reloadable = await startServer({
+    configLayer: (tmp) => ({
+      kb: {
+        storage_path: join(tmp, "kb-reload"),
+        keys_path: join(tmp, "keys-reload"),
+        reports_path: join(tmp, "reports-reload"),
+        auto_index: false,
+        default_collection: "arena-before",
+      },
+    }),
+  });
+  try {
+    await new Promise((r) => setTimeout(r, 500));
+    const reload = await reloadable.call("infobroker_reload_config", {
+      patch: { kb: { default_collection: "arena-after" } },
+    });
+    expectOk(reload.text);
+
+    const ingested = expectOk(
+      (
+        await reloadable.call("infobroker_manage_kb", {
+          action: "ingest",
+          title: "reload note",
+          text: "Reload note body about the collection the reinitialized knowledge base uses.",
+        })
+      ).text
+    );
+    expect(Number((ingested.meta as Record<string, unknown>).chunks_ingested)).toBeGreaterThan(0);
+
+    const listed = expectOk((await reloadable.call("infobroker_manage_kb", { action: "list" })).text);
+    const entries = results(listed);
+    expect(entries[0].collection).toBe("arena-after");
+  } finally {
+    reloadable.stop();
+  }
 });

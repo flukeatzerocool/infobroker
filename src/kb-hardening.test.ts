@@ -1,4 +1,4 @@
-// @implements REQ-060c REQ-066 REQ-100 REQ-067 REQ-085 REQ-108
+// @implements REQ-060c REQ-066 REQ-083 REQ-100 REQ-067 REQ-085 REQ-108
 import { describe, it, expect, afterAll, vi } from "vitest";
 import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -146,6 +146,45 @@ describe("KB maintenance interval (REQ-066)", () => {
       expect(kbGet("https://example.com/k1")).not.toBeNull();
     } finally {
       initKb(makeConfig(join(base, "tier-vs-source-restore"), { maintenance_interval_minutes: 0 }));
+      vi.useRealTimers();
+    }
+  });
+
+  it("retains reports through an expiring tier (REQ-083)", () => {
+    const dir = join(base, "report-retention-store");
+    const config = makeConfig(dir, {
+      maintenance_interval_minutes: 0,
+      freshness: {
+        tiers: {
+          short: { decay_hours: 1, expiry_hours: 1 },
+          keep: { decay_hours: 1, expiry_hours: 0 },
+        },
+        auto_classify: false,
+        default_tier: "keep",
+      },
+    });
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      initKb(config);
+      kbIngest("expiring web result", "w", "https://example.com/short-web", "test", undefined, "web_search", "short");
+      kbIngest(
+        "expiring report body that must never be removed",
+        "short report",
+        "report://short-report",
+        "explicit",
+        "reports",
+        "report",
+        "short"
+      );
+
+      vi.setSystemTime(new Date("2026-01-01T02:00:00.000Z"));
+      initKb(config);
+
+      expect(kbGet("https://example.com/short-web")).toBeNull();
+      expect(kbGet("report://short-report")).not.toBeNull();
+    } finally {
+      initKb(makeConfig(join(base, "report-retention-restore"), { maintenance_interval_minutes: 0 }));
       vi.useRealTimers();
     }
   });

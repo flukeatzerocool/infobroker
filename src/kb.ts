@@ -580,6 +580,53 @@ function sqliteSearch(
   return results.slice(0, actualMax);
 }
 
+/** REQ-072: the similarity at which two documents are treated as one document. */
+const MEANING_SIMILARITY_THRESHOLD = 0.92;
+/** A cheap token-overlap gate: only candidates above it pay for the LSA comparison. */
+const MEANING_LEXICAL_GATE = 0.5;
+
+function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+  if (left.size === 0 || right.size === 0) return 0;
+  let shared = 0;
+  for (const term of left) if (right.has(term)) shared++;
+  return shared / (left.size + right.size - shared);
+}
+
+/**
+ * REQ-072: resolve the identity a document should be stored under by meaning.
+ * A document whose first-chunk text substantially matches one already stored in
+ * the same collection and content class takes that document's identity, so the
+ * ingest updates it in place. The candidate scan covers the whole store; the
+ * lexical gate keeps the LSA comparison to the few candidates that could match.
+ */
+function resolveMeaningIdentity(
+  title: string,
+  text: string,
+  collection: string,
+  sourceType: string,
+  incomingId: string
+): { id: string; similarity: number } | undefined {
+  if (!sqliteStore) return undefined;
+  const incoming = `${title}: ${text.slice(0, 500)}`;
+  const incomingTerms = new Set(tokenize(incoming));
+  if (incomingTerms.size === 0) return undefined;
+  const documents = new Map<string, string>();
+  for (const chunk of sqliteStore.iterateChunks()) {
+    if (!chunk.source_url || chunk.source_url === incomingId) continue;
+    if (chunk.collection !== collection || chunk.source_type !== sourceType) continue;
+    if (!documents.has(chunk.source_url)) documents.set(chunk.source_url, chunk.text.slice(0, 500));
+  }
+  let best: { id: string; similarity: number } | undefined;
+  for (const [id, candidate] of documents) {
+    if (jaccard(incomingTerms, new Set(tokenize(candidate))) < MEANING_LEXICAL_GATE) continue;
+    const similarity = pairwiseSimilarity([incoming, candidate], "lsa")[0]?.[1] ?? 0;
+    if (similarity >= MEANING_SIMILARITY_THRESHOLD && (!best || similarity > best.similarity)) {
+      best = { id, similarity };
+    }
+  }
+  return best;
+}
+
 function sqliteIngest(
   text: string,
   title: string,
@@ -601,22 +648,17 @@ function sqliteIngest(
   }
   const now = Date.now();
 
-  if (sourceUrl && sourceUrl.startsWith("report://")) {
-    // REQ-072: one pass collects each stored report's identity and first chunk
-    // text. The previous nested scan re-read the whole store once per report.
-    const existing = new Map<string, string>();
-    for (const chunk of sqliteStore.iterateChunks()) {
-      if (!chunk.source_url.startsWith("report://")) continue;
-      if (!existing.has(chunk.source_url)) existing.set(chunk.source_url, chunk.text);
-    }
-    const incoming = `${title} ${text.slice(0, 500)}`;
-    for (const [id, existingText] of existing) {
-      if (id === sourceUrl) continue;
-      const sim = pairwiseSimilarity([incoming, `${title} ${existingText.slice(0, 500)}`], "lsa")[0]?.[1] ?? 0;
-      if (sim >= 0.92) {
-        sourceUrl = id;
-        break;
-      }
+  if (sourceUrl) {
+    // REQ-072: a document whose meaning substantially matches one already
+    // stored in the same collection and content class takes that document's
+    // identity, so the ingest updates it in place instead of adding a
+    // duplicate. This applies to every class, not only reports.
+    const match = resolveMeaningIdentity(title, text, resolvedCollection, resolvedSourceType, sourceUrl);
+    if (match) {
+      sqliteStore.appendEvent(
+        `Dedup at ${new Date().toISOString()}: merged "${sourceUrl}" into "${match.id}" (similarity ${match.similarity.toFixed(3)})`
+      );
+      sourceUrl = match.id;
     }
   }
 
@@ -944,6 +986,45 @@ export function kbPutReportReceipt(
   if (doc === null) {
     return { ok: false, error: { code: "invalid_input", message: "report is not stored in the knowledge base" } };
   }
+  // REQ-083: revision numbers are monotonic and a revision names a distinct
+  // predecessor. The server validates; it never invents a revision, because a
+  // same-identity re-ingest replaces the row and has no distinguishable
+  // predecessor to name.
+  const requested = normalized.value.report?.revision;
+  const supersedes = normalized.value.report?.supersedes;
+  const prior = sqliteStore.getReportReceipt?.(reportId) ?? null;
+  const priorRevision = prior?.manifest.report?.revision;
+  if (requested !== undefined && priorRevision !== undefined && requested <= priorRevision) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid_input",
+        message: `report revision ${requested} is not greater than the stored revision ${priorRevision}`,
+      },
+    };
+  }
+  if (supersedes !== undefined && supersedes === reportId) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid_input",
+        message: "receipt.report.supersedes must name a different report than the one it revises",
+      },
+    };
+  }
+  if (supersedes !== undefined) {
+    const predecessor = sqliteStore.getReportReceipt?.(supersedes) ?? null;
+    const predecessorRevision = predecessor?.manifest.report?.revision ?? 1;
+    if (predecessor !== null && requested !== undefined && predecessorRevision >= requested) {
+      return {
+        ok: false,
+        error: {
+          code: "invalid_input",
+          message: `report revision ${requested} must be greater than the revision ${predecessorRevision} of "${supersedes}"`,
+        },
+      };
+    }
+  }
   // The report hash covers the canonical stored document (kbGet text), which
   // differs from the pre-chunk input because chunking prefixes the title.
   const manifest = buildReceiptManifest({
@@ -1106,6 +1187,10 @@ export function runMaintenance(): void {
     if (!tiers) return;
     const now = Date.now();
     const removed = sqliteStore.deleteWhere((chunk) => {
+      // REQ-083: a report is a content class whose own requirement declares
+      // indefinite retention, so tier expiry never removes it (REQ-066's
+      // precedence clause). Its confidence still decays with age.
+      if (chunk.source_type === "report") return false;
       const def = tiers[chunk.freshness_tier];
       if (!def || !def.expiry_hours || def.expiry_hours <= 0) return false;
       const cutoff = now - def.expiry_hours * 60 * 60 * 1000;

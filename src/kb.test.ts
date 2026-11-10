@@ -387,6 +387,60 @@ describe("kb deduplication (REQ-072)", () => {
     });
     expect(kbList("reports", "report").length).toBe(before + bodies.length);
   });
+
+  it("collapses a web document re-ingested under a different URL (REQ-072 web-duplicate)", () => {
+    const body = "Tidal turbines in the estuary generate electricity from reversing currents twice each day.";
+    kbIngest(body, "Tidal Turbine Note", "https://example.com/tidal-a", "test", "dedup-col", "web_search");
+    const before = kbStats().chunk_count;
+    kbIngest(body, "Tidal Turbine Note", "https://example.com/tidal-b", "test", "dedup-col", "web_search");
+    expect(kbStats().chunk_count).toBe(before);
+    expect(kbGet("https://example.com/tidal-b")).toBeNull();
+    expect(kbGet("https://example.com/tidal-a")).not.toBeNull();
+  });
+
+  it("keeps the best match rather than the first candidate over the threshold (REQ-072 best-match)", () => {
+    const base = "The committee approved the harbour budget after three hours of debate.";
+    kbIngest(base, "Harbour Budget", "https://example.com/harbour-a", "test", "dedup-best", "web_search");
+    const exact = `${base} Two members abstained from the final vote.`;
+    kbIngest(exact, "Harbour Budget", "https://example.com/harbour-b", "test", "dedup-best", "web_search");
+    kbIngest(exact, "Harbour Budget", "https://example.com/harbour-c", "test", "dedup-best", "web_search");
+    expect(kbGet("https://example.com/harbour-c")).toBeNull();
+    expect(kbGet("https://example.com/harbour-b")).not.toBeNull();
+  });
+
+  it("does not collapse across content classes (REQ-072 cross-class)", () => {
+    const body = "The auditor flagged the ledger discrepancy in a memo to the finance committee.";
+    kbIngest(body, "Ledger Memo", "report://ledger-memo", "explicit", "reports", "report", "report");
+    kbIngest(body, "Ledger Memo", "https://example.com/ledger-note", "test", "dedup-classes", "web_search");
+    expect(kbGet("report://ledger-memo")).not.toBeNull();
+    expect(kbGet("https://example.com/ledger-note")).not.toBeNull();
+  });
+
+  it("does not collapse across collections (REQ-072 cross-collection)", () => {
+    const body = "Sediment cores from the lake bed record nine centuries of volcanic ash.";
+    kbIngest(body, "Lake Core", "https://example.com/lake-a", "test", "dedup-col-a", "web_search");
+    kbIngest(body, "Lake Core", "https://example.com/lake-b", "test", "dedup-col-b", "web_search");
+    expect(kbGet("https://example.com/lake-a")).not.toBeNull();
+    expect(kbGet("https://example.com/lake-b")).not.toBeNull();
+  });
+
+  it("keeps boilerplate-heavy documents distinct (REQ-072 boilerplate)", () => {
+    const boilerplate = "Subscribe to the daily bulletin for updates. Privacy policy. Terms of service. Contact the newsroom. ";
+    kbIngest(`${boilerplate}The city council approved a new tram line along the eastern quay.`, "Tram", "https://example.com/boiler-a", "test", "dedup-boiler", "web_search");
+    kbIngest(`${boilerplate}The museum reopened its sculpture wing after restoration.`, "Museum", "https://example.com/boiler-b", "test", "dedup-boiler", "web_search");
+    expect(kbGet("https://example.com/boiler-a")).not.toBeNull();
+    expect(kbGet("https://example.com/boiler-b")).not.toBeNull();
+  });
+
+  it("records a dedup event naming both identities (REQ-072 dedup-event)", () => {
+    const body = "Saffron threads are harvested by hand from crocus flowers before sunrise.";
+    kbIngest(body, "Saffron", "https://example.com/saffron-a", "test", "dedup-event", "web_search");
+    kbIngest(body, "Saffron", "https://example.com/saffron-b", "test", "dedup-event", "web_search");
+    const event = kbStats().events.find((e) => e.includes("Dedup at") && e.includes("saffron-b"));
+    expect(event).toBeDefined();
+    expect(event).toContain("https://example.com/saffron-a");
+    expect(event).toContain("https://example.com/saffron-b");
+  });
 });
 
 describe("freshness classification (REQ-074)", () => {
