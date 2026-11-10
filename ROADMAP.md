@@ -20,7 +20,7 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R7 after chunk R6 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R8 after chunk R7 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
 
 ## R6 `manage_kb` action-contract remediation
 
@@ -130,6 +130,50 @@
 - Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
 
 **Trigger:** start after chunk R6 closes; close when F-R5-E-3 and F-R5-G-1 are `Resolved`.
+
+## R7 report-contract evidence remediation
+
+- Add a defect fixture and asserting test for the `register-url` branch (F-R7-C-1), the `undeterminable` publication-date branch (F-R7-C-3), and the `manifest-likelihood`/`manifest-verdict` vocabularies (F-R7-C-5).
+- Enforce the Fact-Check shape block so a report missing its verdict table is rejected (F-R7-C-2), and assert the register `interests`/`source`/`type` branches (F-R7-C-4).
+- Each change ships with a CHANGELOG entry when behavior changes and a re-run of `check-report-fixtures`.
+
+**Trigger:** start after chunk R8 closes; close when F-R7-C-1, F-R7-C-2, F-R7-C-3, F-R7-C-4, and F-R7-C-5 are `Resolved`.
+
+## R7 monitoring and watchlist remediation
+
+- Baseline a report with a verification receipt and revalidate it with `verify_report` before comparing (F-R7-E-1).
+- Report same-id source drift and an unverifiable set instead of id-set membership only (F-R7-E-2).
+- Carry revision/supersedes through the delta (F-R7-E-3), observe the dry-run and error-isolation paths (F-R7-E-5), stop overwriting prior claims (F-R7-E-6), and persist `last_run` so due selection advances (F-R7-E-7).
+
+**Trigger:** start after chunk R8 closes; close when F-R7-E-1, F-R7-E-2, F-R7-E-3, F-R7-E-5, F-R7-E-6, and F-R7-E-7 are `Resolved`.
+
+## R7 confidence and technique remediation
+
+- Remove the fourth confidence label from the analysis skill and make it cite the canonical three-label scale (F-R7-B-1).
+- Map each catalog technique to a family so the six-family claim is verifiable, or narrow the claim (F-R7-B-2).
+
+**Trigger:** start after chunk R8 closes; close when F-R7-B-1 and F-R7-B-2 are `Resolved`.
+
+## R7 routing-citation remediation
+
+- Detect a renamed bare tool in the routing files without over-capturing prose (F-R7-G-2).
+- Extend the routing surface to the remaining reference files (F-R7-G-1) and correct the README provider-enable instruction to name the user layer (F-R7-G-3).
+
+**Trigger:** start after chunk R8 closes; close when F-R7-G-1, F-R7-G-2, and F-R7-G-3 are `Resolved`.
+
+## R7 client-artifact gate remediation
+
+- Make REQ-050's content check fail rather than warn and cover REQ-051's escalation, manifest, quality-gate, and revalidate clauses (F-R7-A-1, F-R7-A-2).
+- Add TRANSLATE to the pipeline-map TAIL (F-R7-D-1), instruct the manifest language after translation (F-R7-D-3), and require removal or an unverified marking for an unsupported drafted claim (F-R7-D-4).
+
+**Trigger:** start after chunk R8 closes; close when F-R7-A-1, F-R7-A-2, F-R7-D-1, F-R7-D-3, and F-R7-D-4 are `Resolved`.
+
+## R7 export remediation
+
+- Assert export determinism with a repeat-and-compare test (F-R7-F-1).
+- Make the library exports enforce validation or expose an explicit skip (F-R7-F-2).
+
+**Trigger:** start after chunk R8 closes; close when F-R7-F-1 and F-R7-F-2 are `Resolved`.
 
 ## Non-goals
 
