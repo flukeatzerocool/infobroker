@@ -28,4 +28,4 @@
 - [x] Step 4.3 `CHANGELOG.md` entry under `## 2026.11.7`.
 - [x] Step 5.1 `check:fast` PASS once the AAR existed; `check` PASS (22 gates, 72.6 s); `test` 1134 tests / 108 files.
 - [x] Step 5.2 `aar.md` written after the gates, ending `LOOP PAUSED`.
-- [ ] Step 5.3 Split commits, typecheck between them, report the list.
+- [x] Step 5.3 Split commits, typecheck between them, reported below.

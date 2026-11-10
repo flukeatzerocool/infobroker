@@ -50,4 +50,11 @@
 
 - None beyond the scheduled roadmap items; the remaining R6 sections (encryption/capacity, ledger/receipt) keep their own triggers.
 
+## Commits
+
+- `2b03bd8` `fix(kb): report recall state and degrade with remediation`
+- `ff31cbb` `test(kb): assert recall state and blend threshold evidence`
+- `38e0fb9` `docs(kb): resolve the R6 retrieval findings and retire the section`
+- This record update.
+
 LOOP PAUSED
