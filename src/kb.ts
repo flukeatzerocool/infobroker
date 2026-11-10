@@ -1058,6 +1058,7 @@ export function kbPutReportReceipt(
     ...(normalized.value.sources ? { sources: normalized.value.sources } : {}),
     ...(normalized.value.report ? { report: normalized.value.report } : {}),
     cachedDocument,
+    ingestAt: new Date().toISOString(),
   });
   const record = sqliteStore.putReportReceipt(reportId, manifest);
   return { ok: true, record };

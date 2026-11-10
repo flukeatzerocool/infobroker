@@ -294,16 +294,18 @@ export function buildReceiptManifest(args: {
   sources?: ReportReceiptSourceInput[];
   report?: ReportManifestMeta;
   cachedDocument: (url: string) => { text: string; title: string } | null;
+  /** REQ-110: the manifest always carries a per-source retrieval time; an unlabelled source is stamped with the ingest instant. */
+  ingestAt: string;
 }): ReportReceiptManifest {
   const hashSource = (source: ReportReceiptSourceInput): ReportReceiptClaim["sources"][number] => {
     const cached = args.cachedDocument(source.url);
     const basis = cached !== null ? ("document" as const) : ("snippet" as const);
     const hashed = cached !== null ? cached.text : source.snippet ?? "";
-    const retrievedAt = source.retrieved_at ?? (cached !== null ? new Date().toISOString() : undefined);
+    const retrievedAt = source.retrieved_at ?? args.ingestAt;
     return {
       url: source.url,
       title: cached?.title ?? source.title ?? "",
-      ...(retrievedAt ? { retrieved_at: retrievedAt } : {}),
+      retrieved_at: retrievedAt,
       hash_basis: basis,
       source_sha256: sha256Hex(hashed),
     };
