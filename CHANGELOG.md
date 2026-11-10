@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.11.7 — R6 review: claim ledger and receipt remediation
+
+- `verify_claims` now persists every finding, including a batch claim no
+  provider could corroborate: it becomes a claim record with no source edges
+  instead of being dropped (`src/index.ts`).
+- A claim source's retrieval time is sealed at rest with the rest of the edge:
+  it travels inside the encrypted payload and the clear column keeps an empty
+  placeholder. A key transition carries the value forward and blanks any value
+  left by an earlier build (D-096).
+- A report receipt source with no caller retrieval time is stamped with the
+  ingest instant, so the canonical manifest always carries a retrieval time;
+  the source's provenance stays visible through `hash_basis: "snippet"`.
+
 ## 2026.11.7 — R6 review: event reseal, store-format marker, corrupt-store recovery
 
 - A knowledge-base key change no longer loses event history: `rekey` and

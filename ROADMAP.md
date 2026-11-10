@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 ledger and receipt remediation
-
-- Persist unsourced findings (F-R6-F-1), seal `claim_sources.retrieved_at` (F-R6-F-2), and stamp or reject a receipt source with no retrieval time (F-R6-F-4).
-
-**Trigger:** start after chunk R7 closes; close when F-R6-F-1, F-R6-F-2, and F-R6-F-4 are `Resolved`.
-
-
 ## R6 dedup false-positive bound
 
 - Bound meaning-equivalence collapse on templated corpora: the R6 increment measured 36 of 200 template documents collapsing into each other at the 0.92 LSA threshold (accepted risk D4a, recorded in `docs/plans/2026-11-10-r6-config-dedup-report/aar.md`).

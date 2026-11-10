@@ -89,6 +89,28 @@ contract. Rejected: a hardcoded deny-list of protected gates, because it fails
 open for every gate added later. Consequence: opting a gate in is a reviewed
 manifest edit, and the committed ledger remains the record of each decision.
 
+### D-096: Legacy Claim-Source Retrieval Times (2026.11.10)
+
+A claim-source retrieval time now lives inside the sealed edge payload (REQ-109);
+the clear `claim_sources.retrieved_at` column keeps an empty placeholder, so the
+schema and the store format do not change. A store that was already encrypted by
+an earlier build can still hold the old clear value for a claim until that claim
+is re-verified or a key transition runs, because the transition is the only
+rewrite path: `resealAll` deletes and re-inserts every edge row, carries the
+legacy value into the payload, and blanks the column inside the event that
+transition already reports. Rationale: an init-time rewrite would be an
+unprompted store upgrade — REQ-108 requires such an upgrade to preserve a
+recoverable artifact and report a status event — and it would need its own
+marker to avoid re-running on every open, while the transition path already has
+both properties. Remediation for an affected store:
+`manage_kb (action: encryption, operation: rekey)` with a fresh key file, or
+disable and re-enable encryption. Rejected: lazy re-sealing on read (REQ-060h
+defines the claims action as read-only); a second sealed column (two copies of
+one value diverge); dropping the column (a table rebuild and a format change).
+Consequence: the finding is closed for new writes and for every transition, and
+this decision is the record of the residual for a store that is never
+transitioned.
+
 ### D-090: Scope Non-Goals Are Gate-Checked (2026.11.07)
 
 The open-web scope boundary lived in D-061's prose with a paraphrase on
