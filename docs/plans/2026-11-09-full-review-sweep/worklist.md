@@ -231,6 +231,35 @@ Code: `src/fetch-fallback.ts`, `src/extract.ts`, `src/providers/jina.ts`,
 `src/preservation.ts`, `src/modality.ts`, `src/http.ts`, `src/truncate.ts`,
 `src/structured-fact.ts`, plus the `fetch_page` handler in `src/index.ts`.
 
+**Phase 1 enumeration (2026-11-10).** 64 distinct implementation anchors
+(`grep -n 'REQ-021'` across the 17 reviewed source files), spread across
+clusters A–F; three clusters (B, C, D) need a loopback probe. D35 split:
+**not triggered** (64 ≤ 120; 3 < 4 clusters). Tracker drift recorded:
+`preservation.ts` (REQ-122) and `modality.ts` (REQ-026h) are R5-owned and read
+as evidence only; `fetch-cache.ts`, `datetime.ts`, `lib/url-guard.ts`,
+`lib/bot-challenge.ts`, `lib/html.ts`, `hedge.ts` are the reviewed R4 modules
+the original code line omitted.
+
+#### R4 verdict table (2026-11-10)
+
+Reviewed at standard depth; split not triggered (64 anchors, 3 clusters probed). Evidence: 18 carrying test files / 229 tests PASS; Arena 37 tests PASS (new crawl regression); six fresh-context cluster reviews; outbound probe not run (D38 prefers deterministic replay).
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-021 `fetch_page` | `finding:F-R4-F-1` | live schema carries every REQ-021 parameter and the array cap and the behavior half holds (hedge race with `hedge_grace_ms`, array concurrency, per-result provider); `renderer` advertises `jina` in prose but declares no schema default (`src/index.ts:1772`), and no gate asserts the G0 parameter contract (F-R4-F-2) |
+| REQ-021a network-target safety | `finding:F-R4-A-1` | string guard and resolved guard refuse private/metadata targets, per-hop and per-redirect re-guard holds, opt-out and distinct `network_target_refused` live (`src/lib/url-guard.ts:97,193-205`; `src/index.ts:1011-1019`; Arena `:244`); only one semantic clause tag exists and the G3 detector cannot see REQ-021a's branch list (`url-guard.test.ts:1`; `clause-coverage.ts:23-34`) |
+| REQ-021b question extraction | `finding:F-R4-D-1` | sentence splitting, ranking, scores, extraction mode, bands, and per-item retention hold (`rerank.test.ts`, `batch.test.ts:136`); the no-match/full-content branch omits `passages_returned` and `match_quality` (`src/index.ts:1362-1381`; `batch.ts:216`) |
+| REQ-021c date detection | `finding:F-R4-C-2` | header/meta/jsonld/time-tag evidence with source and confidence, omit-when-absent hold (`datetime.ts:93-103`); `article:published_time`/`datePublished` are returned as `last_updated` with high confidence (`datetime.ts:39,64-65` → `index.ts:1327-1330`), a guess the REQ forbids |
+| REQ-021d bounded crawl | `finding:F-R4-C-1` | per-hop and per-redirect guard, cap-stops-without-error hold; the crawl fed HTML-to-text output to `extractLinks`, so recursion never ran and only the start page returned (`src/index.ts:1071,1098`) — **fixed in-session** and covered by Arena `fetch_page crawl follows same-origin links`; outbound fetches still bound pages, not fetches (F-R4-C-8) |
+| REQ-021e structured extraction | `finding:F-R4-C-11` | distinct `extracted` field, none-found note, non-mutation hold (`extract.ts:13-52`, `index.ts:1153-1166`); nested `itemscope` is flattened into the parent item (`extract.ts:38-45`) |
+| REQ-021f anti-bot fall-through | `finding:F-R4-B-2` | challenge detection and chain fall-through implemented (`index.ts:849-859`, `bot-challenge.ts`); a page whose title merely contains "captcha" is a false positive because `/captcha/i` is a strong marker with no length guard (`bot-challenge.ts:15,59`), and the fall-through clause has no driving test (F-R4-B-3) |
+| REQ-021g knowledge-base cache | `finding:F-R4-C-5` | fresh-copy-before-network, hit metadata, stale fall-through, configurable age hold (`index.ts:1020-1053`, `fetch-cache.ts:26-34`); a `question` request bypasses the cache entirely (`index.ts:1022`) |
+| REQ-021h source fallback | `holds` | seven-way classification with 402-vs-403/451 split, DOI→open-access→archive ordering, metadata-only note, original-URL preservation, unsupported-protocol clause (`fetch-fallback.ts:62-266`; Arena `:545-625`); P3 gaps F-R4-B-6/B-7 recorded |
+| REQ-021i structured facts | `finding:F-R4-E-1` | value/display, unit, source, property/key, status, facts-before-prose, no inference hold (`structured-fact.ts`; `structured-fact.test.ts`); `area` and `elevation` are absent from the classification signals so those queries never emit a fact (`task-type.ts:78-96`, `index.ts:1674`) |
+| REQ-021j raw-text mode | `finding:F-R4-D-3` | plain unprefixed text, top passage in question mode, invalid-combination error hold (`structured-output.ts:120-155`, `index.ts:1811-1815`); the default non-question raw envelope omits `extraction_mode` and passage count (`index.ts:1384-1399`), and a JSON-array string bypasses the single-URL guard (F-R4-D-4) |
+| REQ-021k batch item metadata | `holds` | each `meta.per_query` item names input, provider, status, `url` echo for HTTP(S), `passages_returned`, truncation state, alongside merged results (`batch.test.ts:255-299`; `batch.ts:195-236`); tag advisory F-R4-D-7 |
+| §6.4 Jina Reader | `finding:F-R4-F-4` | endpoint `https://r.jina.ai/` matches (`providers/jina.ts:6`); the prose says fallback happens only on 429/error to native HTTP, contradicting REQ-021's race and REQ-021f's challenge fall-through (`infobroker.md:837-838`) |
+
 ### R5 — Corroboration and citations (15)
 
 `REQ-026` `REQ-026a` `REQ-026b` `REQ-026c` `REQ-026d` `REQ-026e` `REQ-026f`
@@ -295,7 +324,7 @@ status and any new evidence.
 | R1 | §3 SR-009, §4.1, §6.1–6.2 | 6 | **closed 2026-11-09** | R2 |
 | R2 | §4.2, §4.3 (024 family), §4.4–4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | **closed 2026-11-09** | R3 |
 | R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | **closed 2026-11-09** | R4 |
-| R4 | §4.3 (021 family), §6.4 | 12 | not started | R3 closed |
+| R4 | §4.3 (021 family), §6.4 | 12 | **closed 2026-11-10** | R5 |
 | R5 | §4.3 (026 family, 121–123, 130, 027), §5.5, §8 | 15 | not started | R4 closed |
 | R6 | §4.9 | 29 | not started | R5 closed |
 | R7 | §4.7, §10.2–10.3, App D | 17 | not started | R6 closed |
@@ -392,6 +421,50 @@ work.
 | F-R3-28 | R3 | Analysis is attached with empty sections instead of omitted when the result set is empty after policy refusal or blocklist filtering (`src/index.ts:680,:697`) | P1 | `Scheduled-roadmap` |
 | F-R3-29 | R3 | Topic/entity ordering and cluster-retention assertions are weaker than REQ-127; the cluster test cannot detect a dropped result (`analysis.test.ts:44-73`) | P3 | `Closed-P3` |
 | F-R3-30 | R3 | `analysis.enabled` is configured and validated but read nowhere; setting it false does not disable analysis (outside REQ-127's letter) (`config.json:290`; `src/config.ts:870`) | P3 | `Closed-P3` |
+| F-R4-A-1 | R4 | REQ-021a's branch list has only one semantic clause tag and `clause-coverage.ts` cannot see unparenthesized or-lists (`src/lib/url-guard.test.ts:1`; `src/clause-coverage.ts:23-34`) | P1 | `Scheduled-roadmap` |
+| F-R4-A-2 | R4 | The resolved-address guard runs only on the native path; a non-native renderer receives a hostname that passed the string check (`src/index.ts:840,1011`) | P2 | `Scheduled-roadmap` |
+| F-R4-A-3 | R4 | The configurable hop cap has no end-to-end assertion; `url-guard.test.ts:164` passes a literal and no test checks `src/index.ts:834` plumbing | P2 | `Scheduled-roadmap` |
+| F-R4-A-4 | R4 | The hedge branch catches a primary error and returns null, so a hedged native refusal can lose the distinct refusal code (`src/index.ts:912-920`) | P3 | `Closed-P3` |
+| F-R4-A-5 | R4 | `src/http.ts` is an unguarded fetch primitive; safety depends on callers (`src/http.ts:12-55`) | P3 | `Closed-P3` |
+| F-R4-B-1 | R4 | Once the hedge deadline fires, every renderer runs and none is cancelled; losers keep spending quota and recording stats (`src/index.ts:913-916`; `src/hedge.ts:100-103`) | P2 | `Scheduled-roadmap` |
+| F-R4-B-2 | R4 | `/captcha/i` is a strong title marker with no length guard, so an article titled "...CAPTCHA..." is discarded as anti-bot (`src/lib/bot-challenge.ts:15,59`) | P1 | `Scheduled-roadmap` |
+| F-R4-B-3 | R4 | REQ-021f's "continue to the next renderer" clause has no driving test; the green gate covers detection only (`src/lib/bot-challenge.test.ts:1`) | P2 | `Scheduled-roadmap` |
+| F-R4-B-4 | R4 | The hedge deadline timer is never cleared when the primary wins (`src/index.ts:905`) | P3 | `Closed-P3` |
+| F-R4-B-5 | R4 | A JSON-encoded array longer than five is silently truncated with no per-input record (`src/batch.ts:47-49,73`) | P3 | `Closed-P3` |
+| F-R4-B-6 | R4 | A challenge served as HTTP 403 through native_fetch is classified `access_restricted`, not `anti_bot` (`src/index.ts:852`; `src/fetch-fallback.ts:62-71`) | P3 | `Closed-P3` |
+| F-R4-B-7 | R4 | The `anti_bot`, connectivity, and unknown classification branches carry no named clause tag (`src/fetch-fallback.ts:1`) | P3 | `Closed-P3` |
+| F-R4-C-1 | R4 | The crawl fed HTML-to-text output to `extractLinks`, so recursion never ran and a crawl returned only the start page (`src/index.ts:1071,1098`) | **P0** | **Resolved 2026-11-10** — raw HTML is fetched for link discovery; Arena crawl regression added |
+| F-R4-C-2 | R4 | `article:published_time`/`datePublished` are emitted as `last_updated` with high confidence (`src/datetime.ts:39,64-65` → `src/index.ts:1327-1330`) | P1 | `Scheduled-roadmap` |
+| F-R4-C-3 | R4 | REQ-021d's page-cap, depth-cap, and per-hop-guard clauses had no driving test; the citation exercised helpers only (`src/extract.test.ts:1,37-49`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-4 | R4 | `detect_date` is ignored on the crawl and extract paths, which return before the date is computed (`src/index.ts:1105,1155` vs `:1327`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-5 | R4 | A `question` request bypasses a fresh KB copy though the cache holds the same text (`src/index.ts:1022`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-6 | R4 | Metadata date detection is skipped when HEAD redirects or returns 405, so meta/jsonld/time-tag evidence is not consulted (`src/index.ts:791`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-7 | R4 | Date detection is on by default and issues its own HEAD plus a second GET, so a plain fetch costs three outbound requests (`config.json:266`; `src/index.ts:780-803`) | P3 | `Closed-P3` |
+| F-R4-C-8 | R4 | The page cap bounds returned pages, not outbound fetches; refused/unfetchable hops do not consume the cap (`src/index.ts:1065,1081-1086`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-9 | R4 | Crawl and extract use a raw `text.slice` instead of `maybeTruncate`, so truncation metadata is absent (REQ-004, R1-owned) (`src/index.ts:1092,1163`) | P2 | `Deferred-R1` |
+| F-R4-C-10 | R4 | REQ-021d/021e/021g branch tests carry bare tags with no named clause tag (`src/extract.test.ts:1`; `src/fetch-cache.test.ts:1`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-11 | R4 | Nested microdata is flattened into the parent item, misattributing properties (`src/extract.ts:38-45`) | P2 | `Scheduled-roadmap` |
+| F-R4-C-12 | R4 | `detect_date:false` still returns a cached date on a cache hit (`src/index.ts:1030-1032`) | P3 | `Closed-P3` |
+| F-R4-C-13 | R4 | Crawl page titles are the hostname, so pages from one origin are indistinguishable (`src/index.ts:1091,1095`) | P3 | `Closed-P3` |
+| F-R4-C-14 | R4 | Microdata keeps only the first value per property and drops link-valued properties (`src/extract.ts:43-44`) | P3 | `Closed-P3` |
+| F-R4-D-1 | R4 | The no-match/full-content response omits `passages_returned` and `match_quality` (`src/index.ts:1362-1381`; `src/batch.ts:216`) | P1 | `Scheduled-roadmap` |
+| F-R4-D-2 | R4 | Two no-match tests assert vacuously (`ranked.length >= 0`, `top.length <= 1`) and never assert the empty result (`src/rerank.test.ts:44-60`) | P2 | `Scheduled-roadmap` |
+| F-R4-D-3 | R4 | The default non-question raw envelope omits `extraction_mode` and passage count though REQ-021j requires them in `structuredContent` (`src/index.ts:1384-1399,1814`) | P1 | `Scheduled-roadmap` |
+| F-R4-D-4 | R4 | `rawRequestError` checks `Array.isArray` before the JSON-array string is coerced, so a stringified array runs as a batch in raw mode (`src/structured-output.ts:120-125` vs `src/index.ts:967,976`) | P2 | `Scheduled-roadmap` |
+| F-R4-D-5 | R4 | No test drives a successful raw fetch through the handler; the plain-text test uses a synthetic envelope (`src/structured-output.test.ts:86-100,200-228`) | P2 | `Scheduled-roadmap` |
+| F-R4-D-6 | R4 | The no-match note is shared with unreadable content, conflating two REQ-021b cases (`src/index.ts:1373`) | P3 | `Closed-P3` |
+| F-R4-D-7 | R4 | The batch truncation test sits outside the REQ-021k tagged block (`src/batch.test.ts:225-239`) | P3 | `Closed-P3` |
+| F-R4-E-1 | R4 | `area` and `elevation` are absent from the `structured_fact` signals, so those measurable attributes never classify and emit no fact (`src/task-type.ts:78-96`; `src/index.ts:1674`) | P1 | `Scheduled-roadmap` |
+| F-R4-E-2 | R4 | The fact source names only `wikidata`/`wikipedia`; an infobox-derived and a table-derived fact are indistinguishable (`src/structured-fact.ts:356-373`) | P2 | `Scheduled-roadmap` |
+| F-R4-E-3 | R4 | Status-branch tags are missing and `clause-coverage.ts` registers only the token immediately after the REQ ID (`src/structured-fact.test.ts:1`; `src/clause-coverage.ts:39-52`) | P2 | `Scheduled-roadmap` |
+| F-R4-E-4 | R4 | The classification clause is untagged in `task-type.test.ts:55-67` and no test asserts classify→enrich end-to-end (`src/structured-fact.test.ts:462-477` sets the type by hand) | P2 | `Scheduled-roadmap` |
+| F-R4-E-5 | R4 | Wikipedia facts never carry `as_of`; only Wikidata P585 does (`src/structured-fact.ts:323-364` vs `:208-213`) | P3 | `Closed-P3` |
+| F-R4-E-6 | R4 | Array queries are exempt from structured-fact enrichment (`src/index.ts:1664`) | P3 | `Closed-P3` |
+| F-R4-F-1 | R4 | `renderer` advertises `jina` in prose but declares no schema default (`src/index.ts:1772` vs `infobroker.md:268`) | P1 | `Scheduled-roadmap` |
+| F-R4-F-2 | R4 | `tool-surface.test.ts` checks descriptions and `outputSchema` but never the REQ-021 parameter set, defaults, or array cap (`src/tool-surface.test.ts:173-210`) | P2 | `Scheduled-roadmap` |
+| F-R4-F-3 | R4 | REQ-021's G0 parameter enumeration omits the advertised `raw` parameter that REQ-021j mandates (`infobroker.md:268`; `src/index.ts:1780`) | P2 | `Scheduled-roadmap` |
+| F-R4-F-4 | R4 | §6.4 says fallback happens only on Jina 429/error to native HTTP, contradicting the race and challenge fall-through (`infobroker.md:837-838`) | P1 | `Scheduled-roadmap` |
+| F-R4-F-5 | R4 | The `url` array branch has `.max(5)` but no `.min(1)`, so `url: []` is schema-valid (`src/index.ts:1771`) | P3 | `Closed-P3` |
 
 ## Program risks / notes
 
