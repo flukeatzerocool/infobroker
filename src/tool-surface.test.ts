@@ -25,7 +25,7 @@ interface ToolDef {
   description?: string;
   inputSchema?: {
     type?: string;
-    properties?: Record<string, { description?: string; default?: unknown; enum?: string[] }>;
+    properties?: Record<string, { description?: string; default?: unknown; enum?: string[]; minimum?: number; maximum?: number }>;
     required?: string[];
   };
   annotations?: ToolAnnotations;
@@ -233,4 +233,19 @@ test("search_web advertises the REQ-020 parameter contract and defaults", async 
 
   // REQ-020: only `query` is required.
   expect(tool!.inputSchema?.required).toEqual(["query"]);
+}, 30000);
+
+// @implements REQ-060 max-results-default
+// @implements REQ-060a max-results-default
+test("manage_kb advertises the REQ-060a max-results contract", async () => {
+  const { tools } = await listTools();
+  const tool = tools.find((t) => t.name === "infobroker_manage_kb");
+  expect(tool, "manage_kb is not registered").toBeDefined();
+
+  const props = tool!.inputSchema?.properties ?? {};
+  expect(props.max_results, "manage_kb.max_results is missing from the advertised schema").toBeDefined();
+  expect(props.max_results?.default, "manage_kb.max_results default drifted from REQ-060a").toBe(8);
+  expect(props.max_results?.minimum, "manage_kb.max_results minimum drifted from REQ-060a").toBe(1);
+  expect(props.max_results?.maximum, "manage_kb.max_results maximum drifted from REQ-060a").toBe(50);
+  expect(props.max_results?.description, "manage_kb.max_results description lost the default").toContain("default 8");
 }, 30000);

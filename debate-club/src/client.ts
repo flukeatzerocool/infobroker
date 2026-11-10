@@ -56,26 +56,33 @@ function rpcContentText(result: unknown): string {
   return first?.text ?? "";
 }
 
-export async function startServer(): Promise<DebateServer> {
+export interface ServerOptions {
+  /**
+   * Partial user-configuration layer, shallow-merged over the harness default
+   * at the top level. The tmpDir is passed in so a caller can create paths the
+   * layer refers to (for example an unopenable storage path). Returning
+   * `{ kb: null }` starts a server with no knowledge base.
+   */
+  configLayer?: (tmpDir: string) => Record<string, unknown>;
+}
+
+export async function startServer(options: ServerOptions = {}): Promise<DebateServer> {
   const tmpDir = mkdtempSync(join(tmpdir(), "debate-club-"));
   const cfgLocal = join(tmpDir, "config.local.json");
   const unmatchedPath = join(tmpDir, "unmatched.log");
   writeFileSync(unmatchedPath, "");
+  const defaultLayer: Record<string, unknown> = {
+    output: { verbose: true, audit_log_path: join(tmpDir, "audit.log") },
+    kb: {
+      storage_path: join(tmpDir, "kb"),
+      keys_path: join(tmpDir, "keys"),
+      reports_path: join(tmpDir, "reports"),
+      auto_index: false,
+    },
+  };
   writeFileSync(
     cfgLocal,
-    JSON.stringify(
-      {
-        output: { verbose: true, audit_log_path: join(tmpDir, "audit.log") },
-        kb: {
-          storage_path: join(tmpDir, "kb"),
-          keys_path: join(tmpDir, "keys"),
-          reports_path: join(tmpDir, "reports"),
-          auto_index: false,
-        },
-      },
-      null,
-      2
-    )
+    JSON.stringify({ ...defaultLayer, ...options.configLayer?.(tmpDir) }, null, 2)
   );
 
   const child = spawn(

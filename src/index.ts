@@ -21,7 +21,7 @@ import { sessionStats } from "./session-stats.js";
 import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
@@ -2233,13 +2233,18 @@ instrumentTool(
         }
 
         const dest = ingestDestinations(saveTo);
-        let finalUrl = resolveReportIdentity(title, url || params.source_url as string | undefined);
+        // REQ-060b: a fetched URL wins, then a caller-supplied identity, then a
+        // stable synthesized identity. Without this, text-only ingest dropped
+        // `source_url` and an anonymous document stored an empty identity, so
+        // `list` showed one entry per chunk.
+        const suppliedIdentity = (params.source_url as string | undefined) || url || undefined;
+        let finalUrl = isReport
+          ? resolveReportIdentity(title, suppliedIdentity)
+          : (suppliedIdentity ?? resolveTextIdentity(title));
         let diskPath: string | undefined;
         if (dest.disk) {
           diskPath = saveReportToDisk(title, content, String(params.format || "markdown"));
           finalUrl = `file://${diskPath}`;
-        } else if (!url) {
-          finalUrl = isReport ? resolveReportIdentity(title, undefined) : "";
         }
 
         // REQ-083: a "disk" destination writes the report to a local file

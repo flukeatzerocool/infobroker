@@ -848,17 +848,29 @@ export function kbGet(sourceUrl: string): { title: string; source_url: string; c
   return sqliteGet(sourceUrl);
 }
 
-function slugify(title: string): string {
+function slugify(title: string, fallback = "report"): string {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "report";
+    .slice(0, 80) || fallback;
 }
 
 export function resolveReportIdentity(title: string, providedUrl?: string): string {
   if (providedUrl) return providedUrl;
   return `report://${slugify(title)}`;
+}
+
+/**
+ * REQ-060b: a text-only ingest with no caller-supplied identity still needs a
+ * stable identity, so `list` groups its chunks as one document and `get`
+ * addresses it. `text://` is never fetched; it is a stored identity only,
+ * matching the `report://` convention. The `note` fallback keeps a
+ * punctuation-only title out of the report namespace.
+ */
+export function resolveTextIdentity(title: string, providedUrl?: string): string {
+  if (providedUrl) return providedUrl;
+  return `text://${slugify(title, "note")}`;
 }
 
 /** True when the active backend persists the claim ledger (REQ-109). */

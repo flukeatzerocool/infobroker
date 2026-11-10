@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, kbDelete, resolveReportIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
+import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, kbDelete, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
@@ -307,6 +307,19 @@ describe("kb ingest action chunks content (REQ-060b)", () => {
     );
     expect(chunks).toBeGreaterThan(0);
     expect(kbGet("https://example.com/ingest-note")?.title).toBe("ingest-note");
+  });
+});
+
+// @implements REQ-060b text-identity
+describe("text ingest identity (REQ-060b)", () => {
+  it("builds a stable text:// identity from the title", () => {
+    expect(resolveTextIdentity("Text Note: Part 2!")).toBe("text://text-note-part-2");
+    expect(resolveTextIdentity("Text Note: Part 2!")).toBe(resolveTextIdentity("Text Note: Part 2!"));
+  });
+
+  it("does not collide with the report namespace for an un-slugifiable title", () => {
+    expect(resolveTextIdentity("!!!")).toBe("text://note");
+    expect(resolveTextIdentity("!!!")).not.toBe("report://report");
   });
 });
 
