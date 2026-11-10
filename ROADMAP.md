@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Full-repository review sweep
-
-- Run a whole-repository semantic review one chunk per session: R1 contracts, R2 config/providers/resilience, R3 `search_web`, R4 `fetch_page`, R5 corroboration, R6 knowledge base, R7 client artifacts/reporting, R8 deployment/state/security, R9 spec integrity, then the M1 machine-evidence pass. The tracker is `docs/plans/2026-11-09-full-review-sweep/worklist.md`.
-- Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
-- Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
-
-**Trigger:** start chunk M1 after chunk R9 closed; close this item when M1's machine-evidence pass is green.
-
 ## R6 `manage_kb` action-contract remediation
 
 - Stop discarding a caller-supplied `source_url` for text-only ingest (F-R6-A-2), and add handler-level tests for the receipt-only-report/KB and at-least-one-input refusals (F-R6-A-3).
@@ -92,9 +84,10 @@
 ## R4 fetch-page extraction remediation
 
 - Fix the R4 P1 set in `fetch_page` extraction: report `passages_returned` and `match_quality` on the no-match/full-content branch (F-R4-D-1), expose `extraction_mode` and passage count in the default raw `structuredContent` (F-R4-D-3), and stop emitting publication dates as `last_updated` with high confidence (F-R4-C-2).
+- Route crawl and extract truncation through `maybeTruncate` so truncation metadata is reported (F-R4-C-9, REQ-004).
 - Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
 
-**Trigger:** start after chunk R5 closes; close when every R4 P1 row in the extraction group is `Resolved`.
+**Trigger:** start after chunk R5 closes; close when F-R4-D-1, F-R4-D-3, F-R4-C-2, and F-R4-C-9 are `Resolved`.
 
 ## R4 fetch-page classification remediation
 
