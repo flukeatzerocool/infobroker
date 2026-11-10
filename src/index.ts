@@ -340,6 +340,7 @@ async function doWebSearch(
         query_time_ms: 0,
         fallback_used: false,
         research: true,
+        kb_recall: "not_applicable",
         variants: groups.length,
         ...(analyze ? { analysis: analyzeResults(groups.flatMap((g) => g.results), config.analysis) } : {}),
       },
@@ -349,12 +350,14 @@ async function doWebSearch(
   // REQ-076a: blend keeps the KB rows as a seed for the external response
   // instead of replacing it. `kbRecall` reports which path the request took.
   let kbCached: SearchResult[] = [];
-  let kbRecall: KbRecallState = "unavailable";
+  // REQ-076a: a deep request reports recall as not applicable even when no KB is
+  // configured; a plain search reports the KB state instead.
+  let kbRecall: KbRecallState = deep ? "not_applicable" : "unavailable";
   if (isKbConfigured()) {
-    if (fresh === true) {
-      kbRecall = "skipped";
-    } else if (deep || research) {
+    if (deep || research) {
       kbRecall = "not_applicable";
+    } else if (fresh === true) {
+      kbRecall = "skipped";
     } else {
       try {
         const kbResults = kbSearch(query, maxResults, collection);
@@ -367,10 +370,14 @@ async function doWebSearch(
           const sufficientResults = kbResults.filter(
             (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
           );
+          // REQ-076a: a blend returns both result sets, so the sufficiency
+          // thresholds gate KB-first mode only and never drop cached rows a
+          // caller explicitly asked to keep.
+          const cachedRows = fresh === "blend" ? kbResults : sufficientResults;
           // REQ-028: a deep or research request must still read pages. The KB
           // shortcut returns stored snippets and would otherwise silently skip
           // enrichment, so it applies only to plain searches.
-          const kbMapped = sufficientResults.map((r) => ({
+          const kbMapped = cachedRows.map((r) => ({
             title: r.title,
             url: r.source_url,
             snippet: r.snippet,

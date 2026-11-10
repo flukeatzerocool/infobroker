@@ -54,6 +54,7 @@ import {
   pairwiseSimilarity,
   tokenize,
   DEFAULT_MODEL,
+  KNOWN_MODELS,
   type EmbeddingModel,
 } from "./embed.js";
 import { SqliteStore, sqliteStoreFormat } from "./kb-sqlite.js";
@@ -115,7 +116,8 @@ function configureModel(name: string | undefined): void {
     modelAvailable = false;
     activeModel = createModel(DEFAULT_MODEL)!;
     sqliteStore?.appendEvent(
-      `Embedding model "${requested}" is unavailable at ${new Date().toISOString()}; retrieval degraded to "${DEFAULT_MODEL}"`
+      `Embedding model "${requested}" is unavailable at ${new Date().toISOString()}; retrieval degraded to "${DEFAULT_MODEL}". ` +
+        `Remediation: set kb.embedding_model to a supported reference (${KNOWN_MODELS.join(", ")}) in config.local.json, or install the requested model, then reload.`
     );
     return;
   }
