@@ -5,7 +5,7 @@
 // messages are sealed; the salt and encryption marker live in `meta`.
 import { DatabaseSync } from "node:sqlite";
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, readdirSync, renameSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
   ClaimLedgerQuery,
@@ -28,6 +28,53 @@ import type { ResolvedKey } from "./kb-crypto.js";
 
 /** Row bound for one claim read (REQ-060h); hitting it reports truncated. */
 export const CLAIM_SCAN_LIMIT = 5000;
+
+/**
+ * REQ-085/REQ-108: the store format this build writes and accepts. The value
+ * lives in the SQLite header (`user_version`, offset 60), so the check needs no
+ * database handle and creates no `-wal`/`-shm` sidecar.
+ *
+ * 0 is the reserved legacy marker: every store written before this marker
+ * existed reports 0 and is read as version 1. Only a marker *above* this value
+ * means "written by a newer build".
+ */
+export const SQLITE_FORMAT_VERSION = 1;
+const SQLITE_HEADER_MAGIC = Buffer.from("SQLite format 3\0", "binary");
+const HEADER_READ_BYTES = 100;
+const USER_VERSION_OFFSET = 60;
+
+/** REQ-085: the store's format is unrecognized or newer than this build. */
+export class KbStoreFormatError extends Error {
+  readonly code: "kb_store_newer_format" | "kb_store_unrecognized_format";
+  constructor(code: "kb_store_newer_format" | "kb_store_unrecognized_format", message: string) {
+    super(message);
+    this.name = "KbStoreFormatError";
+    this.code = code;
+  }
+}
+
+/** REQ-108: the store is a recognized SQLite file whose content is corrupt. */
+export class KbStoreCorruptError extends Error {
+  readonly code = "kb_store_corrupt" as const;
+  readonly path: string;
+  readonly sqliteCode: number | null;
+  constructor(path: string, sqliteCode: number | null, message: string) {
+    super(message);
+    this.name = "KbStoreCorruptError";
+    this.path = path;
+    this.sqliteCode = sqliteCode;
+  }
+}
+
+export type StoreProbeState = "new" | "ok" | "unrecognized" | "newer" | "corrupt" | "locked";
+
+export interface StoreProbe {
+  state: StoreProbeState;
+  marker?: number;
+  detail?: string;
+  /** The underlying failure for `locked`, so `init()` can rethrow it unchanged. */
+  error?: unknown;
+}
 
 export const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -76,10 +123,111 @@ export interface SqliteStoreOptions {
   fileName?: string;
   journalMode?: "WAL" | "DELETE";
   /**
+   * REQ-108: recover a corrupt store instead of refusing it. The live store
+   * passes `true`; scratch and migrated stores keep the default so a corrupt
+   * temporary file is never silently replaced.
+   */
+  allowRecovery?: boolean;
+  /** Header probe and recovery opener; injectable for tests. */
+  openDatabase?: (path: string, options?: { readOnly?: boolean }) => DatabaseSync;
+  /**
    * Migration guard: the legacy JSON store is the migration's own source and
    * must survive until the database commit and archive rename complete.
    */
   protectedLegacyPath?: string;
+}
+
+const defaultOpenDatabase = (path: string, options?: { readOnly?: boolean }): DatabaseSync =>
+  options ? new DatabaseSync(path, options) : new DatabaseSync(path);
+
+/**
+ * REQ-085/REQ-108: classify a store file before anything opens it read-write.
+ *
+ * The magic and the marker come from the first 100 bytes, so no handle is
+ * needed for the format decisions. Only a magic-bearing, marker-supported file
+ * is opened (read-only) and checked with `PRAGMA quick_check`: an open plus a
+ * schema read succeeds over a store with damaged pages, so the integrity read
+ * is the only thing that detects latent corruption.
+ *
+ * Sidecars that the read-only open itself creates are removed when the result
+ * is `locked` or `unrecognized`, so "the store was not touched" stays true for
+ * those outcomes.
+ */
+export function probeStoreFile(
+  path: string,
+  open: (path: string, options?: { readOnly?: boolean }) => DatabaseSync = defaultOpenDatabase
+): StoreProbe {
+  if (!existsSync(path)) return { state: "new" };
+
+  const header = Buffer.alloc(HEADER_READ_BYTES);
+  let read = 0;
+  {
+    const fd = openSync(path, "r");
+    try {
+      read = readSync(fd, header, 0, HEADER_READ_BYTES, 0);
+    } finally {
+      closeSync(fd);
+    }
+  }
+  if (read === 0) return { state: "new" }; // zero-byte file: SQLite treats it as a new database
+  if (read < SQLITE_HEADER_MAGIC.length || !header.subarray(0, SQLITE_HEADER_MAGIC.length).equals(SQLITE_HEADER_MAGIC)) {
+    return { state: "unrecognized", detail: "file does not start with the SQLite header" };
+  }
+  if (read < HEADER_READ_BYTES) {
+    return { state: "corrupt", detail: "truncated SQLite header" };
+  }
+  const marker = header.readUInt32BE(USER_VERSION_OFFSET);
+  if (marker > SQLITE_FORMAT_VERSION) {
+    return { state: "newer", marker, detail: `store format ${marker} is newer than supported ${SQLITE_FORMAT_VERSION}` };
+  }
+
+  const sidecars = [`${path}-wal`, `${path}-shm`];
+  const preexisting = sidecars.filter((name) => existsSync(name));
+  const cleanup = (): void => {
+    for (const name of sidecars) {
+      if (preexisting.includes(name)) continue;
+      if (!existsSync(name)) continue;
+      try {
+        unlinkSync(name);
+      } catch {
+        // best effort: a sidecar that cannot be removed still belongs to the store
+      }
+    }
+  };
+
+  let db: DatabaseSync | null = null;
+  try {
+    db = open(path, { readOnly: true });
+    const rows = db.prepare("PRAGMA quick_check").all() as Array<Record<string, unknown>>;
+    const values = rows.flatMap((row) => Object.values(row).map(String));
+    if (values.length > 0 && values.every((value) => value.toLowerCase() === "ok")) {
+      return { state: "ok", marker };
+    }
+    return { state: "corrupt", marker, detail: values.slice(0, 3).join("; ") };
+  } catch (e) {
+    const errcode = sqliteErrorCode(e);
+    // A locked/busy/io/permission failure is not evidence of corruption: the
+    // store may be healthy and merely unavailable right now.
+    if (errcode === 11) return { state: "corrupt", marker, detail: errorMessage(e) };
+    return { state: "locked", marker, detail: errorMessage(e), error: e };
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      // an unclosed read-only handle is released by the OS at process exit
+    }
+    cleanup();
+  }
+}
+
+function sqliteErrorCode(error: unknown): number | null {
+  const candidate = error as { errcode?: unknown; code?: unknown } | null;
+  if (candidate && typeof candidate.errcode === "number") return candidate.errcode;
+  return null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export class SqliteStore implements KbStore {
@@ -105,11 +253,60 @@ export class SqliteStore implements KbStore {
   init(): void {
     const dir = dirname(this.path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
-    this.db = new DatabaseSync(this.path);
-    this.db.exec(`PRAGMA journal_mode = ${this.opts.journalMode ?? "WAL"}`);
-    this.db.exec("PRAGMA secure_delete = ON");
-    this.db.exec(SQLITE_SCHEMA);
 
+    const probe = probeStoreFile(this.path, this.openDatabase);
+    switch (probe.state) {
+      case "unrecognized":
+        throw new KbStoreFormatError(
+          "kb_store_unrecognized_format",
+          `knowledge base store format is unrecognized: ${probe.detail ?? "unknown file layout"}`
+        );
+      case "newer":
+        throw new KbStoreFormatError(
+          "kb_store_newer_format",
+          `knowledge base store was written by a newer version (format ${probe.marker}); this build supports up to ${SQLITE_FORMAT_VERSION}`
+        );
+      case "locked":
+        throw probe.error instanceof Error ? probe.error : new Error(`knowledge base store is unavailable: ${probe.detail ?? "unknown error"}`);
+      case "corrupt":
+        if (!this.opts.allowRecovery) {
+          throw new KbStoreCorruptError(this.path, null, `knowledge base store is corrupt: ${probe.detail ?? "integrity check failed"}`);
+        }
+        this.recoverCorruptStore();
+        return;
+      case "new":
+        this.bootstrap(true);
+        return;
+      case "ok":
+        this.bootstrap(false);
+        return;
+    }
+  }
+
+  private get openDatabase(): (path: string, options?: { readOnly?: boolean }) => DatabaseSync {
+    return this.opts.openDatabase ?? defaultOpenDatabase;
+  }
+
+  /**
+   * Open the store and run the existing startup sequence. `fresh` is true for a
+   * newly created file, which owes the format marker.
+   */
+  private bootstrap(fresh: boolean): void {
+    try {
+      this.db = this.openDatabase(this.path);
+      this.db.exec(`PRAGMA journal_mode = ${this.opts.journalMode ?? "WAL"}`);
+      this.db.exec("PRAGMA secure_delete = ON");
+      this.db.exec(SQLITE_SCHEMA);
+      if (fresh) this.db.exec(`PRAGMA user_version = ${SQLITE_FORMAT_VERSION}`);
+      this.startup();
+    } catch (e) {
+      this.db?.close();
+      this.db = null;
+      throw e;
+    }
+  }
+
+  private startup(): void {
     const marker = this.rawMeta("encryption");
     this.salt = this.rawMeta("salt") ? Buffer.from(this.rawMeta("salt")!, "base64") : null;
     if (marker === "1") {
@@ -139,7 +336,7 @@ export class SqliteStore implements KbStore {
       const suffix = this.encrypted ? "sqlite.enc" : "sqlite";
       const backup = join(dirname(this.path), `vector-store.corrupt-${Date.now()}.${suffix}`);
       try {
-        this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        this.db?.exec("PRAGMA wal_checkpoint(TRUNCATE)");
       } catch {
         // best effort: a busy checkpoint still leaves a usable main file
       }
@@ -148,6 +345,79 @@ export class SqliteStore implements KbStore {
       this.corruptionBackup = backup;
     }
     this.hardenPermissions();
+  }
+
+  /**
+   * REQ-108: preserve a corrupt store as a backup, continue with an empty one,
+   * and report the recovery as a status event.
+   *
+   * Order is backup → create → verify → report, and any failure restores the
+   * archive: a recovery attempt must never leave the operator with neither the
+   * original nor a working store.
+   */
+  private recoverCorruptStore(): void {
+    const dir = dirname(this.path);
+    const base = `vector-store.corrupt-${Date.now()}`;
+    // The plaintext suffix stays an archive artifact (so the plaintext sweep can
+    // reap it once encryption is on); the `.enc` suffix deliberately does not
+    // match, so a possibly-ciphertext backup is never reaped (REQ-084).
+    const suffix = this.opts.encryptionEnabled ? ".sqlite.enc" : ".sqlite";
+    const archiveMain = join(dir, `${base}${suffix}`);
+    if (existsSync(archiveMain)) {
+      throw new Error(`corruption backup already exists: ${archiveMain}`);
+    }
+
+    const moved: Array<{ from: string; to: string }> = [];
+    try {
+      this.db?.close();
+      this.db = null;
+      const sources: Array<{ from: string; side: string }> = [
+        { from: this.path, side: "" },
+        { from: `${this.path}-wal`, side: "-wal" },
+        { from: `${this.path}-shm`, side: "-shm" },
+      ];
+      for (const source of sources) {
+        if (!existsSync(source.from)) continue;
+        const to = join(dir, `${base}${suffix}${source.side}`);
+        renameSync(source.from, to);
+        chmodSync(to, 0o600);
+        moved.push({ from: source.from, to });
+      }
+      // A sidecar recreated between the rename and the creation would otherwise
+      // attach to the new store.
+      for (const name of [`${this.path}-wal`, `${this.path}-shm`]) {
+        if (existsSync(name)) unlinkSync(name);
+      }
+      this.bootstrap(true);
+      // Verify before reporting: a store that cannot answer a trivial query is
+      // not a recovery.
+      this.db!.prepare("SELECT count(*) AS n FROM chunks").get();
+    } catch (e) {
+      try {
+        this.db?.close();
+      } catch {
+        // already closed
+      }
+      this.db = null;
+      for (const name of [this.path, `${this.path}-wal`, `${this.path}-shm`]) {
+        try {
+          if (existsSync(name)) unlinkSync(name);
+        } catch {
+          // best effort; the restore below is the authority
+        }
+      }
+      for (const item of moved.reverse()) {
+        try {
+          renameSync(item.to, item.from);
+        } catch {
+          // the original error is the one worth reporting
+        }
+      }
+      throw e;
+    }
+    this.appendEvent(
+      `Storage corruption detected at ${new Date().toISOString()}. Backup: ${archiveMain}. Starting with an empty knowledge base.`
+    );
   }
 
   /**
@@ -393,15 +663,17 @@ export class SqliteStore implements KbStore {
 
   appendEvent(message: string): void {
     if (!this.db) return;
-    const bytes = this.encrypted && this.rowKey
-      ? sealRow(this.rowKey, Buffer.from(message, "utf-8"))
-      : Buffer.from(message, "utf-8");
     this.db.prepare("INSERT INTO events (at, encrypted, message) VALUES (?, ?, ?)").run(
       new Date().toISOString(),
       this.encrypted ? 1 : 0,
-      bytes
+      this.encodeEvent(Buffer.from(message, "utf-8"))
     );
     this.db.exec("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 100)");
+  }
+
+  /** Seal an event payload when encryption is on, else store it in the clear. */
+  private encodeEvent(clear: Buffer): Buffer {
+    return this.encrypted && this.rowKey && this.rowKey.length > 0 ? sealRow(this.rowKey, clear) : clear;
   }
 
   events(): string[] {
@@ -413,7 +685,16 @@ export class SqliteStore implements KbStore {
     const out: string[] = [];
     for (const row of rows) {
       try {
-        const clear = row.encrypted === 1 && this.rowKey ? openRow(this.rowKey, Buffer.from(row.message)) : Buffer.from(row.message);
+        // A row marked encrypted needs a non-empty key and a successful open;
+        // an empty key (a disabled store's residue) must be skipped, not used to
+        // decode ciphertext into mojibake.
+        const clear =
+          row.encrypted === 1
+            ? this.rowKey && this.rowKey.length > 0
+              ? openRow(this.rowKey, Buffer.from(row.message))
+              : null
+            : Buffer.from(row.message);
+        if (!clear) continue;
         out.push(clear.toString("utf-8"));
       } catch {
         // a single unreadable event is skipped
@@ -695,9 +976,17 @@ export class SqliteStore implements KbStore {
    * Re-seal every row under a new key. Used by enable, disable, and rekey.
    * The caller supplies the new secret; the old key opens the current rows.
    *
-   * REQ-086: the transition is atomic and lossless. Every payload is decoded
-   * before the first write, any undecodable row aborts the transition, and the
-   * in-memory key state is restored if the transaction fails.
+   * REQ-086: the transition is atomic and lossless. Chunk, claim, edge, and
+   * receipt payloads are decoded before the first write and any undecodable row
+   * aborts the transition, and the in-memory key state is restored if the
+   * transaction fails.
+   *
+   * Event history is part of the transition. A row that is marked encrypted but
+   * no longer opens under the current key is preserved byte-for-byte and keeps
+   * its flag instead of aborting: such a row was already unreadable before the
+   * transition, and aborting would make it impossible to ever rekey or disable a
+   * store that holds one. The row stays unreadable afterwards, which `events()`
+   * handles by skipping it rather than rendering ciphertext.
    */
   private resealAll(next: { key: Buffer; encrypted: boolean; salt: Buffer | null }): void {
     if (!this.db) throw new Error("knowledge base store is not open");
@@ -732,6 +1021,22 @@ export class SqliteStore implements KbStore {
     if (decodedReceipts.some((item) => item.body === null)) {
       throw new Error("report receipt row could not be decoded during reseal");
     }
+    // REQ-084/REQ-086: event history reseals with the rest of the store. A row
+    // that does not open under the current key is preserved unchanged (see the
+    // method comment); readable rows are re-encoded under the next key.
+    const eventRows = this.db
+      .prepare("SELECT id, encrypted, message FROM events")
+      .all() as Array<{ id: number; encrypted: number; message: Uint8Array }>;
+    const decodedEvents = eventRows.map((row) => {
+      const bytes = Buffer.from(row.message);
+      if (row.encrypted !== 1) return { id: row.id, clear: bytes as Buffer | null };
+      if (!this.rowKey || this.rowKey.length === 0) return { id: row.id, clear: null };
+      try {
+        return { id: row.id, clear: openRow(this.rowKey, bytes) };
+      } catch {
+        return { id: row.id, clear: null };
+      }
+    });
 
     const previous = {
       rowKey: this.rowKey,
@@ -790,6 +1095,11 @@ export class SqliteStore implements KbStore {
             this.encodeReceipt(item.body),
             item.id
           );
+        }
+        const updateEvent = this.db!.prepare("UPDATE events SET encrypted = ?, message = ? WHERE id = ?");
+        for (const item of decodedEvents) {
+          if (!item.clear) continue; // unreadable under the current key: preserved unchanged
+          updateEvent.run(next.encrypted ? 1 : 0, this.encodeEvent(item.clear), item.id);
         }
         this.metaCache = null;
         this.writeRawMeta("encryption", next.encrypted ? "1" : "0");

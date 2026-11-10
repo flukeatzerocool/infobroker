@@ -57,7 +57,7 @@ import {
   KNOWN_MODELS,
   type EmbeddingModel,
 } from "./embed.js";
-import { SqliteStore, sqliteStoreFormat } from "./kb-sqlite.js";
+import { KbStoreCorruptError, KbStoreFormatError, SqliteStore, sqliteStoreFormat } from "./kb-sqlite.js";
 import { migrateLegacyJson } from "./kb-migrate.js";
 import { SNIPPET_SOURCE_TYPE } from "./kb-store.js";
 import { KbPrefilter } from "./kb-prefilter.js";
@@ -393,6 +393,7 @@ export function initKb(config: KbConfig): void {
           sqliteStore = new SqliteStore(raw, {
             secret,
             encryptionEnabled: config.encryption?.enabled ?? false,
+            allowRecovery: true,
           });
           sqliteStore.init();
           if (migration.event) sqliteStore.appendEvent(migration.event);
@@ -416,11 +417,32 @@ export function initKb(config: KbConfig): void {
           }
           resolvedKey = secret;
         } catch (e) {
-          lockError = {
-            code: "config_error",
-            message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
-            remediation: "Inspect the knowledge-base directory and its permissions, or provide the correct key.",
-          };
+          if (e instanceof KbStoreFormatError) {
+            // REQ-085: an unrecognized or newer store is refused and left
+            // untouched; the message names which rule applied.
+            lockError = {
+              code: "config_error",
+              message: e.message,
+              remediation:
+                e.code === "kb_store_newer_format"
+                  ? "Upgrade the server to a version that supports this store format; the store has not been modified."
+                  : "Inspect the knowledge-base directory; the file is not a knowledge-base store written by this server, and it has not been modified.",
+            };
+          } else if (e instanceof KbStoreCorruptError) {
+            // REQ-108: recovery was attempted and did not complete, or it is
+            // disabled for this caller; the store has been restored.
+            lockError = {
+              code: "config_error",
+              message: e.message,
+              remediation: "Restore the knowledge base from backup, or remove the reported corrupt file and reload to start empty.",
+            };
+          } else {
+            lockError = {
+              code: "config_error",
+              message: `Knowledge base could not be opened: ${e instanceof Error ? e.message : String(e)}`,
+              remediation: "Inspect the knowledge-base directory and its permissions, or provide the correct key.",
+            };
+          }
           sqliteStore?.close();
           sqliteStore = null;
         }
