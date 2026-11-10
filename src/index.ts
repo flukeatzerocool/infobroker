@@ -1932,23 +1932,22 @@ instrumentTool(
         .map((f) => ({ title: f.topic, url: f.sources[0]!.url, snippet: f.claim }));
       autoIndex(indexable, "corroborate", undefined, "corroborate");
       // REQ-109: persist the ledger best-effort. kbRecordClaims swallows every
-      // error, so a ledger failure cannot fail or alter this response. An
-      // unsourced batch claim has no source to link and is not persisted.
+      // error, so a ledger failure cannot fail or alter this response. Every
+      // finding is persisted, including a batch claim no source could be
+      // attributed to: it becomes a claim record with no source edges.
       kbRecordClaims(
-        result.findings
-          .filter((f) => f.sources.some((s) => Boolean(s.url)))
-          .map((f) => ({
-            claim: f.claim || f.topic,
-            verdict: f.verdict,
-            confidence: f.confidence,
-            sources: f.sources
-              .filter((s) => Boolean(s.url))
-              .map((s) => ({
-                url: s.url,
-                title: s.title,
-                retrieved_at: s.retrieved_at ?? new Date().toISOString(),
-              })),
-          }))
+        result.findings.map((f) => ({
+          claim: f.claim || f.topic,
+          verdict: f.verdict,
+          confidence: f.confidence,
+          sources: f.sources
+            .filter((s) => Boolean(s.url))
+            .map((s) => ({
+              url: s.url,
+              title: s.title,
+              retrieved_at: s.retrieved_at ?? new Date().toISOString(),
+            })),
+        }))
       );
       if (compactMode(getConfig())) {
         delete result.provenance;

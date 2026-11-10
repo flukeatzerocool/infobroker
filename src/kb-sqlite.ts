@@ -711,9 +711,9 @@ export class SqliteStore implements KbStore {
   // --- Claim ledger (REQ-109, REQ-060h) -------------------------------------
   //
   // Claim rows mirror the chunk store's at-rest rule: only the identifiers
-  // (claim_key, source_key) and timestamps stay in clear columns; the claim
-  // text, verdict, confidence, and URL live in the sealed payload. The
-  // identifiers are keyed with the row key when encryption is on, so the raw
+  // (claim_key, source_key) stay in clear columns; the claim text, verdict,
+  // confidence, URL, title, and retrieval time live in the sealed payload.
+  // The identifiers are keyed with the row key when encryption is on, so the raw
   // database cannot be dictionary-matched against candidate claims or URLs.
 
   /** Normalize claim text before keying: trim, collapse, lowercase, strip terminal punctuation. */
@@ -762,15 +762,15 @@ export class SqliteStore implements KbStore {
     }
   }
 
-  private encodeEdge(edge: Pick<ClaimSourceEdge, "url" | "title">): Buffer {
-    const clear = Buffer.from(JSON.stringify({ url: edge.url, title: edge.title }), "utf-8");
+  private encodeEdge(edge: Pick<ClaimSourceEdge, "url" | "title" | "retrieved_at">): Buffer {
+    const clear = Buffer.from(JSON.stringify({ url: edge.url, title: edge.title, retrieved_at: edge.retrieved_at }), "utf-8");
     return this.encrypted && this.rowKey ? sealRow(this.rowKey, clear) : clear;
   }
 
-  private decodeEdge(payload: Uint8Array): { url: string; title: string } | null {
+  private decodeEdge(payload: Uint8Array): { url: string; title: string; retrieved_at?: string } | null {
     try {
       const clear = this.encrypted && this.rowKey ? openRow(this.rowKey, Buffer.from(payload)) : Buffer.from(payload);
-      return JSON.parse(clear.toString("utf-8")) as { url: string; title: string };
+      return JSON.parse(clear.toString("utf-8")) as { url: string; title: string; retrieved_at?: string };
     } catch {
       return null;
     }
@@ -815,6 +815,10 @@ export class SqliteStore implements KbStore {
           insertClaim.run(id, claimKey, now, now, this.encrypted ? 1 : 0, payload);
         }
         // Each verification replaces the claim's source set (history deferred).
+        // REQ-109: the retrieval time travels inside the sealed edge payload, so
+        // the clear column keeps only an empty placeholder. A row written by an
+        // older build still carries its time there and is read through the
+        // fallback; a key transition rewrites it into the payload.
         deleteEdges.run(id);
         const seen = new Set<string>();
         for (const src of claim.sources) {
@@ -823,9 +827,9 @@ export class SqliteStore implements KbStore {
           insertEdge.run(
             id,
             this.sourceKey(src.url),
-            src.retrieved_at,
+            "",
             this.encrypted ? 1 : 0,
-            this.encodeEdge({ url: src.url, title: src.title })
+            this.encodeEdge({ url: src.url, title: src.title, retrieved_at: src.retrieved_at })
           );
         }
         written++;
@@ -967,7 +971,15 @@ export class SqliteStore implements KbStore {
     for (const row of rows) {
       const edge = this.decodeEdge(row.payload);
       if (!edge) continue;
-      out.push({ source_key: row.source_key, url: edge.url, title: edge.title, retrieved_at: row.retrieved_at });
+      // REQ-109: the payload is authoritative. A row written before the
+      // retrieval time moved into the payload still has it in the clear
+      // column, so the read falls back rather than dropping the time.
+      out.push({
+        source_key: row.source_key,
+        url: edge.url,
+        title: edge.title,
+        retrieved_at: edge.retrieved_at ?? row.retrieved_at,
+      });
     }
     return out;
   }
@@ -1071,7 +1083,10 @@ export class SqliteStore implements KbStore {
           "INSERT INTO claim_sources (claim_id, source_key, retrieved_at, encrypted, payload) VALUES (?, ?, ?, ?, ?)"
         );
         // Source keys change with the key, so re-key by position: the decoded
-        // edges are in the same order as the rows they came from.
+        // edges are in the same order as the rows they came from. The retrieval
+        // time re-seals with the edge, and a row written before it moved into
+        // the payload contributes its clear value once before the column is
+        // blanked (REQ-109).
         clearEdges.run();
         decodedEdges.forEach((item, i) => {
           const row = edgeRows[i];
@@ -1079,9 +1094,13 @@ export class SqliteStore implements KbStore {
           insertEdge.run(
             row.claim_id,
             this.sourceKey(item.edge.url),
-            row.retrieved_at,
+            "",
             next.encrypted ? 1 : 0,
-            this.encodeEdge(item.edge)
+            this.encodeEdge({
+              url: item.edge.url,
+              title: item.edge.title,
+              retrieved_at: item.edge.retrieved_at ?? row.retrieved_at,
+            })
           );
         });
         const updateReceipt = this.db!.prepare(
