@@ -20,7 +20,7 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R5 after chunk R4 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R6 after chunk R5 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
 
 ## R2 findings remediation
 
@@ -58,6 +58,27 @@
 - Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
 
 **Trigger:** start after chunk R5 closes; close when every R4 P1 row in the contract group is `Resolved`.
+
+## R5 corroboration remediation
+
+- Stop unrelated results from being attributed through stopword overlap (F-R5-A-1), make `confidence_threshold` gate the `confirmed` verdict instead of the fixed 0.5 cutoff (F-R5-A-2), and prevent a knowledge-base-only corroboration from reaching `confirmed` (F-R5-D-1).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R6 closes; close when F-R5-A-1, F-R5-A-2, and F-R5-D-1 are `Resolved`.
+
+## R5 snapshot and family remediation
+
+- Gate archiving on `preservation.enabled` rather than `corroboration.archive_sources` (F-R5-C-1), report the deep-reading snapshot hash and freshness tier instead of discarding it (F-R5-C-3), and collapse short republished snippets into one source family (F-R5-B-1).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R6 closes; close when F-R5-C-1, F-R5-C-3, and F-R5-B-1 are `Resolved`.
+
+## R5 citation and prose remediation
+
+- Preserve the per-provider status and zero-result provider list under compact verbosity (F-R5-E-3), and align §8.2's independence definition with source-family counting (F-R5-G-1).
+- Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R6 closes; close when F-R5-E-3 and F-R5-G-1 are `Resolved`.
 
 ## Non-goals
 

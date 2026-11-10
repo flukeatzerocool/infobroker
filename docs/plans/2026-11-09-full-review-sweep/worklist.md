@@ -266,9 +266,57 @@ Reviewed at standard depth; split not triggered (64 anchors, 3 clusters probed).
 `REQ-026g` `REQ-026h` `REQ-121` `REQ-122` `REQ-123` `REQ-130` `REQ-027`
 `REQ-027a`
 
-Spec: §4.3 (those IDs), §5.5, §8.
+Spec: §1 goal 4, §3 SR-008, §4.3 (those IDs), §5.5, §8.1–§8.3.
 Code: `src/corroborate.ts`, `src/calibration.ts`, `src/source-family.ts`,
-`src/structured-fact.ts`, `src/cite.ts`, `src/bibtex.ts`.
+`src/cite.ts`, `src/bibtex.ts`, `src/preservation.ts`, `src/span.ts`,
+`src/modality.ts`, `src/retrieval-benchmark.ts`,
+`scripts/calibrate-confidence.ts`, `test-fixtures/{calibration,retrieval}`,
+plus the `verify_claims`/`get_citations` handler regions in `src/index.ts`.
+(`src/structured-fact.ts` is R4-owned and read as evidence only.)
+
+**Phase 1 enumeration (2026-11-09).** 94 de-duplicated anchors across clusters
+A–G; three clusters (A, C, D) are probe-dependent. D42 split:
+**not triggered** (94 ≤ 120; 3 < 4 clusters). Tracker drift recorded:
+the R5 `Code:` line omitted `preservation.ts`, `modality.ts`, `span.ts`,
+`retrieval-benchmark.ts`, `scripts/calibrate-confidence.ts`, and both fixture
+directories, and listed R4-owned `structured-fact.ts`; the `Spec:` line and
+coverage row omitted §1 goal 4 and §3 SR-008; `worklist.md:282` (R6) still
+lists `retrieval-benchmark.ts`. Correction happens at chunk close (step 21).
+
+#### R5 verdict table (2026-11-09)
+
+Reviewed at standard depth; split not triggered (94 anchors, 3 probe-dependent clusters). Evidence: 12 carrying test files / 165 tests PASS; Arena 3 files / 37 tests PASS; seven fresh-context cluster reviews; loopback probe not run in this session (the batch-shape legs are covered by `corroborate.test.ts:1098-1257`, and the plan permits `NOT_RUN` only for unservable legs — recorded as a process note in the AAR).
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-026 `verify_claims` | `finding:F-R5-A-2` | G0 schema carries all six parameters with the stated defaults (`src/index.ts:1861-1868`); the confirmation gate is a fixed `confidence >= 0.5`, not `confidence_threshold`, so a 0.7 finding is reported `confirmed` at T=0.8 (`src/corroborate.ts:306-312`; `corroborate.test.ts:407-427`) while the tool description promises below-threshold findings are unverified (`src/index.ts:1861`) |
+| REQ-026a source authority | `finding:F-R5-B-5` | weights configurable and applied (`src/corroborate.ts:538,376-378`; `config.json:340-352`); equal-count ordering proven at unit level (`corroborate.test.ts:191-209`), but no test drives `reconcileClaims`/`corroborate` with weights, so the wiring is static-only (D44) |
+| REQ-026b claim attribution | `finding:F-R5-A-1` | per-source claim text and positive overlap hold (`src/corroborate.ts:216-228`); `jaccardSimilarity` keeps every token longer than two characters with no stopword filter, so a shared "the"/"and" attributes an unrelated page (`src/corroborate.ts:101-113`) |
+| REQ-026c source preservation | `finding:F-R5-C-1` | archive reference, concurrency cap 4 and failure tolerance hold (`src/corroborate.ts:922-965`); the archive is gated on `corroboration.archive_sources`, not `preservation.enabled`, and ships false while preservation ships true (`src/corroborate.ts:793`; `config.json:336,420`) |
+| REQ-026d provenance record | `finding:F-R5-C-6` | version, iteration limit, threshold, config hash and per-source fields present, dropped only in compact (`src/corroborate.ts:823-846`; `src/index.ts:1946`); per-source-type contribution is global across findings with no finding attribution (`src/corroborate.ts:803-809,833-843`) |
+| REQ-026e KB recall | `finding:F-R5-D-1` | recall before external search, capped, original URLs, fail-open hold (`src/corroborate.ts:619-633`); KB hits are reconciled indistinguishably from external ones, so two KB hits can reach `confirmed` with no external source (`src/corroborate.ts:226-228,306-322`) |
+| REQ-026f reconciliation | `holds` | clustering by similarity plus explicit conflict, contested with perspectives, never confirmed across conflict (`src/corroborate.ts:267-323`; `corroborate.test.ts:236-258,372-383`) |
+| REQ-026g batch claims | `finding:F-R5-A-4` | order, collapse with all indices, unsourced-as-unverified, shared budget hold (`corroborate.test.ts:1098-1257`); the dual-input rejection, empty-list rejection and `max_batch_claims` bound live only in the handler and are untested (`src/index.ts:1900-1913`) |
+| REQ-026h span and modality | `holds` | modality on every source, span omitted when unfound, configurable lexicon, score-neutral (`src/corroborate.ts:177-186`; `span.test.ts`, `modality.test.ts`, `corroborate.test.ts:1259-1309`) |
+| REQ-121 source families | `finding:F-R5-B-1` | canonical URL, same-domain and near-duplicate long text collapse, threshold configurable (`src/source-family.ts:26-155`; `source-family.test.ts:8-44`); the 20-token gate means short republished snippets never collapse, and the test enshrines it (`src/source-family.ts:88-90`; `source-family.test.ts:34-40`) |
+| REQ-122 snapshots | `finding:F-R5-C-3` | snippet/document basis, policy gate, byte bound and truncation reporting hold for `verify_claims` (`src/corroborate.ts:849-899`); the deep-reading path calls `snapshotSource` and discards the result, reporting no hash or freshness tier (`src/index.ts:647-655`). P0 F-R5-C-2 (basis mislabeled on fetch failure) fixed in-session |
+| REQ-123 calibration | `finding:F-R5-B-3` | cap applies only to secondary-only findings; Brier and reliability exist over a committed gold set (`calibration.test.ts:6-34`; `scripts/calibrate-confidence.ts`); the disable path has no test and the tool ignores configured `secondary_only_cap` (`src/calibration.ts:39`; `scripts/calibrate-confidence.ts:71-75`) |
+| REQ-130 retrieval benchmark | `finding:F-R5-F-1` | committed corpus, precision/recall/MRR/nDCG, determinism with fixed k=5, baseline floor at `npm run test`, distinct from the gold set (`src/retrieval-benchmark.ts:66-125`); `rankedUrls` swallows every reconciler error and scores the raw order, so a broken reconciler passes (`src/retrieval-benchmark.ts:99-106`) |
+| REQ-027 `get_citations` | `holds` | G0 schema `query` required, `max_results` default 8 max 30 (`src/index.ts:2488-2491`); fields, `@misc` fallback, keyless chain (`src/cite.ts:90-102`; `src/bibtex.ts:43-54`; `cite.test.ts:225-235`) |
+| REQ-027a source aggregation | `finding:F-R5-E-3` | chain sweep, per-provider status, DOI/title dedup, zero-result and exhaustion shapes hold (`src/cite.ts:141-204`; `src/index.ts:2512-2551`; Arena `:267-287`); compact verbosity drops `meta` and therefore the per-provider status and zero-result diagnostic (REQ-027a is unconditional) (`src/index.ts:2536-2551`) |
+
+#### R5 prose verdict table (2026-11-09)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §1 goal 4 truth by iteration | `holds` | multi-pass loop, agreement/contradiction, gap refinement (`infobroker.md:32` → `src/corroborate.ts:647-760,252-324`) |
+| §3 SR-008 corroboration bounded | `holds` | `max_iterations` capped at 10 and the 30-call budget reserved before dispatch (`infobroker.md:92` → `src/corroborate.ts:528-531,638-642`) |
+| §5.5 corroboration quality | `holds` | exits within `max_iterations`; schema/handler, provider-interface and chain-non-empty bullets are gate-backed (`typecheck`, `tool-surface.test.ts`, `config.json` chains) (`infobroker.md:765-775`) |
+| §8.1 algorithm | `finding:F-R5-G-4` | seeding, phases, caps, three-source slice and synthesis match (`infobroker.md:914-992` → `src/corroborate.ts:601-704,774-791`); the agreement map's `red` is `confidence < 0.5`, the 0.5–threshold band is `yellow`, and unsourced findings are excluded rather than red (`:396-417,786-791`); contested findings also take the dominant cluster's confidence rather than `low` (F-R5-G-3) |
+| §8.2 confidence scoring | `finding:F-R5-G-1` | ladder, threshold effect, authority scaling, similarity threshold and semantic grouping hold; the independence definition says "different registrable domains" while code counts source families by canonical URL and text overlap (`infobroker.md:1013-1015` → `src/corroborate.ts:350-367`; `src/source-family.ts:93-100`); the calibration cap is unmentioned (F-R5-G-2) |
+| §8.3 iteration limits | `finding:F-R5-G-6` | defaults, caps, budget, first-pass bounds, concurrency and kb_recall match; `partial` is set whenever any finding is below threshold, not only when a limit is reached (`infobroker.md:1035` → `src/corroborate.ts:819-822`) |
+
+
 
 ### R6 — Knowledge base (29)
 
@@ -279,7 +327,9 @@ Code: `src/corroborate.ts`, `src/calibration.ts`, `src/source-family.ts`,
 `REQ-103`
 
 Spec: §4.9.
-Code: `src/kb*.ts`, `src/embed.ts`, `src/retrieval-benchmark.ts`.
+Code: `src/kb*.ts`, `src/embed.ts`.
+(R5 owns `src/retrieval-benchmark.ts`; removed from this line at the R5
+close, 2026-11-09.)
 
 ### R7 — Client artifacts and reporting (17)
 
@@ -325,9 +375,8 @@ status and any new evidence.
 | R2 | §4.2, §4.3 (024 family), §4.4–4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | **closed 2026-11-09** | R3 |
 | R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | **closed 2026-11-09** | R4 |
 | R4 | §4.3 (021 family), §6.4 | 12 | **closed 2026-11-10** | R5 |
-| R5 | §4.3 (026 family, 121–123, 130, 027), §5.5, §8 | 15 | not started | R4 closed |
-| R6 | §4.9 | 29 | not started | R5 closed |
-| R7 | §4.7, §10.2–10.3, App D | 17 | not started | R6 closed |
+| R5 | §1 goal 4, §3 SR-008, §4.3 (026 family, 121–123, 130, 027), §5.5, §8.1–8.3 | 15 | **closed 2026-11-09** | R6 |
+| R6 | §4.9 | 29 | not started | R5 closed || R7 | §4.7, §10.2–10.3, App D | 17 | not started | R6 closed |
 | R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | not started | R7 closed |
 | R9 | §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | not started | R8 closed |
 | M1 | all | — | not started | R9 closed |
@@ -465,6 +514,60 @@ work.
 | F-R4-F-3 | R4 | REQ-021's G0 parameter enumeration omits the advertised `raw` parameter that REQ-021j mandates (`infobroker.md:268`; `src/index.ts:1780`) | P2 | `Scheduled-roadmap` |
 | F-R4-F-4 | R4 | §6.4 says fallback happens only on Jina 429/error to native HTTP, contradicting the race and challenge fall-through (`infobroker.md:837-838`) | P1 | `Scheduled-roadmap` |
 | F-R4-F-5 | R4 | The `url` array branch has `.max(5)` but no `.min(1)`, so `url: []` is schema-valid (`src/index.ts:1771`) | P3 | `Closed-P3` |
+
+| F-R5-A-1 | R5 | `jaccardSimilarity` keeps every token longer than two characters with no stopword filter, so a shared "the"/"and" attributes an unrelated result to a claim, violating REQ-026b's unrelated-SHALL-NOT clause (`src/corroborate.ts:101-113,225-228`) | P1 | `Scheduled-roadmap` |
+| F-R5-A-2 | R5 | The confirmation gate is a fixed `confidence >= 0.5`, not `confidence_threshold`; a 0.7 finding is reported `confirmed` at T=0.8 while the tool description promises below-threshold findings are unverified (`src/corroborate.ts:306-312`; `src/index.ts:1861`; `corroborate.test.ts:407-427`) | P1 | `Scheduled-roadmap` |
+| F-R5-A-3 | R5 | `priority:"privacy"` replaces a caller's `providers` allowlist with the privacy chain (re-admitting non-operational providers); `priority:"quality"` is a no-op (`src/corroborate.ts:447-449,566-570`) | P2 | `Scheduled-roadmap` |
+| F-R5-A-4 | R5 | REQ-026g's dual-input rejection, empty-list rejection and `max_batch_claims` bound live only in the handler and are untested (`src/index.ts:1900-1913`) | P2 | `Scheduled-roadmap` |
+| F-R5-A-5 | R5 | Agreement-map classification has no positive test (green at/above threshold, yellow in the 0.5–threshold band) (`src/corroborate.ts:406-414`) | P2 | `Scheduled-roadmap` |
+| F-R5-A-6 | R5 | Clause tags missing for REQ-026b's unrelated-SHALL-NOT leg and REQ-026g's dual-input/config-bound legs (`corroborate.test.ts:1,1061-1069`) | P3 | `Closed-P3` |
+| F-R5-A-7 | R5 | Paraphrase grouping is evidenced only by high lexical overlap; no synonym-level paraphrase case (`src/corroborate.ts:270-286`) | P3 | `Closed-P3` |
+| F-R5-A-8 | R5 | `src/corroborate.ts:1` header omits `REQ-026f` though the file implements reconciliation (`src/corroborate.ts:1` vs `corroborate.test.ts:1`) | P3 | `Closed-P3` |
+| F-R5-B-1 | R5 | The 20-token gate means short republished snippets never collapse into one family, and the test enshrines the non-collapse despite REQ-121's "republish substantially the same text" (`src/source-family.ts:88-90,132-138`; `source-family.test.ts:34-40`) | P1 | `Scheduled-roadmap` |
+| F-R5-B-2 | R5 | Named clause tags absent for REQ-121's canonical-URL/near-duplicate legs, REQ-123's cap/measure/disable legs and REQ-026a's authoritative-vs-generic leg (`source-family.test.ts:1`; `calibration.test.ts:1`; `corroborate.test.ts:1`) | P3 | `Closed-P3` |
+| F-R5-B-3 | R5 | REQ-123's disableability clause is untested: nothing asserts `capConfidence(...,{enabled:false})` or that config `calibration.enabled:false` reaches a finding (`src/calibration.ts:39`; `calibration.test.ts:5-34`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-4 | R5 | REQ-121's "each finding SHALL report its family count" is static-only: `family_count` is written and spread but never asserted on a finding (`src/corroborate.ts:259,779-783`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-5 | R5 | Authority weights and calibration options are never exercised through `reconcileClaims`; a mis-wired argument at any of the four call sites would pass the suite (`corroborate.test.ts:128-384`; `src/corroborate.ts:538-544,628,695,745`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-6 | R5 | The calibration tool hardcodes `{enabled:true}` and never reads `secondary_only_cap`, so its Brier score and curve can diverge from the server's configured correction (`scripts/calibrate-confidence.ts:71-75`; `config.json:339`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-7 | R5 | The calibration measurement never runs in a gate: no `calibrat*` package script and no calibration gate in the manifest (`package.json`; `scripts/lib/gate-manifest.ts`) | P3 | `Closed-P3` |
+| F-R5-B-8 | R5 | `textSimilarity` divides by `min(|A|,|B|)` (asymmetric containment), so a snippet contained in a long article merges into that article's family (`src/source-family.ts:69-76`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-9 | R5 | Shipped `web_search:0.7` turns the two-family base 0.7 into 0.49, below the confirm gate, contradicting the §8.2 ladder example and untested at reconcile level (`src/corroborate.ts:371-378`; `config.json:351`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-10 | R5 | `family_similarity_threshold` configurability is unproven: the only explicit pass is the default 0.9 (`source-family.test.ts:19`) | P2 | `Scheduled-roadmap` |
+| F-R5-B-11 | R5 | `reliabilityCurve` bands are half-open and `brierScore([])` returns 0, presenting no data as perfect calibration (`src/calibration.ts:45-72`) | P3 | `Closed-P3` |
+| F-R5-B-12 | R5 | Per-family authority uses only the first source's `source_type`, so an untyped first member neutralizes a typed family (`src/corroborate.ts:350-365`) | P3 | `Closed-P3` |
+| F-R5-C-1 | R5 | Archiving is gated on `corroboration.archive_sources` instead of `preservation.enabled`; shipped preservation-on plus archive-off means the preservation-enabled default never archives (`src/corroborate.ts:793`; `config.json:336,420`) | P1 | `Scheduled-roadmap` |
+| F-R5-C-2 | R5 | Snapshot basis was chosen by whether a fetcher existed, not whether the fetch succeeded, so a failed fetch stored the snippet while reporting `basis:"document"` (`src/corroborate.ts:866-886`) | **P0** | **Resolved 2026-11-09** — basis follows the stored text; regression test `REQ-122 snippet-basis-on-fetch-failure` |
+| F-R5-C-3 | R5 | Deep reading calls `snapshotSource` and discards the result, reporting neither snapshot hash nor freshness tier alongside the live URL (`src/index.ts:647-655`) | P1 | `Scheduled-roadmap` |
+| F-R5-C-4 | R5 | Sources with a pre-existing `content_sha256` are skipped: no snapshot stored and no basis/truncation fields, so a hash can appear without a graded snapshot (`src/corroborate.ts:859`) | P2 | `Scheduled-roadmap` |
+| F-R5-C-5 | R5 | `provenance.sources[]` omits `snapshot_tier` although REQ-122 requires the freshness tier alongside the live URL (`src/corroborate.ts:833-843`) | P2 | `Scheduled-roadmap` |
+| F-R5-C-6 | R5 | Per-source-type contribution is global across findings and the flat `provenance.sources[]` carries no finding index (`src/corroborate.ts:803-809,833-843`) | P2 | `Scheduled-roadmap` |
+| F-R5-C-7 | R5 | REQ-122's document-vs-snippet and truncated-copy branches carry no named clause tags (`preservation.test.ts:1`) | P2 | `Scheduled-roadmap` |
+| F-R5-C-8 | R5 | Archive and snapshot are awaited inline, so preservation can delay the response (`src/corroborate.ts:793-799,922-923`) | P2 | `Scheduled-roadmap` |
+| F-R5-C-9 | R5 | A test named "does not archive when source preservation is disabled" never disables preservation; it only omits `archive_sources` (`corroborate.test.ts:683-707`) | P3 | `Closed-P3` |
+| F-R5-D-1 | R5 | KB recalls are reconciled indistinguishably from external sources, so two KB hits can reach `confirmed` with no external corroboration, violating REQ-026e's KB-alone clause (`src/corroborate.ts:619-633,226-228,306-322`) | P1 | `Scheduled-roadmap` |
+| F-R5-D-2 | R5 | The KB-alone test is tautological: `providers_used` never contains KB slugs, and no KB-only finding is exercised (`corroborate.test.ts:848-869`) | P2 | `Scheduled-roadmap` |
+| F-R5-D-3 | R5 | REQ-026e's uninitialized/disabled/failing branches carry no named clause tags (`corroborate.test.ts:1`) | P3 | `Closed-P3` |
+| F-R5-D-4 | R5 | The KB result cap is untested (no assertion on the `kbSearch` limit or truncation) (`corroborate.test.ts:468-486`) | P2 | `Scheduled-roadmap` |
+| F-R5-D-5 | R5 | KB original-source-URL propagation is asserted only by count, never by value (`corroborate.test.ts:484-485,866-868`) | P2 | `Scheduled-roadmap` |
+| F-R5-D-6 | R5 | Recall-before-external-search ordering has no assertion; a reorder would pass (`corroborate.test.ts:468-486`) | P2 | `Scheduled-roadmap` |
+| F-R5-D-7 | R5 | The failing-KB `catch` is never exercised (`src/corroborate.ts:629-631`) | P2 | `Scheduled-roadmap` |
+| F-R5-E-1 | R5 | The academic chain is truncated to `output.fallback_depth`, so providers past that index are neither attempted nor reported (`src/cite.ts:148`; `config.json:358`) | P2 | `Scheduled-roadmap` |
+| F-R5-E-2 | R5 | Dedup namespaces are disjoint (`doi:` vs `title:`), so a DOI-bearing and a title-only reference for the same work never merge (`src/cite.ts:115-139`) | P2 | `Scheduled-roadmap` |
+| F-R5-E-3 | R5 | Compact verbosity drops `meta`, removing the per-provider status and the zero-result provider list that REQ-027a requires unconditionally (`src/index.ts:2536-2551`) | P1 | `Scheduled-roadmap` |
+| F-R5-E-4 | R5 | REQ-027a's zero-result and all-exhausted branches carry no named clause tags (`cite.test.ts:1`) | P2 | `Scheduled-roadmap` |
+| F-R5-E-5 | R5 | `escapeLatex` escapes the braces of its own `\textbackslash{}` replacement, rendering an extra `{}` (`src/bibtex.ts:14-18`) | P3 | `Closed-P3` |
+| F-R5-E-6 | R5 | CORE carries the academic capability but is absent from the academic dispatch chain (`config.json:101-108` vs `:251`) | P3 | `Closed-P3` |
+| F-R5-E-7 | R5 | `allFailed` is true when every provider is skipped, so `all_providers_exhausted` is reported where nothing was attempted (`src/cite.ts:194-195`) | P3 | `Closed-P3` |
+| F-R5-F-1 | R5 | `rankedUrls` swallows every reconciler error and scores the raw order, so a broken reconciler passes the suite (`src/retrieval-benchmark.ts:99-106`) | P2 | `Scheduled-roadmap` |
+| F-R5-F-2 | R5 | The regression floor compares only the four reconciled aggregates; `baseline.raw`, `cases`, `version` and `k` are recorded but unchecked (`src/retrieval-benchmark.test.ts:61-66`) | P2 | `Scheduled-roadmap` |
+| F-R5-F-3 | R5 | `precision_at_k` divides by `min(returned,k)` rather than `k`, inflating precision for short result lists (`src/retrieval-benchmark.ts:68,73`) | P3 | `Closed-P3` |
+| F-R5-F-4 | R5 | No assertion compares raw with reconciled metrics, so the reconciliation effect is printed but never verified (`src/retrieval-benchmark.ts:117`) | P3 | `Closed-P3` |
+| F-R5-G-1 | R5 | §8.2 defines independence as "different registrable domains" while code counts source families by canonical URL and text overlap (`infobroker.md:1013-1015` → `src/corroborate.ts:350-367`) | P1 | `Scheduled-roadmap` |
+| F-R5-G-2 | R5 | §8.2 omits the secondary-only calibration cap, so a reader cannot know a 0.9/1.0-tier finding can be clamped to 0.7 (`infobroker.md:994-1020`) | P2 | `Scheduled-roadmap` |
+| F-R5-G-3 | R5 | §8.1 gives contested findings `confidence: low`, but code assigns the dominant cluster's confidence, which can reach 0.9/1.0 (`infobroker.md:963-969` → `src/corroborate.ts:302-305,316-322`) | P2 | `Scheduled-roadmap` |
+| F-R5-G-4 | R5 | §8.1's agreement map is `{green,yellow,red:gaps}`; code's `red` is `confidence < 0.5` and unsourced findings are excluded from the map (`infobroker.md:986` → `src/corroborate.ts:396-417,786-791`) | P2 | `Scheduled-roadmap` |
+| F-R5-G-5 | R5 | §8.1 says `agree.length >= 2 → confirmed`, but the path also requires `confidence >= 0.5` (`infobroker.md:957-962` → `src/corroborate.ts:306-312`) | P3 | `Closed-P3` |
+| F-R5-G-6 | R5 | §8.3 says `partial` is set when a limit is reached; code sets it whenever any finding is below threshold (`infobroker.md:1035` → `src/corroborate.ts:819-822`) | P3 | `Closed-P3` |
 
 ## Program risks / notes
 
