@@ -326,10 +326,66 @@ Reviewed at standard depth; split not triggered (94 anchors, 3 probe-dependent c
 `REQ-084` `REQ-085` `REQ-086` `REQ-087` `REQ-108` `REQ-109` `REQ-110`
 `REQ-103`
 
-Spec: §4.9.
-Code: `src/kb*.ts`, `src/embed.ts`.
+Spec: §4.9, §1 goal 6 (knowledge persistence).
+Code: `src/kb*.ts`, `src/embed.ts`; the `manage_kb` registration/handler and the
+auto-index call sites in `src/index.ts` (`:586,588,662,1095,1242,1333,1926`);
+the `kb` block in `config.json` (`:393-418`).
 (R5 owns `src/retrieval-benchmark.ts`; removed from this line at the R5
 close, 2026-11-09.)
+
+**Phase 1 enumeration (2026-11-09).** 86 distinct anchors (70 across nine
+modules, 16 in `src/index.ts`); probe-dependent clusters B, C, E (3 < 4).
+D50 split: **not triggered** (86 ≤ 120; 3 < 4 clusters). Detail:
+`docs/plans/2026-11-09-full-review-r6/phase1-enumeration.md`. Tracker drift
+recorded: the code line omits the `manage_kb` handler, auto-index hooks, and
+the config `kb` block; the coverage row omits §1 goal 6; the R8 line names a
+nonexistent `src/kb-hardening.ts`; the status board merges R6 and R7.
+
+#### R6 verdict table (2026-11-09)
+
+Reviewed at standard depth; split not triggered (86 anchors, 3 probe-dependent
+clusters). Evidence: 20 carrying test files / 322 tests PASS; Arena 3 files /
+37 tests PASS; isolated module probe (`/tmp/opencode/r6-probe-script/probe.ts`)
+legs (a)–(d) and constrained-heap leg (g) PASS; cross-tool stdio probe
+(`probe-cross.ts`) legs (e)–(f) PASS.
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-060 `manage_kb` | `finding:F-R6-A-1` | live schema carries the nine-action enum and A/E envelope (`check-intent-citations.ts:165`, Arena); advertised `max_results` default 8/max 50 and the unconfigured/invalid-KB REQ-002 error are unasserted (`src/index.ts:2058-2060`) |
+| REQ-060a search | `finding:F-R6-A-1` | fields/ranking and empty-store zero results hold (`kb.test.ts:261-279`; probe a); the advertised defaults are unasserted |
+| REQ-060b ingest | `finding:F-R6-A-2` | chunks/receipt/destination hold (`kb.test.ts:300-311`; Arena; probe b); a caller `source_url` is discarded for text-only ingest (`src/index.ts:2236-2243`), and the receipt-only-KB/at-least-one-input branches are handler-only |
+| REQ-060c stats | `finding:F-R6-A-4` | `chunk_count`/size/model/events asserted (`kb.test.ts:113-118`, `kb-sqlite.test.ts:89-95`); per-collection counts and `last_ingestion`-after-ingest unasserted |
+| REQ-060d delete | `finding:F-R6-A-4` | count removal holds (`kb.test.ts:313-327`); "require at least one filter" static-only (`src/index.ts:2352-2354`) |
+| REQ-060e list | `finding:F-R6-A-4` | presence asserted, newest-first order and `chunk_count` unasserted (`kb.test.ts:147-165`) |
+| REQ-060f get | `finding:F-R6-A-4` | reassembly asserted with `toContain`, order and no-document error unasserted (`kb.test.ts:167-184`) |
+| REQ-060g encryption | `holds` | keygen refusal, verify, backup, status, rekey tested (`kb-encryption-tools.test.ts:91-185`; `kb-claims.test.ts:263-274`); probe c shows status reachable while locked |
+| REQ-060h claims | `finding:F-R6-A-5` | newest-first/filters/cap hold (`kb-claims.test.ts:167-195`); the tool-level locked-store error mapping is static-only (`src/index.ts:2065-2069`) |
+| REQ-060i verify_report | `finding:F-R6-A-6` | verified/drift/unverifiable/missing demonstrated (`kb-report-receipt.test.ts:150-337`; probe d); `stale=true` and the document-basis source-absent branch unasserted |
+| REQ-064 auto-index | `finding:F-R6-B-1` | the only citation asserts an injected callback (`deep-search.test.ts:103-116`); real `autoIndex` non-blocking, failure suppression, toggle, and the three hook sites are unobserved |
+| REQ-065 collections | `finding:F-R6-B-2` | explicit>env holds, but the config-default tier is untestable because the fixture default equals the literal fallback (`kb.test.ts:237-250`) |
+| REQ-066 expiry | `finding:F-R6-B-3` | only the zero-interval path is tested (`kb-hardening.test.ts:46-52`); startup/interval removal, tier-driven expiry, indefinite tiers, and no-error-event unasserted |
+| REQ-067 config | `finding:F-R6-B-4` | field list and numeric bounds hold; absent/invalid→error is contradicted by the shipped-defaults fallback (`src/config.ts:978`, `config.test.ts:614-625`) and reload is untested |
+| REQ-072 dedup | `finding:F-R6-B-5` | same-URL replacement holds (probe b); meaning-equivalence runs only for `report://` identities (`src/kb.ts:604-621`), so non-report duplicates persist |
+| REQ-083 reports | `finding:F-R6-B-6` | retention is not `source_type`-guarded — tier expiry removes any chunk (`src/kb.ts:1096-1101`); revision/supersedes live only in the optional receipt and are non-monotonic |
+| REQ-087 source dates | `holds` | store/report/omit/preserve-on-reingest asserted (`kb.test.ts:199-220`) |
+| REQ-074 freshness | `finding:F-R6-C-2` | tier labels only (`kb.test.ts:371-379`); decay/expiry and hot reload static-only |
+| REQ-075 decay | `finding:F-R6-C-3` | score presence and ordering on equal freshness only (`kb.test.ts:67-73`); decay reduction and zero-decay exemption unasserted |
+| REQ-076 KB-first | `finding:F-R6-C-4` | probe hit/miss and unit freshness fields; below-threshold fall-through and unconfigured-KB bypass static-only |
+| REQ-076a blend | `finding:F-R6-C-6` | probe blend/skip; blend reuses the sufficiency filter so sub-threshold cached rows are dropped, and the all-external-fail path needs `kbCached.length > 0` (`src/index.ts:367-369,398,751`) |
+| REQ-082 consistency | `holds` | earlier content stays retrievable and model change reconciles with an event (`kb.test.ts:76-111`; `kb-model.test.ts:63-112`) |
+| REQ-103 local embedding | `finding:F-R6-C-7` | model/config/reconcile tested (`embed.test.ts:14-20`); degradation appends an event with no remediation message and no test (`src/kb.ts:114-120`) |
+| REQ-084 encryption | `finding:F-R6-D-3` | lock/refusal/secret-change/readable-when-disabled tested; handler refusal, `stats.encryption`, and key-source precedence static-only |
+| REQ-085 preservation | `finding:F-R6-D-2` | newer legacy JSON refused byte-unchanged and unreadable path errors hold; no SQLite format marker exists, so a newer SQLite store is opened read-write (`src/kb-sqlite.ts:32-71,105-131`) |
+| REQ-086 transitions | `finding:F-R6-D-1` | enable/disable/rekey lossless for chunks/claims/receipts; `resealAll` never re-seals `events`, so encrypted event history is silently lost on rekey/disable (`src/kb-sqlite.ts:702-808,407-423`) |
+| REQ-108 capacity | `finding:F-R6-E-1` | probe proves heap-bounded search/list/get/stats (49.4 MB store, 32 MB heap); corrupt live SQLite yields only a lock error with no backup/empty-store recovery (`src/kb.ts:416-424`) |
+| REQ-109 claim ledger | `finding:F-R6-F-1` | rows/edges/retrieval time/sealing tested; unsourced findings are never persisted (`src/index.ts:1932`) and `retrieved_at` stays plaintext (`src/kb-sqlite.ts:59`) |
+| REQ-110 receipts | `finding:F-R6-F-4` | manifest/digest/dedup/bounds/sealing tested; a snippet-basis source with no `retrieved_at` loses the retrieval time (`src/kb-receipt.ts:293`), and disk-only rejection is untested |
+
+#### R6 prose verdict table (2026-11-09)
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| §1 goal 6 knowledge persistence | `holds` | search results and fetched pages auto-index (`src/index.ts:586,588,1333`), `verify_claims` findings persist (`:1926`), KB-first retrieval replaces external search (probe e), and an unconfigured KB leaves search working (`isKbConfigured()` guard; probe f) |
 
 ### R7 — Client artifacts and reporting (17)
 
@@ -350,7 +406,8 @@ Code: `skills/`, `instructions/`, `README.md`, `src/report-*.ts`,
 Spec: §2, §4.10, §4.11, §5.1–5.2, §5.4, §10.1, App E.
 Code: `src/config-migrations.ts` (path/patch logic lives in `src/config.ts`), `src/update-check.ts`,
 `src/state-health.ts`, `src/audit-log.ts`, `src/content-policy.ts`,
-`src/kb-hardening.ts`, `scripts/`, `.githooks/`.
+`src/kb-crypto.ts` and `src/kb-sqlite.ts` (KB hardening: startup resilience,
+artifact predicates), `scripts/`, `.githooks/`.
 
 ### R9 — Spec integrity and tool quality (9)
 
@@ -376,7 +433,8 @@ status and any new evidence.
 | R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | **closed 2026-11-09** | R4 |
 | R4 | §4.3 (021 family), §6.4 | 12 | **closed 2026-11-10** | R5 |
 | R5 | §1 goal 4, §3 SR-008, §4.3 (026 family, 121–123, 130, 027), §5.5, §8.1–8.3 | 15 | **closed 2026-11-09** | R6 |
-| R6 | §4.9 | 29 | not started | R5 closed || R7 | §4.7, §10.2–10.3, App D | 17 | not started | R6 closed |
+| R6 | §1 goal 6, §4.9 | 29 | **closed 2026-11-09** | R7 |
+| R7 | §4.7, §10.2–10.3, App D | 17 | not started | R6 closed |
 | R8 | §2, §4.10–4.11, §5.1–5.2, §5.4, §10.1, App E | 15 | not started | R7 closed |
 | R9 | §3 terminology, §4.3 (089/090/092/106), §4.8, §9, App B–C | 9 | not started | R8 closed |
 | M1 | all | — | not started | R9 closed |
@@ -568,6 +626,46 @@ work.
 | F-R5-G-4 | R5 | §8.1's agreement map is `{green,yellow,red:gaps}`; code's `red` is `confidence < 0.5` and unsourced findings are excluded from the map (`infobroker.md:986` → `src/corroborate.ts:396-417,786-791`) | P2 | `Scheduled-roadmap` |
 | F-R5-G-5 | R5 | §8.1 says `agree.length >= 2 → confirmed`, but the path also requires `confidence >= 0.5` (`infobroker.md:957-962` → `src/corroborate.ts:306-312`) | P3 | `Closed-P3` |
 | F-R5-G-6 | R5 | §8.3 says `partial` is set when a limit is reached; code sets it whenever any finding is below threshold (`infobroker.md:1035` → `src/corroborate.ts:819-822`) | P3 | `Closed-P3` |
+
+### R6 finding register (2026-11-09)
+
+| ID | Chunk | Predicate | Severity | Disposition |
+|---|---|---|---|---|
+| F-R6-A-1 | R6 | `manage_kb` advertised `max_results` default 8/max 50 and the unconfigured/invalid-KB REQ-002 error are unasserted; only `check-intent-citations` pins the action enum (`src/tool-surface.test.ts:187-210`; `src/index.ts:2058-2060`) | P1 | `Scheduled-roadmap` |
+| F-R6-A-2 | R6 | A caller `source_url` is discarded for text-only ingest: the `else if (!url)` branch overwrites the identity with `""`, and empty-URL chunks split into one entry per chunk (`src/index.ts:2236-2243`) | P1 | `Scheduled-roadmap` |
+| F-R6-A-3 | R6 | Receipt-only-for-report/KB and at-least-one-of-text-or-url refusal branches are handler-only with no test (`src/index.ts:2185-2186,2215-2227`) | P1 | `Scheduled-roadmap` |
+| F-R6-A-4 | R6 | REQ-060c per-collection counts/last ingestion, REQ-060e newest-first order and chunk_count, REQ-060f chunk order and no-document error, REQ-060d filter requirement are cited but unasserted (`src/kb.test.ts:113-184`) | P1 | `Scheduled-roadmap` |
+| F-R6-A-5 | R6 | The tool-level locked-store error mapping is static-only; the test asserts `kbClaims` does not throw (`src/kb-claims.test.ts:339-354`; `src/index.ts:2065-2069`) | P1 | `Scheduled-roadmap` |
+| F-R6-A-6 | R6 | REQ-060i `stale=true` and the document-basis source-absent branch are unasserted (`src/kb-report-receipt.test.ts:556`; `src/kb-receipt.ts:371-373`) | P1 | `Scheduled-roadmap` |
+| F-R6-A-7 | R6 | Verified sources are counted but not listed, so "each source state" surfaces as aggregate counts (`src/kb-receipt.ts:374-375`) | P3 | `Closed-P3` |
+| F-R6-B-1 | R6 | REQ-064 auto-index has no observing test: non-blocking, failure suppression, toggle, and the three hook sites are unasserted (`src/deep-search.test.ts:103-116`; `src/kb.ts:1026-1061`) | P1 | `Scheduled-roadmap` |
+| F-R6-B-2 | R6 | REQ-065 config-default precedence is indistinguishable from the literal fallback because the fixture default equals `"default"` (`src/kb.test.ts:245`) | P1 | `Scheduled-roadmap` |
+| F-R6-B-3 | R6 | REQ-066 startup/interval expiry, tier-driven removal, indefinite tiers, and the no-error-event clause have zero assertions (`src/kb-hardening.test.ts:46-52`; `src/kb.ts:1091-1109`) | P1 | `Scheduled-roadmap` |
+| F-R6-B-4 | R6 | REQ-067 absent/invalid→error is contradicted by the shipped-defaults fallback, and KB config reload is untested (`src/config.ts:978`; `config.test.ts:614-625`) | P1 | `Scheduled-roadmap` |
+| F-R6-B-5 | R6 | REQ-072 meaning-equivalence dedup runs only for `report://` identities; non-report duplicates under different URLs persist (`src/kb.ts:604-621`) | P1 | `Scheduled-roadmap` |
+| F-R6-B-6 | R6 | REQ-083 report retention is not `source_type`-guarded (tier expiry removes any chunk), and revision/supersedes are receipt-only and non-monotonic (`src/kb.ts:1096-1101`; `src/index.ts:2038`) | P1 | `Scheduled-roadmap` |
+| F-R6-C-1 | R6 | `freshness.default_tier` is only type-checked; a name with no tier never decays or expires (`src/config.ts:938-940`; `src/kb.ts:321-328,1097-1098`) | P2 | `Scheduled-roadmap` |
+| F-R6-C-2 | R6 | REQ-074's cited test asserts tier labels only; decay/expiry and hot reload are static-only (`src/kb.test.ts:371-379`) | P3 | `Closed-P3` |
+| F-R6-C-3 | R6 | REQ-075's decay reduction, zero-decay exemption, and freshness-adjusted ordering are unasserted (`src/kb.test.ts:67-73`) | P2 | `Scheduled-roadmap` |
+| F-R6-C-4 | R6 | The below-threshold fall-through and unconfigured/disabled-KB bypass are static-only (`src/index.ts:353-369`) | P3 | `Closed-P3` |
+| F-R6-C-5 | R6 | A `research` request early-returns without `kb_recall`, so "not applicable" is unimplemented for research (`src/index.ts:322-346`) | P1 | `Scheduled-roadmap` |
+| F-R6-C-6 | R6 | Blend reuses the KB-first sufficiency filter, dropping sub-threshold cached rows, and the all-external-fail path needs a non-empty filtered cache (`src/index.ts:367-369,398,751`) | P1 | `Scheduled-roadmap` |
+| F-R6-C-7 | R6 | REQ-103 degradation appends an informational event with no remediation message and no test (`src/kb.ts:114-120`; `src/index.ts:2348`) | P1 | `Scheduled-roadmap` |
+| F-R6-D-1 | R6 | `resealAll` never re-seals the `events` table, so encrypted event history is silently lost on rekey or disable (`src/kb-sqlite.ts:702-808,390-423`) | P1 | `Scheduled-roadmap` |
+| F-R6-D-2 | R6 | No SQLite store format/version marker: a newer store is opened read-write and DDL runs before verification, contrary to "never rewritten" (`src/kb-sqlite.ts:32-71,105-131,893-907`) | P1 | `Scheduled-roadmap` |
+| F-R6-D-3 | R6 | Handler lock refusal, `stats.encryption`, locked status reachability, and key-source precedence are code-reading only (`src/index.ts:2065-2070`; `src/kb.ts:720`; `src/kb-crypto.ts:203-216`) | P2 | `Scheduled-roadmap` |
+| F-R6-E-1 | R6 | A corrupt live SQLite store yields a lock error only: no backup copy and no empty-store recovery, so clause (c) is unimplemented for the live backend (`src/kb.ts:416-424`; `src/kb-migrate.ts:110-123`) | P1 | `Scheduled-roadmap` |
+| F-R6-E-2 | R6 | Encryption-enabled upgrades unlink the legacy JSON, so clause (b) preserves no artifact; this conflicts with REQ-084's no-plaintext rule and needs a spec decision (`src/kb-migrate.ts:171-176`; `kb-migrate.test.ts:86-88`) | P2 | `Scheduled-roadmap` |
+| F-R6-E-3 | R6 | Clause (a) has no gate-asserted test; the probe is a one-off outside `npm run check`, and `test-isolation.test.ts:1`'s REQ-108 tag is a false citation (`src/kb-sqlite.test.ts:82-95`) | P2 | `Scheduled-roadmap` |
+| F-R6-E-4 | R6 | `sqliteSearch` accumulates every matching chunk before slicing to `maxResults`, so a broad query over an oversize store is not heap-bounded (`src/kb.ts:536-558,580`) | P2 | `Scheduled-roadmap` |
+| F-R6-E-5 | R6 | Migration `JSON.parse`s the whole legacy store, so an upgrade cannot complete when the JSON exceeds the heap (`src/kb-migrate.ts:73,105`) | P3 | `Closed-P3` |
+| F-R6-E-6 | R6 | `docCount` corruption is silently coerced to 0 without backup/rebuild/reporting (`src/kb-sqlite.ts:359`) | P3 | `Closed-P3` |
+| F-R6-F-1 | R6 | The ledger persists only URL-bearing findings; an unsourced batch claim is never stored, so "persist each finding" is unmet (`src/index.ts:1932`) | P2 | `Scheduled-roadmap` |
+| F-R6-F-2 | R6 | `claim_sources.retrieved_at` is plaintext while the rest of the edge is sealed (`src/kb-sqlite.ts:59,545`) | P2 | `Scheduled-roadmap` |
+| F-R6-F-3 | R6 | "A ledger failure never alters the response" is static-only; no tool-level assertion with a locked KB (`src/index.ts:1927-1945`) | P3 | `Closed-P3` |
+| F-R6-F-4 | R6 | A snippet-basis receipt source without `retrieved_at` loses the retrieval time from the canonical manifest (`src/kb-receipt.ts:293`) | P2 | `Scheduled-roadmap` |
+| F-R6-F-5 | R6 | `grade` and `retrieved_at` are stored without the length bounds applied to sibling fields (`src/kb-receipt.ts:217,89`) | P3 | `Closed-P3` |
+| F-R6-F-6 | R6 | Disk-only-plus-receipt and non-report-plus-receipt refusals have no tool-level test (`src/index.ts:2225-2227`) | P3 | `Closed-P3` |
 
 ## Program risks / notes
 

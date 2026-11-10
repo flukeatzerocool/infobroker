@@ -20,7 +20,58 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R6 after chunk R5 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R7 after chunk R6 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+
+## R6 `manage_kb` action-contract remediation
+
+- Stop discarding a caller-supplied `source_url` for text-only ingest (F-R6-A-2), and add handler-level tests for the receipt-only-report/KB and at-least-one-input refusals (F-R6-A-3).
+- Assert the advertised `max_results` contract and the unconfigured/invalid-KB error (F-R6-A-1).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R7 closes; close when F-R6-A-1, F-R6-A-2, and F-R6-A-3 are `Resolved`.
+
+## R6 `manage_kb` action-evidence remediation
+
+- Assert REQ-060c per-collection counts and last ingestion, REQ-060d's filter requirement, REQ-060e newest-first order and chunk count, REQ-060f chunk order and no-document error (F-R6-A-4).
+- Add tool-level assertions for the locked-store error (F-R6-A-5) and for REQ-060i `stale=true` plus the document-basis absent-source branch (F-R6-A-6).
+
+**Trigger:** start after chunk R7 closes; close when F-R6-A-4, F-R6-A-5, and F-R6-A-6 are `Resolved`.
+
+## R6 auto-index, scoping, and expiry remediation
+
+- Add an observing test for auto-index non-blocking/failure suppression/toggle and the three hook sites (F-R6-B-1), make the collection config-default tier testable (F-R6-B-2), and assert startup/interval expiry, indefinite tiers, and the no-error-event clause (F-R6-B-3).
+
+**Trigger:** start after chunk R7 closes; close when F-R6-B-1, F-R6-B-2, and F-R6-B-3 are `Resolved`.
+
+## R6 config, dedup, and report remediation
+
+- Reconcile REQ-067's absent/invalid→error clause with the shipped-defaults fallback and add a reload test (F-R6-B-4).
+- Extend meaning-equivalence dedup beyond `report://` identities (F-R6-B-5), and make report retention `source_type`-guarded with a monotonic revision chain (F-R6-B-6).
+
+**Trigger:** start after chunk R7 closes; close when F-R6-B-4, F-R6-B-5, and F-R6-B-6 are `Resolved`.
+
+## R6 retrieval remediation
+
+- Emit `kb_recall:"not_applicable"` for research requests (F-R6-C-5).
+- Stop blend from applying the sufficiency filter to cached rows and let the all-external-fail path return the unfiltered cache (F-R6-C-6).
+- Give REQ-103 degradation a remediation message and a test (F-R6-C-7).
+
+**Trigger:** start after chunk R7 closes; close when F-R6-C-5, F-R6-C-6, and F-R6-C-7 are `Resolved`.
+
+## R6 encryption and capacity remediation
+
+- Re-seal the `events` table on enable/disable/rekey (F-R6-D-1) and add a persisted store-format marker that refuses a newer SQLite store without rewriting it (F-R6-D-2).
+- Give a corrupt live SQLite store the REQ-108 recovery path: preserve a backup, continue empty, report the event (F-R6-E-1).
+- Each change is a store-format/security change, not a bounded fix; ship with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R7 closes; close when F-R6-D-1, F-R6-D-2, and F-R6-E-1 are `Resolved`.
+
+## R6 ledger and receipt remediation
+
+- Persist unsourced findings (F-R6-F-1), seal `claim_sources.retrieved_at` (F-R6-F-2), and stamp or reject a receipt source with no retrieval time (F-R6-F-4).
+
+**Trigger:** start after chunk R7 closes; close when F-R6-F-1, F-R6-F-2, and F-R6-F-4 are `Resolved`.
+
 
 ## R2 findings remediation
 
