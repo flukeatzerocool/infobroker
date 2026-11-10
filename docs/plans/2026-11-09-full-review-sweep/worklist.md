@@ -369,9 +369,9 @@ legs (a)–(d) and constrained-heap leg (g) PASS; cross-tool stdio probe
 | REQ-060g encryption | `holds` | keygen refusal, verify, backup, status, rekey tested (`kb-encryption-tools.test.ts:91-185`; `kb-claims.test.ts:263-274`); probe c shows status reachable while locked |
 | REQ-060h claims | `finding:F-R6-A-5` | newest-first/filters/cap hold (`kb-claims.test.ts:167-195`); the tool-level locked-store error mapping is static-only (`src/index.ts:2065-2069`) |
 | REQ-060i verify_report | `finding:F-R6-A-6` | verified/drift/unverifiable/missing demonstrated (`kb-report-receipt.test.ts:150-337`; probe d); `stale=true` and the document-basis source-absent branch unasserted |
-| REQ-064 auto-index | `finding:F-R6-B-1` | the only citation asserts an injected callback (`deep-search.test.ts:103-116`); real `autoIndex` non-blocking, failure suppression, toggle, and the three hook sites are unobserved |
-| REQ-065 collections | `finding:F-R6-B-2` | explicit>env holds, but the config-default tier is untestable because the fixture default equals the literal fallback (`kb.test.ts:237-250`) |
-| REQ-066 expiry | `finding:F-R6-B-3` | only the zero-interval path is tested (`kb-hardening.test.ts:46-52`); startup/interval removal, tier-driven expiry, indefinite tiers, and no-error-event unasserted |
+| REQ-064 auto-index | `finding:F-R6-B-1` | observed by `src/kb-auto-index.test.ts` (toggle, synchronous return, deferred ingest, swallowed failure) and `debate-club/src/kb-auto-index.test.ts` (search, fetch, verify hooks) |
+| REQ-065 collections | `finding:F-R6-B-2` | explicit>env>config>literal is distinguishable: the config default is `config-col` and an empty-string default reaches the literal tier (`kb.test.ts:237-258`) |
+| REQ-066 expiry | `finding:F-R6-B-3` | startup removal, interval removal, tier-not-`source_type`, indefinite tiers, and no-error-event are asserted (`kb-hardening.test.ts:46-150`) |
 | REQ-067 config | `finding:F-R6-B-4` | field list and numeric bounds hold; absent/invalid→error is contradicted by the shipped-defaults fallback (`src/config.ts:978`, `config.test.ts:614-625`) and reload is untested |
 | REQ-072 dedup | `finding:F-R6-B-5` | same-URL replacement holds (probe b); meaning-equivalence runs only for `report://` identities (`src/kb.ts:604-621`), so non-report duplicates persist |
 | REQ-083 reports | `finding:F-R6-B-6` | retention is not `source_type`-guarded — tier expiry removes any chunk (`src/kb.ts:1096-1101`); revision/supersedes live only in the optional receipt and are non-monotonic |
@@ -802,9 +802,9 @@ work.
 | F-R6-A-5 | R6 | The tool-level locked-store error mapping is static-only; the test asserts `kbClaims` does not throw (`src/kb-claims.test.ts:339-354`; `src/index.ts:2065-2069`) | P1 | `Resolved` |
 | F-R6-A-6 | R6 | REQ-060i `stale=true` and the document-basis source-absent branch are unasserted (`src/kb-report-receipt.test.ts:556`; `src/kb-receipt.ts:371-373`) | P1 | `Resolved` |
 | F-R6-A-7 | R6 | Verified sources are counted but not listed, so "each source state" surfaces as aggregate counts (`src/kb-receipt.ts:374-375`) | P3 | `Closed-P3` |
-| F-R6-B-1 | R6 | REQ-064 auto-index has no observing test: non-blocking, failure suppression, toggle, and the three hook sites are unasserted (`src/deep-search.test.ts:103-116`; `src/kb.ts:1026-1061`) | P1 | `Scheduled-roadmap` |
-| F-R6-B-2 | R6 | REQ-065 config-default precedence is indistinguishable from the literal fallback because the fixture default equals `"default"` (`src/kb.test.ts:245`) | P1 | `Scheduled-roadmap` |
-| F-R6-B-3 | R6 | REQ-066 startup/interval expiry, tier-driven removal, indefinite tiers, and the no-error-event clause have zero assertions (`src/kb-hardening.test.ts:46-52`; `src/kb.ts:1091-1109`) | P1 | `Scheduled-roadmap` |
+| F-R6-B-1 | R6 | REQ-064 auto-index has no observing test: non-blocking, failure suppression, toggle, and the three hook sites are unasserted (`src/deep-search.test.ts:103-116`; `src/kb.ts:1038-1074`) | P1 | `Resolved` |
+| F-R6-B-2 | R6 | REQ-065 config-default precedence is indistinguishable from the literal fallback because the fixture default equals `"default"` (`src/kb.test.ts:237-258`) | P1 | `Resolved` |
+| F-R6-B-3 | R6 | REQ-066 startup/interval expiry, tier-driven removal, indefinite tiers, and the no-error-event clause have zero assertions (`src/kb-hardening.test.ts:46-150`; `src/kb.ts:1103-1121`) | P1 | `Resolved` |
 | F-R6-B-4 | R6 | REQ-067 absent/invalid→error is contradicted by the shipped-defaults fallback, and KB config reload is untested (`src/config.ts:978`; `config.test.ts:614-625`) | P1 | `Scheduled-roadmap` |
 | F-R6-B-5 | R6 | REQ-072 meaning-equivalence dedup runs only for `report://` identities; non-report duplicates under different URLs persist (`src/kb.ts:604-621`) | P1 | `Scheduled-roadmap` |
 | F-R6-B-6 | R6 | REQ-083 report retention is not `source_type`-guarded (tier expiry removes any chunk), and revision/supersedes are receipt-only and non-monotonic (`src/kb.ts:1096-1101`; `src/index.ts:2038`) | P1 | `Scheduled-roadmap` |

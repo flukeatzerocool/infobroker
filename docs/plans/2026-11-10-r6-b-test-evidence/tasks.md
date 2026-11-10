@@ -1,0 +1,24 @@
+# Tasks — R6 auto-index, collection-scoping, and expiry test evidence
+
+- [x] Baseline: HEAD `f4ce094`, tree clean, `npm run check:fast` PASS (19 gates, 20.2 s).
+- [x] Build-review: stamp `a735ee07…4e36bc`, independence fresh, cold report `3e5d5154…ea5c` (stages 5/5). C-1/C-2/C-3 acknowledged.
+- [x] Step 0.1 `npm run check-intent-citations` → 141 citations, 0 findings (no routing edit needed).
+- [x] Step 0.2 Fixtures confirmed: wikipedia `retrieval augmented generation`, jina `https://example.com/doc`, verify scenario. No new fixtures.
+- [x] Step 0.3 Fake timers verified in practice: `vi.useFakeTimers()` + `setSystemTime` + `advanceTimersByTime` work with `node:sqlite` (the expiry tests pass; no fallback needed).
+- [x] Step 0.4 `startServer` `configLayer` replaces the `kb` block; the new Arena file supplies `storage_path`, `keys_path`, `reports_path`, `auto_index: true`, `maintenance_interval_minutes: 0`.
+- [x] Step 0.5 Registry probe `npm audit --json` answered (JSON report, 311 dependencies); the full `check` path is available.
+- [x] Step 0.6 `content_policy: { mode: "off" }` pinned in the Arena layer.
+- [x] Step 1.1 `src/kb-auto-index.test.ts` → 4 passed (toggle off, per-call toggle, deferral, failure suppression).
+- [x] Step 1.2 `src/kb-hardening.test.ts` +3 tests → 11 passed (startup/tier/indefinite/no-error, interval, tier-vs-source_type).
+- [x] Step 1.3 `src/kb.test.ts` REQ-065 test rewritten → 28 passed (config-col and empty-string literal tier).
+- [x] Step 1.4 `debate-club/src/kb-auto-index.test.ts` → 3 passed (`search_web`, `fetch_page`, `verify_claims`); `npx tsc -p debate-club/tsconfig.json` exit 0.
+- [x] Step 2.1 B-1 mutation: removed the `auto_index` guard in `src/kb.ts:1046` → 2 failed (`expected [ { … } ] to have a length of +0 but got 1`); `git checkout -- src/kb.ts`; `git diff --stat -- src/kb.ts` empty.
+- [x] Step 2.2 B-2 mutation: demoted the config tier at `src/kb.ts:520` → 1 failed (`expected 'default' to be 'config-col'`); restored; diff empty.
+- [x] Step 2.3a B-3 mutation: disabled startup `runMaintenance()` at `src/kb.ts:442` → 2 failed (`expected { title: 'short' … } to be null`, `expected { title: 's1' … } to be null`); restored; diff empty.
+- [x] Step 2.3b B-3 mutation: disabled the interval `setInterval` at `src/kb.ts:446` → 1 failed (`expected { title: 'tick' … } to be null`); restored; diff empty.
+- [x] Step 2.3c B-3 mutation: made the predicate ignore `def.expiry_hours` at `src/kb.ts:1109-1113` → 3 failed (both tier tests plus the corrupt-metadata isolation test, which depends on the same maintenance path); restored; diff empty.
+- [x] Step 3.1 `worklist.md`: F-R6-B-1/2/3 marked `Resolved`, stale `src/kb.ts` citations refreshed, and the three REQ evidence rows updated to point at the new tests.
+- [x] Step 3.2 `ROADMAP.md`: R6 auto-index section retired (25 work items → 24).
+- [x] Step 3.3 Increment record written.
+- [x] Post-fix targeted: 43 unit tests pass (4 auto-index + 11 hardening + 28 kb); new Arena file 3 pass; full Arena 6 files / 51 tests pass.
+- [x] Final: `npm run check:fast` PASS; full `npm run check` PASS (22 gates); split commits.

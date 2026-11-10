@@ -14,12 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 auto-index, scoping, and expiry remediation
-
-- Add an observing test for auto-index non-blocking/failure suppression/toggle and the three hook sites (F-R6-B-1), make the collection config-default tier testable (F-R6-B-2), and assert startup/interval expiry, indefinite tiers, and the no-error-event clause (F-R6-B-3).
-
-**Trigger:** start after chunk R7 closes; close when F-R6-B-1, F-R6-B-2, and F-R6-B-3 are `Resolved`.
-
 ## R6 config, dedup, and report remediation
 
 - Reconcile REQ-067's absent/invalid→error clause with the shipped-defaults fallback and add a reload test (F-R6-B-4).
