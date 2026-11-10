@@ -20,7 +20,7 @@
 - Each chunk produces a per-REQ verdict table, a fresh-context plan and code review, findings dispositioned P0–P3, green exit gates, and an increment record under `docs/plans/`.
 - Coverage is §1–§10 and Appendices A–E, including all 142 §4 REQs, with every section assigned to exactly one chunk.
 
-**Trigger:** start chunk R3 after chunk R2 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
+**Trigger:** start chunk R4 after chunk R3 closed; close this item when every chunk is closed and the final machine-evidence pass is green.
 
 ## R2 findings remediation
 

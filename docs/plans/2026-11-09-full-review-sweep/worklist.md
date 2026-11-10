@@ -194,9 +194,32 @@ Reviewed at deep depth; split not triggered (8 clusters, 26 carrying tests, 247 
 
 Spec: §4.3 (those IDs), §7.4.
 Code: `src/chain.ts`, `src/task-type.ts`, `src/intent-citations.ts`,
-`src/dedup.ts`, `src/source-quality.ts`, `src/batch.ts`, `src/expand.ts`,
-`src/research.ts`, `src/deep-search.ts`, `src/analysis.ts`, `src/rerank.ts`,
-`src/language.ts`, plus the `search_web` handler in `src/index.ts`.
+`src/dedup.ts`, `src/source-quality.ts`, `src/batch.ts`, `src/batch-run.ts`,
+`src/expand.ts`, `src/research.ts`, `src/deep-search.ts`, `src/analysis.ts`,
+`src/rerank.ts`, `src/language.ts`, `src/query.ts`, plus the `search_web`
+handler in `src/index.ts`.
+
+#### R3 verdict table (2026-11-09)
+
+Reviewed at standard depth; split not triggered (6 clusters, ~40 predicates, 2 clusters needed a live probe). Evidence: 18 carrying test files / 201 tests PASS; debate-club Arena 36 tests PASS; isolated stdio probes (`/tmp/r3-probe-*`) for suggest, expand, `ignored_params`, and provider+priority precedence.
+
+| Surface | Verdict | Predicate |
+|---|---|---|
+| REQ-020 | `finding:F-R3-14` | schema, 18 parameters, defaults, array/merge, provenance, `max_results` hold (`tool-surface.test.ts:187-235`; `batch.test.ts:67-73`); a 6th+ input and duplicate inputs are silently dropped so `meta.per_query` can be shorter than the caller's array (`src/batch.ts:73`; `src/index.ts:250`) |
+| REQ-020a | `finding:F-R3-1` | classification, override, confidence floor, quota demotion, and serving-provider reporting hold (`task-type.test.ts:35-120`; `chain.test.ts:86`); an explicit `provider` is discarded by `priority:"privacy"`/`"free_only"` — live probe asked `marginalia` with `priority:"privacy"` and was served by `duckduckgo` (`src/index.ts:415-429`; `src/chain.ts:45-62`) |
+| REQ-020b | `finding:F-R3-6` | live suggest returns title-only strings from a suggestion provider (`src/index.ts:269-293`); no behavior test asserts ordering, fallback to a second suggestion provider, or the error path (only `embed.test.ts:1` names the REQ); `url:""` and hardcoded `provider`/`fallback_used` (F-R3-7, F-R3-8) |
+| REQ-020c | `finding:F-R3-2` | privacy, free_only, quality, and serving-provider identification hold (`chain.test.ts:21-53`); the `speed` comparator returns `1` when both latencies are zero (`src/chain.ts:63-70`), so config priority order is not retained for unmeasured providers and the comparator is not antisymmetric |
+| REQ-020d | `finding:F-R3-3` | the normal path reports unsupported parameters (`ignored_params:["time_range"]` live; `chain.test.ts:99-147`); the KB-first success path returns before parsing and omits `ignored_params` (`src/index.ts:388-396`); `safe_search:"strict"` is not reported (F-R3-4) |
+| REQ-020e | `finding:F-R3-9` | expand returns deduplicated title-only strings with the no-provider fallback (`expand.test.ts`); the response reports `provider:"duckduckgo"` regardless of the serving provider (`src/index.ts:312`); relatedness ordering is unasserted (F-R3-10) |
+| REQ-020f | `finding:F-R3-22` | per-variant search, grouping, provenance, configured bounds, and the no-fetchable-page variant hold (`research.test.ts`); `deriveResearchVariants` feeds empty suggestions, so a keyword-form query yields one variant, not multiple (`src/research.ts:28-30`; `src/expand.ts:24-35`); the response is never truncated per REQ-004 (F-R3-23) |
+| REQ-020g | `finding:F-R3-15` | collapse, semantic ordering, and zero-weight ordering hold (`dedup.test.ts:16-77`); reconciliation runs after the `maxResults` slice with no top-up, so collapse can reduce distinct results below the requested maximum (`src/index.ts:509,:594-604`); contributing providers are not merged (F-R3-16); the no-embedding path returns input order (F-R3-17) |
+| REQ-020h | `finding:F-R3-18` | external ordering, quality weights, zero weight, blocklist exclusion + count, case-insensitive subdomain matching hold (`source-quality.test.ts:30-74`; `dedup.test.ts:49-77`); KB-first recall returns before reconciliation and blend appends KB rows after ordering, so stored hits bypass the source-quality order (`src/index.ts:386-396,:609-610`) |
+| REQ-020i | `finding:F-R3-5` | partial success, per-input status/provider, and batch error-on-all-fail hold (`batch-run.test.ts:22-75`); the all-fail envelope drops `meta.per_query` and the per-input errors (`src/batch.ts:239-241`); a deep element's ranked-passage count is read from the wrong field (F-R3-26) |
+| REQ-124 | `finding:F-R3-13` | operators parse and stay ordinary text when malformed; unsupported operators are computed (`query.test.ts:6-26`; live `ignored_operators`/`ignored_params`); loss is reported in `meta.ignored_operators`, a sibling of the REQ-020d `meta.ignored_params`, and the KB-first path reports neither (`src/index.ts:675,:694`); branch tags and unrecognized-operator pass-through are unasserted (F-R3-11, F-R3-12) |
+| REQ-127 | `finding:F-R3-28` | analysis shape, bounds, clusters-without-removal, timeline/undated, and in-process computation hold (`analysis.test.ts`; Arena `mcp-contract.test.ts:131-147`); analysis is attached with empty sections instead of omitted on zero-result paths (`src/index.ts:680,:697`); batch analysis reflects only the first query (F-R3-27) |
+| REQ-128 | `finding:F-R3-20` | Unicode tokenization, Latin stability, n-gram segmentation, and language routing hold (`embed.test.ts:40-51`; `chain.test.ts:151-155`); only the serving provider's language reaches `ignored_params`, so providers in the chain that cannot honor the language are not reported (`src/chain.ts:34`; `src/index.ts:691`); the no-eligible-provider fallback is untested (F-R3-21) |
+| REQ-028 | `finding:F-R3-24` | top-page fetch, REQ-021b ranking reuse, scores, span anchors, snippet fallback, and the page bound hold (`deep-search.test.ts:28-72`; `rerank.test.ts:40-72`); the whole deep branch is gated on `!compactMode`, so `deep:true` silently returns plain results under compact verbosity (`src/index.ts:618`); the unfetchable-page branch has no tag (F-R3-25) |
+| §7.4 Priority Routing | `finding:F-R3-1` | privacy, free_only, and quality rows match `selectChain`, and privacy falls back to the task chain when empty (`chain.test.ts:21-53`); the explicit-provider precedence row is violated (live probe above); the speed tie-order clause is not honored (F-R3-2) |
 
 ### R4 — `fetch_page` (12)
 
@@ -271,7 +294,7 @@ status and any new evidence.
 |---|---|---|---|---|
 | R1 | §3 SR-009, §4.1, §6.1–6.2 | 6 | **closed 2026-11-09** | R2 |
 | R2 | §4.2, §4.3 (024 family), §4.4–4.6, §5.3, §6.3, §7.1–7.3, App A | 25 | **closed 2026-11-09** | R3 |
-| R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | not started | R2 closed |
+| R3 | §4.3 (020 family, 124, 127, 128, 028), §7.4 | 14 | **closed 2026-11-09** | R4 |
 | R4 | §4.3 (021 family), §6.4 | 12 | not started | R3 closed |
 | R5 | §4.3 (026 family, 121–123, 130, 027), §5.5, §8 | 15 | not started | R4 closed |
 | R6 | §4.9 | 29 | not started | R5 closed |
@@ -339,6 +362,36 @@ work.
 | F-R2-46 | R2 | `resells` is overloaded between `original_source` (D-034) and the privacy surface (`config.json:116,125,134`) | P3 | `Closed-P3` |
 | F-R2-47 | R2 | Key-pool state uses a 32-bit FNV-1a identifier (`src/key-pool.ts:132-143`); state-file threat model is R8's | P3 | `Closed-P3` |
 | F-R2-48 | R2 | A failed reload clears the startup issue, so `state_health.startup_error` stops reporting the fallback (`src/config.ts:170`); R8 surface | P3 | `Closed-P3` |
+| F-R3-1 | R3 | An explicit `provider` is discarded by `priority:"privacy"`/`"free_only"` — live probe asked `marginalia` + `privacy` and was served by `duckduckgo` (`src/index.ts:415-429`; `src/chain.ts:45-62`) | P1 | `Scheduled-roadmap` |
+| F-R3-2 | R3 | The `speed` comparator returns `1` when both latencies are zero, so unmeasured providers do not retain configuration order and the comparator is not antisymmetric (`src/chain.ts:63-70`) | P2 | `Scheduled-roadmap` |
+| F-R3-3 | R3 | The KB-first success path returns before task-type resolution and query parsing, omitting `task_type`, `ignored_params`, and `ignored_operators` (`src/index.ts:388-396` vs `:408,:443,:671,:675`) | P1 | `Scheduled-roadmap` |
+| F-R3-4 | R3 | `safe_search:"strict"` is silently dropped by providers without safe-search support but never listed in `ignored_params` (`src/chain.ts:31`) | P3 | `Closed-P3` |
+| F-R3-5 | R3 | The all-fail batch envelope returns only `firstError` with no `meta.per_query` and no per-input errors (`src/batch.ts:239-241`) | P1 | `Scheduled-roadmap` |
+| F-R3-6 | R3 | Suggest-mode behavior (relatedness order, fallback to a second suggestion provider, all-fail error) has no test; the only citation is `embed.test.ts:1` (`src/index.ts:269-293`) | P2 | `Closed-P3` |
+| F-R3-7 | R3 | Suggest and expand results carry `url:""` instead of omitting the URL field (`src/index.ts:286,:313`) | P3 | `Closed-P3` |
+| F-R3-8 | R3 | Suggest failure reports hardcoded `provider:"duckduckgo"` and `fallback_used:false` regardless of the actual fallback (`src/index.ts:287,:293`) | P3 | `Closed-P3` |
+| F-R3-9 | R3 | Expand reports `provider:"duckduckgo"` regardless of which suggestion provider served (`src/index.ts:312`) | P3 | `Closed-P3` |
+| F-R3-10 | R3 | Expansion relatedness ordering is unasserted; the test covers membership, first-element retention, and the cap only (`src/expand.ts:49-54`; `expand.test.ts`) | P2 | `Closed-P3` |
+| F-R3-11 | R3 | REQ-124's ignored-operator and unrecognized-operator branches carry no named clause tags (`src/query.test.ts:1`) | P3 | `Closed-P3` |
+| F-R3-12 | R3 | An unrecognized operator's pass-through as ordinary text is unasserted; the test covers malformed operators only (`src/query.test.ts:15-20`; `src/query.ts:37-38`) | P3 | `Closed-P3` |
+| F-R3-13 | R3 | Operator loss is reported in `meta.ignored_operators`, a sibling of the REQ-020d `meta.ignored_params`; the REQ does not name a separate key (`src/index.ts:675,:694`) | P3 | `Closed-P3` |
+| F-R3-14 | R3 | Batch input capping and duplicate collapsing silently shorten the caller's array without reporting it (`src/batch.ts:73`; `src/index.ts:250`) | P3 | `Closed-P3` |
+| F-R3-15 | R3 | Reconciliation runs after the `maxResults` slice with no top-up, so content collapse can reduce distinct results below the caller's requested maximum (`src/index.ts:509,:594-604`) | P1 | `Scheduled-roadmap` |
+| F-R3-16 | R3 | `mergeProvenance` never merges the contributing provider slugs; the representative keeps one `provider` string (`src/dedup.ts:17-21`; `src/types.ts:37`) | P1 | `Scheduled-roadmap` |
+| F-R3-17 | R3 | With no embedding capability the reconciler returns input order unranked rather than a non-semantic ranking (`src/dedup.ts:44-49`) | P2 | `Scheduled-roadmap` |
+| F-R3-18 | R3 | KB-first recall returns before reconciliation and blend appends KB rows after ordering, so stored hits bypass source-quality ordering (`src/index.ts:386-396,:609-610`) | P1 | `Scheduled-roadmap` |
+| F-R3-19 | R3 | An invalid source-quality pattern is ignored but unasserted; the test covers a malformed URL only (`src/source-quality.ts:10-17`) | P3 | `Closed-P3` |
+| F-R3-20 | R3 | Only the serving provider's language reaches `ignored_params`; providers in the chain that cannot honor the language are not reported (`src/chain.ts:34`; `src/index.ts:691`) | P2 | `Scheduled-roadmap` |
+| F-R3-21 | R3 | The no-eligible-language-provider fallback has no test and no clause tag (`src/chain.ts:116`) | P2 | `Closed-P3` |
+| F-R3-22 | R3 | `deriveResearchVariants` feeds empty suggestions, so a keyword-form query yields one variant instead of multiple (`src/research.ts:28-30`; `src/expand.ts:24-35`) | P1 | `Scheduled-roadmap` |
+| F-R3-23 | R3 | The `search_web` response, including the research compile, is never subject to REQ-004 truncation; `maybeTruncate` runs only on fetched content (`src/index.ts:871,:1284`) | P1 | `Scheduled-roadmap` |
+| F-R3-24 | R3 | The whole deep-reading branch is gated on `!compactMode`, so `deep:true` (and research's deep pass) silently returns plain results under compact verbosity (`src/index.ts:618`) | P1 | `Scheduled-roadmap` |
+| F-R3-25 | R3 | The REQ-028 unfetchable-page branch has no named clause tag (`src/deep-search.test.ts:1`) | P3 | `Closed-P3` |
+| F-R3-26 | R3 | A deep batch element's ranked-passage count is read from top-level `snippets`, which `search_web` deep never sets, so `per_query.passages_returned` is absent (`src/batch.ts:203`; `src/deep-search.ts:12`) | P2 | `Scheduled-roadmap` |
+| F-R3-27 | R3 | Batch analysis is carried from the first successful query only, so it describes a subset of the merged results (`src/batch.ts:289`) | P2 | `Scheduled-roadmap` |
+| F-R3-28 | R3 | Analysis is attached with empty sections instead of omitted when the result set is empty after policy refusal or blocklist filtering (`src/index.ts:680,:697`) | P1 | `Scheduled-roadmap` |
+| F-R3-29 | R3 | Topic/entity ordering and cluster-retention assertions are weaker than REQ-127; the cluster test cannot detect a dropped result (`analysis.test.ts:44-73`) | P3 | `Closed-P3` |
+| F-R3-30 | R3 | `analysis.enabled` is configured and validated but read nowhere; setting it false does not disable analysis (outside REQ-127's letter) (`config.json:290`; `src/config.ts:870`) | P3 | `Closed-P3` |
 
 ## Program risks / notes
 
