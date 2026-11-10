@@ -14,6 +14,7 @@ import {
   flushKbWrites,
   kbIngest,
   kbGet,
+  kbDelete,
   kbPutReportReceipt,
   kbVerifyReport,
   kbGetReportReceipt,
@@ -293,6 +294,36 @@ describe("report drift detection (REQ-060i)", () => {
     });
     expect(result.report).toBe("verified");
     expect(result.state).toBe("unverifiable");
+  });
+
+  it("reports a document-basis source absent from the cache as unverifiable (REQ-060i)", () => {
+    const { reportId, sourceUrl, record } = storeReceipt();
+    expect(record.manifest.claims[0]!.sources[0]!.hash_basis).toBe("document");
+    expect(kbDelete(undefined, sourceUrl)).toBeGreaterThan(0);
+
+    const result = verify(reportId);
+    expect(result.report).toBe("verified");
+    expect(result.sources.unverifiable).toBe(1);
+    expect(result.sources.drift).toBe(0);
+    expect(result.sources.details[0]).toMatchObject({
+      url: sourceUrl,
+      state: "unverifiable",
+      hash_basis: "document",
+    });
+    expect(result.state).toBe("unverifiable");
+  });
+
+  it("reports a report older than its decay window as stale while remaining verifiable (REQ-060i)", () => {
+    const { reportId } = storeReceipt();
+    const spy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 800 * 3_600_000);
+    try {
+      const result = verify(reportId);
+      expect(result.state).toBe("verified");
+      expect(result.stale).toBe(true);
+      expect(result.age_days).toBeGreaterThanOrEqual(33);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("makes no network call during verification (REQ-060i offline)", () => {
