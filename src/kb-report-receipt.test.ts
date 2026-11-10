@@ -296,6 +296,30 @@ describe("report drift detection (REQ-060i)", () => {
     expect(result.state).toBe("unverifiable");
   });
 
+  it("stamps a retrieval time on a snippet-basis source with no caller timestamp", () => {
+    const dir = tempDir("ibk-receipt-stamp-");
+    const reportId = ingestReport(dir, REPORT_BODY);
+    const before = Date.now();
+    const stored = kbPutReportReceipt(reportId, {
+      claims: [
+        {
+          claim: "the deck coating needs repair",
+          sources: [{ url: "https://example.com/not-cached", snippet: "the deck coating needs repair" }],
+        },
+      ],
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    const source = stored.record.manifest.claims[0].sources[0];
+    // REQ-110: the manifest always carries a retrieval time; the provenance
+    // stays visible through hash_basis rather than a fabricated document basis.
+    expect(source.hash_basis).toBe("snippet");
+    expect(typeof source.retrieved_at).toBe("string");
+    const stamped = Date.parse(source.retrieved_at!);
+    expect(Number.isNaN(stamped)).toBe(false);
+    expect(stamped).toBeGreaterThanOrEqual(before - 1000);
+  });
+
   it("reports a document-basis source absent from the cache as unverifiable (REQ-060i)", () => {
     const { reportId, sourceUrl, record } = storeReceipt();
     expect(record.manifest.claims[0]!.sources[0]!.hash_basis).toBe("document");

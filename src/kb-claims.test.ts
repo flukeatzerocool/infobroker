@@ -104,6 +104,17 @@ function readRaw(dbPath: string): string {
   }
 }
 
+/** The clear `retrieved_at` column values, one per edge row (REQ-109). */
+function rawRetrievedAt(dbPath: string): string[] {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const rows = db.prepare("SELECT retrieved_at FROM claim_sources ORDER BY source_key").all() as Array<{ retrieved_at: string }>;
+    return rows.map((row) => row.retrieved_at);
+  } finally {
+    db.close();
+  }
+}
+
 afterEach(() => {
   for (const dir of dirs.splice(0)) {
     try {
@@ -138,6 +149,34 @@ describe("claim ledger persistence (REQ-109)", () => {
     for (const edge of ledger.claims[0].sources) {
       expect(Date.parse(edge.retrieved_at)).not.toBeNaN();
     }
+  });
+
+  it("reads a legacy clear retrieval time and scrubs it on the encryption transition", () => {
+    const dir = tempDir("ibk-claims-legacy-time-");
+    initKb(baseConfig(dir));
+    kbRecordClaims([bundle()]);
+    flushKbWrites();
+    const dbPath = join(dir, "vector-store.sqlite");
+
+    // Simulate a row written by the previous build: the retrieval time is in
+    // the clear column and the payload has no such field.
+    const db = new DatabaseSync(dbPath);
+    db.prepare("UPDATE claim_sources SET retrieved_at = ?, payload = ?").run(
+      "2026-09-30T08:00:00.000Z",
+      Buffer.from(JSON.stringify({ url: SOURCE_URL, title: "Bridge inspection" }), "utf-8")
+    );
+    db.close();
+
+    // The read falls back to the clear value rather than dropping the time.
+    expect(readClaims().claims[0].sources[0].retrieved_at).toBe("2026-09-30T08:00:00.000Z");
+
+    // Enabling encryption is a REQ-086 transition: it rewrites the edge, so the
+    // clear value is scrubbed and the time lives in the payload from then on.
+    const key = newKeyFile(dir, "good.key");
+    initKb(encryptedConfig(dir, key));
+    flushKbWrites();
+    expect(rawRetrievedAt(dbPath)).toEqual([""]);
+    expect(readClaims().claims[0].sources[0].retrieved_at).toBe("2026-09-30T08:00:00.000Z");
   });
 
   it("re-verification updates in place, preserves first_seen_at, and does not duplicate", () => {
@@ -213,6 +252,34 @@ describe("claim ledger encryption (REQ-109)", () => {
     const ledger = readClaims();
     expect(ledger.claims[0].claim).toBe(CLAIM_TEXT);
     expect(ledger!.claims[0].sources[0].url).toBe(SOURCE_URL);
+  });
+
+  it("keeps the retrieval time out of the clear column and seals it in the payload", () => {
+    const dir = tempDir("ibk-claims-enc-time-");
+    const key = newKeyFile(dir, "good.key");
+    initKb(encryptedConfig(dir, key));
+    kbRecordClaims([bundle()]);
+    flushKbWrites();
+    const dbPath = join(dir, "vector-store.sqlite");
+
+    // REQ-109: the timestamp lives in the sealed edge payload, so the clear
+    // column carries only an empty placeholder and no readable ISO value.
+    expect(rawRetrievedAt(dbPath)).toEqual([""]);
+    expect(readRaw(dbPath)).not.toContain("2026-10-01T10:00:00.000Z");
+    expect(readClaims().claims[0].sources[0].retrieved_at).toBe("2026-10-01T10:00:00.000Z");
+
+    // A transition re-seals the edges; the time survives and the column stays empty.
+    const store = new SqliteStore(dir, { secret: resolveKeySource(key)!, encryptionEnabled: true });
+    store.init();
+    try {
+      store.disableEncryption(resolveKeySource(key)!);
+    } finally {
+      store.close();
+    }
+    initKb(baseConfig(dir));
+    flushKbWrites();
+    expect(readClaims().claims[0].sources[0].retrieved_at).toBe("2026-10-01T10:00:00.000Z");
+    expect(rawRetrievedAt(dbPath)).toEqual([""]);
   });
 
   it("reseals claims when encryption is enabled after they exist", () => {
