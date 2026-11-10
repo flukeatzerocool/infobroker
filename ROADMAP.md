@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 `manage_kb` action-evidence remediation
-
-- Assert REQ-060c per-collection counts and last ingestion, REQ-060d's filter requirement, REQ-060e newest-first order and chunk count, REQ-060f chunk order and no-document error (F-R6-A-4).
-- Add tool-level assertions for the locked-store error (F-R6-A-5) and for REQ-060i `stale=true` plus the document-basis absent-source branch (F-R6-A-6).
-
-**Trigger:** start after chunk R7 closes; close when F-R6-A-4, F-R6-A-5, and F-R6-A-6 are `Resolved`.
-
 ## R6 auto-index, scoping, and expiry remediation
 
 - Add an observing test for auto-index non-blocking/failure suppression/toggle and the three hook sites (F-R6-B-1), make the collection config-default tier testable (F-R6-B-2), and assert startup/interval expiry, indefinite tiers, and the no-error-event clause (F-R6-B-3).
