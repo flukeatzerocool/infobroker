@@ -30,6 +30,14 @@
 
 **Trigger:** start after chunk R3 closes; close when every P1 row in the R2 finding register is `Resolved` and each P2 row is fixed or re-classified.
 
+## R3 findings remediation
+
+- Fix the R3 P1 set: explicit-provider precedence under priority routing, KB-first response metadata, all-fail batch per-input errors, collapse below the requested maximum, contributing-provider preservation, KB-recall source-quality ordering, multiple research variants, REQ-004 truncation of `search_web` responses, deep reading under compact verbosity, and analysis omission on empty results.
+- Close the P2 set: `speed` tie order, no-embedding reconciliation ranking, chain-wide language reporting, deep-batch passage counts, and batch analysis over the merged result set.
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after chunk R4 closes; close when every R3 P1 row in the finding register is `Resolved` and each scheduled P2 is fixed or re-classified.
+
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
