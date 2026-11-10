@@ -864,10 +864,17 @@ async function snapshotCondensedSources(
     while (idx < tasks.length) {
       const { source } = tasks[idx++];
       let text = source.snippet;
+      // REQ-122: the hash basis follows the text actually stored. A fetch that
+      // throws or returns nothing leaves the snippet in place, so the basis
+      // must stay "snippet" even though a fetcher exists.
+      let basis: "document" | "snippet" = "snippet";
       if (fetchSource) {
         try {
           const fetched = await fetchSource(source.url);
-          if (fetched && fetched.trim().length > 0) text = fetched;
+          if (fetched && fetched.trim().length > 0) {
+            text = fetched;
+            basis = "document";
+          }
         } catch {
           // Fetch failed — keep the snippet as the citation basis.
         }
@@ -883,7 +890,7 @@ async function snapshotCondensedSources(
         text,
         provider: source.provider,
         maxBytes,
-        basis: fetchSource ? "document" : "snippet",
+        basis,
       });
       if (snap) {
         source.content_sha256 = snap.snapshot_sha256;

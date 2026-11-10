@@ -465,6 +465,40 @@ describe("corroborate", () => {
     expect(snapshotSource).not.toHaveBeenCalled();
   });
 
+  // @implements REQ-122 snippet-basis-on-fetch-failure
+  it("records a snippet basis when the document fetch fails (REQ-122)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+      content_policy: { mode: "flag" },
+      preservation: { enabled: true },
+    });
+    vi.mocked(snapshotSource).mockReturnValue({
+      snapshot_sha256: "h",
+      snapshot_tier: "evergreen",
+      hash_basis: "snippet",
+      snapshot_url: "https://a.example/x#snippet",
+      truncated: false,
+    });
+
+    await corroborate("the bridge inspection found the structure sound", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Bridge", "https://a.example/x", "the bridge inspection found the structure sound")],
+      },
+      fetchSource: async () => {
+        throw new Error("document fetch offline");
+      },
+    });
+
+    // The fetch failed, so the stored copy is the snippet, not the document.
+    expect(snapshotSource).toHaveBeenCalledWith(
+      expect.objectContaining({ basis: "snippet", url: "https://a.example/x" }),
+    );
+  });
+
   it("reconciles a KB-recalled source alongside an external match (REQ-026e)", async () => {
     mockConfig({
       providers: {
