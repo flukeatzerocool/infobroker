@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.7 — R6 review: `manage_kb` keeps the ingest source identity
+
+- `manage_kb` ingest no longer discards a caller-supplied `source_url` for
+  text-only content, and an anonymous text ingest now stores a stable
+  `text://<slug>` identity, so `list` reports one document instead of one entry
+  per chunk (REQ-060b). A report keeps its supplied identity and its receipt
+  verifies under it. Covered by new Arena contract tests.
+- The `manage_kb` action contract is now pinned by tests: the advertised
+  `max_results` default 8 / max 50 and its behavior, the unconfigured and
+  unopenable-store `config_error` responses, and the receipt and
+  at-least-one-input refusals (REQ-060, REQ-060a, REQ-060b, REQ-060g).
+
 ## 2026.11.7 — R7 review: a failed watchlist topic is recorded as an error
 
 - `monitor-watchlist` now classifies a `verify_claims` response by its status

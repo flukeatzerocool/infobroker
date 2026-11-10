@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 `manage_kb` action-contract remediation
-
-- Stop discarding a caller-supplied `source_url` for text-only ingest (F-R6-A-2), and add handler-level tests for the receipt-only-report/KB and at-least-one-input refusals (F-R6-A-3).
-- Assert the advertised `max_results` contract and the unconfigured/invalid-KB error (F-R6-A-1).
-- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after chunk R7 closes; close when F-R6-A-1, F-R6-A-2, and F-R6-A-3 are `Resolved`.
-
 ## R6 `manage_kb` action-evidence remediation
 
 - Assert REQ-060c per-collection counts and last ingestion, REQ-060d's filter requirement, REQ-060e newest-first order and chunk count, REQ-060f chunk order and no-document error (F-R6-A-4).
