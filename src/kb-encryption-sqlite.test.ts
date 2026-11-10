@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import {
   initKb,
   kbIngest,
@@ -13,7 +14,9 @@ import {
   getKbLockError,
   rekeyStoreTo,
 } from "./kb.js";
-import { resolveKeySource } from "./kb-crypto.js";
+import { SqliteStore } from "./kb-sqlite.js";
+import { resolveKeySource, rawKeyFromString } from "./kb-crypto.js";
+import { openRow, sealRow } from "./kb-row-crypto.js";
 import type { KbConfig } from "./types.js";
 
 function config(dir: string, keyFile: string, enabled: boolean): KbConfig {
@@ -121,6 +124,105 @@ describe("SQLite at-rest encryption (REQ-084)", () => {
       initKb(config(dir, wrong, true));
       expect(getKbLockError()?.code).toBe("config_error");
       expect(kbStoreFormat()).toBe("encrypted");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("event history across key transitions (REQ-084, REQ-086)", () => {
+  it("never renders an encrypted row as text in a plaintext store", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-events-mixed-"));
+    const path = join(dir, "vector-store.sqlite");
+    try {
+      const store = new SqliteStore(dir, { journalMode: "DELETE" });
+      store.init();
+      store.appendEvent("visible event");
+      store.close();
+
+      const raw = new DatabaseSync(path);
+      raw
+        .prepare("INSERT INTO events (at, encrypted, message) VALUES (?, ?, ?)")
+        .run(new Date().toISOString(), 1, sealRow(randomBytes(32), Buffer.from("hidden event")));
+      raw.close();
+
+      const plain = new SqliteStore(dir, { journalMode: "DELETE" });
+      plain.init();
+      expect(plain.events()).toEqual(["visible event"]);
+      expect(plain.events().some((event) => event.startsWith("INFOKB1"))).toBe(false);
+      plain.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  const keyA = rawKeyFromString("a".repeat(64))!;
+  const keyB = rawKeyFromString("b".repeat(64))!;
+  const BOTH = ["first event", "second event"];
+
+  it("reseals event history on rekey and renders it as plaintext after disable", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-events-"));
+    try {
+      const store = new SqliteStore(dir, { secret: keyA, encryptionEnabled: true, journalMode: "DELETE" });
+      store.init();
+      store.appendEvent("first event");
+      store.appendEvent("second event");
+      expect(store.events()).toEqual(BOTH);
+
+      store.rekey(keyA, keyB);
+      expect(store.events()).toEqual(BOTH);
+      store.close();
+
+      const reopened = new SqliteStore(dir, { secret: keyB, journalMode: "DELETE" });
+      reopened.init();
+      expect(reopened.events()).toEqual(BOTH);
+
+      reopened.disableEncryption(keyB);
+      expect(reopened.events()).toEqual(BOTH);
+      expect(reopened.events().some((event) => event.startsWith("INFOKB1"))).toBe(false);
+      reopened.close();
+
+      const plain = new SqliteStore(dir, { journalMode: "DELETE" });
+      plain.init();
+      expect(plain.events()).toEqual(BOTH);
+      plain.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves an unreadable event row and still completes a rekey", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-events-legacy-"));
+    const path = join(dir, "vector-store.sqlite");
+    try {
+      const store = new SqliteStore(dir, { secret: keyA, encryptionEnabled: true, journalMode: "DELETE" });
+      store.init();
+      store.appendEvent("readable before");
+      store.close();
+
+      const raw = new DatabaseSync(path);
+      raw
+        .prepare("INSERT INTO events (at, encrypted, message) VALUES (?, ?, ?)")
+        .run(new Date().toISOString(), 1, randomBytes(48));
+      const before = raw.prepare("SELECT message FROM events ORDER BY id DESC LIMIT 1").get() as { message: Uint8Array };
+      raw.close();
+
+      const reopened = new SqliteStore(dir, { secret: keyA, journalMode: "DELETE" });
+      reopened.init();
+      expect(reopened.events()).toEqual(["readable before"]);
+      reopened.rekey(keyA, keyB);
+      expect(reopened.events()).toEqual(["readable before"]);
+      // Disabling leaves the preserved row marked encrypted while the in-memory
+      // key becomes empty; events() must skip it rather than decode ciphertext.
+      reopened.disableEncryption(keyB);
+      expect(reopened.events()).toEqual(["readable before"]);
+      reopened.close();
+
+      const raw2 = new DatabaseSync(path);
+      const after = raw2.prepare("SELECT message FROM events ORDER BY id DESC LIMIT 1").get() as { message: Uint8Array };
+      raw2.close();
+      expect(Buffer.from(after.message)).toEqual(Buffer.from(before.message));
+      expect(() => openRow(keyB.kind === "raw" ? keyB.dek : Buffer.alloc(32), Buffer.from(after.message))).toThrow();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

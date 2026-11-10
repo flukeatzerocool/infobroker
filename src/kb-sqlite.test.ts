@@ -1,11 +1,11 @@
 // @implements REQ-108 REQ-060a REQ-060b REQ-060c REQ-060d REQ-060e REQ-060f REQ-072 REQ-087 REQ-086
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync, readFileSync, openSync, readSync, closeSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { SqliteStore } from "./kb-sqlite.js";
+import { KbStoreFormatError, SQLITE_FORMAT_VERSION, SqliteStore, probeStoreFile } from "./kb-sqlite.js";
 import type { KbChunk } from "./types.js";
 import {
   initKb,
@@ -62,6 +62,17 @@ describe("KB artifact predicates (REQ-108)", () => {
     expect(isKbStoreArtifact("vector-store.sqlite-wal")).toBe(true);
     expect(isKbStoreArtifact("vector-store.json")).toBe(true);
     expect(isKbStoreArtifact("unrelated.txt")).toBe(false);
+  });
+
+  it("keeps an encrypted corruption backup out of the plaintext-archive sweep", () => {
+    // REQ-108 recovery names a possibly-ciphertext backup with the `.enc`
+    // suffix; the plaintext sweep (REQ-084) must not reap it.
+    expect(isKbArchiveArtifact("vector-store.corrupt-1234.sqlite")).toBe(true);
+    expect(isKbArchiveArtifact("vector-store.corrupt-1234.sqlite-wal")).toBe(true);
+    expect(isKbArchiveArtifact("vector-store.corrupt-1234.sqlite.enc")).toBe(false);
+    expect(isKbArchiveArtifact("vector-store.corrupt-1234.sqlite.enc-wal")).toBe(false);
+    // The timestamp is Date.now() digits so the plaintext form stays eligible.
+    expect(/^vector-store\.corrupt-\d+\.sqlite$/.test(`vector-store.corrupt-${Date.now()}.sqlite`)).toBe(true);
   });
 });
 
@@ -236,6 +247,119 @@ describe("encrypted archive cleanup (REQ-084, REQ-085)", () => {
       expect(existsSync(join(archiveDir, "vector-store.json.migrated-2"))).toBe(false);
     } finally {
       rmSync(archiveDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+});
+
+describe("store format marker and classification (REQ-085, REQ-108)", () => {
+  function snapshotStoreDir(dir: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const name of readdirSync(dir).filter((entry) => entry.startsWith("vector-store.sqlite")).sort()) {
+      out[name] = createHash("sha256").update(readFileSync(join(dir, name))).digest("hex");
+    }
+    return out;
+  }
+
+  function readUserVersion(path: string): number {
+    const header = Buffer.alloc(100);
+    const fd = openSync(path, "r");
+    try {
+      readSync(fd, header, 0, 100, 0);
+    } finally {
+      closeSync(fd);
+    }
+    return header.readUInt32BE(60);
+  }
+
+  it("classifies a missing and a zero-byte file as new", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-probe-new-"));
+    try {
+      expect(probeStoreFile(join(dir, "vector-store.sqlite")).state).toBe("new");
+      writeFileSync(join(dir, "vector-store.sqlite"), "");
+      expect(probeStoreFile(join(dir, "vector-store.sqlite")).state).toBe("new");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes the marker on creation and leaves a pre-marker store at zero", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-marker-"));
+    const path = join(dir, "vector-store.sqlite");
+    try {
+      const store = new SqliteStore(dir, { journalMode: "DELETE" });
+      store.init();
+      store.appendEvent("marked");
+      store.close();
+      expect(readUserVersion(path)).toBe(SQLITE_FORMAT_VERSION);
+
+      const raw = new DatabaseSync(path);
+      raw.exec("PRAGMA user_version = 0");
+      raw.close();
+      const reopened = new SqliteStore(dir, { journalMode: "DELETE" });
+      reopened.init();
+      expect(reopened.events()).toEqual(["marked"]);
+      reopened.close();
+      expect(readUserVersion(path)).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a newer store without touching the directory", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-newer-"));
+    const path = join(dir, "vector-store.sqlite");
+    try {
+      const store = new SqliteStore(dir, { journalMode: "DELETE" });
+      store.init();
+      store.close();
+      const raw = new DatabaseSync(path);
+      raw.exec(`PRAGMA user_version = ${SQLITE_FORMAT_VERSION + 1}`);
+      raw.close();
+
+      const before = snapshotStoreDir(dir);
+      expect(() => new SqliteStore(dir).init()).toThrow(KbStoreFormatError);
+      try {
+        new SqliteStore(dir).init();
+      } catch (e) {
+        expect((e as KbStoreFormatError).code).toBe("kb_store_newer_format");
+      }
+      expect(snapshotStoreDir(dir)).toEqual(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies a non-SQLite file as unrecognized and a truncated header as corrupt", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-probe-bad-"));
+    const path = join(dir, "vector-store.sqlite");
+    try {
+      writeFileSync(path, "this is not a sqlite database at all");
+      expect(probeStoreFile(path).state).toBe("unrecognized");
+      writeFileSync(path, Buffer.concat([Buffer.from("SQLite format 3\0", "binary"), Buffer.alloc(20)]));
+      expect(probeStoreFile(path).state).toBe("corrupt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes a sidecar its own read-only probe created when the store is locked", () => {
+    const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-probe-locked-"));
+    const path = join(dir, "vector-store.sqlite");
+    try {
+      const store = new SqliteStore(dir, { journalMode: "WAL" });
+      store.init();
+      store.close();
+      const before = readdirSync(dir).sort();
+      const busy = Object.assign(new Error("database is locked"), { code: "ERR_SQLITE_ERROR", errcode: 5 });
+      const probe = probeStoreFile(path, (target, options) => {
+        expect(options?.readOnly).toBe(true);
+        writeFileSync(`${target}-shm`, "simulated sidecar");
+        throw busy;
+      });
+      expect(probe.state).toBe("locked");
+      expect(readdirSync(dir).sort()).toEqual(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

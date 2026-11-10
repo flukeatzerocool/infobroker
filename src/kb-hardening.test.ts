@@ -1,9 +1,11 @@
 // @implements REQ-060c REQ-066 REQ-083 REQ-100 REQ-067 REQ-085 REQ-108
 import { describe, it, expect, afterAll, vi } from "vitest";
-import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { SqliteStore } from "./kb-sqlite.js";
 import { initKb, kbIngest, kbSearch, kbStats, kbGet, chunkText, flushKbWrites, getKbLockError } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
@@ -250,5 +252,136 @@ describe("Chunking terminates and preserves content (REQ-067)", () => {
     const chunks = chunkText("a".repeat(45), "t");
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.length).toBeLessThan(45);
+  });
+});
+
+function truncateStore(path: string, size: number): void {
+  const fd = openSync(path, "r+");
+  try {
+    ftruncateSync(fd, size);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function archiveNames(dir: string): string[] {
+  return readdirSync(dir).filter((name) => name.startsWith("vector-store.corrupt-"));
+}
+
+describe("corrupt live store recovery (REQ-108)", () => {
+  it("preserves a backup, continues empty, and reports the event", () => {
+    const dir = join(base, "corrupt-live-store");
+    initKb(makeConfig(dir, { maintenance_interval_minutes: 0 }));
+    kbIngest("alpha beta content before corruption", "corrupt", "https://example.com/corrupt", "test");
+    flushKbWrites();
+    const path = join(dir, "vector-store.sqlite");
+    truncateStore(path, 600);
+    const damaged = readFileSync(path);
+
+    initKb(makeConfig(dir, { maintenance_interval_minutes: 0 }));
+    expect(getKbLockError()).toBeNull();
+    expect(kbStats().chunk_count).toBe(0);
+    const archived = archiveNames(dir).find((name) => !name.endsWith("-wal") && !name.endsWith("-shm"));
+    expect(archived).toBeTruthy();
+    expect(readFileSync(join(dir, archived!))).toEqual(damaged);
+    const events = kbStats().events;
+    expect(events.at(-1)).toContain("Storage corruption detected at ");
+    expect(events.at(-1)).toContain(join(dir, archived!));
+    expect(kbIngest("fresh content after recovery", "fresh", "https://example.com/fresh", "test")).toBeGreaterThan(0);
+    expect(kbSearch("fresh content", 5).length).toBeGreaterThan(0);
+  });
+
+  it("leaves a non-SQLite file untouched and locks", () => {
+    const dir = join(base, "not-a-store");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const path = join(dir, "vector-store.sqlite");
+    writeFileSync(path, "this is not a sqlite database at all");
+    const before = readFileSync(path);
+
+    initKb(makeConfig(dir, { maintenance_interval_minutes: 0 }));
+    expect(getKbLockError()?.code).toBe("config_error");
+    expect(getKbLockError()?.message).toContain("unrecognized");
+    expect(readFileSync(path)).toEqual(before);
+    expect(archiveNames(dir)).toEqual([]);
+  });
+
+  it("locks an encrypted store when the key is absent and keeps it readable", () => {
+    const dir = join(base, "missing-key-store");
+    const good = join(base, "missing-key-store.key");
+    writeFileSync(good, randomBytes(32).toString("base64"), { mode: 0o600 });
+    const encrypted = (keyFile: string) =>
+      makeConfig(dir, { maintenance_interval_minutes: 0, encryption: { enabled: true, key_file: keyFile } });
+
+    initKb(encrypted(good));
+    kbIngest("secret alpha content", "secret", "https://example.com/secret", "test");
+    flushKbWrites();
+
+    initKb(encrypted(join(base, "absent.key")));
+    expect(getKbLockError()?.code).toBe("config_error");
+    expect(getKbLockError()?.message).toMatch(/no key/i);
+
+    initKb(encrypted(good));
+    expect(getKbLockError()).toBeNull();
+    expect(kbSearch("secret alpha content", 5).length).toBeGreaterThan(0);
+  });
+});
+
+describe("corrupt store recovery backout (REQ-108)", () => {
+  function seedCorrupt(dir: string): Buffer {
+    const store = new SqliteStore(dir, { journalMode: "DELETE" });
+    store.init();
+    store.appendEvent("seed event");
+    store.close();
+    const path = join(dir, "vector-store.sqlite");
+    truncateStore(path, 600);
+    return readFileSync(path);
+  }
+
+  it("restores the archive when the creation open fails, once per attempt", () => {
+    const dir = join(base, "restore-create-fail");
+    const damaged = seedCorrupt(dir);
+    const path = join(dir, "vector-store.sqlite");
+    let opens = 0;
+    const refusing = (target: string, options?: { readOnly?: boolean }) => {
+      opens += 1;
+      if (!options?.readOnly) throw new Error("creation refused");
+      return new DatabaseSync(target, options);
+    };
+
+    const store = new SqliteStore(dir, { allowRecovery: true, journalMode: "DELETE", openDatabase: refusing });
+    expect(() => store.init()).toThrow("creation refused");
+    expect(opens).toBe(2); // probe read-only, then the refused creation
+    expect(readFileSync(path)).toEqual(damaged);
+    expect(archiveNames(dir)).toEqual([]);
+
+    expect(() => store.init()).toThrow("creation refused");
+    expect(readFileSync(path)).toEqual(damaged);
+    expect(archiveNames(dir)).toEqual([]);
+  });
+
+  it("restores the archive when the encryption bootstrap fails after creation", () => {
+    const dir = join(base, "restore-bootstrap-fail");
+    const damaged = seedCorrupt(dir);
+    const path = join(dir, "vector-store.sqlite");
+    const store = new SqliteStore(dir, {
+      allowRecovery: true,
+      encryptionEnabled: true,
+      secret: null,
+      journalMode: "DELETE",
+    });
+    expect(() => store.init()).toThrow(/no key/i);
+    expect(readFileSync(path)).toEqual(damaged);
+    expect(existsSync(path)).toBe(true);
+    expect(archiveNames(dir)).toEqual([]);
+  });
+
+  it("does not recover when the caller has not opted in", () => {
+    const dir = join(base, "recovery-opted-out");
+    const damaged = seedCorrupt(dir);
+    const path = join(dir, "vector-store.sqlite");
+    const store = new SqliteStore(dir, { journalMode: "DELETE" });
+    expect(() => store.init()).toThrow(/corrupt/i);
+    expect(readFileSync(path)).toEqual(damaged);
+    expect(archiveNames(dir)).toEqual([]);
   });
 });
