@@ -121,3 +121,22 @@ describe("Embedding-model reconciliation (REQ-082, REQ-103)", () => {
     expect(kbStats().events.some((event) => event.includes("Embedding model reconciled"))).toBe(true);
   });
 });
+
+// @implements REQ-103
+describe("Embedding-model degradation (REQ-103)", () => {
+  it("reports the unavailable reference and a remediation naming the fallback", () => {
+    const dir = join(base, "unknown-model");
+    initKb(makeConfig(dir, "not-a-real-model"));
+
+    const stats = kbStats();
+    expect(stats.model_available).toBe(false);
+    expect(stats.model_name).toBe("not-a-real-model");
+
+    const event = stats.events.find((entry) => entry.includes("not-a-real-model"));
+    expect(event).toBeDefined();
+    expect(event).toContain("retrieval degraded to \"signed-hash-tfidf\"");
+    expect(event).toContain("Remediation:");
+    expect(event).toContain("config.local.json");
+    expect(event).toContain("then reload");
+  });
+});
