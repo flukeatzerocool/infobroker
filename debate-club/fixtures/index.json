@@ -67,6 +67,36 @@
       "body": "<!DOCTYPE html><html><head><style>.x{color:red}</style><script>var x=1;</script></head><body><article><h1>Fixture Article</h1><p>The native renderer must return readable text.</p></article></body></html>"
     },
     {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/crawl$",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "<!DOCTYPE html><html><head><title>Crawl Root</title></head><body><h1>Crawl Root</h1><a href=\"/crawl-a\">A</a><a href=\"/crawl-b\">B</a></body></html>"
+    },
+    {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/crawl-a$",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "<!DOCTYPE html><html><body><h1>Crawl Child A</h1></body></html>"
+    },
+    {
+      "host": "example.com",
+      "method": "GET",
+      "path_regex": "^/crawl-b$",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html; charset=utf-8"
+      },
+      "body": "<!DOCTYPE html><html><body><h1>Crawl Child B</h1></body></html>"
+    },
+    {
       "host": "api.semanticscholar.org",
       "method": "GET",
       "path_regex": "^/graph/v1/paper/search",

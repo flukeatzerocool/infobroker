@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-021 REQ-021a REQ-021h REQ-021i REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-021 REQ-021a REQ-021d REQ-021h REQ-021i REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -239,6 +239,21 @@ test("fetch_page converts native HTML to text", async () => {
   expect(snippet).toContain("Fixture Article");
   expect(snippet).not.toContain("<script");
   expect(snippet).not.toContain("<style");
+});
+
+test("fetch_page crawl follows same-origin links (REQ-021d)", async () => {
+  scenario = "fetch-crawl";
+  const out = await call("infobroker_fetch_page", {
+    url: "https://example.com/crawl",
+    crawl: true,
+    detect_date: false,
+  });
+  const body = expectOk(out.text);
+  const results = body.results as Array<Record<string, unknown>>;
+  expect(results.map((r) => r.url)).toEqual(
+    expect.arrayContaining(["https://example.com/crawl-a", "https://example.com/crawl-b"]),
+  );
+  expect(results.length).toBeGreaterThan(1);
 });
 
 test("fetch_page refuses a private network target", async () => {

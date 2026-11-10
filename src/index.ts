@@ -1068,7 +1068,7 @@ async function doFetchPage(
       visited.add(cur.url);
       let fetched;
       try {
-        fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate, true);
+        fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate, false);
       } catch (e) {
         // REQ-021a/021d: a refused crawl hop is skipped, not listed;
         // REQ-098: the refusal is recorded in the audit trail.

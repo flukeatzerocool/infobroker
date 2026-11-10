@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.7 — R4 `fetch_page` review: bounded crawl recurses again
+
+- `fetch_page` with `crawl: true` now fetches the raw HTML for same-origin
+  link discovery instead of the HTML-to-text rendering, so the crawl actually
+  follows links; it previously returned only the start page
+  (REQ-021d). Covered by a new Arena crawl contract test.
+
 ## 2026.11.7 — R2 review: malformed user layer no longer crashes startup
 
 - A user configuration layer that sets `providers` to a non-object value is
