@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026.11.7 — R2a review: credential pools and dispatch-state filtering
+
+- A credential-requiring provider now honors the ordered credential pool of
+  REQ-104 wherever it is dispatched, not only in the three keyed providers.
+  CORE read `INFOBROKER_CORE_API_KEY` once and cached it for the process, so a
+  pool was ignored and a rejected first key pinned the session; every
+  `generic_http` provider read only its single declared variable. Both now take
+  the next usable credential per request and record a 401/403/429 against the
+  credential that produced it. A provider that declares a custom `auth_env`
+  uses `<auth_env>_POOL` (a name ending in `_API_KEY` keeps the documented
+  plural), and the rule is recorded in `DECISIONS.md` (REQ-104).
+- One usability predicate now governs dispatch, the corroboration pool, the
+  citation chain, and `inspect_providers`. The three copies had drifted: a
+  keyless CORE was reported inactive and excluded from `verify_claims` but was
+  still dispatched by `search_web`, and a provider whose every credential was
+  rejected was reported active. A provider is usable when it is enabled, its
+  URL variable is present, and it has at least one credential that is neither
+  rejected nor cooling down; an optional-key provider needs none (REQ-011,
+  REQ-020a, REQ-104). Consequence: a keyless CORE is no longer dispatched, and
+  a citation chain skips a provider whose pool is exhausted instead of querying
+  it (REQ-027).
+- An explicit `provider` is now subject to the same rule as the chain. A
+  disabled one is still `invalid_input` (REQ-015); an unauthenticated one is
+  excluded from the prepended position and the selected type's chain serves,
+  as REQ-020a's explicit-provider fall-through requires, with `fallback_used`
+  reporting the substitution. An explicit `verify_claims.providers` list is
+  filtered the same way, and a list with no usable entry is rejected as
+  `invalid_input` rather than reported as an empty corroboration (REQ-015).
+- An exceeded provider timeout is now a transient failure: `withTimeout`
+  raises `TimeoutError` and the retry policy recognizes it, so a slow attempt
+  is retried within the provider's configured count before the chain advances
+  (REQ-032, REQ-035). Consequence: a timed-out call can cost up to
+  `retry_count + 1` attempts; the count is per-provider configuration.
+- Every retry attempt now passes the per-provider throttle. `throttle` sat
+  outside `retryWithBackoff` at five sites (`search_web` search and fetch, both
+  `verify_claims` passes, and `get_citations`), so retries were extra outbound
+  requests spaced below REQ-030's minimum interval. The wait stays outside the
+  timeout race, so a legitimate interval cannot manufacture a timeout, and the
+  measured latency still excludes it (REQ-030).
+
 ## 2026.11.7 — R6 review: dedup false-positive bound
 
 - Meaning-equivalence deduplication no longer merges two templated documents

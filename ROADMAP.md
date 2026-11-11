@@ -14,13 +14,36 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R2 findings remediation
+## R2b configuration reload and validation
 
-- Fix the R2 P1 set: credential-pool coverage for CORE/generic providers, disabled-provider bypasses in `verify_claims`, the explicit-provider auth filter, timeout retry classification, throttle coverage on retries, quota flush on shutdown and reset timing, the exhausted-chain error shape, `fetch_page` `retry_after_ms`, a financial indicator source, the latency-window strategy, the `status:"active"` filter, the disabled-provider health probe, `total_requests_served`, `requires_account` derivation, and the REQ-013 partial-results leg.
-- Close the P2 evidence gaps: REQ-010 inheritance and update preservation, REQ-011 leak clauses, REQ-024a non-active reasons, REQ-024b timestamps, the REQ-034 80/100 boundary, dispatch orchestration, disabled-provider skip, and key-pool restart persistence.
-- Correct the §5.3 interface sketch and the §A.5 SearXNG privacy and POST claims; each ships with a CHANGELOG entry and a re-run of the gates it feeds.
+- Fix the reload patch to merge over the current on-disk user layer rather than the startup snapshot (F-R2-2), validate `auth_env`, `url_env`, and `auth_optional` types before use so a non-string value cannot throw during dispatch (F-R2-3), and assert REQ-011's leak, optional-key, and missing-key clauses (F-R2-7).
+- Each behavior change ships with a CHANGELOG entry and a re-run of `validate-spec`, `typecheck`, and the configuration tests.
 
-**Trigger:** start after chunk R3 closes; close when every P1 row in the R2 finding register is `Resolved` and each P2 row is fixed or re-classified.
+**Trigger:** start after R2a ships; close when F-R2-2, F-R2-3, and F-R2-7 are `Resolved`.
+
+## R2c provider status and inspection
+
+- Fix the status surface: report an unavailable credential pool with its reason (F-R2-9), derive `requires_account` from configuration rather than the tier alone (F-R2-12), give REQ-013's `inactive` legs a producer and a test (F-R2-19), filter the `active` list to rows whose reported status is `active` (F-R2-20), and assert REQ-024a's non-active reasons (F-R2-21).
+- Refuse to health-probe a config-disabled provider (F-R2-22), assert REQ-024b's `last_error`/`last_success` (F-R2-23), and make `total_requests_served` count server requests rather than provider samples (F-R2-24).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after R2a ships; close when F-R2-9, F-R2-12, F-R2-19, F-R2-20, F-R2-21, F-R2-22, F-R2-23, and F-R2-24 are `Resolved`.
+
+## R2d retry, latency, quota and chain shape
+
+- Give REQ-036 a configurable time window alongside its count window (F-R2-27), assert the REQ-034 80/100 boundary and skip (F-R2-26), return the exhaustion shape for a fully quota-exhausted chain (F-R2-30), flush quota on SIGTERM/SIGINT (F-R2-32), and pin the reset timing (F-R2-33).
+- Report `retry_after_ms` on a rate-limited `fetch_page` (F-R2-34), assert dispatch orchestration (F-R2-35), and cover disabled-provider exclusion in dispatch and `search_web` (F-R2-15).
+- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+
+**Trigger:** start after R2a ships; close when F-R2-15, F-R2-26, F-R2-27, F-R2-30, F-R2-32, F-R2-33, F-R2-34, and F-R2-35 are `Resolved`.
+
+## R2e financial source and prose reconciliation
+
+- Give the financial chain an economic-indicator source instead of the World Bank documents index (F-R2-36), and correct §5.3's provider-interface sketch and its `web_search`/`general_web` claim (F-R2-38).
+- Correct §A.5's SearXNG privacy and request-method claims (F-R2-41, F-R2-42).
+- Each change ships with a CHANGELOG entry and a re-run of `validate-spec` and `validate-readme`.
+
+**Trigger:** start after R2a ships; close when F-R2-36, F-R2-38, F-R2-41, and F-R2-42 are `Resolved`.
 
 ## R3 findings remediation
 

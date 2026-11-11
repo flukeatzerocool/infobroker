@@ -227,7 +227,7 @@ Recorded at the program close: the ownership table (`worklist.md:86`) assigns §
 
 | Surface | Verdict | Predicate |
 |---|---|---|
-| §1 goal 3 provider intelligence | `finding:F-R2-27` | capability, quota, and provider selection hold (`worklist.md:209` REQ-020a classification/override/quota demotion; `:211` REQ-020c priority routing; `:216` REQ-020h source quality); the latency leg is the count-only window deferred by F-R2-27 (`src/latency.ts:15,29-33`; `ROADMAP.md` § R2 findings remediation) |
+| §1 goal 3 provider intelligence | `finding:F-R2-27` | capability, quota, and provider selection hold (`worklist.md:209` REQ-020a classification/override/quota demotion; `:211` REQ-020c priority routing; `:216` REQ-020h source quality); the latency leg is the count-only window deferred by F-R2-27 (`src/latency.ts:15,29-33`; `ROADMAP.md` § R2d retry, latency, quota and chain shape) |
 
 ### R4 — `fetch_page` (12)
 
@@ -621,13 +621,13 @@ work.
 | F-R2-5 | R2 | REQ-037 "missing required provider fields" rejection branch is untested (`src/config.ts:385-415`) | P2 | `Closed-P3` |
 | F-R2-6 | R2 | REQ-040 invalid-reload retention unasserted; the test only expects a throw (`src/config.test.ts:593`) | P2 | `Closed-P3` |
 | F-R2-7 | R2 | REQ-011 citation asserts `server.json` env-var names only; no leak/optional-key/missing-key assertion (`src/server-manifest.test.ts:51-62`) | P2 | `Scheduled-roadmap` |
-| F-R2-8 | R2 | REQ-104 pool is advertised for every required-auth tier but honored only by keyed providers; CORE/generic_http read one variable (`src/config.ts:1025-1030`; `src/providers/core.ts:10-14`) | P1 | `Scheduled-roadmap` |
-| F-R2-9 | R2 | An exhausted key pool is still reported `active`/`auth_ok: true` (`src/index.ts:1410-1420`) | P2 | `Scheduled-roadmap` |
+| F-R2-8 | R2 | REQ-104 pool is advertised for every required-auth tier but honored only by keyed providers; CORE/generic_http read one variable (`src/config.ts:1025-1030`; `src/providers/core.ts:10-14`) | P1 | **Resolved 2026-11-10** — pool lookup by declared env name; CORE and generic_http rotate per request and record 401/403/429 (`config.test.ts`, `core.test.ts`, `generic-http.test.ts`) |
+| F-R2-9 | R2 | An exhausted key pool is still reported `active`/`auth_ok: true` (`src/index.ts:1410-1420`) | P2 | `Scheduled-roadmap` — status half fixed by the shared predicate (R2a); the per-field `auth_ok`/`inactive_reason` reporting remains |
 | F-R2-10 | R2 | REQ-104 restart-persistence test only reloads malformed state, never a valid rejection/cooldown (`src/key-pool.test.ts:83-113`) | P3 | `Closed-P3` |
 | F-R2-11 | R2 | REQ-104's three WHEN branches carry no clause tags (`src/key-pool.test.ts:1`) | P3 | `Closed-P3` |
 | F-R2-12 | R2 | REQ-129 `requires_account` derives from tier only; CORE (required key) is documented `none` (`src/privacy.ts:47`) | P1 | `Scheduled-roadmap` |
 | F-R2-13 | R2 | REQ-129 posture `unknown` is reachable only for `retains_query` (`src/privacy.ts:46`) | P3 | `Closed-P3` |
-| F-R2-14 | R2 | `verify_claims.providers` bypasses the disabled-provider rule (`src/corroborate.ts:566-571`) | P1 | `Scheduled-roadmap` |
+| F-R2-14 | R2 | `verify_claims.providers` bypasses the disabled-provider rule (`src/corroborate.ts:566-571`) | P1 | **Resolved 2026-11-10** — the explicit list is filtered by the shared predicate; an all-unusable list is `invalid_input` (`corroborate.test.ts`) |
 | F-R2-15 | R2 | Disabled-provider exclusion has no test for dispatch or `search_web` (`src/config.ts:1023`; `src/index.ts:417-421`) | P2 | `Scheduled-roadmap` |
 | F-R2-16 | R2 | REQ-014 "added without source changes" is never tested end-to-end (`src/config.test.ts:175-191`, `:301-306`) | P3 | `Closed-P3` |
 | F-R2-17 | R2 | REQ-071 identifier literal is duplicated in three places and caller-overridable (`src/providers/duckduckgo.ts:83`; `src/corroborate.ts:933`; `src/lib/url-guard.ts:190`) | P3 | `Closed-P3` |
@@ -641,10 +641,10 @@ work.
 | F-R2-25 | R2 | `last_spec_review` reports server boot time (`src/index.ts:67,1633`) | P3 | `Closed-P3` |
 | F-R2-26 | R2 | REQ-034's citation stubs the predicate; the 0.8 boundary, `quota_warning`, and 100% skip are unasserted (`src/chain.test.ts:84-97`) | P2 | `Scheduled-roadmap` |
 | F-R2-27 | R2 | REQ-036 implements a count window only; no configurable strategy or time window (`src/latency.ts:15,29-33`) | P1 | `Scheduled-roadmap` |
-| F-R2-28 | R2 | Retries bypass the per-provider throttle; `throttle()` sits outside `retryWithBackoff` (`src/index.ts:492-509`) | P1 | `Scheduled-roadmap` |
-| F-R2-29 | R2 | An explicit `provider` is prepended before the auth filter (`src/index.ts:415-416`) | P1 | `Scheduled-roadmap` |
+| F-R2-28 | R2 | Retries bypass the per-provider throttle; `throttle()` sits outside `retryWithBackoff` (`src/index.ts:492-509`) | P1 | **Resolved 2026-11-10** — throttle inside the retried closure at all five sites, outside the timeout race (`corroborate.test.ts`, `cite.test.ts`, Arena) |
+| F-R2-29 | R2 | An explicit `provider` is prepended before the auth filter (`src/index.ts:415-416`) | P1 | **Resolved 2026-11-10** — the prepend is gated on the shared predicate; an unauthenticated explicit provider falls through per REQ-020a (Arena) |
 | F-R2-30 | R2 | A fully quota-exhausted chain returns empty success, not exhaustion (`src/index.ts:478-490` → `:773`) | P1 | `Scheduled-roadmap` |
-| F-R2-31 | R2 | Timeouts are not retryable, so REQ-035's transient-failure leg is not honored (`src/retry.ts:60-66`) | P1 | `Scheduled-roadmap` |
+| F-R2-31 | R2 | Timeouts are not retryable, so REQ-035's transient-failure leg is not honored (`src/retry.ts:60-66`) | P1 | **Resolved 2026-11-10** — `TimeoutError` is retryable (`retry.test.ts`) |
 | F-R2-32 | R2 | Quota writes are debounced 30 s with a `beforeExit` flush only; SIGTERM/SIGINT loses the window (`src/quota.ts:32,83-99`) | P1 | `Scheduled-roadmap` |
 | F-R2-33 | R2 | Quota reset applies a 30 s grace and has no reset test (`src/quota.ts:113-115`) | P2 | `Scheduled-roadmap` |
 | F-R2-34 | R2 | A rate-limited `fetch_page` omits `retry_after_ms` (`src/fetch-fallback.ts:139-144`) | P1 | `Scheduled-roadmap` |

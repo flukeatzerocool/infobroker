@@ -89,6 +89,25 @@ contract. Rejected: a hardcoded deny-list of protected gates, because it fails
 open for every gate added later. Consequence: opting a gate in is a reviewed
 manifest edit, and the committed ledger remains the record of each decision.
 
+### D-097: A Declared Credential Variable Carries Its Own Pool Name (2026.11.10)
+
+REQ-104's pooled credentials are named by the conventional slug variables:
+`INFOBROKER_<PROVIDER>_API_KEYS` beside `INFOBROKER_<PROVIDER>_API_KEY`. A
+`generic_http` provider declares an arbitrary `auth_env`, so the slug-derived
+name cannot find its pool. The rule is mechanical: a declared name ending in
+`_API_KEY` takes the plural (`<auth_env>S`), and any other name takes a
+`_POOL` suffix. Rationale: the first form preserves the documented convention
+for a provider that follows it, and the second gives a custom name one obvious
+pool variable without inventing a second config key (REQ-014 requires a
+generic provider to be added by configuration alone, and REQ-104 already
+defines the pool as an environment variable). Rejected: requiring generic
+providers to adopt the slug-derived name (breaks existing user configuration
+and REQ-014's no-source-change promise); a per-provider `pool_env` config key
+(a new validated field for a naming convention). The generated
+`skills/infobroker/references/provider-auth.md` is derived from `config.json`
+and carries no pool-name convention, so this decision, not that file, is the
+record.
+
 ### D-096: Legacy Claim-Source Retrieval Times (2026.11.10)
 
 A claim-source retrieval time now lives inside the sealed edge payload (REQ-109);
