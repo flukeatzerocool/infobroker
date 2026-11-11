@@ -1,4 +1,4 @@
-// @implements REQ-013 REQ-013 latency-threshold REQ-013 partial-results REQ-013 exhausted REQ-013 quota-warning
+// @implements REQ-013 REQ-013 latency-threshold REQ-013 provider-degraded REQ-013 exhausted REQ-013 quota-warning
 import { describe, it, expect } from "vitest";
 import { resolveHealthStatus } from "./health-status.js";
 
@@ -25,7 +25,7 @@ describe("resolveHealthStatus (REQ-013)", () => {
     expect(status).toBe("degraded");
   });
 
-  it("respects the partial-results leg (base already degraded)", () => {
+  it("respects the provider-reported degraded leg (base already degraded)", () => {
     const status = resolveHealthStatus({
       baseStatus: "degraded",
       quotaExhausted: false,

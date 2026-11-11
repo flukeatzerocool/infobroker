@@ -2,12 +2,12 @@
 
 Generated from `config.json`. Do not edit manually.
 
-Posture is derived from each provider's tier and resale flag, with explicit per-provider overrides taking precedence. `unknown` means configuration does not establish the answer; it is not a privacy claim.
+Posture is derived from each provider's tier, its declared credential, and its resale flag, with explicit per-provider overrides taking precedence. `unknown` means configuration does not establish the answer; it is not a privacy claim.
 
 | Provider | Tier | Query forwarding | Retains query | Account/key | Resells | Notes |
 |----------|------|------------------|---------------|-------------|---------|-------|
 | arxiv | free_http | origin provider | unknown | none | no |  |
-| core | free_http | origin provider | unknown | none | no |  |
+| core | free_http | origin provider | unknown | required | no |  |
 | crossref | free_http | origin provider | unknown | none | no |  |
 | duckduckgo | builtin | origin provider | unknown | none | yes |  |
 | europe_pmc | free_http | origin provider | unknown | none | no |  |

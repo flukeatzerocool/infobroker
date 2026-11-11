@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, classifyCredential, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
@@ -28,6 +28,7 @@ import { checkContent, disposition, policyMode, policyMeta } from "./content-pol
 import { audit } from "./audit-log.js";
 import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
+import { assessProvider, selectActiveRows, keyPoolRow, type ProviderStatusInput, type ProviderAssessment } from "./provider-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
 import { settleBatch } from "./batch-run.js";
@@ -1416,29 +1417,25 @@ async function doFetchPage(
   })}`;
 }
 
-// REQ-011/REQ-104: usability is one predicate (config.providerUsable), so the
-// list, the health probe, and dispatch cannot disagree about a missing or
-// exhausted credential.
-function providerInactiveReason(slug: string, p: ProviderConfig): "disabled" | "no_api_key" | "no_url" | null {
-  if (!p.enabled) return "disabled";
-  if (providerUsable(slug)) return null;
-  if (p.url_env && !process.env[p.url_env]) return "no_url";
-  return "no_api_key";
-}
-
-// REQ-013/REQ-024a: one assessment shared by the list and spec actions, so a
-// quota-warning or over-threshold-latency provider is reported degraded and
-// "active" means the same thing everywhere.
-function assessProviderStatus(slug: string, p: ProviderConfig): HealthStatus {
+// REQ-011/REQ-104/REQ-013/REQ-024a: one assessment, built from the same
+// credential classification dispatch uses, so the list, the spec counts, and
+// the active filter cannot disagree about a missing or exhausted credential.
+function providerStatusInput(slug: string, p: ProviderConfig): ProviderStatusInput {
   const config = getConfig();
   const quota = checkQuota(slug, p.rate_limit);
-  return resolveHealthStatus({
-    baseStatus: providerUsable(slug, config) ? "active" : "inactive",
+  return {
+    enabled: p.enabled,
+    urlPresent: !p.url_env || Boolean(process.env[p.url_env]),
+    credential: classifyCredential(slug, p),
     quotaExhausted: quota.exhausted,
     quotaWarning: quota.warning,
     avgLatencyMs: latency.avg(slug) || undefined,
     degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
-  });
+  };
+}
+
+function providerAssessment(slug: string, p: ProviderConfig): ProviderAssessment {
+  return assessProvider(providerStatusInput(slug, p));
 }
 
 /** Non-secret host of a generic provider's endpoint, for diagnostics only. */
@@ -1451,7 +1448,8 @@ function endpointHost(endpoint?: string): string | undefined {
   }
 }
 
-function doListProviders(filter?: string): string {  const config = getConfig();
+function doListProviders(filter?: string): string {
+  const config = getConfig();
   const entries = Object.entries(config.providers);
 
   // REQ-024a: supported task types per provider, derived from the dispatch table.
@@ -1460,20 +1458,14 @@ function doListProviders(filter?: string): string {  const config = getConfig();
     for (const slug of chain) (taskTypesBySlug[slug] ??= []).push(taskType);
   }
 
-  const filtered = filter === "active"
-    ? entries.filter(([slug, p]) => providerUsable(slug, config) && !checkQuota(slug, p.rate_limit).exhausted)
-    : entries;
-
-  const list = filtered.map(([slug, p]) => {
+  const rows = entries.map(([slug, p]) => {
     const quota = checkQuota(slug, p.rate_limit);
-    const operational = providerUsable(slug, config);
-    const reason = quota.exhausted ? "exhausted" : (operational ? null : providerInactiveReason(slug, p));
     const cooldownRemaining = inCooldown(slug) ? cooldownRemainingMs(slug) : undefined;
     // REQ-104: report pool health (index + availability), never key material.
-    const pool = keyPoolStatus(slug);
-    // REQ-013/REQ-024a: the list status uses the same assessment as health, so
-    // a quota-warning or over-threshold-latency provider is reported degraded.
-    const status = assessProviderStatus(slug, p);
+    const keyPool = keyPoolRow(keyPoolStatus(slug));
+    // REQ-013/REQ-024a: one assessment yields both the reported status and the
+    // reason, so the active filter selects exactly the rows it reports active.
+    const assessment = providerAssessment(slug, p);
     // REQ-024a: native_fetch is an inline tool-handler fallback, not a
     // standalone provider module — marked so it is excluded from provider counts.
     const inlineFallback = slug === "native_fetch";
@@ -1490,11 +1482,11 @@ function doListProviders(filter?: string): string {  const config = getConfig();
         : {}),
       rate_limit: p.rate_limit,
       enabled: p.enabled,
-      status,
+      status: assessment.status,
       ...(inlineFallback ? { inline_fallback: true } : {}),
-      ...(reason ? { inactive_reason: reason } : {}),
+      ...(assessment.inactive_reason ? { inactive_reason: assessment.inactive_reason } : {}),
       ...(cooldownRemaining !== undefined ? { cooldown_remaining_ms: cooldownRemaining } : {}),
-      ...(pool.length > 1 ? { key_pool: pool } : {}),
+      ...(keyPool ? { key_pool: keyPool } : {}),
       quota_used: quota.daily.used,
       quota_remaining: quota.daily.remaining,
       quota_warning: quota.warning,
@@ -1508,7 +1500,7 @@ function doListProviders(filter?: string): string {  const config = getConfig();
   return `[OK] ${json({
     status: "ok",
     provider: "system",
-    results: list,
+    results: filter === "active" ? selectActiveRows(rows) : rows,
   })}`;
 }
 
@@ -1592,7 +1584,7 @@ function doSpecHealth(): string {
   // distinguish enabled providers from those whose assessed status is active.
   const providers = Object.entries(config.providers).filter(([slug]) => slug !== "native_fetch");
   const enabledCount = providers.filter(([, p]) => p.enabled).length;
-  const activeCount = providers.filter(([slug, p]) => assessProviderStatus(slug, p) === "active").length;
+  const activeCount = providers.filter(([slug, p]) => providerAssessment(slug, p).status === "active").length;
   const kbStatsData = isKbConfigured() ? kbStats() : null;
 
   const toolCount = Object.keys((server as any)._registeredTools).length;

@@ -1108,17 +1108,29 @@ export function getActiveProviders(): [string, ProviderConfig][] {
  * rejected or cooling down. The tier is irrelevant — a tier-scoped check is how
  * CORE and the generic tier escaped the credential rule.
  */
+/** REQ-011/REQ-104: the credential state behind `providerUsable`. */
+export type CredentialClass = "none" | "usable" | "optional-absent" | "absent" | "unusable";
+
+/**
+ * Classify a provider's declared credential. The optional exemption applies
+ * only to the zero-key case: an optional credential whose configured keys are
+ * all rejected or cooling down stays unusable, which is the pre-existing
+ * `providerUsable` behavior.
+ */
+export function classifyCredential(slug: string, p: ProviderConfig): CredentialClass {
+  if (!p.auth_env) return "none";
+  const keys = poolKeysForEnv(p.auth_env);
+  if (keys.length === 0) return p.auth_optional === true ? "optional-absent" : "absent";
+  return hasUsableKeyForEnv(p.auth_env, slug) ? "usable" : "unusable";
+}
+
 export function providerUsable(slug: string, config?: Config): boolean {
   const cfg = config ?? getConfig();
   const p = cfg.providers[slug];
   if (!p || !p.enabled) return false;
   if (p.url_env && !process.env[p.url_env]) return false;
-  if (p.auth_env) {
-    const keys = poolKeysForEnv(p.auth_env);
-    if (keys.length === 0) return p.auth_optional === true;
-    if (!hasUsableKeyForEnv(p.auth_env, slug)) return false;
-  }
-  return true;
+  const credential = classifyCredential(slug, p);
+  return credential === "none" || credential === "usable" || credential === "optional-absent";
 }
 
 export function getDispatchChain(taskType: string): string[] {

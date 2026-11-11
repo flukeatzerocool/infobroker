@@ -44,7 +44,14 @@ export function derivePrivacy(provider: ProviderConfig): PrivacyPosture {
   return {
     query_forwarding: override.query_forwarding ?? forwarding,
     retains_query: override.retains_query ?? "unknown",
-    requires_account: override.requires_account ?? provider.tier === "keyed_http",
+    // REQ-129: an account is required when the provider needs a credential to
+    // operate — a declared non-optional credential — regardless of tier. The
+    // tier is only the fallback for a provider that declares no credential.
+    requires_account:
+      override.requires_account ??
+      (provider.auth_env !== undefined
+        ? provider.auth_optional !== true
+        : provider.tier === "keyed_http"),
     resells,
     ...(override.notes ? { notes: override.notes } : {}),
   };

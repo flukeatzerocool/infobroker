@@ -48,4 +48,38 @@ describe("derivePrivacy (REQ-129)", () => {
     expect(derivePrivacy(provider({ resells: true })).resells).toBe(true);
     expect(derivePrivacy(provider({ resells: false })).resells).toBe(false);
   });
+
+  it("derives the account requirement from the declared credential, not the tier", () => {
+    // A required credential makes an account necessary regardless of tier.
+    expect(derivePrivacy(provider({ tier: "free_http", auth_env: "INFOBROKER_CORE_API_KEY" })).requires_account).toBe(true);
+    // An optional credential does not: the provider operates anonymously.
+    expect(
+      derivePrivacy(provider({ tier: "free_http", auth_env: "INFOBROKER_GITHUB_API_KEY", auth_optional: true })).requires_account,
+    ).toBe(false);
+    // A keyed tier with no declared credential still requires an account.
+    expect(derivePrivacy(provider({ tier: "keyed_http" })).requires_account).toBe(true);
+    // A self-hosted tier with no credential does not.
+    expect(derivePrivacy(provider({ tier: "self_hosted_http" })).requires_account).toBe(false);
+  });
+
+  it("documents the shipped providers' account requirements from configuration", async () => {
+    const { getConfig } = await import("./config.js");
+    const config = getConfig();
+    const expected: Record<string, boolean> = {
+      core: true,
+      exa: true,
+      tavily: true,
+      yep: true,
+      semantic_scholar: false,
+      stack_exchange: false,
+      github: false,
+      searxng: false,
+      wikipedia: false,
+    };
+    for (const [slug, requires] of Object.entries(expected)) {
+      const p = config.providers[slug];
+      expect(p, `provider ${slug} is missing from config`).toBeTruthy();
+      expect({ slug, requires_account: derivePrivacy(p).requires_account }).toEqual({ slug, requires_account: requires });
+    }
+  });
 });

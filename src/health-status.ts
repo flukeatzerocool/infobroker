@@ -1,7 +1,8 @@
 // @implements REQ-013 REQ-036
 // Pure decision function for the `inspect_providers` health status. Extracted from
-// doProviderHealth so the REQ-013 degraded definition (latency threshold OR
-// partial results) is unit-testable without an MCP round-trip.
+// doProviderHealth so the REQ-013 degraded definition (latency threshold, a
+// provider that reports itself degraded, or quota at the warning threshold) is
+// unit-testable without an MCP round-trip.
 export type HealthStatus = "active" | "inactive" | "degraded" | "exhausted";
 
 export interface HealthStatusInput {
@@ -27,7 +28,7 @@ export function resolveHealthStatus(input: HealthStatusInput): HealthStatus {
 
   // REQ-013: a provider whose recent latency exceeds its threshold is
   // degraded even when reachable (the latency leg, independent of the
-  // partial-results leg).
+  // provider-reported leg).
   if (
     status === "active" &&
     input.degradedLatencyMs !== undefined &&

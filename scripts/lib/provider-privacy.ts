@@ -34,7 +34,7 @@ export function renderProviderPrivacy(config: PrivacyConfig): string {
   lines.push("Generated from `config.json`. Do not edit manually.");
   lines.push("");
   lines.push(
-    "Posture is derived from each provider's tier and resale flag, with explicit per-provider overrides taking precedence. `unknown` means configuration does not establish the answer; it is not a privacy claim.",
+    "Posture is derived from each provider's tier, its declared credential, and its resale flag, with explicit per-provider overrides taking precedence. `unknown` means configuration does not establish the answer; it is not a privacy claim.",
   );
   lines.push("");
   lines.push("| Provider | Tier | Query forwarding | Retains query | Account/key | Resells | Notes |");
