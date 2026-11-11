@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.11.11 — R2e review: financial source and prose reconciliation
+
+- The World Bank provider now serves economic-indicator series: a query naming
+  a known indicator (`gdp`, `gdp growth`, `inflation`, `unemployment`,
+  `population`, and related terms) resolves a country from the World Bank
+  country list and returns one normalized structured fact per non-null year
+  from the Indicators API, while an unrecognized query still uses the document
+  index (REQ-095; `src/providers/world_bank.ts`;
+  `src/providers/new-providers.test.ts`).
+
+- §5.3 and the §1 glossary now describe the provider interface the code has:
+  `capabilities` is a string list, `health()` reports a string connectivity
+  status, rate limits live in configuration and are enforced by the shared
+  throttle, `search` takes optional options, and `lookupDoi` is declared;
+  dispatch is stated as configuration-driven rather than derived from the
+  `web_search` capability (`infobroker.md`).
+
+- §A.5, §A.2, and §6.3 now match the shipped requests: SearXNG is called with
+  GET and a self-hosted instance forwards queries to its configured upstream
+  engines, World Bank is described by its Indicators endpoint with the
+  document index as fallback, and the README and the bundled tuning reference
+  repeat the corrected SearXNG description instead of claiming queries stay
+  local (`infobroker.md`, `README.md`,
+  `skills/infobroker/references/config-tune.md`).
+
 ## 2026.11.7 — R2d review: retry, latency, quota and chain shape
 
 - A `search_web` chain whose providers are quota-exhausted now returns

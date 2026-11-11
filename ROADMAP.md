@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R2e financial source and prose reconciliation
-
-- Give the financial chain an economic-indicator source instead of the World Bank documents index (F-R2-36), and correct §5.3's provider-interface sketch and its `web_search`/`general_web` claim (F-R2-38).
-- Correct §A.5's SearXNG privacy and request-method claims (F-R2-41, F-R2-42).
-- Each change ships with a CHANGELOG entry and a re-run of `validate-spec` and `validate-readme`.
-
-**Trigger:** start after R2a ships; close when F-R2-36, F-R2-38, F-R2-41, and F-R2-42 are `Resolved`.
-
 ## R3 findings remediation
 
 - Fix the R3 P1 set: explicit-provider precedence under priority routing, KB-first response metadata, all-fail batch per-input errors, collapse below the requested maximum, contributing-provider preservation, KB-recall source-quality ordering, multiple research variants, REQ-004 truncation of `search_web` responses, deep reading under compact verbosity, and analysis omission on empty results.

@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.11.7
+**Spec version:** 2026.11.11
 
 ## Contents
 

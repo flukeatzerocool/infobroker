@@ -1653,7 +1653,7 @@ if (startupNoticeList.length > 0) {
 }
 const server = new McpServer({
   name: "infobroker",
-  version: "2026.11.7",
+  version: "2026.11.11",
   ...(startupNoticeList.length > 0
     ? { instructions: `Infobroker state needs attention: ${startupNoticeList.map((notice) => notice.message).join(" ")}` }
     : {}),
