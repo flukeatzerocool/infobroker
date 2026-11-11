@@ -1,5 +1,6 @@
 // @implements REQ-020 REQ-095 REQ-128
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { RetryableError } from "../retry.js";
 import { provider as openalex } from "./openalex.js";
 import { provider as europe_pmc } from "./europe_pmc.js";
 import { provider as crossref } from "./crossref.js";
@@ -17,7 +18,9 @@ vi.mock("../http.js", () => ({
 }));
 
 describe("zero-config financial/academic/news providers", () => {
-  beforeEach(() => mockFetch.mockReset());
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
 
   it("openalex parses works into academic results", async () => {
     mockFetch.mockImplementation(async () =>
@@ -81,6 +84,114 @@ describe("zero-config financial/academic/news providers", () => {
     const results = await world_bank.search("q");
     expect(results).toHaveLength(1);
     expect(results[0].url).toBe("https://wb.example/");
+  });
+
+  describe("world_bank indicator path (REQ-095)", () => {
+    const COUNTRIES = [
+      { id: "USA", iso2Code: "US", name: "United States" },
+      { id: "DEU", iso2Code: "DE", name: "Germany" },
+      { id: "WLD", iso2Code: "1W", name: "World" },
+    ];
+    const countryEnvelope = () => [{ page: 1, pages: 1, per_page: "400", total: 3 }, COUNTRIES];
+    const indicatorEnvelope = (id: string, rows: Array<{ date: string; value: number | null; iso3?: string; name?: string }>) => [
+      { page: 1, pages: 1, per_page: "10" },
+      rows.map((row) => ({
+        indicator: { id, value: id === "NY.GDP.MKTP.CD" ? "GDP (current US$)" : "GDP growth (annual %)" },
+        country: { id: "US", value: row.name ?? "United States" },
+        countryiso3code: row.iso3 ?? "USA",
+        date: row.date,
+        value: row.value,
+      })),
+    ];
+
+    function route(documents: unknown, indicator: unknown) {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes("/v2/country?")) return new Response(JSON.stringify(countryEnvelope()), { status: 200 });
+        if (url.includes("/indicator/")) return new Response(JSON.stringify(indicator), { status: 200 });
+        return new Response(JSON.stringify(documents), { status: 200 });
+      });
+    }
+
+    it("parses a country indicator series into structured facts", async () => {
+      route(
+        { documents: { documents: [] } },
+        indicatorEnvelope("NY.GDP.MKTP.CD", [
+          { date: "2025", value: 30769700000000 },
+          { date: "2024", value: 29298013000000 },
+        ])
+      );
+      const results = await world_bank.search("US GDP");
+      expect(results).toHaveLength(2);
+      expect(results[0].title).toBe("United States — GDP (current US$) (2025)");
+      expect(results[0].url).toBe("https://data.worldbank.org/indicator/NY.GDP.MKTP.CD?locations=USA");
+      expect(results[0].snippet).toBe("30,769,700,000,000 · 2025 · World Bank indicator");
+      expect(results[0].source_type).toBe("structured_fact");
+      expect(results[0].published_date).toBeUndefined();
+      const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/v2/country/USA/indicator/NY.GDP.MKTP.CD"))).toBe(true);
+    });
+
+    it("defaults to the World aggregate when the query names no country", async () => {
+      route({ documents: { documents: [] } }, indicatorEnvelope("FP.CPI.TOTL.ZG", [{ date: "2025", value: 3.04, iso3: "WLD", name: "World" }]));
+      await world_bank.search("world inflation");
+      const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/v2/country/WLD/indicator/"))).toBe(true);
+    });
+
+    it("prefers the longest indicator alias", async () => {
+      route({ documents: { documents: [] } }, indicatorEnvelope("NY.GDP.MKTP.KD.ZG", [{ date: "2025", value: 2.5 }]));
+      await world_bank.search("gdp growth");
+      const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/indicator/NY.GDP.MKTP.KD.ZG"))).toBe(true);
+      expect(urls.some((url) => url.includes("/indicator/NY.GDP.MKTP.CD"))).toBe(false);
+    });
+
+    it("drops observations with no value", async () => {
+      route(
+        { documents: { documents: [] } },
+        indicatorEnvelope("NY.GDP.MKTP.CD", [
+          { date: "2025", value: 1 },
+          { date: "2024", value: null },
+        ])
+      );
+      const results = await world_bank.search("US GDP");
+      expect(results).toHaveLength(1);
+    });
+
+    it("throws a retryable error for a failing indicator response", async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes("/v2/country?")) return new Response(JSON.stringify(countryEnvelope()), { status: 200 });
+        return new Response("", { status: 503 });
+      });
+      await expect(world_bank.search("US GDP")).rejects.toBeInstanceOf(RetryableError);
+    });
+
+    it("falls back to documents when the country list cannot be fetched", async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes("/v2/country?")) return new Response("", { status: 500 });
+        return new Response(
+          JSON.stringify({ documents: { documents: [{ title: "Fallback", url: "https://wb.example/fallback" }] } }),
+          { status: 200 }
+        );
+      });
+      const results = await world_bank.search("US GDP");
+      expect(results[0].url).toBe("https://wb.example/fallback");
+      const urls = mockFetch.mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/indicator/"))).toBe(false);
+    });
+
+    it("keeps uppercase ISO codes distinct from ordinary words", async () => {
+      route({ documents: { documents: [] } }, indicatorEnvelope("FP.CPI.TOTL.ZG", [{ date: "2025", value: 2, iso3: "DEU", name: "Germany" }]));
+      await world_bank.search("inflation in Germany");
+      let urls = mockFetch.mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/v2/country/DEU/indicator/"))).toBe(true);
+
+      mockFetch.mockClear();
+      route({ documents: { documents: [] } }, indicatorEnvelope("FP.CPI.TOTL.ZG", [{ date: "2025", value: 3, iso3: "WLD", name: "World" }]));
+      await world_bank.search("tell us about inflation");
+      urls = mockFetch.mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/v2/country/WLD/indicator/"))).toBe(true);
+    });
   });
 
   it("openalex exposes scholarly metadata and rebuilds the abstract (REQ-003)", async () => {
