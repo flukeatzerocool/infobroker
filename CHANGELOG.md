@@ -2,6 +2,16 @@
 
 ## 2026.11.7 — R2a review: credential pools and dispatch-state filtering
 
+- `inspect_providers` `action=health` no longer probes a config-disabled
+  provider: it reports `inactive` with `inactive_reason: "disabled"` through the
+  same assessment the list and spec actions use, and the report gains
+  `inactive_reason` only when configuration or quota states the cause. The
+  action's recorded `last_error`/`last_success` timestamps now come from an
+  extracted, unit-tested provider history and are asserted end-to-end, and
+  REQ-024b says they are recorded since server start. `action=spec`'s
+  `total_requests_served` counts tool requests the server handled rather than
+  provider latency samples (REQ-013, REQ-024b, REQ-024c, D-103, D-104, D-105).
+
 - `inspect_providers` now reports a declared-but-unusable credential pool as
   `inactive_reason: "credentials_unavailable"` instead of claiming no key is
   configured, and the per-key `key_pool` row appears when a single configured

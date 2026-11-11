@@ -17,6 +17,44 @@ key-level cooldown and no provider-level cooldown shows
 `inactive_reason: credentials_unavailable` plus a one-entry `key_pool` row whose
 `reason` is `cooldown`; no dedicated reason value distinguishes it.
 
+### D-103: A Disabled Provider Is Reported, Not Refused, by the Health Action (2026.11.11)
+
+The health action probed a config-disabled provider and could report it
+`active`; the probe gate was a single boolean with no test and no stated
+reason. Decision: the action skips the probe for a non-operational provider and
+returns the normal `[OK]` envelope with `inactive` and
+`inactive_reason: "disabled"`, using the same assessment the list and spec
+actions report. The alternative — a REQ-002 error envelope — was rejected:
+REQ-002 errors mean the server could not serve the request, while health is a
+diagnostic surface, and `search_web`'s `invalid_input` refusal exists because it
+cannot serve a query at all. Quota precedence is preserved: an exhausted quota
+still reports `exhausted` with its own reason, even for a disabled provider.
+Accepted residual: a provider disabled after exhausting its quota names the
+quota cause, not the configuration cause.
+
+### D-104: Provider Operational History Is Process-Scoped (2026.11.11)
+
+REQ-024b's "timestamps of the most recent error and success" were held in two
+module-level maps that no test could reach. Decision: the history moves to
+`src/provider-history.ts` with unchanged in-memory semantics, a read API, and a
+test reset seam, and REQ-024b states that the timestamps are recorded since
+server start. The health probe never records a success, so `last_success`
+reflects real provider traffic. Persisting the history to disk was rejected: it
+is a state-format change needing migration and REQ-024b does not require
+durability.
+
+### D-105: `total_requests_served` Counts Tool Requests (2026.11.11)
+
+REQ-024c's "cumulative request count" was reported as
+`latency.total()` — the number of provider latency samples — so a server that
+served tool calls without provider traffic reported zero. Decision: the field
+is `toolMetrics.totalCalls()`, cumulative across tools and inclusive of failed
+calls, and REQ-024c states it as the count of tool requests handled since server
+start. Instrumentation records after a handler returns, so the in-flight spec
+call never counts itself. Rejected: a second counter in `src/index.ts` (two
+sources drift), and counting only successful calls (a failed request was still
+handled by the server).
+
 ### D-101: An Optional Credential Does Not Require an Account, and Neither Does It Change Usability (2026.11.11)
 
 REQ-129's `requires_account` was derived from the provider tier alone, so CORE

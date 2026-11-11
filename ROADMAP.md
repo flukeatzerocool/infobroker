@@ -20,13 +20,6 @@
 
 **Trigger:** start after the R2c status surface ships and § R8 settles the rows it asserts; close when F-R2-7 is `Resolved`. Supersedes the R2b close condition, which named F-R2-2, F-R2-3, and F-R2-7 together; R2b-i resolved F-R2-3 and the remaining two carry their own sections.
 
-## R2c-ii provider health and spec counts
-
-- Refuse to health-probe a config-disabled provider (F-R2-22), assert REQ-024b's `last_error`/`last_success` (F-R2-23), and make `total_requests_served` count server requests rather than provider samples (F-R2-24).
-- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after R2c-i ships; close when F-R2-22, F-R2-23, and F-R2-24 are `Resolved`.
-
 ## R2d retry, latency, quota and chain shape
 
 - Give REQ-036 a configurable time window alongside its count window (F-R2-27), assert the REQ-034 80/100 boundary and skip (F-R2-26), return the exhaustion shape for a fully quota-exhausted chain (F-R2-30), flush quota on SIGTERM/SIGINT (F-R2-32), and pin the reset timing (F-R2-33).
