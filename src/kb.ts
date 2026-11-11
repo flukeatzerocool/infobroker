@@ -53,6 +53,7 @@ import {
   cosineSimilarity,
   pairwiseSimilarity,
   tokenize,
+  identityTokens,
   DEFAULT_MODEL,
   KNOWN_MODELS,
   type EmbeddingModel,
@@ -606,7 +607,7 @@ function sqliteSearch(
 
 /** REQ-072: the similarity at which two documents are treated as one document. */
 const MEANING_SIMILARITY_THRESHOLD = 0.92;
-/** A cheap token-overlap gate: only candidates above it pay for the LSA comparison. */
+/** A cheap token-overlap gate: only candidates above it pay for the similarity comparison. */
 const MEANING_LEXICAL_GATE = 0.5;
 
 function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
@@ -616,12 +617,31 @@ function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number 
   return shared / (left.size + right.size - shared);
 }
 
+function sameIdentity(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  if (left.size !== right.size) return false;
+  for (const term of left) if (!right.has(term)) return false;
+  return true;
+}
+
+/** A stored chunk is `${title}: ${body}`; the body is what identity is read from. */
+function chunkBody(chunk: { title: string; text: string }): string {
+  const prefix = chunk.title ? `${chunk.title}: ` : "";
+  return prefix && chunk.text.startsWith(prefix) ? chunk.text.slice(prefix.length) : chunk.text;
+}
+
 /**
  * REQ-072: resolve the identity a document should be stored under by meaning.
  * A document whose first-chunk text substantially matches one already stored in
  * the same collection and content class takes that document's identity, so the
  * ingest updates it in place. The candidate scan covers the whole store; the
- * lexical gate keeps the LSA comparison to the few candidates that could match.
+ * lexical gate keeps the similarity comparison to the few candidates that could
+ * match.
+ *
+ * A similarity match alone is not enough: shared boilerplate makes distinct
+ * documents score highly, so a match is accepted only when the two bodies carry
+ * the same identifying names, dates, and numbers. When neither body carries an
+ * identity token the guard abstains and similarity decides, and the collapse
+ * records that basis.
  */
 function resolveMeaningIdentity(
   title: string,
@@ -629,24 +649,31 @@ function resolveMeaningIdentity(
   collection: string,
   sourceType: string,
   incomingId: string
-): { id: string; similarity: number } | undefined {
+): { id: string; similarity: number; basis: "identity" | "similarity-only" } | undefined {
   if (!sqliteStore) return undefined;
   const incoming = `${title}: ${text.slice(0, 500)}`;
   const incomingTerms = new Set(tokenize(incoming));
   if (incomingTerms.size === 0) return undefined;
-  const documents = new Map<string, string>();
+  // Identity is read from the same window the similarity comparison uses, on
+  // both sides, so the two sets describe the same span of text.
+  const incomingIdentity = identityTokens(text.slice(0, 500));
+  const documents = new Map<string, { title: string; text: string }>();
   for (const chunk of sqliteStore.iterateChunks()) {
     if (!chunk.source_url || chunk.source_url === incomingId) continue;
     if (chunk.collection !== collection || chunk.source_type !== sourceType) continue;
-    if (!documents.has(chunk.source_url)) documents.set(chunk.source_url, chunk.text.slice(0, 500));
+    if (!documents.has(chunk.source_url)) documents.set(chunk.source_url, { title: chunk.title, text: chunk.text });
   }
-  let best: { id: string; similarity: number } | undefined;
-  for (const [id, candidate] of documents) {
+  let best: { id: string; similarity: number; basis: "identity" | "similarity-only" } | undefined;
+  for (const [id, document] of documents) {
+    const candidate = document.text.slice(0, 500);
     if (jaccard(incomingTerms, new Set(tokenize(candidate))) < MEANING_LEXICAL_GATE) continue;
     const similarity = pairwiseSimilarity([incoming, candidate], "lsa")[0]?.[1] ?? 0;
-    if (similarity >= MEANING_SIMILARITY_THRESHOLD && (!best || similarity > best.similarity)) {
-      best = { id, similarity };
-    }
+    if (similarity < MEANING_SIMILARITY_THRESHOLD) continue;
+    if (best && similarity <= best.similarity) continue;
+    const candidateIdentity = identityTokens(chunkBody(document).slice(0, 500));
+    const guarded = incomingIdentity.size === 0 && candidateIdentity.size === 0;
+    if (!guarded && !sameIdentity(incomingIdentity, candidateIdentity)) continue;
+    best = { id, similarity, basis: guarded ? "similarity-only" : "identity" };
   }
   return best;
 }
@@ -680,7 +707,8 @@ function sqliteIngest(
     const match = resolveMeaningIdentity(title, text, resolvedCollection, resolvedSourceType, sourceUrl);
     if (match) {
       sqliteStore.appendEvent(
-        `Dedup at ${new Date().toISOString()}: merged "${sourceUrl}" into "${match.id}" (similarity ${match.similarity.toFixed(3)})`
+        `Dedup at ${new Date().toISOString()}: merged "${sourceUrl}" into "${match.id}" ` +
+          `(similarity ${match.similarity.toFixed(3)}, basis ${match.basis})`
       );
       sourceUrl = match.id;
     }

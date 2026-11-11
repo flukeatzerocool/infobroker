@@ -1,4 +1,4 @@
-// @implements REQ-103 REQ-021b REQ-026f REQ-020g REQ-020b REQ-020e REQ-128
+// @implements REQ-103 REQ-021b REQ-026f REQ-020g REQ-020b REQ-020e REQ-128 REQ-072 boilerplate-only
 import { describe, it, expect } from "vitest";
 import {
   createModel,
@@ -8,6 +8,7 @@ import {
   embedQueryInto,
   isKnownModel,
   tokenize,
+  identityTokens,
   DEFAULT_MODEL,
 } from "./embed.js";
 
@@ -92,5 +93,37 @@ describe("embed (REQ-103)", () => {
   it("embedQueryInto projects a query into the document basis", () => {
     const { queryVec, docVecs } = embedQueryInto("battery electric", ["electric car battery", "sourdough bread"], "lsa");
     expect(queryVec.length).toBe(docVecs[0].length);
+  });
+});
+
+describe("identityTokens (REQ-072)", () => {
+  it("keeps digit-bearing tokens and mid-sentence proper nouns", () => {
+    const identity = identityTokens("The Ashford January 2019 review under case 5042 was completed.");
+    expect(identity).toEqual(new Set(["ashford", "january", "2019", "5042"]));
+  });
+
+  it("excludes a proper noun that opens a sentence", () => {
+    // Including the first word of every sentence would fire on any update.
+    expect(identityTokens("Parliament debated the tariff while the dockworkers organised.")).toEqual(new Set());
+    expect(identityTokens("The review closed. Parliament debated the tariff.")).toEqual(new Set());
+  });
+
+  it("keeps a single-character digit, which the tokenizer drops", () => {
+    expect(identityTokens("Case 7 was closed.")).toEqual(new Set(["7"]));
+    expect(tokenize("Case 7 was closed.")).not.toContain("7");
+  });
+
+  it("splits apostrophes and hyphens into word tokens", () => {
+    expect(identityTokens("Filed by O'Neill-Byrne for the committee.")).toEqual(new Set(["neill", "byrne"]));
+  });
+
+  it("returns an empty set for empty or identity-free text", () => {
+    expect(identityTokens("")).toEqual(new Set());
+    expect(identityTokens("the harbour lease review was completed under the usual procedure")).toEqual(new Set());
+  });
+
+  it("is deterministic", () => {
+    const text = "The Bramley March 2020 review under case 6100 was completed.";
+    expect(identityTokens(text)).toEqual(identityTokens(text));
   });
 });

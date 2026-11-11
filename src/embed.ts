@@ -68,6 +68,55 @@ export function tokenize(text: string): string[] {
   return tokens;
 }
 
+/** Lowercased alphanumeric chunks, keeping single characters (a bare digit is identity). */
+function alnumChunks(text: string): string[] {
+  return text
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+// A proper-noun run: up to four capitalized words with no intervening
+// punctuation, matching the shape `src/analysis.ts` extracts.
+const IDENTITY_PROPER_RE = /\p{Lu}[\p{L}\p{N}'’.&-]*(?:\s+\p{Lu}[\p{L}\p{N}'’.&-]*){0,3}/gu;
+const SENTENCE_END = ".!?:";
+const SENTENCE_END_SKIP = /[\s"'“”‘’(\[]/;
+
+/**
+ * REQ-072: the tokens that identify a document — the values that make a
+ * templated document *that* document rather than the template. Identity is a
+ * number (a date, a count, a case id) or a proper noun away from a sentence
+ * boundary. The title is deliberately not passed here: a document is the same
+ * document even when its title differs, so a title token must not veto a
+ * match. The scan never lowercases before the capitalization pass, and keeps
+ * single characters, because `tokenize` drops both.
+ */
+export function identityTokens(text: string): Set<string> {
+  const out = new Set<string>();
+  if (!text) return out;
+  const normalized = text.normalize("NFKC");
+  for (const chunk of alnumChunks(normalized)) {
+    if (/\p{N}/u.test(chunk)) out.add(chunk);
+  }
+  for (const match of normalized.matchAll(IDENTITY_PROPER_RE)) {
+    let back = (match.index ?? 0) - 1;
+    while (back >= 0 && SENTENCE_END_SKIP.test(normalized[back])) back--;
+    const previous = back >= 0 ? normalized[back] : "";
+    const sentenceStart = back < 0 || SENTENCE_END.includes(previous);
+    // A run that opens a sentence drops only its first word: the rest are
+    // capitalized because they are names, not because of their position.
+    const words = match[0].split(/\s+/);
+    for (const word of sentenceStart ? words.slice(1) : words) {
+      for (const chunk of alnumChunks(word)) {
+        if (chunk.length > 1 || /\p{N}/u.test(chunk)) out.add(chunk);
+      }
+    }
+  }
+  return out;
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || b.length === 0 || a.length !== b.length) return 0;
   let dot = 0;

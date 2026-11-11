@@ -417,7 +417,10 @@ describe("kb deduplication (REQ-072)", () => {
   });
 
   it("does not collapse across collections (REQ-072 cross-collection)", () => {
-    const body = "Sediment cores from the lake bed record nine centuries of volcanic ash.";
+    const body =
+      "Sediment cores from the lake bed record nine centuries of volcanic ash. " +
+      "The cores were logged against the regional stratigraphy and archived with the survey. " +
+      "Each layer was photographed before the samples were sealed for transport.";
     kbIngest(body, "Lake Core", "https://example.com/lake-a", "test", "dedup-col-a", "web_search");
     kbIngest(body, "Lake Core", "https://example.com/lake-b", "test", "dedup-col-b", "web_search");
     expect(kbGet("https://example.com/lake-a")).not.toBeNull();
@@ -430,6 +433,20 @@ describe("kb deduplication (REQ-072)", () => {
     kbIngest(`${boilerplate}The museum reopened its sculpture wing after restoration.`, "Museum", "https://example.com/boiler-b", "test", "dedup-boiler", "web_search");
     expect(kbGet("https://example.com/boiler-a")).not.toBeNull();
     expect(kbGet("https://example.com/boiler-b")).not.toBeNull();
+  });
+
+  it("ignores a number in the title when the body matches (REQ-072 title-identity)", () => {
+    // Identity is read from the body, never the title: a document is the same
+    // document even when its title differs, so a title number cannot veto it.
+    const body =
+      "Sediment cores from the lake bed record nine centuries of volcanic ash. " +
+      "The cores were logged against the regional stratigraphy and archived with the survey. " +
+      "Each layer was photographed before the samples were sealed for transport.";
+    kbIngest(body, "Lake Core Report 2024", "https://example.com/title-num-a", "test", "dedup-title", "web_search");
+    const before = kbStats().chunk_count;
+    kbIngest(body, "Lake Core Report 2025", "https://example.com/title-num-b", "test", "dedup-title", "web_search");
+    expect(kbStats().chunk_count).toBe(before);
+    expect(kbGet("https://example.com/title-num-b")).toBeNull();
   });
 
   it("records a dedup event naming both identities (REQ-072 dedup-event)", () => {
