@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026.11.7 — R2d review: retry, latency, quota and chain shape
+
+- A `search_web` chain whose providers are quota-exhausted now returns
+  `all_providers_exhausted` with `quota_exhausted` instead of an empty
+  `no_results` success, and a chain mixing an exhausted provider with
+  empty-result providers fails the same way; an all-empty chain still returns
+  the successful zero-result answer (REQ-031, REQ-034; `src/index.ts`;
+  `src/dispatch-orchestration.test.ts`).
+
+- Quota counters are flushed on `SIGTERM` and `SIGINT` before the process
+  stops, and the reset is exact at `resetAt` instead of allowing an
+  undocumented 30-second grace, so a spent provider no longer stays skipped
+  past its stated reset (REQ-033; `src/quota.ts`; `src/quota.test.ts`).
+
+- The provider latency window is configurable: `output.latency_window_strategy`
+  (`count`, `time`, or `both`, default `both`) and `output.latency_window_ms`
+  (default 900000) bound the samples, and age eviction now runs on the read
+  path too, so an idle provider reports no history instead of a stale average
+  (REQ-036; `src/latency.ts`, `src/config.ts`, `src/types.ts`, `config.json`;
+  `src/latency.test.ts`, `src/config.test.ts`).
+
+- A rate-limited `fetch_page` reports `retry_after_ms` derived from the live
+  cooldown registry, on the standard and `extract` paths alike (REQ-038;
+  `src/fetch-fallback.ts`; `src/fetch-fallback.test.ts`). The dispatch
+  orchestration — hedge on/off, cross-task fallback order, all-error vs
+  all-empty, and the cooldown skip with zero new outbound calls — is asserted
+  end-to-end through loopback providers, and a config-disabled provider is
+  never dispatched or called (REQ-015, REQ-031, REQ-031a, REQ-038;
+  `src/dispatch-orchestration.test.ts`).
+
 ## 2026.11.7 — R2a review: credential pools and dispatch-state filtering
 
 - `inspect_providers` `action=health` no longer probes a config-disabled

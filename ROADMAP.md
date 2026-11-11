@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R2d retry, latency, quota and chain shape
-
-- Give REQ-036 a configurable time window alongside its count window (F-R2-27), assert the REQ-034 80/100 boundary and skip (F-R2-26), return the exhaustion shape for a fully quota-exhausted chain (F-R2-30), flush quota on SIGTERM/SIGINT (F-R2-32), and pin the reset timing (F-R2-33).
-- Report `retry_after_ms` on a rate-limited `fetch_page` (F-R2-34), assert dispatch orchestration (F-R2-35), and cover disabled-provider exclusion in dispatch and `search_web` (F-R2-15).
-- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after R2a ships; close when F-R2-15, F-R2-26, F-R2-27, F-R2-30, F-R2-32, F-R2-33, F-R2-34, and F-R2-35 are `Resolved`.
-
 ## R2e financial source and prose reconciliation
 
 - Give the financial chain an economic-indicator source instead of the World Bank documents index (F-R2-36), and correct §5.3's provider-interface sketch and its `web_search`/`general_web` claim (F-R2-38).
