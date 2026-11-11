@@ -147,15 +147,33 @@ export function envNames(slug: string): { many: string; single: string } {
   return { many: `INFOBROKER_${upper}_API_KEYS`, single: `INFOBROKER_${upper}_API_KEY` };
 }
 
-export function poolKeys(slug: string): string[] {
-  const { many, single } = envNames(slug);
-  const multi = (process.env[many] ?? "")
+/**
+ * The pool variable for a declared credential variable (REQ-104). REQ-104's
+ * documented convention is the plural of the single-key name; a provider that
+ * declares a custom `auth_env` (the generic_http tier) gets a `_POOL` suffix
+ * instead, because its variable is not the slug-derived `_API_KEY` shape.
+ */
+export function poolEnvName(envName: string): string {
+  return envName.endsWith("_API_KEY") ? `${envName}S` : `${envName}_POOL`;
+}
+
+function splitKeys(raw: string | undefined): string[] {
+  return (raw ?? "")
     .split(/[\s,]+/)
     .map((k) => k.trim())
     .filter((k) => k.length > 0);
+}
+
+/** Credentials for a declared credential variable: the pool first, then the single key. */
+export function poolKeysForEnv(envName: string): string[] {
+  const multi = splitKeys(process.env[poolEnvName(envName)]);
   if (multi.length > 0) return multi;
-  const one = process.env[single];
+  const one = process.env[envName];
   return one && one.length > 0 ? [one] : [];
+}
+
+export function poolKeys(slug: string): string[] {
+  return poolKeysForEnv(envNames(slug).single);
 }
 
 function available(id: string, now: number): boolean {
@@ -169,13 +187,17 @@ function available(id: string, now: number): boolean {
 // Next usable credential in round-robin order, or undefined when the pool is
 // empty or every credential is disabled/cooling down. A single-key provider
 // behaves exactly as before.
-export function resolveApiKey(slug: string, now: number = Date.now()): string | undefined {
-  const keys = poolKeys(slug);
+export function resolveApiKeyForEnv(
+  envName: string,
+  scope: string,
+  now: number = Date.now(),
+): string | undefined {
+  const keys = poolKeysForEnv(envName);
   if (keys.length === 0) return undefined;
   const s = loadState();
   for (let offset = 0; offset < keys.length; offset++) {
     const idx = (s.cursor + offset) % keys.length;
-    const id = scopedId(slug, keys[idx]);
+    const id = scopedId(scope, keys[idx]);
     if (available(id, now)) {
       s.cursor = (idx + 1) % keys.length;
       saveState();
@@ -183,6 +205,26 @@ export function resolveApiKey(slug: string, now: number = Date.now()): string | 
     }
   }
   return undefined;
+}
+
+export function resolveApiKey(slug: string, now: number = Date.now()): string | undefined {
+  return resolveApiKeyForEnv(envNames(slug).single, slug, now);
+}
+
+/**
+ * Whether any credential of a declared variable is usable right now (REQ-104).
+ * A predicate: it never advances the round-robin cursor nor writes state, so a
+ * dispatch or eligibility check cannot spend a credential.
+ */
+export function hasUsableKeyForEnv(envName: string, scope: string, now: number = Date.now()): boolean {
+  const keys = poolKeysForEnv(envName);
+  if (keys.length === 0) return false;
+  loadState();
+  return keys.some((key) => available(scopedId(scope, key), now));
+}
+
+export function hasUsableKey(slug: string, now: number = Date.now()): boolean {
+  return hasUsableKeyForEnv(envNames(slug).single, slug, now);
 }
 
 export function markKeyRejected(slug: string, key: string): void {

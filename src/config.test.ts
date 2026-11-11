@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./types.js";
 import { validateConfig } from "./config.js";
+import { markKeyRejected, resetKeyPoolStateForTests } from "./key-pool.js";
 
 const BASE: Config = {
   providers: {
@@ -827,6 +828,79 @@ describe("keyed provider activation (REQ-031)", () => {
 
     delete process.env["INFOBROKER_EXA_API_KEY"];
     expect(mod.getDispatchChain("general_web")).not.toContain("exa");
+  });
+});
+
+// @implements REQ-104
+describe("credential-pool activation in dispatch (REQ-104)", () => {
+  const savedEnv = { ...process.env };
+  let dir: string;
+
+  beforeEach(() => {
+    delete process.env["INFOBROKER_CORE_API_KEY"];
+    delete process.env["INFOBROKER_CORE_API_KEYS"];
+    dir = mkdtempSync(join(tmpdir(), "ib-pool-"));
+    process.env["INFOBROKER_KEYPOOL_STATE"] = join(dir, "key-pool.json");
+    resetKeyPoolStateForTests();
+  });
+
+  afterEach(() => {
+    process.env = { ...savedEnv };
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const dispatchBase = (): Config => ({
+    ...BASE,
+    providers: {
+      ...BASE.providers,
+      core: {
+        tier: "free_http",
+        capabilities: ["academic"],
+        rate_limit: {},
+        auth_env: "INFOBROKER_CORE_API_KEY",
+        enabled: true,
+        priority: 15,
+      },
+      optional_search: {
+        tier: "keyed_http",
+        capabilities: ["web_search"],
+        rate_limit: {},
+        auth_env: "INFOBROKER_OPTIONAL_SEARCH_API_KEY",
+        auth_optional: true,
+        enabled: true,
+        priority: 25,
+      },
+    },
+    dispatch: { ...BASE.dispatch, academic: ["core", "duckduckgo"], optional: ["optional_search", "duckduckgo"] },
+  });
+
+  it("excludes a required-key provider whose pool is absent (F-R2-8)", async () => {
+    await loadWithOverlay(dispatchBase(), {});
+    const mod = await import("./config.js");
+    expect(mod.getDispatchChain("academic")).not.toContain("core");
+  });
+
+  it("includes a required-key provider that declares a pool (F-R2-8)", async () => {
+    process.env["INFOBROKER_CORE_API_KEYS"] = "k1,k2";
+    await loadWithOverlay(dispatchBase(), {});
+    const mod = await import("./config.js");
+    expect(mod.getDispatchChain("academic")).toContain("core");
+  });
+
+  it("excludes a provider whose every pooled credential is rejected (F-R2-8)", async () => {
+    process.env["INFOBROKER_CORE_API_KEYS"] = "k1,k2";
+    markKeyRejected("core", "k1");
+    markKeyRejected("core", "k2");
+    await loadWithOverlay(dispatchBase(), {});
+    const mod = await import("./config.js");
+    expect(mod.getDispatchChain("academic")).not.toContain("core");
+  });
+
+  it("keeps an optional-key provider without any credential (REQ-011)", async () => {
+    delete process.env["INFOBROKER_OPTIONAL_SEARCH_API_KEY"];
+    await loadWithOverlay(dispatchBase(), {});
+    const mod = await import("./config.js");
+    expect(mod.getDispatchChain("optional")).toContain("optional_search");
   });
 });
 

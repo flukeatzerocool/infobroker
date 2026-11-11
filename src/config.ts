@@ -11,6 +11,7 @@ import {
 } from "./config-migrations.js";
 import { atomicWriteFile, backupFile } from "./lib/atomic-write.js";
 import { REGISTERED_PROVIDER_SLUGS } from "./providers/registered-slugs.js";
+import { hasUsableKeyForEnv, poolKeysForEnv } from "./key-pool.js";
 
 /**
  * Numeric configuration must be finite: JSON can express `Infinity` through an
@@ -1021,23 +1022,31 @@ export function getActiveProviders(): [string, ProviderConfig][] {
   return Object.entries(config.providers).filter(([, p]) => p.enabled);
 }
 
+/**
+ * One provider-usability predicate for every selection path (REQ-011, REQ-015,
+ * REQ-020a, REQ-104). A provider is usable when it is enabled, its required URL
+ * variable is present, and it has a usable credential: an optional-key provider
+ * needs none, a required-key provider needs at least one credential that is not
+ * rejected or cooling down. The tier is irrelevant — a tier-scoped check is how
+ * CORE and the generic tier escaped the credential rule.
+ */
+export function providerUsable(slug: string, config?: Config): boolean {
+  const cfg = config ?? getConfig();
+  const p = cfg.providers[slug];
+  if (!p || !p.enabled) return false;
+  if (p.url_env && !process.env[p.url_env]) return false;
+  if (p.auth_env) {
+    const keys = poolKeysForEnv(p.auth_env);
+    if (keys.length === 0) return p.auth_optional === true;
+    if (!hasUsableKeyForEnv(p.auth_env, slug)) return false;
+  }
+  return true;
+}
+
 export function getDispatchChain(taskType: string): string[] {
   const config = getConfig();
   const dispatch = isPlainObject(config.dispatch) ? config.dispatch : {};
   const chain = dispatch[taskType];
   if (!Array.isArray(chain)) return [];
-  return chain.filter((slug) => {
-    const provider = config.providers[slug];
-    if (!provider || !provider.enabled) return false;
-    if (provider.tier === "keyed_http" && provider.auth_env) {
-      const many = provider.auth_env.replace(/_API_KEY$/, "_API_KEYS");
-      if (!process.env[provider.auth_env] && !process.env[many]) return false;
-    }
-    if (provider.tier === "generic_http" && provider.auth_env && provider.auth_optional !== true) {
-      const many = provider.auth_env.replace(/_API_KEY$/, "_API_KEYS");
-      if (!process.env[provider.auth_env] && !process.env[many]) return false;
-    }
-    if (provider.tier === "self_hosted_http" && provider.url_env && !process.env[provider.url_env]) return false;
-    return true;
-  });
+  return chain.filter((slug) => providerUsable(slug, config));
 }

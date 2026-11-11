@@ -3,6 +3,7 @@ import type { SearchResult, Provider, ProviderConfig } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { ParseError, RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
+import { noteAuthStatus, resolveApiKeyForEnv } from "../key-pool.js";
 
 type FieldMap = NonNullable<ProviderConfig["field_map"]>;
 
@@ -64,13 +65,20 @@ function resolveUrl(rawUrl: string, endpoint: string): string {
   }
 }
 
-function authHeaders(cfg: ProviderConfig, slug: string): Record<string, string> {
-  if (!cfg.auth_env) return {};
-  const key = process.env[cfg.auth_env];
-  if (!key) {
-    if (cfg.auth_optional) return {};
+// REQ-104: a declared credential variable is a pool. `poolEnvName` derives the
+// pool variable (`_API_KEYS` for an `_API_KEY` name, `_POOL` otherwise), and a
+// rejected credential is dropped for the session.
+function credentialFor(cfg: ProviderConfig, slug: string): string | undefined {
+  if (!cfg.auth_env) return undefined;
+  const key = resolveApiKeyForEnv(cfg.auth_env, slug);
+  if (!key && !cfg.auth_optional) {
     throw new Error(`Provider "${slug}" requires ${cfg.auth_env}, which is not set`);
   }
+  return key;
+}
+
+function authHeaders(cfg: ProviderConfig, key: string | undefined): Record<string, string> {
+  if (!cfg.auth_env || !key) return {};
   const scheme = (cfg.auth_scheme ?? "Bearer").trim();
   return { [cfg.auth_header ?? "Authorization"]: scheme ? `${scheme} ${key}` : key };
 }
@@ -97,9 +105,13 @@ export function createGenericProvider(slug: string, cfg: ProviderConfig): Provid
     const sep = base.includes("?") ? "&" : "?";
     const url = `${base}${sep}${encodeURIComponent(cfg.query_param!)}=${encodeURIComponent(query)}`;
 
-    const resp = await infobrokerFetch(url, { providerSlug: slug, headers: authHeaders(cfg, slug) });
+    const key = credentialFor(cfg, slug);
+    const resp = await infobrokerFetch(url, { providerSlug: slug, headers: authHeaders(cfg, key) });
 
-    if (!resp.ok) throw new RetryableError(`${slug} returned HTTP ${resp.status}`, resp.status);
+    if (!resp.ok) {
+      if (key) noteAuthStatus(slug, key, resp.status);
+      throw new RetryableError(`${slug} returned HTTP ${resp.status}`, resp.status);
+    }
 
     const data = await readJson(resp, slug);
     const list = getAtPath(data, cfg.results_path ?? "");
@@ -149,7 +161,7 @@ export function createGenericProvider(slug: string, cfg: ProviderConfig): Provid
         const sep = base.includes("?") ? "&" : "?";
         url = `${base}${sep}${encodeURIComponent(cfg.query_param!)}=test`;
       }
-      const resp = await infobrokerFetch(url, { providerSlug: slug, headers: authHeaders(cfg, slug) });
+      const resp = await infobrokerFetch(url, { providerSlug: slug, headers: authHeaders(cfg, credentialFor(cfg, slug)) });
       const elapsed = Date.now() - start;
       if (resp.ok) return { status: "active", avgLatencyMs: elapsed };
       return { status: "degraded", avgLatencyMs: elapsed };

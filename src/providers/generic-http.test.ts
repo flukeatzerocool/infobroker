@@ -1,6 +1,10 @@
 // @implements REQ-014 REQ-003 original-source
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createGenericProvider } from "./generic-http.js";
+import { resetKeyPoolStateForTests } from "../key-pool.js";
 import { ParseError } from "../retry.js";
 import type { ProviderConfig } from "../types.js";
 
@@ -326,5 +330,68 @@ describe("generic-http provider", () => {
       abstract: "abstract text",
       citation_count: 42,
     });
+  });
+});
+
+// @implements REQ-104
+describe("generic provider credential pool (REQ-104)", () => {
+  let dir: string;
+  const saved = { ...process.env };
+
+  function sentHeaders(call: number): Record<string, string> | undefined {
+    const init = mockFetch.mock.calls[call]?.[1] as { headers?: Record<string, string> } | undefined;
+    return init?.headers;
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "generic-pool-"));
+    process.env["INFOBROKER_KEYPOOL_STATE"] = join(dir, "key-pool.json");
+    resetKeyPoolStateForTests();
+    delete process.env["ACME_TOKEN"];
+    delete process.env["ACME_TOKEN_POOL"];
+    mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    process.env = { ...saved };
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("rotates a pool derived from a declared auth_env and drops a rejected credential", async () => {
+    process.env["ACME_TOKEN_POOL"] = "t1,t2";
+    const p = createGenericProvider("acme", cfg({ auth_env: "ACME_TOKEN" }));
+
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: { items: [] } }));
+    await p.search("query");
+    expect(sentHeaders(0)).toEqual({ Authorization: "Bearer t1" });
+
+    // Round-robin spends t2 on the second request; its 401 disables only t2.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      headers: new Headers(),
+      json: async () => ({}),
+    });
+    await expect(p.search("query")).rejects.toThrow(/401/);
+    expect(sentHeaders(1)).toEqual({ Authorization: "Bearer t2" });
+
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: { items: [] } }));
+    await p.search("query");
+    expect(sentHeaders(2)).toEqual({ Authorization: "Bearer t1" });
+
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: { items: [] } }));
+    await p.search("query");
+    expect(sentHeaders(3)).toEqual({ Authorization: "Bearer t1" });
+  });
+
+  it("accepts a conventional plural pool for an _API_KEY variable", async () => {
+    process.env["INFOBROKER_MYSEARCH_API_KEYS"] = "m1,m2";
+    const p = createGenericProvider("my_search", cfg({ auth_env: "INFOBROKER_MYSEARCH_API_KEY" }));
+
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: { items: [] } }));
+    await p.search("query");
+    expect(sentHeaders(0)).toEqual({ Authorization: "Bearer m1" });
+
+    delete process.env["INFOBROKER_MYSEARCH_API_KEYS"];
   });
 });

@@ -2,19 +2,15 @@
 import type { SearchResult, Provider } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
-import { getEnvVar } from "../config.js";
 import { infobrokerFetch } from "../http.js";
+import { noteAuthStatus, resolveApiKey } from "../key-pool.js";
 
 const CORE_API = "https://api.core.ac.uk/v3/search/works";
 
-let _coreApiKey: string | undefined;
-function coreApiKey(): string | undefined {
-  if (_coreApiKey === undefined) _coreApiKey = getEnvVar("core", "_API_KEY");
-  return _coreApiKey;
-}
-
 async function search(query: string): Promise<SearchResult[]> {
-  const apiKey = coreApiKey();
+  // REQ-104: the credential pool of the conventional slug variables, read per
+  // request so a rejected key is replaced on the next attempt.
+  const apiKey = resolveApiKey("core");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -27,7 +23,10 @@ async function search(query: string): Promise<SearchResult[]> {
     providerSlug: "core",
   });
 
-  if (!resp.ok) throw new RetryableError(`CORE returned HTTP ${resp.status}`, resp.status);
+  if (!resp.ok) {
+    if (apiKey) noteAuthStatus("core", apiKey, resp.status);
+    throw new RetryableError(`CORE returned HTTP ${resp.status}`, resp.status);
+  }
 
   const data = (await resp.json()) as {
     results?: Array<{

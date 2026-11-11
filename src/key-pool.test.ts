@@ -5,10 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   resolveApiKey,
+  resolveApiKeyForEnv,
   markKeyRejected,
   markKeyRateLimited,
   noteAuthStatus,
   poolKeys,
+  poolKeysForEnv,
+  hasUsableKey,
   keyPoolStatus,
   resetKeyPoolStateForTests,
 } from "./key-pool.js";
@@ -110,5 +113,53 @@ describe("key pool (REQ-104)", () => {
     const raw = JSON.parse(readFileSync(stateFile, "utf-8")) as { cursor: unknown; keys: unknown };
     expect(typeof raw.cursor).toBe("number");
     expect(raw.keys).toEqual({});
+  });
+});
+
+// REQ-104: a predicate must be able to ask whether any credential is usable
+// without spending one. F-R2-8/F-R2-29 depend on it, so it must not advance the
+// cursor or write state.
+describe("credential availability predicate (REQ-104)", () => {
+  it("reports an exhausted pool as unusable", () => {
+    process.env["INFOBROKER_ACME_API_KEYS"] = "k1,k2";
+    markKeyRejected("acme", "k1");
+    expect(hasUsableKey("acme")).toBe(true);
+    markKeyRejected("acme", "k2");
+    expect(hasUsableKey("acme")).toBe(false);
+  });
+
+  it("does not advance the selection cursor", () => {
+    process.env["INFOBROKER_ACME_API_KEYS"] = "k1,k2";
+    expect(hasUsableKey("acme")).toBe(true);
+    expect(hasUsableKey("acme")).toBe(true);
+    expect(resolveApiKey("acme")).toBe("k1");
+  });
+
+  it("reports an absent credential as unusable", () => {
+    expect(hasUsableKey("acme")).toBe(false);
+  });
+
+  it("derives the pool variable from a declared credential variable", () => {
+    process.env["ACME_TOKEN"] = "single";
+    expect(poolKeysForEnv("ACME_TOKEN")).toEqual(["single"]);
+
+    process.env["ACME_TOKEN_POOL"] = "p1,p2";
+    expect(poolKeysForEnv("ACME_TOKEN")).toEqual(["p1", "p2"]);
+
+    process.env["INFOBROKER_OTHER_API_KEY"] = "single";
+    process.env["INFOBROKER_OTHER_API_KEYS"] = "q1,q2";
+    expect(poolKeysForEnv("INFOBROKER_OTHER_API_KEY")).toEqual(["q1", "q2"]);
+
+    delete process.env["ACME_TOKEN"];
+    delete process.env["ACME_TOKEN_POOL"];
+    delete process.env["INFOBROKER_OTHER_API_KEY"];
+    delete process.env["INFOBROKER_OTHER_API_KEYS"];
+  });
+
+  it("resolves a pool for a declared credential variable under a provider scope", () => {
+    process.env["ACME_TOKEN_POOL"] = "a1,a2";
+    expect(resolveApiKeyForEnv("ACME_TOKEN", "acme")).toBe("a1");
+    expect(resolveApiKeyForEnv("ACME_TOKEN", "acme")).toBe("a2");
+    delete process.env["ACME_TOKEN_POOL"];
   });
 });
