@@ -27,7 +27,7 @@
 
 | ID | Severity | Disposition |
 |---|---|---|
-| A-1 — dedup collapses templated near-duplicates at the 0.92 threshold (36/200 in the seeded corpus) | P2 | `Scheduled-roadmap` — `ROADMAP.md` § R6 dedup false-positive bound |
+| A-1 — dedup collapses templated near-duplicates at the 0.92 threshold (36/200 in the seeded corpus) | P2 | `Resolved` — 2026-11-10, `docs/plans/2026-11-10-r6-dedup-false-positive-bound/` (distinguishing-identity guard; the roadmap section is retired) |
 | A-2 — REQ body drafts initially exceeded Appendix B | P3 | Closed-P3 — caught by the measurement step; no output affected |
 | A-3 — test-authoring slips (shared event list, reused report id) | P3 | Closed-P3 — caught by the test run; no output affected |
 | A-4 — the Arena result-cap fixture also seeded templated documents and collapsed under the dedup (a second instance of A-1's class) | P3 | Closed-P3 — the fixture now seeds twelve distinct subjects; the underlying threshold risk stays scheduled as A-1 |

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.11.7 — R6 review: dedup false-positive bound
+
+- Meaning-equivalence deduplication no longer merges two templated documents
+  that differ in an identifying name, date, or number. Similarity alone decided
+  the match before, and shared boilerplate made distinct documents score above
+  the threshold; a match now also requires the two bodies to carry the same
+  identity tokens, read from the document body and never from the title
+  (REQ-072). The 200-document bound suite records the change: the templated
+  segment stored 131 of 200 documents before and stores all 200 now, with
+  duplicate recall and the negative pairs asserted separately
+  (`src/kb-dedup-bound.test.ts`).
+- A collapse event names its basis — `identity` when the two bodies agreed on
+  identifying content, `similarity-only` when neither carried an identity token
+  and similarity alone decided. The second case is the documented residual:
+  documents whose only difference is ordinary lowercase wording are still
+  merged, and the event stream shows where that happened.
+- Identity is read from the same 500-character window the similarity
+  comparison uses, on both sides, so a name or number past that window is not
+  compared. Identity tokens also require capitalization, so a script without
+  case distinction contributes only its numbers.
+
 ## 2026.11.7 — R6 review: claim ledger and receipt remediation
 
 - `verify_claims` now persists every finding, including a batch claim no

@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R6 dedup false-positive bound
-
-- Bound meaning-equivalence collapse on templated corpora: the R6 increment measured 36 of 200 template documents collapsing into each other at the 0.92 LSA threshold (accepted risk D4a, recorded in `docs/plans/2026-11-10-r6-config-dedup-report/aar.md`).
-- Either add a distinguishing-token guard or raise the threshold, and re-measure with the same seeded corpus before changing the constant.
-
-**Trigger:** start when a user reports a collapsed document, or when the seeded templated corpus collapses more than 10% of its documents.
-
 ## R2 findings remediation
 
 - Fix the R2 P1 set: credential-pool coverage for CORE/generic providers, disabled-provider bypasses in `verify_claims`, the explicit-provider auth filter, timeout retry classification, throttle coverage on retries, quota flush on shutdown and reset timing, the exhausted-chain error shape, `fetch_page` `retry_after_ms`, a financial indicator source, the latency-window strategy, the `status:"active"` filter, the disabled-provider health probe, `total_requests_served`, `requires_account` derivation, and the REQ-013 partial-results leg.
