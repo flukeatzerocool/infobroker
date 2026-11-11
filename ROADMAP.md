@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R2b-ii user-layer write ordering
-
-- Merge the `reload_config` patch over the current on-disk layer rather than the startup snapshot, apply the same fresh read to `migrateUserConfigLayer` and `loadConfigFromDisk`, and back up the bytes that were read rather than the file at backup time (F-R2-2).
-- Document and provide the config-level route to clear a declared provider auth field, which the R2b-i validation rule leaves unavailable (D-098, REQ-037).
-
-**Trigger:** start after R2b-i ships; close when F-R2-2 is `Resolved` and the unset path is tested.
-
 ## R2b-iii key-safety evidence
 
 - Assert REQ-011's missing-key, optional-key, and no-leak clauses through a spawned server (F-R2-7), coordinating the `inspect_providers` status row with § R2c's F-R2-9 and the key-pool row shape settled by § R8.

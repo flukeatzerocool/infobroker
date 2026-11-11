@@ -511,7 +511,12 @@ defaults: which providers are enabled, their priority in fallback chains,
 rate limits, corroboration parameters, and the task-to-provider dispatch
 table. Hot-reloadable via `reload_config` — edit the file and call the tool,
 or pass a `patch` to merge configuration programmatically; changes take
-effect without a restart.
+effect without a restart. A patch is merged over your user layer as it exists
+on disk when you call the tool, and a `null` value removes that key — the
+supported way to clear a field your layer declares, such as a provider's
+`auth_env`. A field the shipped `config.json` also declares comes back after
+removal, because that declaration is the provider's own requirement; set
+`auth_optional` to `true` where the provider allows a keyless use.
 
 Your own overrides live in a separate user layer —
 `~/.config/infobroker/config.local.json` by default, or a path you set via

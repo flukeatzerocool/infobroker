@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-099: A Config Patch Merges the On-Disk Layer, Backs Up What It Read, and Removes with `null` (2026.11.11)
+
+The `reload_config` patch merged over the in-memory snapshot taken at startup,
+so an edit made to `config.local.json` while the server was running was
+silently overwritten; the backup copied the file at backup time rather than the
+content that was merged. Decision: the patch and the opt-in migration read the
+layer from disk when they are called, and every config write backs up the exact
+bytes it read (`backupBytes`), so the backup is recoverable evidence of what
+changed. A `null` leaf in a patch removes that key from the user layer — the
+config-level route to clear a declared `auth_env`, `url_env`, or
+`auth_optional`, which D-098's validation rule leaves unavailable. Removal
+restores the shipped declaration when the shipped `config.json` also declares
+the field: that declaration is the provider's requirement, and masking it would
+recreate the silent keyless-provider bypass D-098 removed. `auth_optional:
+true` remains the route where a provider permits an optional credential.
+D-098 governs a `null` stored in the layer (rejected); this decision governs a
+`null` in a patch document (a removal). Accepted residual: the window between
+the read and the atomic write is not closed by compare-and-swap and is not
+simulated by a test, so a concurrent edit landing inside it can still be lost.
+Rejected: `null`-as-unset in the stored layer, an `unset` array parameter, and
+a sentinel value.
+
 ### D-098: A Declared Provider Auth Field Must Have a Usable Shape (2026.11.11)
 
 A provider's `auth_env`, `url_env`, and `auth_optional` are read by truthiness
