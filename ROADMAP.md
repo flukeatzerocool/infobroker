@@ -14,12 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R2b-iii key-safety evidence
-
-- Assert REQ-011's missing-key, optional-key, and no-leak clauses through a spawned server (F-R2-7), coordinating the `inspect_providers` status row (F-R2-9, delivered by R2c-i) and the key-pool row shape settled by § R8.
-
-**Trigger:** start after the R2c status surface ships and § R8 settles the rows it asserts; close when F-R2-7 is `Resolved`. Supersedes the R2b close condition, which named F-R2-2, F-R2-3, and F-R2-7 together; R2b-i resolved F-R2-3 and the remaining two carry their own sections.
-
 ## R2d retry, latency, quota and chain shape
 
 - Give REQ-036 a configurable time window alongside its count window (F-R2-27), assert the REQ-034 80/100 boundary and skip (F-R2-26), return the exhaustion shape for a fully quota-exhausted chain (F-R2-30), flush quota on SIGTERM/SIGINT (F-R2-32), and pin the reset timing (F-R2-33).
