@@ -12,7 +12,13 @@ import { join } from "node:path";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
-export type StubMode = "ok" | "missing" | "echo401";
+export type StubMode = "ok" | "missing" | "echo401" | "empty" | "rate_limited" | "error";
+
+export interface StubProviderOptions {
+  mode?: StubMode;
+  /** Delay the response so a hedge race can be observed. */
+  delayMs?: number;
+}
 
 export interface StubProvider {
   url: string;
@@ -21,14 +27,21 @@ export interface StubProvider {
 }
 
 /**
- * Start a loopback provider stub: `ok` returns one result, `missing` 404s, and
+ * Start a loopback provider stub: `ok` returns one result, `empty` returns an
+ * empty result set, `missing` 404s, `rate_limited` 429s, `error` 500s, and
  * `echo401` rejects every request with a 401 whose body echoes the presented
  * credential — so a leak sweep can detect a response body reaching a client.
  */
-export async function startStubProvider(mode: StubMode): Promise<StubProvider> {
+export async function startStubProvider(
+  modeOrOptions: StubMode | StubProviderOptions,
+): Promise<StubProvider> {
+  const options: StubProviderOptions = typeof modeOrOptions === "string" ? { mode: modeOrOptions } : modeOrOptions;
+  const mode = options.mode ?? "ok";
+  const delayMs = options.delayMs ?? 0;
   const state = { requests: 0 };
-  const server = createHttpServer((req, res) => {
+  const server = createHttpServer(async (req, res) => {
     state.requests++;
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
     if (mode === "ok") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
@@ -36,6 +49,21 @@ export async function startStubProvider(mode: StubMode): Promise<StubProvider> {
           results: [{ title: "Stub result", url: "https://example.com/stub", content: "stub body" }],
         })
       );
+      return;
+    }
+    if (mode === "empty") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ results: [] }));
+      return;
+    }
+    if (mode === "rate_limited") {
+      res.writeHead(429, { "content-type": "application/json", "retry-after": "30" });
+      res.end(JSON.stringify({ error: "rate limited" }));
+      return;
+    }
+    if (mode === "error") {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "provider failed" }));
       return;
     }
     if (mode === "echo401") {
@@ -88,11 +116,21 @@ export interface HermeticProvider {
   authOptional?: boolean;
   /** Add the provider to every dispatch chain. Defaults to true. */
   dispatch?: boolean;
+  /** Own loopback endpoint; defaults to the shared `searxngUrl`. */
+  url?: string;
+  /** Keep the provider declared but disabled. Defaults to true (enabled). */
+  enabled?: boolean;
+  /** Quota/throttle override for the provider. */
+  rateLimit?: { per_second?: number; per_day?: number; per_month?: number; jitter_ms?: number };
 }
 
 export interface HermeticConfigOptions {
   /** Additional loopback generic_http providers (replaces searxng in dispatch). */
   providers?: HermeticProvider[];
+  /** Per-task dispatch chains; an unnamed task keeps the default provider order. */
+  chains?: Record<string, string[]>;
+  /** Overrides merged into the shipped `output` block (e.g. hedge timings). */
+  output?: Record<string, unknown>;
   /** Write the call log and audit log into the temp root. */
   fileLogs?: boolean;
 }
@@ -137,14 +175,16 @@ export function writeHermeticConfig(
     config.providers[provider.slug] = {
       tier: "generic_http",
       capabilities: ["web_search"],
-      enabled: true,
+      enabled: provider.enabled ?? true,
       priority: 1,
-      rate_limit: { per_second: 10 },
-      endpoint: `${searxngUrl}/search`,
+      rate_limit: provider.rateLimit ?? { per_second: 10 },
+      endpoint: `${provider.url ?? searxngUrl}/search`,
       query_param: "q",
       results_path: "results",
       auth_env: provider.authEnv,
       ...(provider.authOptional ? { auth_optional: true } : {}),
+      // Keep error-path tests fast: a loopback stub answers immediately.
+      retry_count: 0,
       field_map: { title: "title", url: "url", snippet: "snippet" },
     };
   }
@@ -152,7 +192,10 @@ export function writeHermeticConfig(
   const chain = extra.length > 0
     ? extra.filter((provider) => provider.dispatch !== false).map((provider) => provider.slug)
     : ["searxng"];
-  for (const taskType of Object.keys(config.dispatch)) config.dispatch[taskType] = [...chain];
+  for (const taskType of Object.keys(config.dispatch)) {
+    config.dispatch[taskType] = options.chains?.[taskType] ?? [...chain];
+  }
+  if (options.output) config.output = { ...(config.output ?? {}), ...options.output };
 
   let callLogPath: string | undefined;
   let auditLogPath: string | undefined;
