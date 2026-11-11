@@ -154,7 +154,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Freshness tier** | A classification assigned to knowledge base content at ingest time that determines how quickly its retrieval confidence decays and when it expires. Tiers range from volatile content that loses accuracy rapidly to stable content that remains accurate indefinitely. |
 | **Provider slug** | The lowercase machine identifier for a provider, used in tool responses, configuration, and env-var names (e.g. `duckduckgo`, `exa`). |
 | **Dispatch chain** | The ordered provider list for a task type (§7.2), primary first; used for auto-selection (REQ-020a) and, on failure, as the fallback chain (REQ-031). |
-| **Capability** | A function a provider declares (e.g. `web_search`, `academic`, `content_fetch`). Capability tokens overlap the task types (§7.1); the `web_search` capability serves the `general_web` task type. |
+| **Capability** | A function a provider declares (e.g. `web_search`, `academic`, `content_fetch`). Capability tokens name the task types (§7.1) a provider serves plus `web_search`, `suggest`, and `content_fetch`; they are declarative metadata, and chain membership comes from the `dispatch` configuration (§7.2). |
 | **Provider status** | A configured provider's assessed state: `active`, `inactive` (missing key or unreachable), `degraded` (latency above a configurable threshold, a provider that reports itself degraded, or quota at the warning threshold), or `exhausted` (quota consumed; REQ-013, REQ-034). |
 | **Source type** | A label carried by a normalized result, a corroborating source, or a KB document. On results it is the provider-declared content kind (e.g. `academic`, `news`); in corroboration it denotes the source-authority class (REQ-026a); on KB documents it is a caller-assigned tag (e.g. `report`). |
 | **Quota** | Per-provider daily and monthly usage counters, persisted across restarts (REQ-033). |
@@ -729,12 +729,12 @@ Every provider implements:
 interface Provider {
   slug: string;
   tier: 'builtin' | 'free_http' | 'self_hosted_http' | 'keyed_http' | 'generic_http';
-  capabilities: ('web_search' | 'suggest' | 'content_fetch' | 'academic' | 'code' | 'encyclopedia' | 'definition' | 'structured_fact' | 'location' | 'archive' | 'small_web' | 'news' | 'semantic' | 'synthesis' | 'privacy_critical' | 'financial')[];
-  rateLimit: { perSecond?: number; perDay?: number; perMonth?: number };
-  health(): Promise<{ status: "active" | "degraded" | "inactive"; avgLatencyMs: number }>;
-  search(query: string, options: SearchOptions): Promise<SearchResult[]>;
+  capabilities: string[];
+  health(): Promise<{ status: string; avgLatencyMs: number }>;
+  search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
   fetchPage?(url: string): Promise<string>;
   suggest?(query: string): Promise<string[]>;
+  lookupDoi?(doi: string): Promise<DoiRecord | null>;
 }
 ```
 
@@ -744,13 +744,18 @@ Free HTTP → `free_http`, Self-hosted HTTP → `self_hosted_http`, Keyed HTTP �
 distinct module per provider: every generic provider is a configuration
 instance resolved through the registration mapping (REQ-070) to a single
 shared implementation, so adding one requires no provider-module source
-change (REQ-014). The provider-module `health()` returns connectivity status
-(`active`, `degraded`, `inactive`); the provider status reported by the
-`inspect_providers` tool (REQ-013) additionally includes `exhausted`. Capability
-tokens overlap the task-type tokens (§7.1) plus `web_search` (general web
-search), `suggest`, and `content_fetch`. Dispatch is keyed by task type
-(§7.2); a provider whose capability list includes `web_search` serves the
-`general_web` task type.
+change (REQ-014). A provider module's `health()` reports connectivity status as
+a plain string from the same vocabulary (`active`, `degraded`, `inactive`); the
+provider status reported by the `inspect_providers` tool (REQ-013) is the
+assessed state, which additionally includes `exhausted`. Rate limits are not an
+interface member: each provider's limits are configuration
+(`ProviderConfig.rate_limit`) enforced by the shared throttle (REQ-030).
+Capability tokens name the functions a provider serves and match the configured
+token vocabulary (§7.1) plus `web_search`, `suggest`, and `content_fetch`; they
+are declarative metadata read by configuration validation and provider
+reporting, not a routing table. Dispatch is keyed by task type and comes from
+the `dispatch` configuration (§7.2): a provider serves a task type when the
+chain names it, not because of a capability token.
 
 ### 5.4 Build Phases
 
@@ -831,7 +836,7 @@ Tool responses are JSON with this envelope:
 | Hacker News | `https://hn.algolia.com/api/v1/` | Story search via Algolia |
 | GDELT | `https://api.gdeltproject.org/api/v2/doc/doc` | Global news, artlist mode |
 | SEC EDGAR | `https://efts.sec.gov/LATEST/search-index` | Full-text filings search |
-| World Bank | `https://search.worldbank.org/api/v2/wds` | Documents and indicators |
+| World Bank | `https://api.worldbank.org/v2/country/{iso3}/indicator/{id}` | Economic indicator series, with document search as fallback |
 
 ### 6.4 Jina Reader
 Append the target URL to `https://r.jina.ai/`. Example:
@@ -1470,7 +1475,7 @@ different shipped default (REQ-010).
 
 **SEC EDGAR** — `https://efts.sec.gov/LATEST/search-index?q={query}`. Full-text search of SEC filings; a descriptive User-Agent is required.
 
-**World Bank** — `https://search.worldbank.org/api/v2/wds?format=json&qterm={query}`. Documents, indicators, and economic series.
+**World Bank** — `https://api.worldbank.org/v2/country/{iso3}/indicator/{id}?format=json&date={start}:{end}`. Economic indicator series for a resolved country and indicator, with `https://search.worldbank.org/api/v2/wds?format=json&qterm={query}` as the document-search fallback when the query names no known indicator.
 
 ### A.3 Free HTTP (Free Key Optional)
 
@@ -1494,7 +1499,7 @@ Keys are optional for these providers; CORE requires a free key.
 
 ### A.5 Self-hosted HTTP
 
-**SearXNG** — User runs Docker container. MCP calls `POST /search?format=json` on the user's instance URL. Full privacy — all queries stay on user's machine. 274 search backends available. Requires `format: json` enabled in `settings.yml`.
+**SearXNG** — User runs Docker container. MCP calls `GET /search?format=json` on the user's instance URL. 274 search backends available. Requires `format: json` enabled in `settings.yml`. Self-hosting keeps queries off Infobroker's third-party search backends, but the instance forwards each query to its configured upstream engines unless those are disabled, so enabling it does not guarantee that queries stay on your machine.
 
 ### A.6 Built-in (Scraped, No Official API)
 
