@@ -14,12 +14,18 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R2b configuration reload and validation
+## R2b-ii user-layer write ordering
 
-- Fix the reload patch to merge over the current on-disk user layer rather than the startup snapshot (F-R2-2), validate `auth_env`, `url_env`, and `auth_optional` types before use so a non-string value cannot throw during dispatch (F-R2-3), and assert REQ-011's leak, optional-key, and missing-key clauses (F-R2-7).
-- Each behavior change ships with a CHANGELOG entry and a re-run of `validate-spec`, `typecheck`, and the configuration tests.
+- Merge the `reload_config` patch over the current on-disk layer rather than the startup snapshot, apply the same fresh read to `migrateUserConfigLayer` and `loadConfigFromDisk`, and back up the bytes that were read rather than the file at backup time (F-R2-2).
+- Document and provide the config-level route to clear a declared provider auth field, which the R2b-i validation rule leaves unavailable (D-098, REQ-037).
 
-**Trigger:** start after R2a ships; close when F-R2-2, F-R2-3, and F-R2-7 are `Resolved`.
+**Trigger:** start after R2b-i ships; close when F-R2-2 is `Resolved` and the unset path is tested.
+
+## R2b-iii key-safety evidence
+
+- Assert REQ-011's missing-key, optional-key, and no-leak clauses through a spawned server (F-R2-7), coordinating the `inspect_providers` status row with § R2c's F-R2-9 and the key-pool row shape settled by § R8.
+
+**Trigger:** start after § R2c and § R8 settle the rows it asserts; close when F-R2-7 is `Resolved`. Supersedes the R2b close condition, which named F-R2-2, F-R2-3, and F-R2-7 together; R2b-i resolved F-R2-3 and the remaining two carry their own sections.
 
 ## R2c provider status and inspection
 
@@ -181,6 +187,13 @@
 - Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
 
 **Trigger:** start after chunk M1 closes; close when F-R9-C-2, F-R9-C-3, and F-R9-D-1 are `Resolved`.
+
+## Review-loop convergence
+
+- Cap the cold-review loop inside the plan itself (for example, one re-audit of a failed stage) and record the cap in the increment AAR, instead of letting the number of passes be an agent judgement.
+- Narrow a multi-finding increment at the first blocker that belongs to one finding's evidence rather than revising the combined scope again.
+
+**Trigger:** start with the next increment that plans a multi-finding remediation; close when an increment records a cap and stops at it.
 
 ## Non-goals
 

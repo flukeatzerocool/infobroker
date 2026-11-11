@@ -2,6 +2,24 @@
 
 ## Active Decisions
 
+### D-098: A Declared Provider Auth Field Must Have a Usable Shape (2026.11.11)
+
+A provider's `auth_env`, `url_env`, and `auth_optional` are read by truthiness
+at dispatch (`providerUsable`), so a declared falsy value does not mean "no
+requirement" — it silently converts "this provider needs a credential or an
+endpoint" into "this provider needs nothing", admitting a keyed provider to
+every chain and failing later with a 401 instead of being filtered as
+`no_api_key`. Decision: validation rejects a declared `auth_env`/`url_env` that
+is not a non-empty string, and a declared `auth_optional` that is not a boolean;
+`null` is rejected rather than read as "unset". Rejected: treating `null` as an
+explicit unset (it is indistinguishable from the silent bypass at dispatch, and
+an unset path that changes dispatch semantics is a separate contract change).
+Accepted consequence: there is no config-level way to clear a declared auth
+field today; that capability is carried by the roadmap's user-layer write
+ordering section. The rejection message names the provider slug and the field,
+never the value, so a credential pasted into one of these fields cannot reach a
+startup issue, an error envelope, or a log. (REQ-037)
+
 ### D-092: A Published Tag Is Immutable (2026.11.07)
 
 A moved tag silently changes what every downstream pin resolves to, and the
