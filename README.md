@@ -202,7 +202,8 @@ with the package but stay inert.
 
 Most free providers work immediately; CORE needs a free API key. The keyed
 providers — Exa, Tavily, Yep — unlock higher throughput and specialized
-search when enabled, and self-hosted SearXNG gives full query privacy:
+search when enabled, and a self-hosted SearXNG instance puts the search path
+on infrastructure you operate:
 
 ```bash
 export INFOBROKER_EXA_API_KEY="your-key"
@@ -470,7 +471,7 @@ Twenty-six providers. Twenty-one work with zero configuration.
 | Exa | Keyed HTTP | Semantic | Yes |
 | Tavily | Keyed HTTP | Synthesis | Yes |
 | Yep | Keyed HTTP | Web, Semantic | Yes |
-| SearXNG | Self-hosted | Full privacy | Yes (self) |
+| SearXNG | Self-hosted | Self-hosted search backend | Yes (self) |
 
 Built-in providers and most free-HTTP providers are active out of the box;
 CORE needs a free API key. Exa, Tavily, and Yep ship disabled; set
@@ -495,8 +496,9 @@ bundled or installed on its behalf — SearXNG runs as a container you
 operate, and Infobroker queries its JSON endpoint like any other backend.
 Leave it disabled (the default) and you lose nothing: the
 privacy-critical chain still serves via Mojeek and DuckDuckGo. Enable it
-only when you want full query privacy, in which case only your own
-SearXNG instance sees your queries.
+to control the search path: the instance you run receives each query
+first and forwards it to its configured upstream engines, so disable the
+engines you do not want to reach.
 
 ## Configuration
 
@@ -798,7 +800,7 @@ chain exhausts, the server retries the `general_web` chain before failing.
 |-----------|--------------------|-----------------------|
 | Built-in `websearch` / `webfetch` | One search engine, one fetch mode, no configuration, no visibility into what backend is used | Twenty-one zero-config providers with a unified tool surface. Choose the right source for each task. Fall back automatically on failure. See every provider's status and quota. |
 | Raw API calls | Manual HTTP requests, per-provider auth, per-provider response parsing, no fallback, no quota tracking | One interface for every provider. API keys configured once. Results normalized to a common shape. Rate limits and quota tracked automatically. |
-| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and nineteen other providers work with zero configuration. Upgrade paths for Exa, Tavily, and Yep. Self-hosted SearXNG for full privacy. |
+| Dedicated search APIs | Pay-per-query, vendor lock-in, opaque routing | Free-first design. DuckDuckGo, Wikipedia, and nineteen other providers work with zero configuration. Upgrade paths for Exa, Tavily, and Yep. A self-hosted SearXNG to keep the front door on your own machine. |
 | Other search MCP servers | Single-provider focus, no fallback, no corroboration, no writing pipeline | Multi-provider with automatic fallback. Corroboration engine cross-references independent sources. Bundled writing skills transform research into finished documents. |
 | AI with built-in search | The model picks the search engine, serves stale cache, no reproducibility | You control the provider chain. Queries are reproducible. Fallback behavior is visible. The corroboration engine verifies facts across independent sources. |
 

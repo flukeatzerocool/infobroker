@@ -94,7 +94,7 @@ wholesale; `dispatch_append` adds slugs to the end of one.
 |-------|---------------|-----|
 | `academic` | semantic_scholar, arxiv, openalex, europe_pmc, crossref | Semantic Scholar carries cross-publisher coverage and a citation graph; arXiv serves preprints; OpenAlex, Europe PMC, and Crossref are keyless metadata indexes ordered from broadest to most specialised (open metadata, biomedical, DOI registrations). |
 | `news` | duckduckgo, gdelt, hacker_news | DuckDuckGo has the freshest index with snippets and time filters; GDELT adds global event coverage on a lag and headline-only records; Hacker News is tech-scoped discussion. |
-| `privacy_critical` | searxng, mojeek, duckduckgo | A self-hosted SearXNG means only your instance sees the query; Mojeek runs an independent index; DuckDuckGo resells and forwards upstream. SearXNG is disabled by default and dropped from the chain until `INFOBROKER_SEARXNG_URL` is set, so an unconfigured install starts at Mojeek. |
+| `privacy_critical` | searxng, mojeek, duckduckgo | A self-hosted SearXNG receives each query first and forwards it to its configured upstream engines, so it keeps the search path on infrastructure you operate but does not keep queries local unless those engines are disabled; Mojeek runs an independent index; DuckDuckGo resells and forwards upstream. SearXNG is disabled by default and dropped from the chain until `INFOBROKER_SEARXNG_URL` is set, so an unconfigured install starts at Mojeek. |
 
 ## Cheat sheet
 
