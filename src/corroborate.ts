@@ -1,7 +1,7 @@
 // @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026g REQ-026h REQ-121 REQ-122 REQ-123
 import type { SearchResult, CorroborationResult, CorroborationFinding, CorroborationSource } from "./types.js";
 import { PROVIDERS, resolveProvider } from "./providers/index.js";
-import { getConfig, getActiveProviders, getDispatchChain } from "./config.js";
+import { getConfig, getActiveProviders, getDispatchChain, providerUsable } from "./config.js";
 import { throttle } from "./rate-limiter.js";
 import { checkQuota, increment } from "./quota.js";
 import { retryWithBackoff } from "./retry.js";
@@ -416,22 +416,30 @@ function buildAgreementMap(
   return map;
 }
 
-// Parity with getDispatchChain: skip enabled providers whose required env is
-// absent, so corroborate does not waste calls on keyed/self-hosted backends
-// that cannot authenticate this session.
+// One predicate with getDispatchChain and the citation chain (REQ-011,
+// REQ-015, REQ-104): a provider is operational only when it is enabled and has
+// a usable credential, so corroborate never spends calls on a backend that
+// cannot authenticate this session.
 export function providerOperational(
   slug: string,
   config: ReturnType<typeof getConfig>,
 ): boolean {
-  const p = config.providers[slug];
-  if (!p) return false;
-  // REQ-011: a provider whose key is optional stays operational without one.
-  if (!p.auth_optional && p.auth_env) {
-    const many = p.auth_env.replace(/_API_KEY$/, "_API_KEYS");
-    if (!process.env[p.auth_env] && !process.env[many]) return false;
+  return providerUsable(slug, config);
+}
+
+/**
+ * Raised when a caller names providers and none of them is usable. REQ-015
+ * removes a disabled provider from every selection path, and REQ-104 treats an
+ * exhausted credential pool as unavailable; with an empty pool there is nothing
+ * to verify, so the tool reports invalid input instead of an empty success.
+ */
+export class UnusableProviderError extends Error {
+  readonly slugs: string[];
+  constructor(slugs: string[]) {
+    super(`No usable provider in the requested list: ${slugs.join(", ")}`);
+    this.name = "UnusableProviderError";
+    this.slugs = slugs;
   }
-  if (p.url_env && !process.env[p.url_env]) return false;
-  return true;
 }
 
 // Apply the user's priority intent to the corroboration pool without the
@@ -563,10 +571,18 @@ export async function corroborate(
   // and REQ-026a authority weighting applies to real sources. The Phase-1
   // broad pass is capped to first_pass_max_providers (highest priority first);
   // the remaining pool stays available for gap refinement.
-  const providerList = options.providers
-    || getActiveProviders()
-         .filter(([slug]) => providerOperational(slug, config))
-         .map(([slug]) => slug);
+  const requestedProviders = options.providers;
+  const providerList = requestedProviders
+    ? requestedProviders.filter((slug) => providerOperational(slug, config))
+    : getActiveProviders()
+        .filter(([slug]) => providerOperational(slug, config))
+        .map(([slug]) => slug);
+  // REQ-015/REQ-104: a caller-supplied list is subject to the same rule as the
+  // default pool. When nothing survives, say so rather than reporting an empty
+  // corroboration as if the providers had simply returned nothing.
+  if (requestedProviders && providerList.length === 0) {
+    throw new UnusableProviderError([...new Set(requestedProviders)]);
+  }
   const pool = applyPriority(providerList, options.priority, options.latency);
   const availableProviders = pool.filter((p) => resolveSearcher(p, searchers));
 
@@ -676,11 +692,12 @@ export async function corroborate(
             // throws, and the reservation is synchronous.
             if (!tryReserveCall()) return null;
             try {
-              await throttle(slug);
-              const results = await retryWithBackoff(
-                timedSearch(searcher, passQuery, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout),
-                config.providers[slug]
-              );
+              // REQ-030: each attempt is throttled, retries included.
+              const attemptSearch = async () => {
+                await throttle(slug);
+                return timedSearch(searcher, passQuery, { max_results: firstPassMaxResults }, config.providers[slug]?.timeout)();
+              };
+              const results = await retryWithBackoff(attemptSearch, config.providers[slug]);
               return { slug, results };
             } catch {
               return null;
@@ -726,13 +743,14 @@ export async function corroborate(
 
       const settled = await Promise.allSettled(
         gapTasks.map(async ({ slug, refinedQuery }) => {
-          await throttle(slug);
           const searcher = resolveSearcher(slug, searchers);
           if (!searcher) throw new Error(`No searcher for ${slug}`);
-          const results = await retryWithBackoff(
-            timedSearch(searcher, refinedQuery, { max_results: 3 }, config.providers[slug]?.timeout),
-            config.providers[slug]
-          );
+          // REQ-030: each attempt is throttled, retries included.
+          const attemptSearch = async () => {
+            await throttle(slug);
+            return timedSearch(searcher, refinedQuery, { max_results: 3 }, config.providers[slug]?.timeout)();
+          };
+          const results = await retryWithBackoff(attemptSearch, config.providers[slug]);
           return { slug, results };
         })
       );

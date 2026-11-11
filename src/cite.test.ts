@@ -2,6 +2,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchCitations, type Searcher } from "./cite.js";
 import type { SearchResult } from "./types.js";
+import { RetryableError } from "./retry.js";
+import { throttle } from "./rate-limiter.js";
 
 const h = vi.hoisted(() => ({
   config: {
@@ -10,6 +12,7 @@ const h = vi.hoisted(() => ({
   },
   quotaExhausted: false,
   cooldown: false,
+  rejected: [] as string[],
 }));
 
 vi.mock("./config.js", () => ({
@@ -30,8 +33,10 @@ vi.mock("./cooldown.js", () => ({
   shouldCooldown: () => false,
   cooldownDurationMs: () => 0,
 }));
-vi.mock("./rate-limiter.js", () => ({ throttle: async () => {} }));
-vi.mock("./corroborate.js", () => ({ providerOperational: () => true }));
+vi.mock("./rate-limiter.js", () => ({ throttle: vi.fn(async () => {}) }));
+vi.mock("./corroborate.js", () => ({
+  providerOperational: (slug: string) => !h.rejected.includes(slug),
+}));
 
 function result(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
@@ -49,6 +54,8 @@ function searchers(map: Record<string, Searcher>): Record<string, Searcher> {
 beforeEach(() => {
   h.quotaExhausted = false;
   h.cooldown = false;
+  h.rejected = [];
+  vi.mocked(throttle).mockClear();
   h.config.providers = {
     a: { enabled: true, rate_limit: {}, timeout: 1000 },
     b: { enabled: true, rate_limit: {}, timeout: 1000 },
@@ -232,5 +239,44 @@ describe("searchCitations aggregation (REQ-027a)", () => {
 
     expect(report.citations[0].year).toBe("2024");
     expect(report.citations[0].bibtex).toContain("@misc{");
+  });
+});
+
+// @implements REQ-104 REQ-030
+describe("credential eligibility and per-attempt throttling (REQ-104, REQ-030)", () => {
+  it("skips a provider the credential predicate rejects, without calling it", async () => {
+    h.rejected = ["a"];
+    let called = false;
+    const report = await searchCitations("q", 8, {
+      chain: ["a"],
+      searchers: {
+        a: async () => {
+          called = true;
+          return [result()];
+        },
+      },
+    });
+
+    expect(report.providers[0]).toMatchObject({ slug: "a", status: "skipped", reason: "no_auth" });
+    expect(called).toBe(false);
+  });
+
+  it("throttles every attempt, including a retry", async () => {
+    Object.assign(h.config.providers.a, { retry_count: 1, retry_backoff_ms: 1 });
+    let attempts = 0;
+    const report = await searchCitations("q", 8, {
+      chain: ["a"],
+      searchers: {
+        a: async () => {
+          attempts++;
+          if (attempts === 1) throw new RetryableError("upstream failure", 503);
+          return [result()];
+        },
+      },
+    });
+
+    expect(report.providers[0].status).toBe("ok");
+    expect(attempts).toBe(2);
+    expect(vi.mocked(throttle)).toHaveBeenCalledTimes(2);
   });
 });

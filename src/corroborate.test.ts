@@ -6,6 +6,17 @@ vi.mock("../src/config.js", () => ({
   getConfig: vi.fn(),
   getActiveProviders: vi.fn(),
   getDispatchChain: vi.fn(),
+  // Mirrors config.providerUsable for the fields these tests exercise.
+  providerUsable: (slug: string, config: any) => {
+    const p = config?.providers?.[slug];
+    if (!p || !p.enabled) return false;
+    if (p.url_env && !process.env[p.url_env]) return false;
+    if (p.auth_env) {
+      const pool = p.auth_env.endsWith("_API_KEY") ? `${p.auth_env}S` : `${p.auth_env}_POOL`;
+      if (!process.env[p.auth_env] && !process.env[pool]) return p.auth_optional === true;
+    }
+    return true;
+  },
 }));
 
 vi.mock("../src/rate-limiter.js", () => ({
@@ -1244,8 +1255,13 @@ describe("batch claim verification (REQ-026g, REQ-026h)", () => {
   });
 
   it("counts a failed dispatch against the batch HTTP-call budget", async () => {
-    mockConfig({ corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 } });
     const providers = ["down_one", "down_two", "down_three", "down_four", "down_five"];
+    mockConfig({
+      providers: Object.fromEntries(
+        providers.map((slug, i) => [slug, { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: i + 1, timeout: 10000 }])
+      ),
+      corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    });
     const claims = Array.from({ length: 10 }, (_, i) => `distinct claim number ${i}`);
     let attempts = 0;
     const searchers: Record<string, () => Promise<SearchResult[]>> = {};
@@ -1344,3 +1360,66 @@ describe("batch claim verification (REQ-026g, REQ-026h)", () => {
   });
 });
 
+
+// @implements REQ-015 REQ-104 REQ-030
+describe("explicit provider selection and per-attempt throttling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(throttle).mockResolvedValue(undefined);
+    vi.mocked(checkQuota).mockReturnValue(makeQuota());
+    vi.mocked(increment).mockReturnValue(makeQuota());
+    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => (fn as () => Promise<any>)());
+    vi.mocked(isKbConfigured).mockReturnValue(false);
+    vi.mocked(kbSearch).mockReturnValue([]);
+    vi.mocked(getDispatchChain).mockReturnValue([]);
+  });
+
+  it("never searches an explicitly named disabled provider", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        ghost: { enabled: false, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+    });
+    const searched: string[] = [];
+    await corroborate("topic", {
+      max_iterations: 1,
+      providers: ["ghost", "duckduckgo"],
+      searchers: {
+        ghost: async () => {
+          searched.push("ghost");
+          return [];
+        },
+        duckduckgo: async () => {
+          searched.push("duckduckgo");
+          return [makeResult("Topic", "https://a.com/1", "topic corroboration")];
+        },
+      },
+    });
+    expect(searched).toEqual(["duckduckgo"]);
+  });
+
+  it("rejects a provider list with no usable entry", async () => {
+    mockConfig();
+    await expect(corroborate("topic", { providers: ["ghost"] })).rejects.toThrow(/No usable provider/i);
+  });
+
+  it("throttles every attempt, including a retry (REQ-030)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+    });
+    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => {
+      await (fn as () => Promise<unknown>)();
+      return await (fn as () => Promise<unknown>)();
+    });
+    await corroborate("topic", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Topic", "https://a.com/1", "topic corroboration")],
+      },
+    });
+    expect(vi.mocked(throttle).mock.calls.filter(([slug]) => slug === "duckduckgo")).toHaveLength(2);
+  });
+});

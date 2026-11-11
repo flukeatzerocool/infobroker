@@ -9,6 +9,19 @@ export interface UnrefTimer {
 }
 
 /**
+ * An exceeded provider-call timeout (REQ-035). It is a transient failure: the
+ * retry policy (REQ-032) recognizes it, so a slow attempt is retried before the
+ * chain advances. It remains an `Error`, so envelope construction and the
+ * fallback classification are unchanged.
+ */
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
+/**
  * Resolve `work`, rejecting with an error built from `message()` when
  * `timeoutMs` elapses first. A missing or non-positive timeout passes the work
  * through unchanged. The losing branch is always discarded: `Promise.race`
@@ -26,7 +39,7 @@ export async function withTimeout<T>(
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message())), timeoutMs);
+        timer = setTimeout(() => reject(new TimeoutError(message())), timeoutMs);
         // Fake timers and non-Node timer types may not implement `unref`.
         (timer as UnrefTimer).unref?.();
       }),

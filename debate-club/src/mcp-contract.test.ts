@@ -1,4 +1,4 @@
-// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-021 REQ-021a REQ-021d REQ-021h REQ-021i REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
+// @implements REQ-001 REQ-002 REQ-003 REQ-004 REQ-013 REQ-020 REQ-020a REQ-127 REQ-015 REQ-104 REQ-021 REQ-021a REQ-021d REQ-021h REQ-021i REQ-024 REQ-024a REQ-024b REQ-024c REQ-026g REQ-026h REQ-027 REQ-060 REQ-081 REQ-089
 // Debate-club Arena: drives the real Infobroker MCP server over stdio with
 // every outbound request served from committed fixtures, and asserts the
 // mechanical response contracts (envelope, error taxonomy, result shape,
@@ -126,6 +126,34 @@ test("search_web returns a shape-valid result set from the pinned provider", asy
   expect((body.results as unknown[]).length).toBeGreaterThan(0);
   // REQ-020: the Wikipedia provider's real snippet survives normalization.
   expect(String((body.results as Array<Record<string, unknown>>)[0].snippet)).not.toBe("");
+});
+
+test("search_web rejects an explicitly named disabled provider (REQ-015)", async () => {
+  scenario = "search-disabled-provider";
+  expectedError = "invalid_input";
+  const out = await call("infobroker_search_web", {
+    query: "retrieval augmented generation",
+    provider: "searxng",
+  });
+  expect(out.text).toContain("[ERROR]");
+  expectError(out.text, "invalid_input");
+});
+
+test("search_web excludes an explicit unauthenticated provider instead of calling it (REQ-020a)", async () => {
+  scenario = "search-unauthenticated-provider";
+  // CORE is enabled in the shipped config but its credential is stripped by the
+  // Arena. REQ-020a excludes it from selection, so the academic chain serves and
+  // no outbound request reaches the credential-gated host.
+  const out = await call("infobroker_search_web", {
+    query: "retrieval augmented generation",
+    provider: "core",
+    task_type: "academic",
+    max_results: 2,
+    deep: false,
+  });
+  const body = expectOk(out.text);
+  expect(providerOf(body)).not.toBe("core");
+  expect(server.unmatched().join("\n")).not.toContain("api.core.ac.uk");
 });
 
 test("search_web analyze attaches in-process analysis (REQ-127)", async () => {

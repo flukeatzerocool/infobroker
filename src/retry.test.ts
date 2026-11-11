@@ -1,6 +1,7 @@
 // @implements REQ-032
 import { describe, it, expect, vi } from "vitest";
 import { retryWithBackoff, RetryableError } from "./retry.js";
+import { TimeoutError } from "./lib/timeout.js";
 
 describe("retryWithBackoff per-provider config (REQ-032)", () => {
   it("honors the configured retry count", async () => {
@@ -48,5 +49,24 @@ describe("retryWithBackoff per-provider config (REQ-032)", () => {
     });
     await expect(retryWithBackoff(fn, { retry_count: 2, retry_backoff_ms: 1 })).rejects.toThrow(/not found/);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  // REQ-035: an exceeded timeout is a transient failure, so it advances the
+  // retry path before the chain falls through to the next provider.
+  it("retries a timeout up to the configured count", async () => {
+    const fn = vi.fn(async () => {
+      throw new TimeoutError("Provider timed out after 10ms");
+    });
+    await expect(retryWithBackoff(fn, { retry_count: 2, retry_backoff_ms: 1 })).rejects.toBeInstanceOf(TimeoutError);
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the timeout message on the final rejection", async () => {
+    const fn = vi.fn(async () => {
+      throw new TimeoutError("Provider timed out after 10ms");
+    });
+    await expect(retryWithBackoff(fn, { retry_count: 1, retry_backoff_ms: 1 })).rejects.toThrow(
+      /Provider timed out after 10ms/,
+    );
   });
 });

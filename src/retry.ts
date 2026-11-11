@@ -1,5 +1,7 @@
 // @implements REQ-032
 
+import { TimeoutError } from "./lib/timeout.js";
+
 const DEFAULT_BASE_DELAY = 1000;
 const DEFAULT_RETRY_COUNT = 3;
 
@@ -58,6 +60,9 @@ export async function retryWithBackoff<T>(
 }
 
 function isRetryable(e: Error): boolean {
+  // REQ-035: an exceeded timeout is a transient failure, so the retry policy
+  // applies before the chain advances to the next provider.
+  if (e instanceof TimeoutError) return true;
   if (e instanceof RetryableError) {
     return e.status === 429 || (e.status >= 500 && e.status <= 599);
   }

@@ -163,12 +163,13 @@ export async function searchCitations(
       continue;
     }
     try {
-      await throttle(slug);
       const providerConfig = config.providers[slug];
-      const results = await retryWithBackoff(
-        timedSearch(searcher, query, { max_results: limit }, providerConfig?.timeout),
-        providerConfig,
-      );
+      // REQ-030: each attempt is throttled, retries included.
+      const attemptSearch = async () => {
+        await throttle(slug);
+        return timedSearch(searcher, query, { max_results: limit }, providerConfig?.timeout)();
+      };
+      const results = await retryWithBackoff(attemptSearch, providerConfig);
       increment(slug, providerConfig?.rate_limit);
       rawCount += results.length;
       for (const result of results) collected.push(toCitation(result));

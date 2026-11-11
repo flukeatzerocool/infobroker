@@ -6,12 +6,12 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
 import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
-import { corroborate } from "./corroborate.js";
+import { corroborate, UnusableProviderError } from "./corroborate.js";
 import { snapshotSource } from "./preservation.js";
 import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
 import { ignoredOperators, parseQuery } from "./query.js";
@@ -419,13 +419,18 @@ async function doWebSearch(
   const taskType = resolvedTaskType.taskType;
   let chain: string[];
 
-  if (preferredProvider && config.providers[preferredProvider]?.enabled) {
-    chain = [preferredProvider, ...getDispatchChain(taskType).filter((p) => p !== preferredProvider)];
-  } else if (preferredProvider) {
+  if (preferredProvider && !config.providers[preferredProvider]?.enabled) {
     // REQ-015: a disabled or undeclared provider is removed from dispatch and
     // SHALL be skipped by all provider-selection logic, even when explicitly
     // requested — never call it.
     return `[ERROR] ${json(err(preferredProvider, "invalid_input", `Provider "${preferredProvider}" is disabled or not configured`, "Choose an enabled provider or omit the provider parameter"))}`;
+  } else if (preferredProvider) {
+    // REQ-020a: an explicit provider is served first only when it is usable. An
+    // unauthenticated one is excluded from selection and the chain serves, with
+    // `fallback_used` reporting the substitution.
+    chain = providerUsable(preferredProvider, config)
+      ? [preferredProvider, ...getDispatchChain(taskType).filter((p) => p !== preferredProvider)]
+      : getDispatchChain(taskType);
   } else {
     chain = getDispatchChain(taskType);
   }
@@ -496,9 +501,6 @@ async function doWebSearch(
         return null;
       }
 
-      await throttle(slug);
-      start = Date.now();
-
       const provider = resolveProvider(slug);
       if (!provider?.search) {
         throw new Error(`Provider ${slug} has no search function`);
@@ -510,8 +512,13 @@ async function doWebSearch(
       const doCall = async (): Promise<SearchResult[]> => provider.search(query, providerOpts);
 
       const timeoutMs = config.providers[slug]?.timeout;
-      const timedCall = async (): Promise<SearchResult[]> =>
-        withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
+      // REQ-030: every outbound request is throttled, retries included, and the
+      // wait stays outside the timeout race so an interval cannot fake a timeout.
+      const timedCall = async (): Promise<SearchResult[]> => {
+        await throttle(slug);
+        start = Date.now();
+        return withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
+      };
       // REQ-032: retry backoff and count are configurable per provider.
       const results = (await retryWithBackoff(timedCall, config.providers[slug])).slice(0, maxResults);
 
@@ -832,9 +839,6 @@ async function fetchPageContent(
     }
     let start = 0;
     try {
-      await throttle(slug);
-      start = Date.now();
-
       const doCall = async (): Promise<string> => {
         if (slug === "native_fetch") {
           // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard.
@@ -848,8 +852,13 @@ async function fetchPageContent(
       };
 
       const timeoutMs = config.providers[slug]?.timeout;
-      const timedCall = async (): Promise<string> =>
-        withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
+      // REQ-030: each attempt is throttled, and the wait stays outside the
+      // timeout race so a minimum interval cannot manufacture a timeout.
+      const timedCall = async (): Promise<string> => {
+        await throttle(slug);
+        start = Date.now();
+        return withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
+      };
       // REQ-032: retry backoff and count are configurable per provider.
       const raw = await retryWithBackoff(timedCall, config.providers[slug]);
 
@@ -1407,25 +1416,14 @@ async function doFetchPage(
   })}`;
 }
 
-function authPresent(authEnv?: string): boolean {
-  if (!authEnv) return true;
-  if (process.env[authEnv]) return true;
-  const many = authEnv.replace(/_API_KEY$/, "_API_KEYS");
-  return !!process.env[many];
-}
-
-function providerOperational(p: ProviderConfig): boolean {
-  if (!p.enabled) return false;
-  if (!p.auth_optional && !authPresent(p.auth_env)) return false;
-  if (p.url_env && !process.env[p.url_env]) return false;
-  return true;
-}
-
-function providerInactiveReason(p: ProviderConfig): "disabled" | "no_api_key" | "no_url" | null {
+// REQ-011/REQ-104: usability is one predicate (config.providerUsable), so the
+// list, the health probe, and dispatch cannot disagree about a missing or
+// exhausted credential.
+function providerInactiveReason(slug: string, p: ProviderConfig): "disabled" | "no_api_key" | "no_url" | null {
   if (!p.enabled) return "disabled";
-  if (!p.auth_optional && !authPresent(p.auth_env)) return "no_api_key";
+  if (providerUsable(slug)) return null;
   if (p.url_env && !process.env[p.url_env]) return "no_url";
-  return null;
+  return "no_api_key";
 }
 
 // REQ-013/REQ-024a: one assessment shared by the list and spec actions, so a
@@ -1435,7 +1433,7 @@ function assessProviderStatus(slug: string, p: ProviderConfig): HealthStatus {
   const config = getConfig();
   const quota = checkQuota(slug, p.rate_limit);
   return resolveHealthStatus({
-    baseStatus: providerOperational(p) ? "active" : "inactive",
+    baseStatus: providerUsable(slug, config) ? "active" : "inactive",
     quotaExhausted: quota.exhausted,
     quotaWarning: quota.warning,
     avgLatencyMs: latency.avg(slug) || undefined,
@@ -1463,13 +1461,13 @@ function doListProviders(filter?: string): string {  const config = getConfig();
   }
 
   const filtered = filter === "active"
-    ? entries.filter(([slug, p]) => providerOperational(p) && !checkQuota(slug, p.rate_limit).exhausted)
+    ? entries.filter(([slug, p]) => providerUsable(slug, config) && !checkQuota(slug, p.rate_limit).exhausted)
     : entries;
 
   const list = filtered.map(([slug, p]) => {
     const quota = checkQuota(slug, p.rate_limit);
-    const operational = providerOperational(p);
-    const reason = quota.exhausted ? "exhausted" : (operational ? null : providerInactiveReason(p));
+    const operational = providerUsable(slug, config);
+    const reason = quota.exhausted ? "exhausted" : (operational ? null : providerInactiveReason(slug, p));
     const cooldownRemaining = inCooldown(slug) ? cooldownRemainingMs(slug) : undefined;
     // REQ-104: report pool health (index + availability), never key material.
     const pool = keyPoolStatus(slug);
@@ -1522,9 +1520,9 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   }
 
   const quota = checkQuota(providerSlug, p.rate_limit);
-  const keyEnv = p.auth_env;
-  // REQ-104/REQ-024b: auth presence is pool-aware (single key or key pool).
-  const authOk = p.auth_optional ? true : authPresent(keyEnv);
+  // REQ-104/REQ-024b: usability is pool-aware, so a provider whose every
+  // credential is rejected is never probed as active.
+  const authOk = providerUsable(providerSlug, config);
   let status: HealthStatus = authOk ? "active" : "inactive";
 
   let avgLatencyMs: number | undefined;
@@ -1883,6 +1881,14 @@ instrumentTool(
     outputSchema: envelopeOutputSchema,
   },
   async (params: any) => {
+    const invalidInput = (message: string) => ({
+      content: [
+        {
+          type: "text" as const,
+          text: `[ERROR] ${json(err("none", "invalid_input", message, "Pass exactly one of query (string) or claims (array) and retry"))}`,
+        },
+      ],
+    });
     try {
       // REQ-026g: exactly one of `query` or `claims` is accepted. The batch
       // cap is configuration, and the tool rejects (not clamps) an over-cap
@@ -1896,14 +1902,6 @@ instrumentTool(
       const maxBatch = Number.isFinite(rawMaxBatch)
         ? Math.min(25, Math.max(1, Math.trunc(rawMaxBatch)))
         : 10;
-      const invalidInput = (message: string) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: `[ERROR] ${json(err("none", "invalid_input", message, `Pass exactly one of query (string) or claims (array of up to ${maxBatch} strings) and retry`))}`,
-          },
-        ],
-      });
       if (queryText !== undefined && claimList !== undefined) {
         return invalidInput("Provide either query or claims, not both");
       }
@@ -1964,6 +1962,9 @@ instrumentTool(
         ],
       };
     } catch (e) {
+      // REQ-015/REQ-104: a named provider that is disabled or has no usable
+      // credential is invalid input, not a corroboration failure.
+      if (e instanceof UnusableProviderError) return invalidInput(e.message);
       return {
         content: [
           {
