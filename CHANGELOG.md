@@ -2,6 +2,18 @@
 
 ## 2026.11.7 — R2a review: credential pools and dispatch-state filtering
 
+- `inspect_providers` now reports a declared-but-unusable credential pool as
+  `inactive_reason: "credentials_unavailable"` instead of claiming no key is
+  configured, and the per-key `key_pool` row appears when a single configured
+  key is rejected or cooling down. `action=list` with `status: "active"`
+  selects exactly the rows it reports `active`, so a degraded provider no longer
+  appears in an "active" list. The generated provider-privacy reference derives
+  `requires_account` from the declared credential rather than the provider tier,
+  so CORE is documented as requiring an account while optional-key providers
+  stay account-free. REQ-013's `degraded` status names the provider-reported leg
+  in place of an unproduced "partial results" leg, and its five branches carry
+  one named clause tag each (REQ-013, REQ-024a, REQ-129, D-100, D-101, D-102).
+
 - `reload_config`'s `patch` now merges over the user layer as it exists on disk
   at call time, so an edit made while the server was running is no longer
   overwritten, and every config write backs up the exact bytes it read instead

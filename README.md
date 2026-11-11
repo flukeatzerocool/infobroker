@@ -662,7 +662,8 @@ reloads, encryption transitions, key operations, and quota exhaustion — are
 appended to an owner-only audit log at `output.audit_log_path` (default
 `~/.local/share/infobroker/audit.log`). Per-provider privacy posture is
 generated from `config.json` into
-`skills/infobroker/references/provider-privacy.md`; the gate fails when that
+`skills/infobroker/references/provider-privacy.md`, including whether the
+declared credential makes an account necessary; the gate fails when that
 document drifts from configuration.
 
 Operational records are separate: every tool call and outbound provider

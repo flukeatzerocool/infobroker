@@ -311,7 +311,7 @@ branch in a test file:
 
 ```
 // @implements REQ-013 latency-threshold
-// @implements REQ-013 partial-results
+// @implements REQ-013 provider-degraded
 ```
 
 The G3 gate fails when such a REQ has fewer clause tags than branches — the

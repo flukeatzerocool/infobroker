@@ -16,17 +16,16 @@
 
 ## R2b-iii key-safety evidence
 
-- Assert REQ-011's missing-key, optional-key, and no-leak clauses through a spawned server (F-R2-7), coordinating the `inspect_providers` status row with § R2c's F-R2-9 and the key-pool row shape settled by § R8.
+- Assert REQ-011's missing-key, optional-key, and no-leak clauses through a spawned server (F-R2-7), coordinating the `inspect_providers` status row (F-R2-9, delivered by R2c-i) and the key-pool row shape settled by § R8.
 
-**Trigger:** start after § R2c and § R8 settle the rows it asserts; close when F-R2-7 is `Resolved`. Supersedes the R2b close condition, which named F-R2-2, F-R2-3, and F-R2-7 together; R2b-i resolved F-R2-3 and the remaining two carry their own sections.
+**Trigger:** start after the R2c status surface ships and § R8 settles the rows it asserts; close when F-R2-7 is `Resolved`. Supersedes the R2b close condition, which named F-R2-2, F-R2-3, and F-R2-7 together; R2b-i resolved F-R2-3 and the remaining two carry their own sections.
 
-## R2c provider status and inspection
+## R2c-ii provider health and spec counts
 
-- Fix the status surface: report an unavailable credential pool with its reason (F-R2-9), derive `requires_account` from configuration rather than the tier alone (F-R2-12), give REQ-013's `inactive` legs a producer and a test (F-R2-19), filter the `active` list to rows whose reported status is `active` (F-R2-20), and assert REQ-024a's non-active reasons (F-R2-21).
 - Refuse to health-probe a config-disabled provider (F-R2-22), assert REQ-024b's `last_error`/`last_success` (F-R2-23), and make `total_requests_served` count server requests rather than provider samples (F-R2-24).
 - Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
 
-**Trigger:** start after R2a ships; close when F-R2-9, F-R2-12, F-R2-19, F-R2-20, F-R2-21, F-R2-22, F-R2-23, and F-R2-24 are `Resolved`.
+**Trigger:** start after R2c-i ships; close when F-R2-22, F-R2-23, and F-R2-24 are `Resolved`.
 
 ## R2d retry, latency, quota and chain shape
 

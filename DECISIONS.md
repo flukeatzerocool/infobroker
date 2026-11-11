@@ -2,6 +2,54 @@
 
 ## Active Decisions
 
+### D-102: A Single Unavailable Credential Is Visible on the Provider Row (2026.11.11)
+
+`keyPoolStatus` reports per-key availability, but `inspect_providers` emitted
+the `key_pool` row only when a provider had more than one credential, so a
+single rejected or cooling key produced an `inactive` row with no explanation
+at all. Decision: the row is emitted when the pool has more than one key **or**
+when any single key is unavailable; the entry shape (`index`, `available`,
+`reason`) does not change. The alternative — a second `credentials_cooling_down`
+reason value — was rejected: a transient key cooldown is already described by
+the per-key `reason` and, for a provider-level block, by the row's
+`cooldown_remaining_ms`. Accepted residual: a provider with exactly one key in
+key-level cooldown and no provider-level cooldown shows
+`inactive_reason: credentials_unavailable` plus a one-entry `key_pool` row whose
+`reason` is `cooldown`; no dedicated reason value distinguishes it.
+
+### D-101: An Optional Credential Does Not Require an Account, and Neither Does It Change Usability (2026.11.11)
+
+REQ-129's `requires_account` was derived from the provider tier alone, so CORE
+— a `free_http` provider with a required key — was documented as requiring no
+account. Decision: the posture derives from the declared credential, with the
+tier only as the fallback for a provider that declares none, so a required
+credential makes an account necessary and an optional credential does not
+(`auth_optional: true` means the provider operates anonymously). Separately,
+usability is unchanged: the optional exemption applies only when *no* key is
+configured. An optional credential whose configured keys are all rejected or
+cooling remains `providerUsable === false`, exactly as before this change, and
+its row now reports `inactive_reason: credentials_unavailable` rather than
+`no_api_key` — a present-but-unusable credential is not an absent one.
+Rejected: deriving the account requirement from key presence (it would document
+`semantic_scholar`, `stack_exchange`, and `github` as account-required when they
+are not) and extending the optional exemption to the all-keys-rejected case (a
+behavior change to dispatch eligibility, outside this increment's contract).
+
+### D-100: REQ-013's Degraded Status Names Its Real Producer (2026.11.11)
+
+REQ-013 and the glossary defined `degraded` as latency above a threshold,
+**partial results**, or quota at the warning threshold. The partial-results leg
+had no producer: no provider reports partiality as a status, and a non-2xx
+health probe is reported `degraded`, which is not the same thing — batch
+partiality is a per-input outcome owned by REQ-020i/REQ-021k. Decision:
+`degraded` names *a provider that reports itself degraded*, which the provider
+`health()` contract already produces, and the five REQ-013 branches carry one
+named clause tag each (`missing-key`, `unreachable`, `latency-threshold`,
+`provider-degraded`, `quota-warning`). The `exhausted` tag is retained as an
+assertion for the outer status even though it is not an or-branch. Rejected:
+inventing a partial-results producer — a provider-level flag would have to be
+fabricated from a probe result the spec already calls `degraded`.
+
 ### D-099: A Config Patch Merges the On-Disk Layer, Backs Up What It Read, and Removes with `null` (2026.11.11)
 
 The `reload_config` patch merged over the in-memory snapshot taken at startup,
