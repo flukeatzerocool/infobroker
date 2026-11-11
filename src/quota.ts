@@ -98,6 +98,19 @@ function flushWrite(): void {
 
 process.on("beforeExit", () => flushWrite());
 
+// REQ-033: a debounced write must survive an ordinary stop, not only a clean
+// event-loop drain. Each one-shot handler flushes, removes only itself, and
+// re-raises the signal so the process keeps the platform's default exit
+// status instead of being relabelled as a success.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  const handler = () => {
+    flushWrite();
+    process.removeListener(signal, handler);
+    process.kill(process.pid, signal);
+  };
+  process.once(signal, handler);
+}
+
 function getDailyReset(): string {
   const now = new Date();
   const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
@@ -111,7 +124,7 @@ function getMonthlyReset(): string {
 }
 
 function isExpired(resetAt: string): boolean {
-  return new Date(resetAt) < new Date(Date.now() - 30_000);
+  return Date.parse(resetAt) <= Date.now();
 }
 
 export function loadQuotaState(): void {
