@@ -1,8 +1,9 @@
-// @implements REQ-024b
-// Hermetic fixtures for the spawned health-action tests. A loopback server
-// answers as SearXNG, and the isolated config enables only that provider, pins
-// every dispatch chain to it, and disables every other provider — so the
-// search, the hedge, and the health probe can never reach an external host.
+// @implements REQ-024b REQ-011
+// Hermetic fixtures for the spawned provider tests. A loopback server answers
+// as SearXNG (or as a generic keyed provider), and the isolated config enables
+// only loopback-backed providers, pins every dispatch chain to them, and
+// disables every other provider — so a search, the hedge, the health probe, and
+// the startup check can never reach an external host.
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import { join } from "node:path";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
-export type StubMode = "ok" | "missing";
+export type StubMode = "ok" | "missing" | "echo401";
 
 export interface StubProvider {
   url: string;
@@ -19,10 +20,14 @@ export interface StubProvider {
   close(): Promise<void>;
 }
 
-/** Start a loopback SearXNG-shaped stub: `ok` returns one result, `missing` 404s. */
+/**
+ * Start a loopback provider stub: `ok` returns one result, `missing` 404s, and
+ * `echo401` rejects every request with a 401 whose body echoes the presented
+ * credential — so a leak sweep can detect a response body reaching a client.
+ */
 export async function startStubProvider(mode: StubMode): Promise<StubProvider> {
   const state = { requests: 0 };
-  const server = createHttpServer((_req, res) => {
+  const server = createHttpServer((req, res) => {
     state.requests++;
     if (mode === "ok") {
       res.writeHead(200, { "content-type": "application/json" });
@@ -31,6 +36,12 @@ export async function startStubProvider(mode: StubMode): Promise<StubProvider> {
           results: [{ title: "Stub result", url: "https://example.com/stub", content: "stub body" }],
         })
       );
+      return;
+    }
+    if (mode === "echo401") {
+      const presented = req.headers["authorization"] ?? req.headers["x-api-key"] ?? "";
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "credential rejected", presented }));
       return;
     }
     res.writeHead(404, { "content-type": "application/json" });
@@ -63,45 +74,111 @@ export async function closedPortUrl(): Promise<string> {
 export interface HermeticConfig {
   root: string;
   env: NodeJS.ProcessEnv;
+  /** The file call-log path when `fileLogs` is enabled. */
+  callLogPath?: string;
+  /** The audit-log path when `fileLogs` is enabled. */
+  auditLogPath?: string;
+}
+
+/** A loopback generic_http provider added to the isolated config. */
+export interface HermeticProvider {
+  slug: string;
+  /** Conventional slug-derived credential variable, e.g. `INFOBROKER_KEYSTUB_API_KEY`. */
+  authEnv: string;
+  authOptional?: boolean;
+  /** Add the provider to every dispatch chain. Defaults to true. */
+  dispatch?: boolean;
+}
+
+export interface HermeticConfigOptions {
+  /** Additional loopback generic_http providers (replaces searxng in dispatch). */
+  providers?: HermeticProvider[];
+  /** Write the call log and audit log into the temp root. */
+  fileLogs?: boolean;
+}
+
+/** Drop every credential variable so a spawned server cannot inherit one. */
+function scrubCredentials(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base };
+  for (const key of Object.keys(env)) {
+    if (/^INFOBROKER_[A-Z0-9_]+_API_KEYS?$/.test(key)) delete env[key];
+  }
+  return env;
 }
 
 /**
- * Write an isolated config for a spawned server: only `searxng` (and the inline
- * `native_fetch` fallback) stay enabled, every dispatch chain points at
- * `searxng`, and the KB lives under the temp root.
+ * Write an isolated config for a spawned server: by default only `searxng`
+ * (and the inline `native_fetch` fallback) stay enabled and every dispatch
+ * chain points at `searxng`. With `providers`, each loopback generic_http
+ * entry replaces searxng in every chain. The KB lives under the temp root.
  */
-export function writeHermeticConfig(searxngUrl: string): HermeticConfig {
+export function writeHermeticConfig(
+  searxngUrl: string,
+  options: HermeticConfigOptions = {},
+): HermeticConfig {
   const root = mkdtempSync(join(tmpdir(), "infobroker-health-"));
   const storage = join(root, "knowledge-base");
   mkdirSync(storage, { recursive: true, mode: 0o700 });
 
   const config = JSON.parse(readFileSync(join(REPO_ROOT, "config.json"), "utf-8")) as {
     kb?: Record<string, unknown>;
+    output?: Record<string, unknown>;
     dispatch: Record<string, string[]>;
-    providers: Record<string, { enabled: boolean }>;
+    providers: Record<string, Record<string, unknown>>;
   };
   config.kb = { ...(config.kb ?? {}), storage_path: storage, auto_index: false };
-  config.providers.searxng.enabled = true;
+
+  const extra = options.providers ?? [];
+  config.providers.searxng.enabled = extra.length === 0;
   for (const [slug, provider] of Object.entries(config.providers)) {
     if (slug !== "searxng" && slug !== "native_fetch") provider.enabled = false;
   }
-  for (const taskType of Object.keys(config.dispatch)) config.dispatch[taskType] = ["searxng"];
+  for (const provider of extra) {
+    config.providers[provider.slug] = {
+      tier: "generic_http",
+      capabilities: ["web_search"],
+      enabled: true,
+      priority: 1,
+      rate_limit: { per_second: 10 },
+      endpoint: `${searxngUrl}/search`,
+      query_param: "q",
+      results_path: "results",
+      auth_env: provider.authEnv,
+      ...(provider.authOptional ? { auth_optional: true } : {}),
+      field_map: { title: "title", url: "url", snippet: "snippet" },
+    };
+  }
+
+  const chain = extra.length > 0
+    ? extra.filter((provider) => provider.dispatch !== false).map((provider) => provider.slug)
+    : ["searxng"];
+  for (const taskType of Object.keys(config.dispatch)) config.dispatch[taskType] = [...chain];
+
+  let callLogPath: string | undefined;
+  let auditLogPath: string | undefined;
+  if (options.fileLogs) {
+    callLogPath = join(root, "call-log.jsonl");
+    auditLogPath = join(root, "audit.log");
+    config.output = {
+      ...(config.output ?? {}),
+      call_log: "file",
+      call_log_path: callLogPath,
+      audit_log_path: auditLogPath,
+    };
+  }
 
   const configPath = join(root, "config.json");
   writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 
-  return {
-    root,
-    env: {
-      ...process.env,
-      HOME: root,
-      XDG_DATA_HOME: join(root, "data"),
-      TMPDIR: root,
-      INFOBROKER_CONFIG: configPath,
-      INFOBROKER_CONFIG_LOCAL: join(root, "config.local.json"),
-      INFOBROKER_QUOTA_STATE: join(root, "quota.json"),
-      INFOBROKER_KEYPOOL_STATE: join(root, "key-pool.json"),
-      INFOBROKER_SEARXNG_URL: searxngUrl,
-    },
-  };
+  const env = scrubCredentials(process.env);
+  env["HOME"] = root;
+  env["XDG_DATA_HOME"] = join(root, "data");
+  env["TMPDIR"] = root;
+  env["INFOBROKER_CONFIG"] = configPath;
+  env["INFOBROKER_CONFIG_LOCAL"] = join(root, "config.local.json");
+  env["INFOBROKER_QUOTA_STATE"] = join(root, "quota.json");
+  env["INFOBROKER_KEYPOOL_STATE"] = join(root, "key-pool.json");
+  env["INFOBROKER_SEARXNG_URL"] = searxngUrl;
+
+  return { root, env, ...(callLogPath ? { callLogPath } : {}), ...(auditLogPath ? { auditLogPath } : {}) };
 }
