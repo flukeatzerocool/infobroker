@@ -78,7 +78,11 @@ function readPackageVersion(): string {
     return "unknown";
   }
 }
-const latency = createLatencyTracker(() => getConfig().output.latency_window_size);
+const latency = createLatencyTracker(() => ({
+  size: getConfig().output.latency_window_size,
+  ms: getConfig().output.latency_window_ms,
+  strategy: getConfig().output.latency_window_strategy ?? "both",
+}));
 const responseBytes: number[] = [];
 const RESPONSE_WINDOW = 100;
 
@@ -490,6 +494,16 @@ async function doWebSearch(
       const quota = checkQuota(slug, config.providers[slug]?.rate_limit);
       if (quota.exhausted) {
         quotaExhausted[slug] = quota.daily.remaining;
+        // REQ-031: a quota refusal is a provider-attributable failure, not an
+        // empty result, so the chain must end in exhaustion rather than an
+        // empty success. The shared tail renders `quota_exhausted`.
+        lastError = err(
+          slug,
+          "all_providers_exhausted",
+          `Provider ${slug} has exhausted its quota`,
+          providerRemediation("Retry after the quota resets"),
+          { quota_exhausted: true },
+        );
         sessionStats.recordAttempt(slug, "quota");
         recordAttempt(slug, "quota");
         // REQ-098: quota exhaustion is a security-relevant event for the audit
@@ -1158,6 +1172,7 @@ async function doFetchPage(
         err("none", taxonomy.code, `${taxonomy.message}: ${url}`, providerRemediation(taxonomy.remediation), {
           failures: extractFailures,
           ...(taxonomy.cause ? { cause: taxonomy.cause } : {}),
+          ...(taxonomy.retry_after_ms !== undefined ? { retry_after_ms: taxonomy.retry_after_ms } : {}),
         })
       )}`;
     }
@@ -1326,6 +1341,7 @@ async function doFetchPage(
       err("none", taxonomy.code, `${taxonomy.message}: ${url}`, taxonomy.remediation, {
         failures,
         ...(taxonomy.cause ? { cause: taxonomy.cause } : {}),
+        ...(taxonomy.retry_after_ms !== undefined ? { retry_after_ms: taxonomy.retry_after_ms } : {}),
       })
     )}`;
   }

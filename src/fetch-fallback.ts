@@ -8,7 +8,7 @@ import { HttpStatusError } from "./lib/url-guard.js";
 import { BotChallengeError } from "./retry.js";
 import { htmlToText } from "./lib/html.js";
 import { throttle } from "./rate-limiter.js";
-import { inCooldown } from "./cooldown.js";
+import { inCooldown, cooldownRemainingMs } from "./cooldown.js";
 import { providerRemediation } from "./error-envelope.js";
 import { PROVIDERS } from "./providers/index.js";
 import type { DoiRecord } from "./types.js";
@@ -102,11 +102,16 @@ export function classifyFailure(error: unknown, renderer: string): FetchFailure 
  * connectivity error. REQ-038: every provider-attributable remediation names
  * the provider-status surface so the caller can diagnose without guessing.
  */
-export function failureTaxonomy(failures: FetchFailure[]): {
+export function failureTaxonomy(
+  failures: FetchFailure[],
+  opts: { remainingMs?: (slug: string) => number } = {},
+): {
   code: "access_blocked" | "network_error" | "rate_limited" | "all_providers_exhausted";
   cause?: "paywall" | "access_restricted" | "anti_bot" | "not_found";
   message: string;
   remediation: string;
+  /** REQ-038: remaining cooldown for a rate-limited response. */
+  retry_after_ms?: number;
 } {
   const has = (kind: FetchFailureKind) => failures.some((f) => f.kind === kind);
   const only = (kind: FetchFailureKind) => failures.length > 0 && failures.every((f) => f.kind === kind);
@@ -137,10 +142,16 @@ export function failureTaxonomy(failures: FetchFailure[]): {
     };
   }
   if (has("rate_limited")) {
+    // REQ-038: report the remaining cooldown for the rate-limited renderers.
+    const remainingMs = opts.remainingMs ?? cooldownRemainingMs;
+    const remaining = failures
+      .filter((failure) => failure.kind === "rate_limited")
+      .reduce((max, failure) => Math.max(max, remainingMs(failure.renderer)), 0);
     return {
       code: "rate_limited",
       message: "The page's renderers were rate-limited",
       remediation: providerRemediation("Retry after the rate-limit window"),
+      ...(remaining > 0 ? { retry_after_ms: remaining } : {}),
     };
   }
   if (only("network")) {

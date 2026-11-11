@@ -119,6 +119,30 @@ describe("fetch failure classification (REQ-021h)", () => {
     ).toBe("rate_limited");
   });
 
+  // REQ-038: a rate-limited response reports the remaining cooldown.
+  it("reports retry_after_ms from the live cooldown registry", () => {
+    const rateLimited = [{ renderer: "jina", kind: "rate_limited" as const }];
+    expect(failureTaxonomy(rateLimited, { remainingMs: () => 29_000 }).retry_after_ms).toBe(29_000);
+    // The longest remaining cooldown wins across rate-limited renderers.
+    expect(
+      failureTaxonomy(
+        [
+          { renderer: "jina", kind: "rate_limited" },
+          { renderer: "native_fetch", kind: "rate_limited" },
+        ],
+        { remainingMs: (slug) => (slug === "native_fetch" ? 12_000 : 5_000) },
+      ).retry_after_ms
+    ).toBe(12_000);
+  });
+
+  it("omits retry_after_ms when no cooldown remains", () => {
+    const branch = failureTaxonomy([{ renderer: "jina", kind: "rate_limited" }], { remainingMs: () => 0 });
+    expect(branch.retry_after_ms).toBeUndefined();
+    // A non-rate-limited branch never carries the field.
+    expect(failureTaxonomy([{ renderer: "jina", kind: "paywall" }], { remainingMs: () => 9_000 }).retry_after_ms)
+      .toBeUndefined();
+  });
+
   // REQ-038: a provider-attributable remediation names the status surface,
   // including the access-restriction, rate-limit, and not-found branches.
   it("names the provider-status surface in every remediation", () => {
