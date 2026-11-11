@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, classifyCredential, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, isOperational, classifyCredential, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
@@ -26,8 +26,9 @@ import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
 import { audit } from "./audit-log.js";
-import type { ProviderConfig, HealthReport, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
-import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
+import type { ProviderConfig, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
+import { assembleHealthReport } from "./provider-health.js";
+import { recordProviderSuccess, recordProviderError, providerHistory } from "./provider-history.js";
 import { assessProvider, selectActiveRows, keyPoolRow, type ProviderStatusInput, type ProviderAssessment } from "./provider-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
@@ -78,8 +79,6 @@ function readPackageVersion(): string {
   }
 }
 const latency = createLatencyTracker(() => getConfig().output.latency_window_size);
-const providerLastSuccess: Record<string, number> = {};
-const providerLastError: Record<string, { message: string; timestamp: number }> = {};
 const responseBytes: number[] = [];
 const RESPONSE_WINDOW = 100;
 
@@ -526,7 +525,7 @@ async function doWebSearch(
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
       latency.track(slug, elapsed);
-      providerLastSuccess[slug] = Date.now();
+      recordProviderSuccess(slug);
       sessionStats.recordAttempt(slug, "ok");
       recordAttempt(slug, "ok", elapsed);
 
@@ -535,7 +534,7 @@ async function doWebSearch(
       // provider's empty as distinct from a total failure so the final
       // all-empty case is reported as a legitimate zero-result answer.
       if (results.length === 0) {
-        providerLastError[slug] = { message: "empty result set", timestamp: Date.now() };
+        recordProviderError(slug, "empty result set");
         sessionStats.recordAttempt(slug, "empty");
         recordAttempt(slug, "empty", elapsed);
         return null;
@@ -543,7 +542,7 @@ async function doWebSearch(
 
       const filtered = contentType ? filterByContentType(results, contentType) : results;
       if (filtered.length === 0) {
-        providerLastError[slug] = { message: "content_type filter removed all results", timestamp: Date.now() };
+        recordProviderError(slug, "content_type filter removed all results");
         sessionStats.recordAttempt(slug, "empty");
         recordAttempt(slug, "empty", elapsed);
         return null;
@@ -552,7 +551,7 @@ async function doWebSearch(
       return { slug, filtered, elapsed };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      providerLastError[slug] = { message: msg, timestamp: Date.now() };
+      recordProviderError(slug, msg);
       // REQ-038: a rate-limit or bot-challenge failure puts the provider in
       // cooldown so a burst of requests stops re-hammering it.
       if (shouldCooldown(e)) {
@@ -882,7 +881,7 @@ async function fetchPageContent(
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
       latency.track(slug, elapsed);
-      providerLastSuccess[slug] = Date.now();
+      recordProviderSuccess(slug);
       sessionStats.recordAttempt(slug, "ok");
       recordAttempt(slug, "ok", elapsed);
       return { slug, content, truncated: maybeTruncate(content, maxChars), elapsed };
@@ -894,7 +893,7 @@ async function fetchPageContent(
       // distinguish a paywall from an anti-bot gate from a network failure.
       const failure = classifyFailure(e, slug);
       onFailure?.(failure);
-      providerLastError[slug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
+      recordProviderError(slug, e instanceof Error ? e.message : String(e));
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
       }
@@ -1512,64 +1511,55 @@ async function doProviderHealth(providerSlug: string): Promise<string> {
   }
 
   const quota = checkQuota(providerSlug, p.rate_limit);
-  // REQ-104/REQ-024b: usability is pool-aware, so a provider whose every
-  // credential is rejected is never probed as active.
-  const authOk = providerUsable(providerSlug, config);
-  let status: HealthStatus = authOk ? "active" : "inactive";
-
-  let avgLatencyMs: number | undefined;
   const registeredProvider = resolveProvider(providerSlug);
-  if (registeredProvider && authOk) {
+  // REQ-024b: probe eligibility is one decision — the provider can operate
+  // (the same truth table dispatch and the list use) and has a probe target.
+  // A disabled provider, or an inline fallback with no target, is never probed.
+  const probeEligible = isOperational({
+    enabled: p.enabled,
+    urlPresent: !p.url_env || Boolean(process.env[p.url_env]),
+    credential: classifyCredential(providerSlug, p),
+  }) && Boolean(registeredProvider);
+
+  let probeStatus: "active" | "degraded" | "inactive" | undefined;
+  let probeLatencyMs: number | undefined;
+  if (probeEligible && registeredProvider) {
     try {
       const h = await registeredProvider.health();
-      const base = h.status as "active" | "degraded" | "inactive";
-      status = base;
-      // REQ-036: report the server's bounded time-window latency when a local
-      // history exists, falling back to the provider's own live measurement
-      // (e.g. first call, no recorded requests yet).
-      avgLatencyMs = latency.avg(providerSlug) || h.avgLatencyMs;
+      probeStatus = h.status as "active" | "degraded" | "inactive";
+      probeLatencyMs = h.avgLatencyMs;
       // REQ-024b: the live probe must not overwrite the recorded last-success
       // timestamp — last_success reflects operational history, not this probe.
     } catch (e) {
-      providerLastError[providerSlug] = { message: e instanceof Error ? e.message : String(e), timestamp: Date.now() };
-      if (status === "active") {
-        status = "degraded";
-      }
+      recordProviderError(providerSlug, e instanceof Error ? e.message : String(e));
+      probeStatus = "degraded";
     }
-  } else {
-    avgLatencyMs = latency.avg(providerSlug) || 0;
   }
 
-  status = resolveHealthStatus({
-    baseStatus: status,
-    quotaExhausted: quota.exhausted,
-    quotaWarning: quota.warning,
-    avgLatencyMs,
-    degradedLatencyMs: p.degraded_latency_ms ?? config.output.degraded_latency_ms,
+  // REQ-036: report the server's bounded time-window latency when a local
+  // history exists, falling back to the provider's own live measurement.
+  const historyLatency = latency.avg(providerSlug);
+  const avgLatencyMs = probeEligible ? (historyLatency || probeLatencyMs) : (historyLatency || 0);
+
+  // REQ-013/REQ-024b: the health action reports through the same assessment the
+  // list and spec actions use, supplying the probe result it just observed.
+  const assessment = assessProvider({
+    ...providerStatusInput(providerSlug, p),
+    probeStatus,
+    avgLatencyMs: probeEligible ? avgLatencyMs : latency.avg(providerSlug) || undefined,
   });
 
-  const report: HealthReport = {
-    status: status as HealthReport["status"],
+  const report = assembleHealthReport({
     slug: providerSlug,
     tier: p.tier,
     capabilities: p.capabilities,
-    quota_used: quota.daily.used,
-    quota_remaining: quota.daily.remaining,
-    quota_reset_at: quota.daily.resetAt,
-    quota_warning: quota.warning,
-    avg_latency_ms: avgLatencyMs,
-    auth_ok: authOk,
-  };
-
-  if (providerLastError[providerSlug]) {
-    report.last_error = new Date(providerLastError[providerSlug].timestamp).toISOString();
-  }
-  if (providerLastSuccess[providerSlug]) {
-    report.last_success = new Date(providerLastSuccess[providerSlug]).toISOString();
-  }
-  if (inCooldown(providerSlug)) {
-    report.cooldown_remaining_ms = cooldownRemainingMs(providerSlug);
-  }
+    assessment,
+    quota,
+    avgLatencyMs,
+    authOk: providerUsable(providerSlug, config),
+    history: providerHistory(providerSlug),
+    cooldownRemainingMs: inCooldown(providerSlug) ? cooldownRemainingMs(providerSlug) : undefined,
+  });
 
   return `[OK] ${json({
     status: "ok",
@@ -1620,7 +1610,7 @@ function doSpecHealth(): string {
         last_ingestion: kbStatsData.last_ingestion,
       } : undefined,
       uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
-      total_requests_served: latency.total(),
+      total_requests_served: toolMetrics.totalCalls(),
       tool_metrics: toolMetrics.snapshot(),
       session: {
         ...sessionStats.snapshot(),

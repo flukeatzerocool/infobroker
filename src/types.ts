@@ -212,6 +212,13 @@ export interface HealthReport {
   last_error?: string;
   last_success?: string;
   auth_ok: boolean;
+  /** REQ-024b: present only when configuration or quota states the cause. */
+  inactive_reason?:
+    | "disabled"
+    | "no_url"
+    | "no_api_key"
+    | "credentials_unavailable"
+    | "exhausted";
   cooldown_remaining_ms?: number;
 }
 

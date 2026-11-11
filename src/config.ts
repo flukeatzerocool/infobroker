@@ -1124,13 +1124,25 @@ export function classifyCredential(slug: string, p: ProviderConfig): CredentialC
   return hasUsableKeyForEnv(p.auth_env, slug) ? "usable" : "unusable";
 }
 
+/**
+ * REQ-013/REQ-024b: the one truth table for "can this provider operate at all".
+ * `providerUsable`, the shared assessment, and the health action's probe gate
+ * all read it, so a provider cannot be probed while being reported unusable.
+ */
+export function isOperational(input: { enabled: boolean; urlPresent: boolean; credential: CredentialClass }): boolean {
+  if (!input.enabled || !input.urlPresent) return false;
+  return input.credential === "none" || input.credential === "usable" || input.credential === "optional-absent";
+}
+
 export function providerUsable(slug: string, config?: Config): boolean {
   const cfg = config ?? getConfig();
   const p = cfg.providers[slug];
-  if (!p || !p.enabled) return false;
-  if (p.url_env && !process.env[p.url_env]) return false;
-  const credential = classifyCredential(slug, p);
-  return credential === "none" || credential === "usable" || credential === "optional-absent";
+  if (!p) return false;
+  return isOperational({
+    enabled: p.enabled,
+    urlPresent: !p.url_env || Boolean(process.env[p.url_env]),
+    credential: classifyCredential(slug, p),
+  });
 }
 
 export function getDispatchChain(taskType: string): string[] {

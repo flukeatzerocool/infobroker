@@ -23,4 +23,17 @@ describe("tool metrics (REQ-024c)", () => {
     expect(metrics.snapshot().t.calls).toBe(4);
     expect(metrics.snapshot().t.max_ms).toBe(400);
   });
+
+  it("counts every tool call cumulatively, including failed ones", () => {
+    const metrics = createToolMetrics();
+    expect(metrics.totalCalls()).toBe(0);
+    metrics.record("search_web", 10, true);
+    metrics.record("fetch_page", 20, false);
+    metrics.record("search_web", 30, true);
+    expect(metrics.totalCalls()).toBe(3);
+    // Per-tool windows are bounded; the cumulative count is not.
+    const bounded = createToolMetrics(1);
+    for (let i = 0; i < 5; i++) bounded.record("t", i, true);
+    expect(bounded.totalCalls()).toBe(5);
+  });
 });

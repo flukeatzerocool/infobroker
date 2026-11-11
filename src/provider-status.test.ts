@@ -4,7 +4,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { classifyCredential, getConfig, providerUsable } from "./config.js";
+import { classifyCredential, getConfig, isOperational, providerUsable } from "./config.js";
 import { markKeyRejected, resetKeyPoolStateForTests } from "./key-pool.js";
 import { assessProvider, keyPoolRow, selectActiveRows, type ProviderStatusInput } from "./provider-status.js";
 
@@ -265,5 +265,47 @@ describe("keyPoolRow (REQ-104)", () => {
 
   it("omits an empty pool", () => {
     expect(keyPoolRow([])).toBeUndefined();
+  });
+});
+
+// REQ-024b: the health action's probe gate and the shared assessment read one
+// truth table, so a provider cannot be probed while being reported unusable.
+describe("isOperational and the health assessment (REQ-024b)", () => {
+  it("is false for a disabled provider even with a usable credential", () => {
+    expect(isOperational({ enabled: false, urlPresent: true, credential: "none" })).toBe(false);
+  });
+
+  it("is false for an absent URL env or an unusable credential", () => {
+    expect(isOperational({ enabled: true, urlPresent: false, credential: "none" })).toBe(false);
+    expect(isOperational({ enabled: true, urlPresent: true, credential: "absent" })).toBe(false);
+    expect(isOperational({ enabled: true, urlPresent: true, credential: "unusable" })).toBe(false);
+  });
+
+  it("is true for every operating credential class", () => {
+    for (const credential of ["none", "usable", "optional-absent"] as const) {
+      expect(isOperational({ enabled: true, urlPresent: true, credential })).toBe(true);
+    }
+  });
+
+  it("keeps a disabled provider inactive and named even when a probe claims active", () => {
+    expect(assessProvider(base({ enabled: false, probeStatus: "active" }))).toEqual({
+      status: "inactive",
+      inactive_reason: "disabled",
+    });
+  });
+
+  it("keeps quota precedence over the disabled reason", () => {
+    expect(assessProvider(base({ enabled: false, quotaExhausted: true }))).toEqual({
+      status: "exhausted",
+      inactive_reason: "exhausted",
+    });
+  });
+
+  it("gives a probe-explained inactive row no reason", () => {
+    expect(assessProvider(base({ probeStatus: "inactive" }))).toEqual({ status: "inactive" });
+  });
+
+  it("keeps an operational provider with no probe target active (native_fetch)", () => {
+    expect(assessProvider(base())).toEqual({ status: "active" });
   });
 });

@@ -17,6 +17,8 @@ export interface ToolMetricsSnapshot {
 export interface ToolMetrics {
   record(name: string, durationMs: number, ok: boolean): void;
   snapshot(): Record<string, ToolMetricsSnapshot>;
+  /** REQ-024c: cumulative tool requests handled, successful or not. */
+  totalCalls(): number;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -26,11 +28,13 @@ function percentile(sorted: number[], p: number): number {
 
 export function createToolMetrics(windowSize = 200): ToolMetrics {
   const tools: Record<string, ToolEntry> = {};
+  let calls = 0;
 
   return {
     record(name: string, durationMs: number, ok: boolean): void {
       const entry = (tools[name] ??= { calls: 0, errors: 0, samples: [] });
       entry.calls++;
+      calls++;
       if (!ok) entry.errors++;
       entry.samples.push(Math.max(0, durationMs));
       while (entry.samples.length > windowSize) entry.samples.shift();
@@ -49,6 +53,10 @@ export function createToolMetrics(windowSize = 200): ToolMetrics {
         };
       }
       return out;
+    },
+
+    totalCalls(): number {
+      return calls;
     },
   };
 }

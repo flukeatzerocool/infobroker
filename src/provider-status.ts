@@ -4,6 +4,7 @@
 // is the provider operational (the same truth table as `config.providerUsable`),
 // what is its assessed REQ-013 status, and — when it is not active — why.
 import type { CredentialClass } from "./config.js";
+import { isOperational } from "./config.js";
 import { resolveHealthStatus, type HealthStatus } from "./health-status.js";
 
 /** REQ-024a: the distinguishing cause reported for a non-active provider. */
@@ -32,10 +33,10 @@ export interface ProviderAssessment {
   inactive_reason?: InactiveReason;
 }
 
-const OPERATES: ReadonlySet<CredentialClass> = new Set(["none", "usable", "optional-absent"]);
-
 export function assessProvider(input: ProviderStatusInput): ProviderAssessment {
-  const operational = input.enabled && input.urlPresent && OPERATES.has(input.credential);
+  // REQ-013/REQ-024b: the same truth table `providerUsable` and the health
+  // action use, so a row cannot report operational while dispatch refuses it.
+  const operational = isOperational(input);
   const baseStatus: "active" | "inactive" | "degraded" = operational
     ? (input.probeStatus ?? "active")
     : "inactive";
