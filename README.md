@@ -329,10 +329,11 @@ tells you how sure it is.
 > "Ingest this article so it's cached for next time."
 
 Every search, fetch, and corroboration run is cached. `manage_kb`
-checks the cache before external providers, falling back only when cached
-results aren't fresh or relevant enough. It ingests text or a URL, reports
+checks the cache before external providers, falling back when cached results
+aren't fresh or relevant. It ingests text or a URL, reports
 what's cached, and removes content. Content is age-scored, expired on a
-schedule, and deduplicated by source. Retrieval runs locally with a
+schedule, and deduplicated by source and by meaning — a differing name, date,
+or number keeps a page separate. Retrieval runs locally with a
 configurable embedding model; your content never leaves the machine. Beyond
 the cache, `manage_kb` archives generated reports: ingest with
 `source_type: "report"`, pass the Source Register URLs in the receipt, and the
@@ -342,9 +343,8 @@ recall to a named `collection`, and `fresh: "blend"` keeps cached results
 beside fresh ones, reporting the kept count even when zero.
 
 Corroboration results are also kept as claim records. Each `verify_claims` run
-stores one ledger entry per finding, linked to the sources that supported it
-with the time each source was retrieved, and re-verifying a claim updates that
-entry in place instead of adding a duplicate. Cited sources are copied into
+stores one ledger entry per finding, linked to its sources with each source's
+retrieval time; re-verifying updates that entry in place. Cited sources are copied into
 the knowledge base as retrievable, hashed snapshots, so a report can be
 rechecked after the live page changes. Each snapshot reports its basis —
 fetched document or supplied snippet — and whether it was truncated. Read them
