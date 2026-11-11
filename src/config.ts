@@ -769,6 +769,23 @@ export function validateConfig(config: Config): void {
   if (!isFiniteNumber(config.output.latency_window_size) || !Number.isInteger(config.output.latency_window_size) || config.output.latency_window_size < 1) {
     errors.push("output.latency_window_size must be a positive integer");
   }
+  if (
+    config.output.latency_window_strategy !== undefined &&
+    config.output.latency_window_strategy !== "count" &&
+    config.output.latency_window_strategy !== "time" &&
+    config.output.latency_window_strategy !== "both"
+  ) {
+    errors.push("output.latency_window_strategy must be one of count, time, or both");
+  }
+  if (
+    config.output.latency_window_ms !== undefined &&
+    (!isFiniteNumber(config.output.latency_window_ms) ||
+      !Number.isInteger(config.output.latency_window_ms) ||
+      config.output.latency_window_ms < 1 ||
+      config.output.latency_window_ms > MAX_TIMER_MS)
+  ) {
+    errors.push(`output.latency_window_ms must be a positive integer no greater than ${MAX_TIMER_MS}`);
+  }
   if (config.output.degraded_latency_ms !== undefined && (!isFiniteNumber(config.output.degraded_latency_ms) || config.output.degraded_latency_ms < 0)) {
     errors.push("output.degraded_latency_ms must be a non-negative number");
   }

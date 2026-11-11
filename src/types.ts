@@ -146,6 +146,10 @@ export interface Config {
   output: {
     max_chars: number;
     latency_window_size: number;
+    /** REQ-036: which bound the latency window applies. Defaults to `both`. */
+    latency_window_strategy?: "count" | "time" | "both";
+    /** REQ-036: maximum sample age in milliseconds for the time bound. */
+    latency_window_ms?: number;
     verbose?: boolean;
     fallback_depth: number;
     max_redirect_hops: number;

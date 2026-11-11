@@ -688,6 +688,7 @@ const NUMERIC_BRANCHES = [
   "preservation.max_bytes",
   "output.max_chars",
   "output.latency_window_size",
+  "output.latency_window_ms",
   "output.fallback_depth",
   "output.max_redirect_hops",
   "output.degraded_latency_ms",
@@ -787,6 +788,22 @@ describe("numeric config hardening (REQ-067, REQ-010)", () => {
     expect(() => validateConfig(configWith("source_quality.blocklist", [""]))).toThrow(/source_quality.blocklist/);
   });
 
+  // REQ-036: the window strategy is configurable and validated as a closed set.
+  it("rejects an unknown latency window strategy and a non-positive window", () => {
+    expect(() => validateConfig(configWith("output.latency_window_strategy", "count-and-time"))).toThrow(
+      /latency_window_strategy/
+    );
+    expect(() => validateConfig(configWith("output.latency_window_ms", 0))).toThrow(/latency_window_ms/);
+    expect(() => validateConfig(configWith("output.latency_window_ms", -5))).toThrow(/latency_window_ms/);
+  });
+
+  it("accepts every declared latency window strategy", () => {
+    for (const strategy of ["count", "time", "both"]) {
+      expect(() => validateConfig(configWith("output.latency_window_strategy", strategy))).not.toThrow();
+    }
+    expect(() => validateConfig(configWith("output.latency_window_ms", 900000))).not.toThrow();
+  });
+
   it("rejects finite values that would overflow the 32-bit timer", () => {
     expect(() => validateConfig(configWith("providers.duckduckgo.timeout", 1e308))).toThrow(new RegExp("timeout"));
     expect(() => validateConfig(configWith("kb.maintenance_interval_minutes", 1e308))).toThrow(
@@ -828,6 +845,32 @@ describe("keyed provider activation (REQ-031)", () => {
 
     delete process.env["INFOBROKER_EXA_API_KEY"];
     expect(mod.getDispatchChain("general_web")).not.toContain("exa");
+  });
+});
+
+// @implements REQ-015
+describe("disabled provider exclusion in dispatch (REQ-015)", () => {
+  it("omits a disabled provider even when the chain lists it, keeping the usable tail", async () => {
+    const disabledBase: Config = {
+      ...BASE,
+      providers: {
+        ...BASE.providers,
+        duckduckgo: { ...BASE.providers.duckduckgo!, enabled: false },
+        marginalia: {
+          tier: "builtin",
+          capabilities: ["web_search"],
+          rate_limit: {},
+          enabled: true,
+          priority: 20,
+        },
+      },
+      dispatch: { ...BASE.dispatch, general_web: ["duckduckgo", "marginalia"] },
+    };
+    await loadWithOverlay(disabledBase, {});
+    const mod = await import("./config.js");
+
+    expect(mod.getDispatchChain("general_web")).not.toContain("duckduckgo");
+    expect(mod.getDispatchChain("general_web")).toContain("marginalia");
   });
 });
 
