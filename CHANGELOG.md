@@ -2,6 +2,19 @@
 
 ## 2026.11.7 — R2a review: credential pools and dispatch-state filtering
 
+- Configuration validation now rejects a declared provider `auth_env` or
+  `url_env` that is not a non-empty string, and a declared `auth_optional` that
+  is not a boolean. A falsy value was not neutral: `providerUsable` reads those
+  fields by truthiness, so `auth_env: null` silently turned a keyed provider
+  into a keyless one and it failed later with a 401 instead of being filtered
+  as `no_api_key`. `null` is therefore rejected as well, and the rejection
+  message names the provider slug and the field, never the value. A layer that
+  carries a malformed field now starts on the shipped configuration with the
+  REQ-113 startup report instead of loading cleanly and throwing in dispatch
+  (REQ-037, D-098). The twelve rejection cases, the recovery and reload cases,
+  and the no-leak assertions (startup issue, warning log, thrown message) are
+  in `src/config.test.ts` and `src/config-patch.test.ts`.
+
 - A credential-requiring provider now honors the ordered credential pool of
   REQ-104 wherever it is dispatched, not only in the three keyed providers.
   CORE read `INFOBROKER_CORE_API_KEY` once and cached it for the process, so a

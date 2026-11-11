@@ -422,7 +422,9 @@ The server SHALL validate the configuration structure on load and reload.
 Validation SHALL reject: missing required provider fields, unknown provider
 keys, dispatch chains referencing providers not declared in the configuration,
 dispatch appends naming an undeclared chain or provider, capabilities a generic
-tier cannot honor, and invalid rate-limit values. On reload, an invalid
+tier cannot honor, and invalid rate-limit values. Validation SHALL also reject
+a declared provider `auth_env` or `url_env` that is not a non-empty string, and
+a declared `auth_optional` that is not a boolean. On reload, an invalid
 configuration SHALL leave the previous configuration active without
 interruption. _Check:_ G1.
 

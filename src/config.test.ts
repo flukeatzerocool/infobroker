@@ -963,3 +963,190 @@ describe("knowledge base configuration reload (REQ-067, REQ-040)", () => {
     expect(kbMod.kbList("after-reload")[0]?.freshness_tier).toBe("stable");
   });
 });
+
+// @implements REQ-037 auth-env
+// @implements REQ-037 url-env
+// @implements REQ-037 auth-optional
+describe("provider auth field validation (REQ-037)", () => {
+  const EXA = {
+    tier: "keyed_http" as const,
+    capabilities: ["web_search"],
+    rate_limit: {},
+    enabled: true,
+    priority: 5,
+    auth_env: "INFOBROKER_EXA_API_KEY",
+  };
+
+  function withExa(field: Record<string, unknown>): Config {
+    return {
+      ...BASE,
+      providers: { ...BASE.providers, exa: { ...EXA, ...field } },
+    };
+  }
+
+  const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+    ["auth_env as a number", { auth_env: 42 }, /Provider "exa": auth_env must be a non-empty string/],
+    ["auth_env as an empty string", { auth_env: "" }, /Provider "exa": auth_env must be a non-empty string/],
+    ["auth_env as null", { auth_env: null }, /Provider "exa": auth_env must be a non-empty string/],
+    ["auth_env as an array", { auth_env: ["sk-sentinel-a"] }, /Provider "exa": auth_env must be a non-empty string/],
+    ["auth_env as a boolean", { auth_env: true }, /Provider "exa": auth_env must be a non-empty string/],
+    ["url_env as an array", { url_env: [] }, /Provider "exa": url_env must be a non-empty string/],
+    ["url_env as an empty string", { url_env: "" }, /Provider "exa": url_env must be a non-empty string/],
+    ["url_env as null", { url_env: null }, /Provider "exa": url_env must be a non-empty string/],
+    ["url_env as an object", { url_env: {} }, /Provider "exa": url_env must be a non-empty string/],
+    ["auth_optional as a string", { auth_optional: "true" }, /Provider "exa": auth_optional must be a boolean/],
+    ["auth_optional as null", { auth_optional: null }, /Provider "exa": auth_optional must be a boolean/],
+  ];
+
+  for (const [name, field, message] of cases) {
+    it(`rejects ${name}`, () => {
+      expect(() => validateConfig(withExa(field))).toThrow(message);
+    });
+  }
+
+  it("rejects a malformed field on a disabled provider", () => {
+    expect(() => validateConfig(withExa({ enabled: false, url_env: "" }))).toThrow(
+      /Provider "exa": url_env must be a non-empty string/
+    );
+  });
+
+  it("accepts auth_optional false", () => {
+    expect(() => validateConfig(withExa({ auth_optional: false }))).not.toThrow();
+  });
+
+  it("accepts an absent auth field", () => {
+    const cfg = withExa({});
+    delete (cfg.providers.exa as unknown as Record<string, unknown>)["auth_env"];
+    expect(() => validateConfig(cfg)).not.toThrow();
+  });
+});
+
+describe("provider auth field recovery and reload (REQ-037, REQ-113)", () => {
+  let dir: string;
+  let basePath: string;
+  let overlayPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ib-cfg-authfield-"));
+    basePath = join(dir, "config.json");
+    overlayPath = join(dir, "config.local.json");
+    const base: Config = {
+      ...BASE,
+      providers: {
+        ...BASE.providers,
+        exa: {
+          tier: "keyed_http",
+          capabilities: ["web_search"],
+          rate_limit: {},
+          enabled: true,
+          priority: 5,
+          auth_env: "INFOBROKER_EXA_API_KEY",
+        },
+      },
+    };
+    writeFileSync(basePath, JSON.stringify(base));
+    process.env["INFOBROKER_CONFIG"] = basePath;
+    process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+    vi.resetModules();
+  });
+
+  it("starts on shipped defaults for a malformed auth field and does not throw in dispatch", async () => {
+    const overlay = JSON.stringify({
+      providers: { exa: { enabled: true, auth_env: 42 } },
+      dispatch: { general_web: ["exa", "duckduckgo"] },
+    });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    let cfg: Config | undefined;
+    expect(() => {
+      cfg = mod.loadConfig();
+    }).not.toThrow();
+    expect(cfg?.output.max_chars).toBe(50000);
+    const issue = mod.getStartupConfigIssue();
+    expect(issue?.code).toBe("invalid_merged_user_layer");
+    expect(issue?.message).toMatch(/exa/);
+    expect(issue?.message).toMatch(/auth_env/);
+    expect(() => mod.getDispatchChain("general_web")).not.toThrow();
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+
+  it("starts on shipped defaults for a null auth field", async () => {
+    const overlay = JSON.stringify({ providers: { exa: { auth_env: null } } });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    const issue = mod.getStartupConfigIssue();
+    expect(issue?.code).toBe("invalid_merged_user_layer");
+    expect(issue?.message).toMatch(/auth_env/);
+    expect(readFileSync(overlayPath, "utf-8")).toBe(overlay);
+  });
+
+  it("rejects a malformed auth field on reload and keeps the previous configuration", async () => {
+    const overlay = JSON.stringify({ output: { max_chars: 42000 } });
+    writeFileSync(overlayPath, overlay);
+    const mod = await import("./config.js");
+    const first = mod.loadConfig();
+    expect(first.output.max_chars).toBe(42000);
+
+    writeFileSync(overlayPath, JSON.stringify({ output: { max_chars: 41000 }, providers: { exa: { auth_env: 42 } } }));
+    expect(() => mod.reloadConfig()).toThrow(/auth_env/);
+    expect(mod.getConfig().output.max_chars).toBe(42000);
+  });
+
+  it("rejects a null auth field on reload", async () => {
+    writeFileSync(overlayPath, JSON.stringify({ output: { max_chars: 42000 } }));
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    writeFileSync(overlayPath, JSON.stringify({ providers: { exa: { auth_env: null } } }));
+    expect(() => mod.reloadConfig()).toThrow(/auth_env/);
+  });
+
+  it("does not leak a credential-shaped value into the startup issue or the warning log", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const overlay = JSON.stringify({ providers: { exa: { auth_env: ["sk-sentinel-a"] } } });
+      writeFileSync(overlayPath, overlay);
+      const mod = await import("./config.js");
+      mod.loadConfig();
+      const issue = mod.getStartupConfigIssue();
+      expect(issue?.message).toBeTruthy();
+      expect(issue?.message).toMatch(/exa/);
+      expect(issue?.message).toMatch(/auth_env/);
+      expect(issue?.message).not.toContain("sk-sentinel-a");
+      expect(issue?.message).not.toContain("sk-sentin");
+      const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(logged).toBeTruthy();
+      expect(logged).toMatch(/exa/);
+      expect(logged).toMatch(/auth_env/);
+      expect(logged).not.toContain("sk-sentinel-a");
+      expect(logged).not.toContain("sk-sentin");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("throws a redacted message on the reload path", async () => {
+    writeFileSync(overlayPath, JSON.stringify({ output: { max_chars: 42000 } }));
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    writeFileSync(overlayPath, JSON.stringify({ providers: { exa: { auth_env: ["sk-sentinel-a"] } } }));
+    let message = "";
+    try {
+      mod.reloadConfig();
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toBeTruthy();
+    expect(message).toMatch(/exa/);
+    expect(message).toMatch(/auth_env/);
+    expect(message).not.toContain("sk-sentinel-a");
+    expect(message).not.toContain("sk-sentin");
+  });
+});

@@ -91,6 +91,32 @@ describe("patchUserConfigLayer (REQ-040)", () => {
     expect(existsSync(userPath)).toBe(false);
   });
 
+  it("rejects a malformed provider auth field before writing", async () => {
+    writeFileSync(
+      basePath,
+      JSON.stringify({
+        ...BASE,
+        providers: {
+          ...BASE.providers,
+          exa: {
+            tier: "keyed_http",
+            capabilities: ["web_search"],
+            rate_limit: {},
+            enabled: true,
+            priority: 5,
+            auth_env: "INFOBROKER_EXA_API_KEY",
+          },
+        },
+      })
+    );
+    const mod = await loadModule();
+    mod.loadConfig();
+    expect(() => mod.patchUserConfigLayer({ providers: { exa: { auth_env: 42 } } })).toThrow(
+      /Provider "exa": auth_env must be a non-empty string/
+    );
+    expect(existsSync(userPath)).toBe(false);
+  });
+
   it("backs up the previous layer when one exists", async () => {
     writeFileSync(userPath, JSON.stringify({ output: { hedge_enabled: false } }));
     const mod = await loadModule();

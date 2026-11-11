@@ -417,6 +417,20 @@ export function validateConfig(config: Config): void {
     if (typeof provider.enabled !== "boolean") {
       errors.push(`Provider "${slug}": missing or invalid "enabled"`);
     }
+    // REQ-037: a declared auth field must have a usable shape. A falsy value
+    // (null, "") would silently drop the credential/endpoint requirement at
+    // dispatch (`providerUsable` tests truthiness), so it is rejected rather
+    // than read as "unset". The message names the field, never the value.
+    const raw = provider as unknown as Record<string, unknown>;
+    for (const field of ["auth_env", "url_env"] as const) {
+      const value = raw[field];
+      if (value !== undefined && (typeof value !== "string" || value === "")) {
+        errors.push(`Provider "${slug}": ${field} must be a non-empty string`);
+      }
+    }
+    if (raw["auth_optional"] !== undefined && typeof raw["auth_optional"] !== "boolean") {
+      errors.push(`Provider "${slug}": auth_optional must be a boolean`);
+    }
     if (!isFiniteNumber(provider.priority)) {
       errors.push(`Provider "${slug}": missing or invalid "priority"`);
     }
