@@ -1,6 +1,7 @@
 // @implements REQ-105
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, statSync, existsSync } from "node:fs";
+// @implements REQ-105 backup-bytes
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -122,5 +123,115 @@ describe("atomic write and backup (REQ-105)", () => {
   it("returns null when there is nothing to back up", () => {
     const dir = mkdtempSync(join(tmpdir(), "ib-mig-"));
     expect(backupFile(join(dir, "absent.json"))).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R2b-ii: fresh read and read-buffer backup on the migration paths (REQ-105)
+// ---------------------------------------------------------------------------
+
+describe("migrateUserConfigLayer write ordering (REQ-105 fresh-layer, backup-bytes)", () => {
+  const BASE_CONFIG = {
+    config_version: 1,
+    providers: {
+      duckduckgo: {
+        tier: "builtin",
+        capabilities: ["web_search"],
+        rate_limit: { per_second: 0.33 },
+        enabled: true,
+        priority: 10,
+      },
+    },
+    dispatch: { general_web: ["duckduckgo"] },
+    corroboration: {
+      max_iterations: 5,
+      max_http_calls: 30,
+      confidence_threshold: 0.8,
+      first_pass_max_results: 10,
+      first_pass_max_providers: 5,
+      similarity_threshold: 0.3,
+    },
+    output: { max_chars: 50000, latency_window_size: 100, fallback_depth: 3, max_redirect_hops: 5 },
+  };
+
+  let dir: string;
+  let basePath: string;
+  let userPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "ib-migrate-order-"));
+    basePath = join(dir, "config.json");
+    userPath = join(dir, "config.local.json");
+    writeFileSync(basePath, JSON.stringify(BASE_CONFIG));
+    process.env["INFOBROKER_CONFIG"] = basePath;
+    process.env["INFOBROKER_CONFIG_LOCAL"] = userPath;
+  });
+
+  afterEach(() => {
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function loadModule() {
+    vi.resetModules();
+    return await import("./config.js");
+  }
+
+  it("applies migrations over an edit made after startup (REQ-105 fresh-layer)", async () => {
+    const stale = { config_version: 1, output: { hedge_enabled: false } };
+    writeFileSync(userPath, JSON.stringify(stale));
+    const mod = await loadModule();
+    mod.loadConfig();
+    // External edit after the startup snapshot was taken.
+    writeFileSync(
+      userPath,
+      JSON.stringify({ ...stale, corroboration: { kb_recall: true } })
+    );
+    const result = mod.migrateUserConfigLayer();
+    expect(result).not.toBeNull();
+    const written = JSON.parse(readFileSync(userPath, "utf-8"));
+    expect(written.corroboration).toEqual({ kb_recall: true });
+    expect(written.config_version).toBe(CURRENT_CONFIG_VERSION);
+  });
+
+  it("backs up the exact layer bytes it read (REQ-105 backup-bytes)", async () => {
+    const odd = '{\n  "config_version" : 1,\n  "output" : {"hedge_enabled": false}\n}\n';
+    writeFileSync(userPath, odd);
+    const mod = await loadModule();
+    mod.loadConfig();
+    const result = mod.migrateUserConfigLayer();
+    expect(result?.backup).toBeTruthy();
+    expect(readFileSync(result!.backup!, "utf-8")).toBe(odd);
+  });
+
+  it("backs up the bytes the startup auto-migration read (REQ-105 backup-bytes)", async () => {
+    const odd = '{\n  "state" : {"auto_migrate_config": true},\n  "config_version" : 1\n}\n';
+    writeFileSync(userPath, odd);
+    const mod = await loadModule();
+    mod.loadConfig();
+    const migration = mod.getStartupMigration();
+    expect(migration?.backup).toBeTruthy();
+    expect(readFileSync(migration!.backup!, "utf-8")).toBe(odd);
+  });
+
+  it("refuses to migrate an unparseable on-disk layer without writing", async () => {
+    writeFileSync(userPath, "{ not json");
+    const mod = await loadModule();
+    mod.loadConfig();
+    expect(() => mod.migrateUserConfigLayer()).toThrow();
+    expect(readFileSync(userPath, "utf-8")).toBe("{ not json");
+  });
+
+  it("exposes a buffer-taking backup that preserves the supplied bytes (REQ-105 backup-bytes)", async () => {
+    const atomic = await import("./lib/atomic-write.js");
+    const backupBytes = (atomic as Record<string, unknown>)["backupBytes"];
+    expect(typeof backupBytes).toBe("function");
+    const target = join(dir, "layer.json");
+    writeFileSync(target, "on disk now");
+    const bytes = Buffer.from("what was read", "utf-8");
+    const backup = (backupBytes as (b: Buffer, f: string) => string)(bytes, target);
+    expect(readFileSync(backup, "utf-8")).toBe("what was read");
+    expect(statSync(backup).mode & 0o777).toBe(0o600);
   });
 });

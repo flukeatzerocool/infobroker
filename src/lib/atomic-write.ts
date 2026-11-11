@@ -66,3 +66,16 @@ export function backupFile(fpath: string): string | null {
   chmodSync(dst, 0o600);
   return dst;
 }
+
+/**
+ * Write `bytes` to a timestamped sibling backup at 0600 and return the path.
+ * Use this instead of `backupFile` when the caller already holds the content it
+ * read and merged (REQ-040, REQ-105): the backup then records exactly what was
+ * merged, even if the source changed between the read and the write.
+ */
+export function backupBytes(bytes: Buffer, fpath: string): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dst = `${fpath}.bak-${stamp}-${randomBytes(3).toString("hex")}`;
+  atomicWriteFile(dst, bytes, 0o600);
+  return dst;
+}

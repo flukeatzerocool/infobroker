@@ -2379,12 +2379,12 @@ instrumentTool(
   {
     title: "Reload Configuration",
     description:
-      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json, or when passing `patch` to change configuration programmatically. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). `patch` deep-merges a partial config into the user layer (config.local.json), rejecting unknown top-level keys, backing up the previous layer, and validating the merged result before writing; `migrate` true backs up and applies registered user-layer migrations before reloading. The call re-reads the startup configuration source and reports any user-layer schema drift. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns an [OK] or [ERROR] JSON envelope.",
+      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json, or when passing `patch` to change configuration programmatically. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). `patch` merges a partial config into the user layer (config.local.json) as it exists on disk, rejecting unknown top-level keys, backing up the exact bytes read, and validating the merged result before writing; a `null` value removes that key from the layer. `migrate` true backs up and applies registered user-layer migrations before reloading. The call re-reads the startup configuration source and reports any user-layer schema drift. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns an [OK] or [ERROR] JSON envelope.",
     inputSchema: {
       patch: z
         .record(z.string(), z.unknown())
         .optional()
-        .describe("Partial configuration deep-merged into the user layer (config.local.json) before reloading; unknown top-level keys are rejected and the previous layer is backed up"),
+        .describe("Partial configuration merged into the user layer (config.local.json) as it exists on disk before reloading; a `null` value removes that key, unknown top-level keys are rejected, and the exact bytes read are backed up"),
       migrate: z
         .boolean()
         .optional()

@@ -2,6 +2,17 @@
 
 ## 2026.11.7 — R2a review: credential pools and dispatch-state filtering
 
+- `reload_config`'s `patch` now merges over the user layer as it exists on disk
+  at call time, so an edit made while the server was running is no longer
+  overwritten, and every config write backs up the exact bytes it read instead
+  of copying the file at backup time (REQ-040, REQ-105, D-099). A `null` value
+  in a patch removes that key from the layer — the config-level way to clear a
+  declared provider `auth_env`, `url_env`, or `auth_optional` that the shipped
+  config does not also declare; a shipped declaration is restored by removal,
+  and `auth_optional: true` covers a keyless use. An unreadable user layer is
+  refused rather than overwritten. The fresh-read, backup, and removal cases
+  are in `src/config-patch.test.ts` and `src/config-migrations.test.ts`.
+
 - Configuration validation now rejects a declared provider `auth_env` or
   `url_env` that is not a non-empty string, and a declared `auth_optional` that
   is not a boolean. A falsy value was not neutral: `providerUsable` reads those

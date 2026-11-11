@@ -9,7 +9,7 @@ import {
   CURRENT_CONFIG_VERSION,
   type ConfigDrift,
 } from "./config-migrations.js";
-import { atomicWriteFile, backupFile } from "./lib/atomic-write.js";
+import { atomicWriteFile, backupBytes } from "./lib/atomic-write.js";
 import { REGISTERED_PROVIDER_SLUGS } from "./providers/registered-slugs.js";
 import { hasUsableKeyForEnv, poolKeysForEnv } from "./key-pool.js";
 
@@ -165,6 +165,17 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8"));
 }
 
+/**
+ * Read the user layer once and keep the exact bytes (REQ-040, REQ-105).
+ * A malformed file throws: a caller must never write over a layer it could not
+ * read. A non-object document is reported as "no layer", matching load.
+ */
+function readUserLayerFile(userPath: string): { bytes: Buffer; layer: Record<string, unknown> | null } {
+  const bytes = readFileSync(userPath);
+  const parsed: unknown = JSON.parse(bytes.toString("utf-8"));
+  return { bytes, layer: isPlainObject(parsed) ? parsed : null };
+}
+
 function loadConfigFromDisk(recoverUserLayer = false): Config {
   const base = readJson(getConfigPath()) as Config;
   shippedTopLevel = Object.keys(base as unknown as Record<string, unknown>);
@@ -172,9 +183,11 @@ function loadConfigFromDisk(recoverUserLayer = false): Config {
   startupMigration = null;
   const userPath = getUserConfigPath();
   let rawUser: unknown = null;
+  let rawUserBytes: Buffer | null = null;
   if (userPath && existsSync(userPath)) {
     try {
-      rawUser = readJson(userPath);
+      rawUserBytes = readFileSync(userPath);
+      rawUser = JSON.parse(rawUserBytes.toString("utf-8"));
     } catch (e) {
       if (!recoverUserLayer) throw e;
       startupConfigIssue = {
@@ -197,7 +210,7 @@ function loadConfigFromDisk(recoverUserLayer = false): Config {
       try {
         validateConfig(candidate);
         try {
-          const backup = backupFile(userPath);
+          const backup = backupBytes(rawUserBytes!, userPath);
           atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(applied.layer, null, 2)}\n`, "utf-8"));
           userConfigLayer = applied.layer;
           startupMigration = { changes: applied.changes, backup, path: userPath };
@@ -262,10 +275,12 @@ export function applyUserLayerMigrations(layer: Record<string, unknown>): {
 }
 
 /**
- * REQ-105: opt-in migration of the user configuration layer. Backs up the
- * existing file, applies registered migrations and the current schema stamp,
- * and commits atomically. Returns the applied changes and the backup path, or
- * null when there is no user layer or nothing to change.
+ * REQ-105: opt-in migration of the user configuration layer. Reads the layer as
+ * it exists on disk now, backs up the exact bytes read, applies registered
+ * migrations and the current schema stamp, and commits atomically. Returns the
+ * applied changes and the backup path, or null when there is no user layer or
+ * nothing to change. A layer that cannot be parsed throws rather than being
+ * overwritten (REQ-113).
  */
 export function migrateUserConfigLayer(): {
   changes: string[];
@@ -274,23 +289,65 @@ export function migrateUserConfigLayer(): {
 } | null {
   const userPath = getUserConfigPath();
   if (!userPath || !existsSync(userPath)) return null;
-  if (!userConfigLayer) return null;
 
-  const { layer, changes } = applyUserLayerMigrations(userConfigLayer);
+  const { bytes, layer: freshLayer } = readUserLayerFile(userPath);
+  if (!freshLayer) return null;
+
+  const { layer, changes } = applyUserLayerMigrations(freshLayer);
   if (changes.length === 0) return null;
 
-  const backup = backupFile(userPath);
+  const backup = backupBytes(bytes, userPath);
   atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(layer, null, 2)}\n`, "utf-8"));
   userConfigLayer = layer;
   return { changes, backup, path: userPath };
 }
 
 /**
+ * REQ-040: a `null` leaf in a patch means "remove this key from the user layer".
+ * The returned patch carries every non-null value; the removal list carries the
+ * paths to delete after the merge.
+ */
+function splitNullRemovals(
+  value: Record<string, unknown>,
+  prefix: string[] = []
+): { patch: Record<string, unknown>; removals: string[][] } {
+  const patch: Record<string, unknown> = {};
+  const removals: string[][] = [];
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === null) {
+      removals.push([...prefix, key]);
+      continue;
+    }
+    if (isPlainObject(entry)) {
+      const nested = splitNullRemovals(entry, [...prefix, key]);
+      removals.push(...nested.removals);
+      if (Object.keys(nested.patch).length > 0) patch[key] = nested.patch;
+      continue;
+    }
+    patch[key] = entry;
+  }
+  return { patch, removals };
+}
+
+function deleteAtPaths(layer: Record<string, unknown>, removals: string[][]): Record<string, unknown> {
+  for (const path of removals) {
+    let node: unknown = layer;
+    for (const segment of path.slice(0, -1)) {
+      node = isPlainObject(node) ? node[segment] : undefined;
+    }
+    if (isPlainObject(node)) delete node[path[path.length - 1]];
+  }
+  return layer;
+}
+
+/**
  * REQ-040: apply a caller-supplied configuration patch to the user layer.
- * The patch is deep-merged, the merged configuration is validated before any
- * write, the previous layer is backed up, and the write is atomic. An unknown
- * top-level key or an invalid merged configuration throws before disk is
- * touched, so the caller keeps the previous configuration active.
+ * The patch is deep-merged over the layer as it exists on disk now, a `null`
+ * leaf removes that key, the merged configuration is validated before any
+ * write, the bytes that were read are backed up, and the write is atomic. An
+ * unknown top-level key, an unreadable layer, or an invalid merged
+ * configuration throws before disk is touched, so the caller keeps the previous
+ * configuration active.
  */
 export function patchUserConfigLayer(patch: Record<string, unknown>): {
   path: string;
@@ -306,12 +363,19 @@ export function patchUserConfigLayer(patch: Record<string, unknown>): {
       throw new Error(`Unknown configuration key "${key}" — the patch may only set keys the shipped schema declares`);
     }
   }
-  const existing = userConfigLayer ?? {};
-  const nextLayer = mergeLayer(existing, patch);
+  let existing: Record<string, unknown> = {};
+  let existingBytes: Buffer | null = null;
+  if (existsSync(userPath)) {
+    const fresh = readUserLayerFile(userPath);
+    existing = fresh.layer ?? {};
+    existingBytes = fresh.bytes;
+  }
+  const { patch: effectivePatch, removals } = splitNullRemovals(patch);
+  const nextLayer = deleteAtPaths(mergeLayer(existing, effectivePatch), removals);
   // Validate the merged result before touching disk (REQ-040).
   const merged = applyDefaults(mergeLayer(base, nextLayer));
   validateConfig(merged);
-  const backup = backupFile(userPath);
+  const backup = existingBytes ? backupBytes(existingBytes, userPath) : null;
   atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(nextLayer, null, 2)}\n`, "utf-8"));
   userConfigLayer = nextLayer;
   return { path: userPath, backup, changed: Object.keys(patch) };
