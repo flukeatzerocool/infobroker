@@ -26,6 +26,10 @@ export interface StubProviderOptions {
   servePages?: boolean;
   /** Per-result content text for the `ok` mode. */
   contents?: string[];
+  /** HTML body served for every `/page/N` request (defaults to the fixed stub page). */
+  pageBody?: string;
+  /** Extra headers served with every `/page/N` response (e.g. `last-modified`). */
+  pageHeaders?: Record<string, string>;
 }
 
 export interface StubProvider {
@@ -55,9 +59,10 @@ export async function startStubProvider(
     // A result URL served by this stub returns a small HTML page, so a deep
     // read can fetch it without leaving the loopback interface.
     if ((req.url ?? "").startsWith("/page/")) {
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...(options.pageHeaders ?? {}) });
       res.end(
-        `<html><head><title>Stub page</title></head><body><p>Stub page content for deep reading with ranked passages and queries.</p></body></html>`
+        options.pageBody ??
+          `<html><head><title>Stub page</title></head><body><p>Stub page content for deep reading with ranked passages and queries.</p></body></html>`
       );
       return;
     }
@@ -157,6 +162,10 @@ export interface HermeticConfigOptions {
   chains?: Record<string, string[]>;
   /** Overrides merged into the shipped `output` block (e.g. hedge timings). */
   output?: Record<string, unknown>;
+  /** Overrides merged into the shipped `fetch` block (e.g. private-target permission). */
+  fetch?: Record<string, unknown>;
+  /** Overrides merged into the shipped `kb` block (e.g. auto-index). */
+  kb?: Record<string, unknown>;
   /** Write the call log and audit log into the temp root. */
   fileLogs?: boolean;
 }
@@ -187,6 +196,7 @@ export function writeHermeticConfig(
   const config = JSON.parse(readFileSync(join(REPO_ROOT, "config.json"), "utf-8")) as {
     kb?: Record<string, unknown>;
     output?: Record<string, unknown>;
+    fetch?: Record<string, unknown>;
     dispatch: Record<string, string[]>;
     providers: Record<string, Record<string, unknown>>;
   };
@@ -222,6 +232,8 @@ export function writeHermeticConfig(
     config.dispatch[taskType] = options.chains?.[taskType] ?? [...chain];
   }
   if (options.output) config.output = { ...(config.output ?? {}), ...options.output };
+  if (options.fetch) config.fetch = { ...(config.fetch ?? {}), ...options.fetch };
+  if (options.kb) config.kb = { ...(config.kb ?? {}), ...options.kb };
 
   let callLogPath: string | undefined;
   let auditLogPath: string | undefined;
