@@ -54,6 +54,26 @@ test("finalizeToolResult synthesizes an object for non-JSON text", () => {
   expect(finalized.structuredContent).toMatchObject({ status: "ok", provider: "none", results: [], message: "plain text" });
 });
 
+// REQ-027a: a tool may declare metadata that survives compact verbosity, and
+// the retained keys must appear in both surfaces the shaper rewrites.
+test("finalizeToolResult keeps a tool-scoped required meta set under compact verbosity", () => {
+  const body = `[OK] ${JSON.stringify({
+    status: "ok",
+    provider: "academic",
+    results: [{ title: "t", url: "u", authors: [], bibtex: "@misc{x}" }],
+    meta: { query_time_ms: 4, providers: [{ slug: "openalex", status: "ok" }], no_results: true, diagnostic: "none" },
+  })}`;
+  const finalized = finalizeToolResult(textResult(body), [], true, undefined, ["providers", "no_results", "diagnostic"]);
+  expect(finalized.structuredContent.meta).toEqual({
+    providers: [{ slug: "openalex", status: "ok" }],
+    no_results: true,
+    diagnostic: "none",
+  });
+  const text = (finalized.content as Array<{ text: string }>)[0].text;
+  expect(text).toContain('"providers"');
+  expect(text).not.toContain("query_time_ms");
+});
+
 test("finalizeToolResult merges notices into structured content", () => {
   const notice = { code: "config_drift", message: "drift" };
   const result = textResult(`[OK] ${JSON.stringify({ status: "ok", provider: "x", results: [] })}`);

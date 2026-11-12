@@ -1,6 +1,12 @@
 // @implements REQ-079
 import { describe, it, expect } from "vitest";
-import { compactEnvelope, compactMode, compactResults } from "./verbosity.js";
+import {
+  CITATION_REQUIRED_META_KEYS,
+  compactEnvelope,
+  compactMode,
+  compactResults,
+  pickRequiredMeta,
+} from "./verbosity.js";
 
 describe("compactMode (REQ-079)", () => {
   it("is off when verbose is true or undefined", () => {
@@ -86,5 +92,59 @@ describe("compactEnvelope (REQ-079)", () => {
       meta: { query_time_ms: 4, language_unsupported: ["mojeek"] },
     });
     expect(out.meta).toEqual({ language_unsupported: ["mojeek"] });
+  });
+});
+
+// REQ-027a: get_citations declares a tool-scoped required set, so its
+// per-provider status and zero-result diagnostic survive compact verbosity
+// while optional metadata and every other tool's shape stay unchanged.
+describe("compactEnvelope tool-scoped required meta (REQ-027a)", () => {
+  it("retains the citation fields when the tool declares them", () => {
+    const out = compactEnvelope(
+      {
+        status: "ok",
+        provider: "academic",
+        results: [{ title: "t", url: "u", authors: [], bibtex: "@misc{x}" }],
+        meta: {
+          query_time_ms: 4,
+          deduped: 1,
+          providers: [{ slug: "openalex", status: "ok" }],
+          no_results: true,
+          diagnostic: "No references matched: openalex=ok",
+        },
+      },
+      CITATION_REQUIRED_META_KEYS,
+    );
+    expect(out.meta).toEqual({
+      providers: [{ slug: "openalex", status: "ok" }],
+      no_results: true,
+      diagnostic: "No references matched: openalex=ok",
+    });
+  });
+
+  it("drops the same fields for a tool that does not declare them", () => {
+    const out = compactEnvelope({
+      status: "ok",
+      provider: "academic",
+      results: [],
+      meta: { providers: [{ slug: "openalex", status: "ok" }], no_results: true },
+    });
+    expect(out).not.toHaveProperty("meta");
+  });
+
+  it("leaves the default required set unchanged", () => {
+    const out = compactEnvelope({
+      status: "ok",
+      provider: "x",
+      results: [],
+      meta: { per_query: [{ query: "a", status: "ok" }], providers: [{ slug: "p", status: "ok" }] },
+    });
+    expect(out.meta).toEqual({ per_query: [{ query: "a", status: "ok" }] });
+  });
+
+  it("keeps only the declared keys through pickRequiredMeta", () => {
+    expect(
+      pickRequiredMeta({ providers: [{ slug: "p", status: "ok" }], query_time_ms: 1 }, CITATION_REQUIRED_META_KEYS),
+    ).toEqual({ providers: [{ slug: "p", status: "ok" }] });
   });
 });

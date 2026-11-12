@@ -21,12 +21,22 @@ export function compactResults(results: SearchResult[]): SearchResult[] {
 }
 
 /** Meta fields that another REQ makes required even under compact verbosity. */
-const REQUIRED_META_KEYS = ["per_query", "fact_status", "language_unsupported"] as const;
+export const REQUIRED_META_KEYS = ["per_query", "fact_status", "language_unsupported"] as const;
+
+/**
+ * REQ-027a: `get_citations` must report each attempted provider's status and,
+ * for a zero-result answer, name the providers tried. These stay required only
+ * for that tool, so no other tool's compact shape changes.
+ */
+export const CITATION_REQUIRED_META_KEYS = ["providers", "no_results", "diagnostic"] as const;
 
 /** The required-meta subset of a meta block, for handlers that shape responses themselves. */
-export function pickRequiredMeta(meta: Record<string, unknown>): Record<string, unknown> {
+export function pickRequiredMeta(
+  meta: Record<string, unknown>,
+  requiredKeys: readonly string[] = REQUIRED_META_KEYS,
+): Record<string, unknown> {
   const kept: Record<string, unknown> = {};
-  for (const key of REQUIRED_META_KEYS) {
+  for (const key of requiredKeys) {
     if (key in meta) kept[key] = meta[key];
   }
   return kept;
@@ -44,7 +54,10 @@ function isSearchResult(value: unknown): value is SearchResult {
  * payloads (verify_claims) keep their fields. Action-required notices survive;
  * informational notices are optional metadata and are dropped.
  */
-export function compactEnvelope<T extends Record<string, unknown>>(envelope: T): T {
+export function compactEnvelope<T extends Record<string, unknown>>(
+  envelope: T,
+  requiredKeys: readonly string[] = REQUIRED_META_KEYS,
+): T {
   const out: Record<string, unknown> = { ...envelope };
 
   if (Array.isArray(out.results) && out.results.length > 0 && out.results.every(isSearchResult)) {
@@ -55,7 +68,7 @@ export function compactEnvelope<T extends Record<string, unknown>>(envelope: T):
   if (meta && typeof meta === "object" && !Array.isArray(meta)) {
     const source = meta as Record<string, unknown>;
     const kept: Record<string, unknown> = {};
-    for (const key of REQUIRED_META_KEYS) {
+    for (const key of requiredKeys) {
       if (key in source) kept[key] = source[key];
     }
     if (Object.keys(kept).length > 0) out.meta = kept;

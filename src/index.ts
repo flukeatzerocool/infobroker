@@ -38,7 +38,7 @@ import { orderByRelevance, reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
 import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
 import { createLatencyTracker } from "./latency.js";
-import { compactMode, compactResults, pickRequiredMeta } from "./verbosity.js";
+import { compactMode, compactResults, CITATION_REQUIRED_META_KEYS, pickRequiredMeta } from "./verbosity.js";
 import { requestLimit } from "./normalizer.js";
 import { deriveResearchVariants, compileResearchGroups } from "./research.js";
 import { keyPoolStatus } from "./key-pool.js";
@@ -1819,6 +1819,12 @@ async function withStructuredFacts(content: string, query: string | string[]): P
   return `[OK] ${json(applyFactsToEnvelope(payload, enrichment))}`;
 }
 
+// REQ-027a: get_citations must keep these meta fields under compact verbosity,
+// where every other tool keeps only the global required set.
+const TOOL_REQUIRED_META: Record<string, readonly string[]> = {
+  infobroker_get_citations: CITATION_REQUIRED_META_KEYS,
+};
+
 // --- search_web ---
 const instrumentTool = (name: string, config: any, handler: any) =>
   server.registerTool(name, config, async (...args: any[]) => {
@@ -1832,7 +1838,7 @@ const instrumentTool = (name: string, config: any, handler: any) =>
       return finalizeToolResult(injectNotices(result, notices), notices, compactMode(getConfig()), (text) => {
         const bounded = maybeTruncate(text, getConfig().output.response_max_chars ?? getConfig().output.max_chars);
         return { text: bounded.text, truncated: bounded.truncated, ...(bounded.outputPath ? { outputPath: bounded.outputPath } : {}) };
-      });
+      }, TOOL_REQUIRED_META[name]);
     } catch (error) {
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, false);
@@ -2681,22 +2687,19 @@ instrumentTool(
           ],
         };
       }
-      const compact = compactMode(getConfig());
-      const meta = compact
-        ? undefined
-        : {
-            query_time_ms: report.elapsedMs,
-            deduped: report.deduped,
-            providers: report.providers,
-            ...(report.citations.length === 0
-              ? {
-                  no_results: true,
-                  diagnostic: `No references matched: ${report.providers
-                    .map((p) => `${p.slug}=${p.status}`)
-                    .join(", ")}`,
-                }
-              : {}),
-          };
+      const meta = {
+        query_time_ms: report.elapsedMs,
+        deduped: report.deduped,
+        providers: report.providers,
+        ...(report.citations.length === 0
+          ? {
+              no_results: true,
+              diagnostic: `No references matched: ${report.providers
+                .map((p) => `${p.slug}=${p.status}`)
+                .join(", ")}`,
+            }
+          : {}),
+      };
       return {
         content: [
           {
@@ -2705,7 +2708,7 @@ instrumentTool(
               status: "ok",
               provider: "academic",
               results,
-              ...(meta ? { meta } : {}),
+              meta,
             })}`,
           },
         ],

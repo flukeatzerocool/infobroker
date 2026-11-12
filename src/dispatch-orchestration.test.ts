@@ -1,4 +1,4 @@
-// @implements REQ-031 REQ-031a REQ-034 REQ-038 REQ-015
+// @implements REQ-031 REQ-031a REQ-034 REQ-038 REQ-015 REQ-027a
 // Dispatch orchestration is asserted through the spawned server against
 // loopback providers, so the hedge switch, cross-task fallback, empty-vs-error
 // distinction, exhaustion skip, and cooldown skip are measured on the real
@@ -560,6 +560,54 @@ describe("deep-reading snapshot reporting (REQ-122)", () => {
       const payload = await search(call, { query: "deep snapshot probe", deep: true });
       expect(payload.status).toBe("ok");
       expect((payload.results ?? []).every((r) => r.snapshot_sha256 === undefined)).toBe(true);
+    });
+  });
+});
+
+// F-R5-E-3 / REQ-027a: compact verbosity must not drop the per-provider status
+// or the zero-result provider list that REQ-027a requires unconditionally.
+describe("compact get_citations metadata (REQ-027a)", () => {
+  async function citations(
+    call: (method: string, params: unknown) => Promise<RpcMessage>,
+    args: Record<string, unknown>,
+  ): Promise<ToolPayload> {
+    const msg = await call("tools/call", { name: "infobroker_get_citations", arguments: args });
+    const text = (msg.result as { content?: Array<{ text?: string }> } | undefined)?.content?.[0]?.text ?? "";
+    return parse(text);
+  }
+
+  test("retains per-provider status under compact verbosity", async () => {
+    const a = await stub("ok");
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      chains: { academic: ["stub_a"] },
+      output: { verbose: false },
+    });
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await citations(call, { query: "compact citation probe", max_results: 3 });
+      expect(payload.status).toBe("ok");
+      expect(payload.results.length).toBeGreaterThan(0);
+      const providers = payload.meta?.providers as Array<{ slug: string; status: string }> | undefined;
+      expect(Array.isArray(providers)).toBe(true);
+      expect(providers?.some((p) => p.slug === "stub_a" && p.status === "ok")).toBe(true);
+    });
+  });
+
+  test("retains the zero-result provider list and diagnostic under compact verbosity", async () => {
+    const a = await stub("empty");
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      chains: { academic: ["stub_a"] },
+      output: { verbose: false },
+    });
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await citations(call, { query: "empty citation probe", max_results: 3 });
+      expect(payload.status).toBe("ok");
+      expect(payload.results).toEqual([]);
+      const providers = payload.meta?.providers as Array<{ slug: string; status: string }> | undefined;
+      expect(providers?.some((p) => p.slug === "stub_a")).toBe(true);
+      expect(payload.meta?.no_results).toBe(true);
+      expect(String(payload.meta?.diagnostic)).toContain("stub_a");
     });
   });
 });

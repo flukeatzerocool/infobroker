@@ -64,6 +64,7 @@ export function finalizeToolResult<T extends ToolResultLike>(
   notices: readonly unknown[],
   compact = false,
   truncate?: (text: string) => { text: string; truncated: boolean; outputPath?: string },
+  requiredMetaKeys?: readonly string[],
 ): T & { structuredContent: Record<string, unknown> } {
   const base = { ...(result as Record<string, unknown>) };
   let structured =
@@ -89,7 +90,7 @@ export function finalizeToolResult<T extends ToolResultLike>(
   }
 
   if (compact) {
-    structured = compactEnvelope(structured);
+    structured = compactEnvelope(structured, requiredMetaKeys);
 
     // REQ-079: the human-readable text must agree with the compacted
     // structuredContent. Raw mode has no JSON envelope, so its plain text is
