@@ -322,7 +322,7 @@ When `verify_claims` computes a finding's confidence, the confidence SHALL refle
 Each finding returned by `verify_claims` SHALL associate every corroborating source with the specific claim that source supports. A finding SHALL report, alongside its verdict and confidence, the per-source claim text. A source SHALL be attributed to a claim only when the source text overlaps that claim's content; unrelated results SHALL NOT be attributed. _Check:_ G1.
 
 **REQ-026c — corroboration source preservation**
-WHEN source preservation is enabled in the configuration, `verify_claims` SHALL attempt to capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. _Check:_ G1.
+WHEN source preservation is enabled in the configuration, `verify_claims` SHALL attempt to capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. Archiving SHALL be disableable without disabling source snapshots. _Check:_ G1.
 
 **REQ-026d — corroboration provenance record**
 The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, the per-source-type contribution to each finding, the effective configuration hash, and for each source its retrieval time, content hash, source family, and provider. The record SHALL be present in verbose output. _Check:_ G1.
