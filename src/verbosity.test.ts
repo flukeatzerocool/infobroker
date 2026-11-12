@@ -75,4 +75,16 @@ describe("compactEnvelope (REQ-079)", () => {
     const out = compactEnvelope({ status: "ok", provider: "corroborate", results: findings });
     expect(out.results).toEqual(findings);
   });
+
+  // F-R3-20 / REQ-128: the chain-wide language report is required, so compact
+  // shaping retains it while still dropping optional metadata.
+  it("retains the language report in compact verbosity", () => {
+    const out = compactEnvelope({
+      status: "ok",
+      provider: "duckduckgo",
+      results: [],
+      meta: { query_time_ms: 4, language_unsupported: ["mojeek"] },
+    });
+    expect(out.meta).toEqual({ language_unsupported: ["mojeek"] });
+  });
 });

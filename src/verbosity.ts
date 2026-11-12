@@ -21,7 +21,16 @@ export function compactResults(results: SearchResult[]): SearchResult[] {
 }
 
 /** Meta fields that another REQ makes required even under compact verbosity. */
-const REQUIRED_META_KEYS = ["per_query", "fact_status"] as const;
+const REQUIRED_META_KEYS = ["per_query", "fact_status", "language_unsupported"] as const;
+
+/** The required-meta subset of a meta block, for handlers that shape responses themselves. */
+export function pickRequiredMeta(meta: Record<string, unknown>): Record<string, unknown> {
+  const kept: Record<string, unknown> = {};
+  for (const key of REQUIRED_META_KEYS) {
+    if (key in meta) kept[key] = meta[key];
+  }
+  return kept;
+}
 
 function isSearchResult(value: unknown): value is SearchResult {
   if (!value || typeof value !== "object") return false;
