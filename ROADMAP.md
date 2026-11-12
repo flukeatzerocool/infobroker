@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R7 report-contract evidence remediation
-
-- Add a defect fixture and asserting test for the `register-url` branch (F-R7-C-1), the `undeterminable` publication-date branch (F-R7-C-3), and the `manifest-likelihood`/`manifest-verdict` vocabularies (F-R7-C-5).
-- Enforce the Fact-Check shape block so a report missing its verdict table is rejected (F-R7-C-2), and assert the register `interests`/`source`/`type` branches (F-R7-C-4).
-- Each change ships with a CHANGELOG entry when behavior changes and a re-run of `check-report-fixtures`.
-
-**Trigger:** start after chunk R8 closes; close when F-R7-C-1, F-R7-C-2, F-R7-C-3, F-R7-C-4, and F-R7-C-5 are `Resolved`.
-
 ## R7 monitoring and watchlist remediation
 
 - Baseline a report with a verification receipt and revalidate it with `verify_report` before comparing (F-R7-E-1).
