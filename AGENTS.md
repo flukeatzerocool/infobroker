@@ -13,7 +13,7 @@ Knowledge base: src/kb.ts (tool logic) → src/kb-store.ts (seam + artifact pred
 | Tool | Purpose |
 |------|---------|
 | `infobroker_search_web` | Unified search across providers with fallback chain, task-type auto-selection, and suggestion mode |
-| `infobroker_fetch_page` | Fetch URL content via Jina Reader (default) or native HTTP |
+| `infobroker_fetch_page` | Fetch URL content through the renderer chain (Jina Reader primary) or native HTTP |
 | `infobroker_verify_claims` | Multi-pass truth-finding with cross-source verification |
 | `infobroker_get_citations` | Academic references as BibTeX citations |
 | `infobroker_inspect_providers` | Provider operational state: list, health, or spec actions |

@@ -265,7 +265,7 @@ WHEN `search_web` returns results, including knowledge-base recall used to answe
 WHEN `search_web` receives an array of queries, a failing element SHALL NOT fail the batch. The response SHALL return every successful element's results with per-input metadata, and SHALL report each failed element's error in that metadata. The batch SHALL report success when at least one element succeeds, and SHALL return an error per REQ-002 only when every element fails. Per-input metadata SHALL name the input, the serving provider, and the status, and SHALL report the ranked passage count and truncation state when those apply to the element. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` default, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, and `extract`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
+Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` primary, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, `extract`, and `raw`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
 
 **REQ-021a — `fetch_page` network-target safety**
 WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
@@ -841,8 +841,12 @@ Tool responses are JSON with this envelope:
 ### 6.4 Jina Reader
 Append the target URL to `https://r.jina.ai/`. Example:
 `https://r.jina.ai/https://example.com/article`. Jina returns the page content
-rendered as Markdown. Falls back to native HTTP GET + HTML-to-text extraction
-when Jina returns 429 or an error.
+rendered as Markdown and is the primary renderer in the shipped `content_fetch`
+chain. When it is slow, the chain hedges to the next renderer after the grace
+window; when it returns 429 or another error, or serves an anti-bot challenge
+page, the tool falls through to the next renderer instead of returning the
+challenge (REQ-021, REQ-021f). The shipped fallback is a native HTTP GET with
+HTML-to-text extraction.
 
 ---
 
@@ -1428,7 +1432,7 @@ different shipped default (REQ-010).
 | Old (DuckDuckGo MCP) | New (Infobroker) |
 |----------------------|-------------------|
 | `duckduckgo_web_search` | `search_web` — DuckDuckGo is still the default provider, with fallback |
-| `duckduckgo_get_page_content` | `fetch_page` — Jina Reader as default renderer, native fallback |
+| `duckduckgo_get_page_content` | `fetch_page` — Jina Reader primary in the renderer chain, native fallback |
 | `duckduckgo_suggest_related_searches` | `search_web` with `suggest` — DuckDuckGo autocomplete, same endpoint |
 | (none) | `search_web` auto-selection — task-type routing (was `choose_provider`) |
 | (none) | `verify_claims` — multi-pass truth-finding |

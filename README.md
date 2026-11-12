@@ -251,9 +251,10 @@ object, so programmatic clients read fields instead of parsing text.
 > "Get the text of that page about the Death Star plans."
 > "Where, in that report, does it mention the reactor core?"
 
-`fetch_page` hands any URL to Jina Reader, which renders it as clean
-Markdown optimized for LLM consumption. It falls back to native HTTP when
-Jina is throttled. Wikipedia and Internet Archive have dedicated
+`fetch_page` hands any URL to the renderer chain, which starts with Jina
+Reader and renders it as clean Markdown optimized for LLM consumption. It
+falls back to native HTTP when the primary renderer is slow, throttled, or
+errors. Wikipedia and Internet Archive have dedicated
 renderers for source-specific extraction. Ask a page a question — pass
 `question` to `fetch_page` and it returns the passages that answer it, each
 scored and ranked, instead of the whole document. Fetch several URLs at once
