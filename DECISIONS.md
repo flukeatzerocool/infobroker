@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### D-108: The Reference Directory Is the Citation Surface, and Bare-Tool Detection Is Bounded (2026.11.12)
+
+REQ-107 requires every tool reference in the client routing surface to resolve
+and a renamed tool to fail the gate. Decision: the surface is the instruction
+file, `SKILL.md`, and **every** file in `skills/infobroker/references/`, derived
+by the gate rather than registered by hand. That is a modest superset of the
+routing tables named in `infobroker.md:172`; the superset is intentional because
+a reference file is where a reader is sent to act. An unknown bare token is
+treated as a citation only when it carries `action:`/`operation:` arguments, is
+within edit distance 2 of a registered slug, or uses a registered slug as a
+prefix or suffix. The durable false-positive budget is the gate's **0 findings**
+over the corpus (172 citations at adoption); the 599-token classification
+(165 known, 183 non-name shapes, 251 prose) is a one-off observation, not a
+committed artifact. A reordered or unrelated bare rename (`web_search`,
+`lookup`) remains indistinguishable from prose and is a recorded by-design
+limit, not a discharged part of REQ-107. Other skill reference directories are
+outside the contract because they cite no tool today; widening the surface there
+is a new decision. A hit is fixed by rephrasing the prose or registering the
+tool, never by loosening the rule silently.
+
 ### D-107: The Technique Catalog Claims Five Families, Not Six (2026.11.12)
 
 REQ-088 requires at least six techniques across at least three tradecraft
