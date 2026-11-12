@@ -14,12 +14,12 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R5 corroboration remediation
+## KB recalled-source provenance
 
-- Stop unrelated results from being attributed through stopword overlap (F-R5-A-1), make `confidence_threshold` gate the `confirmed` verdict instead of the fixed 0.5 cutoff (F-R5-A-2), and prevent a knowledge-base-only corroboration from reaching `confirmed` (F-R5-D-1).
-- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
+- Report the ingest provider of each knowledge-base-recalled source in the corroboration provenance record; the recall mapping currently drops it, so REQ-026d's per-source `provider` field is absent for recalled sources.
+- Ship a test asserting the provenance entry of a recalled source, a CHANGELOG entry, and a re-run of the gates it feeds.
 
-**Trigger:** start after chunk R6 closes; close when F-R5-A-1, F-R5-A-2, and F-R5-D-1 are `Resolved`.
+**Trigger:** start with the next `verify_claims` provenance change; close when a recalled source reports its provider in the provenance record.
 
 ## R5 snapshot and family remediation
 

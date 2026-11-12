@@ -2,6 +2,22 @@
 
 ## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
 
+- `verify_claims` no longer attributes a result to a claim through stopword
+  overlap: attribution judges overlap on content tokens only, so a shared
+  "the"/"was" cannot manufacture support (REQ-026b; `src/corroborate.ts`;
+  `src/corroborate.test.ts`). Confirmation is now gated by the effective
+  `confidence_threshold` — configuration value or caller override — instead of
+  the fixed 0.5 cutoff, and a below-threshold finding keeps its computed
+  confidence and reports `unverified` rather than falling through to `contested`
+  (REQ-026; `src/corroborate.ts`; `src/corroborate.test.ts`). A finding is never
+  `confirmed` from knowledge-base recall alone: recalled sources carry a
+  `retrieval_origin` marker, at least one agreeing source must come from a live
+  provider, and a live result for the same URL clears the marker (REQ-026e;
+  `src/types.ts`, `src/corroborate.ts`; `src/corroborate.test.ts`).
+- `verify_claims`' threshold and external-source conditions are now stated in
+  REQ-026, §8.1, §8.2, and the README (REQ-026, REQ-026e; `infobroker.md`,
+  `README.md`).
+
 - `fetch_page` no longer discards a page whose title merely contains "CAPTCHA":
   the marker is now a weak signal that counts only when the page has almost no
   visible text, while the strong title, body, and challenge-script markers are
