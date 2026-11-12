@@ -1075,6 +1075,60 @@ describe("corroborate", () => {
     expect(result.total_sources).toBeGreaterThanOrEqual(2);
   });
 
+  // @implements REQ-026d recalled-source-provider
+  it("reports the ingest provider of a recalled source in the provenance record", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: true },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(kbSearch).mockReturnValue([
+      { score: 0.9, freshness_score: 0.8, freshness_tier: "stable", source_url: "https://wiki.example/recalled", title: "Recalled Topic", snippet: "recalled corroborating claim about the topic", collection: "default", provider: "wikipedia", source_type: "encyclopedia", ingested_at: Date.now() },
+    ]);
+
+    const result = await corroborate("topic", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Recalled Topic Match", "https://a.com/1", "recalled corroborating claim")],
+      },
+    });
+
+    const findingSource = result.findings
+      .flatMap((f) => f.sources)
+      .find((s) => s.url === "https://wiki.example/recalled");
+    expect(findingSource?.retrieval_origin).toBe("knowledge_base");
+    expect(findingSource?.provider).toBe("wikipedia");
+
+    const provenanceEntry = result.provenance?.sources?.find((s) => s.url === "https://wiki.example/recalled");
+    expect(provenanceEntry).toBeDefined();
+    expect(provenanceEntry?.provider).toBe("wikipedia");
+  });
+
+  // @implements REQ-026d recalled-source-provider
+  it("omits the provider of a recalled source that carries none", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: true },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(kbSearch).mockReturnValue([
+      { score: 0.9, freshness_score: 0.8, freshness_tier: "stable", source_url: "https://wiki.example/anonymous", title: "Recalled Topic", snippet: "recalled corroborating claim about the topic", collection: "default", provider: "", source_type: "encyclopedia", ingested_at: Date.now() },
+    ]);
+
+    const result = await corroborate("topic", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Recalled Topic Match", "https://a.com/1", "recalled corroborating claim")],
+      },
+    });
+
+    const provenanceEntry = result.provenance?.sources?.find((s) => s.url === "https://wiki.example/anonymous");
+    expect(provenanceEntry).toBeDefined();
+    expect(provenanceEntry?.provider).toBeUndefined();
+  });
+
   it("skips knowledge-base recall when kb_recall is false", async () => {
     mockConfig({
       providers: {

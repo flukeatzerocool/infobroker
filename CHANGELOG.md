@@ -2,6 +2,13 @@
 
 ## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
 
+- `verify_claims` reports the ingest provider of a knowledge-base-recalled
+  source in the corroboration provenance record instead of dropping it, so
+  REQ-026d's per-source `provider` field is populated for recalled sources; a
+  recalled source with no recorded provider omits the field rather than
+  reporting a placeholder (REQ-026d; `src/corroborate.ts`;
+  `src/corroborate.test.ts`).
+
 - `verify_claims` no longer attributes a result to a claim through stopword
   overlap: attribution judges overlap on content tokens only, so a shared
   "the"/"was" cannot manufacture support (REQ-026b; `src/corroborate.ts`;

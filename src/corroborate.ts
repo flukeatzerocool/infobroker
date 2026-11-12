@@ -673,6 +673,10 @@ export async function corroborate(
           url: r.source_url,
           snippet: r.snippet,
           source_type: r.source_type,
+          // REQ-026d: carry the ingest provider through to the provenance
+          // record. An empty provider stays absent rather than being reported
+          // as a placeholder.
+          provider: r.provider || undefined,
           retrieval_origin: "knowledge_base" as const,
         }));
         reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions, confidenceThreshold);

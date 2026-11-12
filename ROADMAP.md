@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## KB recalled-source provenance
-
-- Report the ingest provider of each knowledge-base-recalled source in the corroboration provenance record; the recall mapping currently drops it, so REQ-026d's per-source `provider` field is absent for recalled sources.
-- Ship a test asserting the provenance entry of a recalled source, a CHANGELOG entry, and a re-run of the gates it feeds.
-
-**Trigger:** start with the next `verify_claims` provenance change; close when a recalled source reports its provider in the provenance record.
-
 ## R5 snapshot and family remediation
 
 - Gate archiving on `preservation.enabled` rather than `corroboration.archive_sources` (F-R5-C-1), report the deep-reading snapshot hash and freshness tier instead of discarding it (F-R5-C-3), and collapse short republished snippets into one source family (F-R5-B-1).
