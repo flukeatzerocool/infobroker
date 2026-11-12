@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R4 fetch-page classification remediation
-
-- Fix the R4 P1 set in classification: require a stronger anti-bot marker than a bare "captcha" title (F-R4-B-2), classify `area` and `elevation` as measurable attributes so a fact is emitted (F-R4-E-1), and add named clause tags per REQ-021a branch plus the detector support that observes them (F-R4-A-1).
-- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after chunk R5 closes; close when every R4 P1 row in the classification group is `Resolved`.
-
 ## R4 fetch-page contract remediation
 
 - Declare the `renderer` schema default and align the §6.4 fallback prose with the race and anti-bot fall-through (F-R4-F-1, F-R4-F-4); also schedule the REQ-021 `raw` parameter omission (F-R4-F-3) with the same prose pass.
