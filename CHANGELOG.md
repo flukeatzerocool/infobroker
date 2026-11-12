@@ -46,6 +46,16 @@
   file (REQ-004, REQ-021d, REQ-021e; `src/index.ts`;
   `src/fetch-page-extraction.test.ts`).
 
+- `fetch_page` no longer advertises a renderer default the schema does not
+  declare: the schema description, tool description, REQ-021, §6.4, the tool
+  table, the migration table, and the README now state that omitting `renderer`
+  runs the configured `content_fetch` chain (Jina Reader primary, native HTTP
+  fallback) and that a named value pins one renderer. REQ-021's parameter
+  enumeration gains the advertised `raw` parameter, and §6.4 now names the
+  hedge and the throttle/error and anti-bot fall-through instead of a single
+  429/error condition (REQ-021, REQ-021f, REQ-021j; `src/index.ts`,
+  `infobroker.md`, `README.md`, `AGENTS.md`; `src/tool-surface.test.ts`).
+
 ## 2026.11.11 — R3 search reconciliation: selection, provenance, and response bounds
 
 - An explicit `provider` now keeps precedence over a `priority` chain:
