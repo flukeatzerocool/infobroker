@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026.11.11 — R3 search reconciliation: selection, provenance, and response bounds
+
+- An explicit `provider` now keeps precedence over a `priority` chain:
+  selection runs first and the usable provider is re-inserted before the
+  language and quota reorderings, so it can no longer be discarded by
+  `privacy`/`free_only` (§7.4, REQ-020a; `src/index.ts`;
+  `src/dispatch-orchestration.test.ts`). The `speed` comparator is
+  antisymmetric and two unmeasured providers keep configuration order
+  (REQ-020c; `src/chain.ts`; `src/chain.test.ts`).
+
+- A KB-first hit reports the same request metadata as a cache miss
+  (`task_type`, `ignored_params`, `ignored_operators`), and knowledge-base
+  rows take the blocklist and source-quality ordering on the KB-first, blend,
+  and external-failure paths (REQ-020d, REQ-020h; `src/index.ts`;
+  `src/dispatch-orchestration.test.ts`). A language-restricted chain reports
+  `meta.language_unsupported` for every non-serving provider that cannot honor
+  it, retained under compact verbosity (REQ-128, REQ-079; `src/chain.ts`,
+  `src/verbosity.ts`).
+
+- Collapsed representatives carry a `providers` array naming every
+  contributing provider, and the reconciler falls back to a deterministic
+  lexical ranking when no embedding capability is available (REQ-020g;
+  `src/dedup.ts`, `src/types.ts`; `src/dedup.test.ts`,
+  `src/dedup-fallback.test.ts`). Provider headroom is now kept until after
+  collapse, so duplicates cannot reduce the result count below the caller's
+  maximum (REQ-020g, REQ-073; `src/index.ts`).
+
+- An all-fail batch returns `meta.per_query` with each failed element's error,
+  deep elements report `passages_returned`, and batch analysis is recomputed
+  over the merged set instead of inheriting one query's analysis (REQ-020i,
+  REQ-127; `src/batch.ts`, `src/index.ts`; `src/batch.test.ts`). Analysis is
+  omitted whenever that site's result set is empty (REQ-127).
+
+- `deep: true` now fetches and ranks pages under compact verbosity instead of
+  silently returning a plain search; compact shaping still trims the payload
+  per REQ-079 (REQ-028; `src/index.ts`). Research derives multiple variants
+  from provider suggestions, or from content-keyword relaxation when none are
+  available (REQ-020f; `src/research.ts`; `src/research.test.ts`).
+
+- Tool responses are bounded by the new optional `output.response_max_chars`
+  (default 50000) at the shared finalizer, after the compact rewrite, with
+  `truncated`/`output_path` written into `structuredContent` and REQ-004's
+  in-band note in the text (REQ-004; `src/structured-output.ts`, `src/config.ts`,
+  `config.json`; `src/structured-output.test.ts`).
+
 ## 2026.11.11 — R2e review: financial source and prose reconciliation
 
 - The World Bank provider now serves economic-indicator series: a query naming
