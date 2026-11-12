@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.11.11 — R7 confidence and technique: one scale, declared families
+
+- The gated-analysis skill now uses the canonical confidence model. Its
+  analysis step names exactly `High`, `Medium`, and `Low`, cites
+  `skills/infobroker/references/confidence.md` instead of restating band
+  definitions, and routes a claim with no reliable source to the finding's
+  `**Gaps:**` field and the `## Uncertainty Register` rather than inventing a
+  fourth label (REQ-115; `skills/analysis-loop/SKILL.md`).
+- Every structured analytic technique in the catalog declares one family, and a
+  new `## Families` index is the authoritative claim. The prose no longer claims
+  a "cause and effect" family that has no curated method; the catalog states the
+  five families it actually covers, recorded as D-107 (REQ-088;
+  `skills/analysis-loop/references/techniques.md`).
+- `validate-spec` now asserts both contracts: the confidence-scoring block's
+  label set must equal the canonical three and cite the canonical file, and the
+  family index must agree with each technique's declaration in both directions,
+  with single-family membership, no empty cells, at least three families, and at
+  least six techniques (`scripts/validate-spec.ts`).
+
 ## 2026.11.11 — R7 monitoring: receipt-backed delta, source drift, and runner lifecycle
 
 - `monitor-delta` can now revalidate a stored baseline before comparing it. With
