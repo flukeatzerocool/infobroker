@@ -1027,10 +1027,16 @@ encyclopedia sources at the same source count. A finding carries the
 `unverified` verdict at the 0.1 placeholder from its seeding (§8.1) until
 sources are attributed; the ladder above applies once they are.
 
-Independence: Two sources are independent if they have different registrable
-domains (e.g. wikipedia.org and britannica.com are independent; two pages on
-wikipedia.org, or two subdomains of the same registrable domain, are not).
-The similarity threshold at which claims are grouped into an agreement cluster
+Independence: sources are counted in source families (REQ-121). Sources that
+share a canonical URL, republish the same text with enough substance for the
+comparison to be evidence of republication, or sit on one registrable domain
+(e.g. wikipedia.org and britannica.com are independent; two pages on
+wikipedia.org, or two subdomains of the same registrable domain, are not) are
+one family. Substantially-same-text comparison uses
+`corroboration.family_similarity_threshold`, and each finding reports its
+family count. The ladder above counts families, not hosts, so republished wire
+copy and mirrors do not raise a finding's tier. The similarity threshold at
+which claims are grouped into an agreement cluster
 is configurable via `corroboration.similarity_threshold`. Agreement grouping is
 semantic — paraphrased claims join the same cluster — while an explicit conflict
 check keeps contradictory claims in separate perspectives so the `contested`
