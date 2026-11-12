@@ -35,6 +35,8 @@ export interface SearchResult {
   source_family?: string;
   /** Serving provider slug, when known. */
   provider?: string;
+  /** REQ-020g: every provider that contributed to this collapsed representative. */
+  providers?: string[];
   /** SHA-256 of the stored source text (REQ-122/REQ-026d). */
   content_sha256?: string;
   /** ISO time the source was retrieved. */
@@ -145,6 +147,8 @@ export interface Config {
   };
   output: {
     max_chars: number;
+    /** REQ-004: bound on any single tool response, in characters. */
+    response_max_chars?: number;
     latency_window_size: number;
     /** REQ-036: which bound the latency window applies. Defaults to `both`. */
     latency_window_strategy?: "count" | "time" | "both";

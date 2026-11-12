@@ -18,6 +18,12 @@ function mergeProvenance(keep: SearchResult, dup: SearchResult): void {
   if (!keep.original_source && dup.original_source) keep.original_source = dup.original_source;
   if (!keep.source_type && dup.source_type) keep.source_type = dup.source_type;
   if (!keep.source_family && dup.source_family) keep.source_family = dup.source_family;
+  // REQ-020g: the representative preserves every contributing provider.
+  const contributing = new Set<string>(keep.providers ?? []);
+  if (keep.provider) contributing.add(keep.provider);
+  if (dup.provider) contributing.add(dup.provider);
+  for (const slug of dup.providers ?? []) contributing.add(slug);
+  if (contributing.size > 0) keep.providers = [...contributing].sort();
 }
 
 export interface ReconcileOptions {
@@ -25,6 +31,61 @@ export interface ReconcileOptions {
   qualityWeight?: number;
   /** REQ-020h: source-quality score for one result (typically -1..1). */
   qualityScore?: (result: SearchResult) => number;
+}
+
+// REQ-020g: the non-semantic ranking used when no embedding capability is
+// available. Shares of the query's content words present in the result text,
+// so ordering is deterministic and still relevance-shaped.
+function contentTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}'-]+/u)
+    .filter((word) => word.length >= 3);
+}
+
+export function lexicalRelevance(query: string, text: string): number {
+  const wanted = new Set(contentTokens(query));
+  if (wanted.size === 0) return 0;
+  const present = new Set(contentTokens(text));
+  let overlap = 0;
+  for (const word of wanted) if (present.has(word)) overlap++;
+  return overlap / wanted.size;
+}
+
+function orderedIndexes(
+  results: SearchResult[],
+  query: string,
+  qualityOf: (result: SearchResult) => number,
+  qualityWeight: number,
+): number[] {
+  const texts = results.map(resultText);
+  let scores: number[];
+  try {
+    const ranked = rankDocs(query, texts, "lsa");
+    scores = new Array<number>(results.length).fill(0);
+    for (const row of ranked) scores[row.index] = row.score;
+  } catch {
+    // REQ-020g: without embeddings the non-semantic ranking still applies.
+    scores = texts.map((text) => lexicalRelevance(query, text));
+  }
+  return results
+    .map((result, index) => ({ index, score: scores[index] + qualityWeight * qualityOf(result) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.index);
+}
+
+// REQ-020g/REQ-020h: order a result set without collapsing it. Used where a
+// collapse across tiers would be wrong (the KB blend, which keeps both sets).
+export function orderByRelevance(
+  results: SearchResult[],
+  query: string,
+  options: ReconcileOptions = {},
+): SearchResult[] {
+  const qualityScore = options.qualityScore;
+  const qualityWeight = qualityScore ? (options.qualityWeight ?? 0) : 0;
+  const qualityOf = (result: SearchResult): number => (qualityScore ? qualityScore(result) : 0);
+  const order = orderedIndexes(results, query, qualityOf, qualityWeight);
+  return order.map((index) => results[index]);
 }
 
 export function reconcileResults(
@@ -44,29 +105,12 @@ export function reconcileResults(
   try {
     sim = pairwiseSimilarity(texts, "lsa");
   } catch {
-    if (qualityWeight === 0) return results;
-    return [...results].sort((a, b) => qualityWeight * (qualityOf(b) - qualityOf(a)));
+    // REQ-020g: no similarity model, so nothing can collapse; the results are
+    // still ranked by the non-semantic ordering rather than returned as-is.
+    return orderByRelevance(results, query, options);
   }
 
-  let order: number[];
-  try {
-    const ranked = rankDocs(query, texts, "lsa");
-    const relevance = new Map(ranked.map((r) => [r.index, r.score]));
-    // One ordering pass: relevance stays dominant; the quality term only
-    // breaks ties or promotes a clearly better source.
-    order = results
-      .map((result, index) => ({
-        index,
-        score: (relevance.get(index) ?? 0) + qualityWeight * qualityOf(result),
-      }))
-      .sort((a, b) => b.score - a.score || a.index - b.index)
-      .map((entry) => entry.index);
-  } catch {
-    order = results.map((_r, i) => i);
-    if (qualityWeight !== 0) {
-      order.sort((a, b) => qualityWeight * (qualityOf(results[b]) - qualityOf(results[a])) || a - b);
-    }
-  }
+  const order = orderedIndexes(results, query, qualityOf, qualityWeight);
 
   const drop = new Set<number>();
   const kept: SearchResult[] = [];

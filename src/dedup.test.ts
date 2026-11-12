@@ -1,6 +1,6 @@
 // @implements REQ-020g
 import { describe, it, expect } from "vitest";
-import { reconcileResults, DEFAULT_DEDUP_THRESHOLD } from "./dedup.js";
+import { reconcileResults, orderByRelevance, DEFAULT_DEDUP_THRESHOLD } from "./dedup.js";
 import type { SearchResult } from "./types.js";
 
 function r(title: string, url: string, snippet: string): SearchResult {
@@ -75,5 +75,25 @@ describe("reconcileResults (REQ-020g)", () => {
       qualityScore: () => 1,
     });
     expect(out[0]?.url).toBe("https://b.com/2");
+  });
+
+  it("records every contributing provider on the representative (REQ-020g)", () => {
+    const results = [
+      { ...r("Quantum error correction breakthrough", "https://a.com/1", "Researchers demonstrate quantum error correction at scale"), provider: "duckduckgo" },
+      { ...r("Quantum error correction breakthrough", "https://b.com/2", "Researchers demonstrate quantum error correction at scale"), provider: "mojeek" },
+    ];
+    const out = reconcileResults(results, "quantum error correction");
+    expect(out).toHaveLength(1);
+    expect(out[0].providers).toEqual(["duckduckgo", "mojeek"]);
+    expect(out[0].provider).toBe("duckduckgo");
+  });
+
+  it("exposes a deterministic non-semantic ranking (REQ-020g)", () => {
+    const results = [
+      r("Gardening tips for spring", "https://a.com/1", "planting vegetables and flowers"),
+      r("Quantum computing qubits", "https://b.com/2", "quantum error correction with qubits"),
+    ];
+    const out = orderByRelevance(results, "quantum computing qubits");
+    expect(out[0].url).toBe("https://b.com/2");
   });
 });
