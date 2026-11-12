@@ -6,7 +6,12 @@ import {
   validateRoutingFiles,
   deriveOperations,
   checkCoverage,
-  FILE_PREFIX_POLICY,
+  EXPLICIT_PREFIX_POLICY,
+  prefixPolicyFor,
+  nearMiss,
+  containsSlug,
+  isCitationShaped,
+  REFERENCE_DIRECTORY,
   type ToolSchema,
 } from "./intent-citations.js";
 
@@ -135,15 +140,23 @@ describe("extractCitations — canonical forms", () => {
 
 describe("extractCitations — prefix policy", () => {
   it("requires the single prefix in the instruction file", () => {
-    expect(FILE_PREFIX_POLICY[INSTRUCTION]).toBe("single");
+    expect(EXPLICIT_PREFIX_POLICY[INSTRUCTION]).toBe("single");
+    expect(prefixPolicyFor(INSTRUCTION)).toBe("single");
     const { findings } = extract(INSTRUCTION, "Use `search_web`.");
     expect(findings.map((f) => f.code)).toContain("wrong_prefix");
   });
 
   it("requires bare names in skill files", () => {
-    expect(FILE_PREFIX_POLICY[JOURNEYS]).toBe("bare");
+    expect(EXPLICIT_PREFIX_POLICY[JOURNEYS]).toBeUndefined();
+    expect(prefixPolicyFor(JOURNEYS)).toBe("bare");
     const { findings } = extract(JOURNEYS, "Use `infobroker_search_web`.");
     expect(findings.map((f) => f.code)).toContain("wrong_prefix");
+  });
+
+  it("derives the bare policy for an unregistered reference file", () => {
+    expect(prefixPolicyFor(`${REFERENCE_DIRECTORY}new-reference.md`)).toBe("bare");
+    expect(prefixPolicyFor("README.md")).toBeUndefined();
+    expect(prefixPolicyFor("skills/analysis-loop/references/techniques.md")).toBeUndefined();
   });
 
   it("rejects the double prefix in the instruction file", () => {
@@ -200,6 +213,48 @@ describe("extractCitations — findings", () => {
     const { citations, findings } = extract(JOURNEYS, "Use `manage_kb (search)`.");
     expect(findings.map((f) => f.code)).toContain("missing_action_key");
     expect(citations[0].coverage).toEqual(["action:search"]);
+  });
+});
+
+describe("extractCitations — renamed bare tools", () => {
+  const slugs = new Set(schemas.keys());
+
+  it("flags a near-miss bare rename", () => {
+    const { findings } = extract(JOURNEYS, "Use `fetch_pages (crawl)`.");
+    expect(findings.map((f) => f.code)).toContain("unknown_tool");
+  });
+
+  it("flags a bare rename carrying a slug affix", () => {
+    const { findings } = extract(JOURNEYS, "Use `search_web_v2`.");
+    expect(findings.map((f) => f.code)).toContain("unknown_tool");
+  });
+
+  it("flags an unrelated bare name only when its arguments are citation-shaped", () => {
+    const { findings } = extract(JOURNEYS, "Use `lookup_page (action: search)`.");
+    expect(findings.map((f) => f.code)).toContain("unknown_tool");
+  });
+
+  it("leaves prose and reordered bare names alone", () => {
+    for (const text of ["`teleport`", "`file (see above)`", "`manage`", "`web_search`"]) {
+      const { citations, findings } = extract(JOURNEYS, `Use ${text}.`);
+      expect(citations).toEqual([]);
+      expect(findings).toEqual([]);
+    }
+  });
+
+  it("exposes the three detection signals", () => {
+    expect(nearMiss("fetch_pages", slugs)).toBe(true);
+    expect(nearMiss("manage", slugs)).toBe(false);
+    expect(containsSlug("search_web_v2", slugs)).toBe(true);
+    expect(containsSlug("web_search", slugs)).toBe(false);
+    expect(isCitationShaped("action: search")).toBe(true);
+    expect(isCitationShaped("see above")).toBe(false);
+  });
+
+  it("detects a renamed bare tool in a previously unregistered reference file", () => {
+    const file = `${REFERENCE_DIRECTORY}troubleshooting.md`;
+    const { findings } = extract(file, "Use `fetch_pages (crawl)`.");
+    expect(findings.map((f) => f.code)).toContain("unknown_tool");
   });
 });
 

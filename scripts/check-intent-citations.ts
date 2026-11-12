@@ -1,19 +1,22 @@
 #!/usr/bin/env npx tsx
-// check-intent-citations.ts — gate: the client routing surface cites only
-// tools, operations, and parameters declared by the live tool schema, and
-// every declared operation is cited at least once (REQ-107). Wired into
-// `npm run check`.
+// check-intent-citations.ts — gate: the client routing surface (the
+// instruction file, SKILL.md, and every file in the skill reference directory)
+// cites only tools, operations, and parameters declared by the live tool
+// schema, and every declared operation is cited at least once (REQ-107). The
+// reference surface is derived from the directory, so a new reference file is
+// covered without registration. Wired into `npm run check`.
 //
 // Exit codes: 0 = pass; 1 = citation findings; 2 = fatal.
 
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
 import { isolatedConfigEnv } from "../src/lib/test-isolation.js";
 import {
-  FILE_PREFIX_POLICY,
+  EXPLICIT_PREFIX_POLICY,
+  REFERENCE_DIRECTORY,
   validateRoutingFiles,
   type Finding,
   type ToolProperty,
@@ -21,6 +24,31 @@ import {
 } from "../src/intent-citations.js";
 
 const ROOT = join(import.meta.dirname, "..");
+
+// The routing surface is the instruction file, SKILL.md, and every Markdown
+// file in the skill reference directory. Deriving the references keeps the
+// surface in step with the skill: a new file is covered without registration.
+function routingFiles(): string[] {
+  let references: string[];
+  try {
+    references = readdirSync(join(ROOT, REFERENCE_DIRECTORY), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => `${REFERENCE_DIRECTORY}${entry.name}`)
+      .sort();
+  } catch (error) {
+    console.error(
+      `check-intent-citations: cannot read ${REFERENCE_DIRECTORY}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    process.exit(2);
+  }
+  if (references.length === 0) {
+    console.error(`check-intent-citations: ${REFERENCE_DIRECTORY} holds no reference files`);
+    process.exit(2);
+  }
+  return [...Object.keys(EXPLICIT_PREFIX_POLICY), ...references];
+}
 
 const USAGE = `check-intent-citations — routing citation integrity (REQ-107)
 
@@ -153,7 +181,7 @@ async function main(): Promise<void> {
     schemas.set(schema.slug, schema);
   }
   const files: Record<string, string> = {};
-  for (const file of Object.keys(FILE_PREFIX_POLICY)) {
+  for (const file of routingFiles()) {
     try {
       files[file] = readFileSync(join(ROOT, file), "utf-8");
     } catch (error) {

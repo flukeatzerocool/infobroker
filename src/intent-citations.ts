@@ -12,7 +12,9 @@
 //
 // Prefix policy is per file: the client-facing instruction file uses the
 // server-registered single `infobroker_*` names; skill files use bare names.
-// Clients may add their own server namespace (for example opencode exposes
+// Every file in `skills/infobroker/references/` is part of the surface by
+// directory, so a new reference file needs no registration. Clients may add
+// their own server namespace (for example opencode exposes
 // `infobroker_infobroker_search_web`); the parser normalizes every form to
 // the registered slug for schema checks.
 
@@ -54,16 +56,71 @@ export const STRING_OPERATIONS: Readonly<Record<string, readonly string[]>> = {
   fetch_page: ["question"],
 };
 
-export const FILE_PREFIX_POLICY: Readonly<Record<string, PrefixPolicy>> = {
+// Files whose prefix policy is not the reference-directory default. The
+// reference directory itself is derived by the gate, so a new reference file
+// is covered without a registration edit here.
+export const EXPLICIT_PREFIX_POLICY: Readonly<Record<string, PrefixPolicy>> = {
   "instructions/search-preferences.md": "single",
   "skills/infobroker/SKILL.md": "bare",
-  "skills/infobroker/references/journeys.md": "bare",
-  "skills/infobroker/references/workflows.md": "bare",
-  "skills/infobroker/references/decision-tree.md": "bare",
 };
+
+export const REFERENCE_DIRECTORY = "skills/infobroker/references/";
+
+export function prefixPolicyFor(file: string): PrefixPolicy | undefined {
+  const explicit = EXPLICIT_PREFIX_POLICY[file];
+  if (explicit) return explicit;
+  if (file.startsWith(REFERENCE_DIRECTORY) && file.endsWith(".md")) return "bare";
+  return undefined;
+}
 
 const ARG_RE = /^([a-z][a-z0-9_]*)\s*:\s*(.+)$/;
 const BARE_OP_RE = /^[a-z][a-z0-9_]*$/;
+
+// An unknown bare token is indistinguishable from prose unless it carries a
+// signal a prose phrase does not: a citation-shaped argument, a near-miss of a
+// registered name, or a registered name used as an affix. The signals are
+// deliberately narrow; a reordered or unrelated rename stays prose and is a
+// recorded by-design limit (D-108).
+const NEAR_MISS_DISTANCE = 2;
+
+function editDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const d: number[][] = Array.from({ length: rows }, (_, i) =>
+    Array.from({ length: cols }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+  }
+  return d[a.length][b.length];
+}
+
+export function nearMiss(name: string, knownSlugs: ReadonlySet<string>): boolean {
+  for (const slug of knownSlugs) {
+    if (editDistance(name, slug) <= NEAR_MISS_DISTANCE) return true;
+  }
+  return false;
+}
+
+export function containsSlug(name: string, knownSlugs: ReadonlySet<string>): boolean {
+  for (const slug of knownSlugs) {
+    if (name.startsWith(slug) || name.endsWith(slug)) return true;
+  }
+  return false;
+}
+
+export function isCitationShaped(args: string): boolean {
+  return args
+    .split(",")
+    .map((part) => part.trim())
+    .some((part) => /^(action|operation)\s*:/.test(part));
+}
 
 function stripQuotes(value: string): string {
   const trimmed = value.trim();
@@ -86,13 +143,20 @@ export function splitToolName(name: string): { slug: string; prefix: CitationPre
   return { slug: name, prefix: "bare" };
 }
 
-function looksLikeTool(name: string, knownSlugs: ReadonlySet<string>): boolean {
+function looksLikeTool(
+  name: string,
+  args: string | undefined,
+  knownSlugs: ReadonlySet<string>
+): boolean {
   const { slug, prefix } = splitToolName(name);
   // A prefixed name is always treated as a tool citation, even when the slug
-  // is unknown, so a renamed prefixed tool is caught. A bare token is only a
-  // citation when it matches a registered slug; otherwise prose words such as
-  // `question` or `suggest` would be over-captured.
-  return prefix !== "bare" || knownSlugs.has(slug);
+  // is unknown, so a renamed prefixed tool is caught. A bare token is a
+  // citation when it matches a registered slug, carries citation-shaped
+  // arguments, is a near-miss of a slug, or uses a slug as an affix; otherwise
+  // prose words such as `question` or `manage` would be over-captured.
+  if (prefix !== "bare" || knownSlugs.has(slug)) return true;
+  if (args !== undefined && isCitationShaped(args)) return true;
+  return nearMiss(slug, knownSlugs) || containsSlug(slug, knownSlugs);
 }
 
 function coverageKey(
@@ -267,7 +331,7 @@ export function extractCitations(
       if (!callMatch) continue;
 
       const [, name, args] = callMatch;
-      if (!looksLikeTool(name, knownSlugs)) continue;
+      if (!looksLikeTool(name, args, knownSlugs)) continue;
 
       const { slug, prefix } = splitToolName(name);
       const tool = schemas.get(slug);
@@ -283,7 +347,7 @@ export function extractCitations(
         continue;
       }
 
-      const expected = FILE_PREFIX_POLICY[file];
+      const expected = prefixPolicyFor(file);
       if (expected && prefix !== expected) {
         findings.push({
           code: "wrong_prefix",
@@ -368,7 +432,7 @@ export function validateRoutingFiles(
   const citations: Citation[] = [];
   const findings: Finding[] = [];
   for (const [file, content] of Object.entries(files)) {
-    if (!(file in FILE_PREFIX_POLICY)) {
+    if (!prefixPolicyFor(file)) {
       findings.push({ code: "unregistered_file", message: `${file} has no prefix policy` });
       continue;
     }
