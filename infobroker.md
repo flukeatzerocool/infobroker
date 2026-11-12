@@ -313,7 +313,7 @@ WHEN action is health, the tool SHALL perform a live connectivity check against 
 WHEN action is spec, the tool SHALL report build identity, provider counts, uptime, the cumulative count of tool requests handled since server start, and paths to persistent state files; the provider counts SHALL distinguish configured providers, enabled providers, and providers whose assessed status is active, excluding inline renderer fallbacks. WHEN the knowledge base is configured, the report SHALL also include chunk count, per-collection counts, freshness tier distribution, and last ingestion timestamp. _Check:_ G0, G1.
 
 **REQ-026 — `verify_claims`**
-Multi-pass truth-finding search. Parameters: `query` or `claims` (exactly one is required; a claim list seeds each claim verbatim, a query is split heuristically), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
+Multi-pass truth-finding search. Parameters: `query` or `claims` (exactly one is required; a claim list seeds each claim verbatim, a query is split heuristically), `max_iterations` (default 5, max 10), `confidence_threshold` (default 0.8), `providers` (optional array, defaults to all active), `priority` (optional, routes the corroboration pool by intent). It SHALL search across providers, reconcile claims into findings, and return each finding with a claim, verdict, confidence, and up to three corroborating sources. A finding SHALL be reported as confirmed only when its confidence meets the effective confidence threshold. The response SHALL include an agreement map and a synthesis statement. See §8 for the full corroboration algorithm. _Check:_ G0, G1.
 
 **REQ-026a — corroboration source authority**
 When `verify_claims` computes a finding's confidence, the confidence SHALL reflect the authority of the corroborating sources in addition to their independence. A source's authority SHALL reflect its `source_type`: scholarly, encyclopedia, and primary sources SHALL contribute more weight than generic web pages. The authority weights SHALL be configurable in the configuration file, and a finding's reported confidence SHALL use the configured weights. _Check:_ G1.
@@ -965,7 +965,8 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
     for (topic, claims_set) in grouped:
       agree, disagree, gaps = reconcile(claims_set)
 
-      if agree.length >= 2:
+      if agree.length >= 2 and compute_confidence(agree) >= confidence_threshold
+         and has_external(agree):  // REQ-026e: never KB-only
         findings[topic] = {
           confidence: compute_confidence(agree.length, providers),
           sources: agree.slice(0, 3).map(source_info),  // REQ-026: report at most three
@@ -1014,7 +1015,12 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
 
 The default `confidence_threshold` of 0.8 therefore gates `green` on the 0.9
 tier (three or more independent sources); the 0.7 tier (two independent
-sources) reports as `yellow`. Source authority (REQ-026a) scales the
+sources) reports as `yellow`. Confirmation follows the same bar: a finding is
+`confirmed` only when its confidence meets the effective `confidence_threshold`
+and at least one agreeing source comes from outside the knowledge base
+(REQ-026e). A finding that misses either condition keeps its computed
+confidence and reports `unverified`; the Rating column above names a confidence
+band, not the verdict. Source authority (REQ-026a) scales the
 independence-based confidence above by a per-source-type weight, so a finding
 backed only by generic web pages scores below one backed by scholarly or
 encyclopedia sources at the same source count. A finding carries the

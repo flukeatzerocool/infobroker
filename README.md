@@ -320,7 +320,9 @@ family, so confidence counts origins, not hosts, and a secondary-only
 finding is capped rather than overstated. Contradictions are surfaced with
 all perspectives. Gaps trigger refined queries that broaden to the rest of
 your providers. It also remembers: prior findings in your knowledge base
-participate as corroborating sources before it queries the network. You get a
+participate as corroborating sources before it queries the network, but a
+finding is marked `confirmed` only when its confidence clears the threshold and
+at least one agreeing source comes from outside your knowledge base. You get a
 structured report — confirmed, contested, and unverified findings — with
 source provenance, per-source claims and spans, and confidence scores. Every
 other search tool returns a list of links; Infobroker finds the truth and
