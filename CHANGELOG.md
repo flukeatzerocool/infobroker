@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
+
+- A page's publication date is no longer reported as its `last_updated` date.
+  Date evidence is split into modification (the `last-modified` header,
+  `article:modified_time`, `og:updated_time`, JSON-LD `dateModified`) and
+  publication (`article:published_time`, `meta[name=date]`, `dc.date`,
+  `citation_date`, JSON-LD `datePublished`, and an ambiguous `<time datetime>`).
+  Only modification evidence produces `last_updated`; publication evidence
+  produces `published_date` with its source and confidence, a modification date
+  wins when a page carries both, and only modification evidence is stored as a
+  knowledge-base source date (REQ-021c, REQ-060; `src/datetime.ts`,
+  `src/index.ts`; `src/datetime.test.ts`, `src/fetch-page-extraction.test.ts`).
+
+- A `fetch_page` question that matches no passage now reports the same
+  extraction metadata as one that matches: `extraction_mode: "full_content"`,
+  `meta.passages_returned: 0`, `meta.match_quality: "none"`, and the note, from
+  one shared builder on both the ordinary and the fallback-content path; a
+  plain fetch reports `url`, `extraction_mode`, and a zero passage count, so a
+  `raw` response's `structuredContent` carries every field REQ-021j names; and
+  batch per-input metadata believes an envelope's reported passage count and
+  band instead of re-deriving them from snippets it never carried (REQ-021b,
+  REQ-021j, REQ-021k; `src/index.ts`, `src/batch.ts`;
+  `src/fetch-page-extraction.test.ts`, `src/batch.test.ts`).
+
+- Crawl and extract responses are bounded by `maybeTruncate` instead of a raw
+  slice: a clipped crawl page carries its own `truncated` flag and
+  `output_path`, the crawl envelope reports `truncated` and
+  `meta.truncated_pages`, and a clipped extract response carries the same
+  `truncated`/`output_path`/hint trio as a plain fetch. The renderer layer is
+  left uncapped on those two paths, so one clipped page maps to one full-text
+  file (REQ-004, REQ-021d, REQ-021e; `src/index.ts`;
+  `src/fetch-page-extraction.test.ts`).
+
 ## 2026.11.11 — R3 search reconciliation: selection, provenance, and response bounds
 
 - An explicit `provider` now keeps precedence over a `priority` chain:
