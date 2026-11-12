@@ -25,8 +25,22 @@ export function parseEnvelope(text: string): ParsedSearchEnvelope {
   }
 }
 
-export function deriveResearchVariants(query: string, maxVariants: number): string[] {
-  return deriveExpansions(query, [], maxVariants);
+export function deriveResearchVariants(query: string, maxVariants: number, suggestions: string[] = []): string[] {
+  const base = deriveExpansions(query, suggestions, maxVariants);
+  if (base.length >= 2 || maxVariants <= 1) return base;
+  // REQ-020f: a keyphrase query whose stopword-stripped form equals the query
+  // still needs multiple variants, so relax it to its content keywords.
+  const keywords = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}'-]+/u)
+    .filter((word) => word.length >= 3);
+  if (new Set(keywords).size < 2) return base;
+  const variants = [...base];
+  for (const keyword of keywords) {
+    if (variants.length >= maxVariants) break;
+    if (!variants.some((variant) => variant.toLowerCase() === keyword)) variants.push(keyword);
+  }
+  return variants;
 }
 
 export interface ResearchGroup {

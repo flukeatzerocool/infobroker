@@ -8,6 +8,25 @@ describe("deriveResearchVariants (REQ-020f)", () => {
     expect(variants[0]).toBe("machine learning survey");
     expect(variants.length).toBeLessThanOrEqual(3);
   });
+
+  it("derives more than one variant from an ordinary multi-token query", () => {
+    const variants = deriveResearchVariants("quantum computing", 3);
+    expect(variants.length).toBeGreaterThan(1);
+    expect(variants[0]).toBe("quantum computing");
+  });
+
+  it("uses provider suggestions when they are supplied", () => {
+    const variants = deriveResearchVariants("quantum computing", 3, [
+      "quantum computing applications",
+      "quantum error correction",
+    ]);
+    expect(variants).toContain("quantum computing applications");
+  });
+
+  it("keeps a single variant for a single-token query or max_variants of one", () => {
+    expect(deriveResearchVariants("quantum", 3)).toHaveLength(1);
+    expect(deriveResearchVariants("quantum computing", 1)).toHaveLength(1);
+  });
 });
 
 describe("parseEnvelope (REQ-020f)", () => {
