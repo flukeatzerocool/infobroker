@@ -1,6 +1,6 @@
 // @implements REQ-125
 import { describe, it, expect } from "vitest";
-import { parseWatchlist, dueTopics, diffClaims } from "./watchlist.js";
+import { parseWatchlist, dueTopics, diffClaims, markRun } from "./watchlist.js";
 
 describe("watchlist (REQ-125)", () => {
   it("rejects malformed entries", () => {
@@ -32,5 +32,21 @@ describe("watchlist (REQ-125)", () => {
 
   it("diffs claim lists", () => {
     expect(diffClaims(["a", "b"], ["b", "c"])).toEqual({ new: ["c"], removed: ["a"] });
+  });
+
+  // @implements REQ-125 last-run-persistence
+  it("records a run time without touching other topics", () => {
+    const list = parseWatchlist({
+      topics: [
+        { id: "a", query: "q1", interval_hours: 1 },
+        { id: "b", query: "q2", interval_hours: 1, last_run: "2026-10-20T00:00:00Z" },
+      ],
+    });
+    const marked = markRun(list, "a", "2026-10-26T23:45:00Z");
+    expect(marked.topics[0]!.last_run).toBe("2026-10-26T23:45:00Z");
+    expect(marked.topics[1]!.last_run).toBe("2026-10-20T00:00:00Z");
+    expect(list.topics[0]!.last_run).toBeUndefined();
+    const due = dueTopics(marked, new Date("2026-10-26T23:46:00Z"));
+    expect(due.find((topic) => topic.id === "a")?.due).toBe(false);
   });
 });

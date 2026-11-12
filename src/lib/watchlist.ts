@@ -45,6 +45,17 @@ export function dueTopics(watchlist: Watchlist, now: Date = new Date()): DueTopi
   });
 }
 
+/**
+ * REQ-125: record a completed attempt on a topic so the next invocation's due
+ * selection advances. Pure — the caller owns the file write.
+ */
+export function markRun(watchlist: Watchlist, id: string, at: string): Watchlist {
+  return {
+    ...watchlist,
+    topics: watchlist.topics.map((topic) => (topic.id === id ? { ...topic, last_run: at } : topic)),
+  };
+}
+
 export interface RunDelta {
   new: string[];
   removed: string[];
