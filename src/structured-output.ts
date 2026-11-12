@@ -52,11 +52,18 @@ function firstText(result: ToolResultLike): string | undefined {
  * (raw mode) is respected; otherwise the text envelope is parsed. A handler
  * that returns text the parser cannot read still yields a minimal object, so a
  * declared output schema never fails validation.
+ *
+ * REQ-004: an optional `truncate` callback bounds the returned text. It runs
+ * after the compact rewrite so a re-serialization cannot restore the full
+ * body, and the structured envelope (built from the full text) stays intact
+ * with `truncated`/`output_path` flags. A response that already reports a
+ * truncation is left alone, so `fetch_page`'s own bound is unchanged.
  */
 export function finalizeToolResult<T extends ToolResultLike>(
   result: T,
   notices: readonly unknown[],
   compact = false,
+  truncate?: (text: string) => { text: string; truncated: boolean; outputPath?: string },
 ): T & { structuredContent: Record<string, unknown> } {
   const base = { ...(result as Record<string, unknown>) };
   let structured =
@@ -110,7 +117,36 @@ export function finalizeToolResult<T extends ToolResultLike>(
     }
   }
 
+  // REQ-004: bound the returned text after the compact rewrite. The structured
+  // envelope keeps the parsed body; only the text is clipped and flagged.
+  const bounded = firstText(base);
+  if (truncate && bounded !== undefined && structured.truncated !== true) {
+    const clipped = truncate(bounded);
+    if (clipped.truncated) {
+      structured = {
+        ...structured,
+        truncated: true,
+        ...(clipped.outputPath ? { output_path: clipped.outputPath } : {}),
+      };
+      base.content = replaceFirstText(base, clipped.text).content;
+    }
+  }
+
   return { ...(base as T), structuredContent: structured };
+}
+
+function replaceFirstText<T extends ToolResultLike>(result: T, text: string): T {
+  const content = result.content;
+  if (!Array.isArray(content)) return result;
+  let replaced = false;
+  const next = content.map((item) => {
+    if (!replaced && item && typeof item === "object" && (item as { type?: unknown }).type === "text") {
+      replaced = true;
+      return { ...(item as object), text };
+    }
+    return item;
+  });
+  return { ...(result as Record<string, unknown>), content: next } as T;
 }
 
 /**

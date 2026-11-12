@@ -70,6 +70,52 @@ test("finalizeToolResult respects a handler-provided structuredContent", () => {
   expect(finalized.structuredContent).toMatchObject({ raw: true, provider: "jina" });
 });
 
+// F-R3-23 / REQ-004: an oversized tool response is truncated to the configured
+// bound, written to disk, and flagged, while the structured body stays whole.
+test("finalizeToolResult truncates the text and flags the response", () => {
+  const body = `[OK] ${JSON.stringify({ status: "ok", provider: "x", results: [{ title: "t", url: "u", snippet: "s" }] })}`;
+  const finalized = finalizeToolResult(textResult(body), [], false, () => ({
+    text: `${body.slice(0, 10)}...\n\n[truncated at 10 chars — full content written to /tmp/opencode/trunc.txt]`,
+    truncated: true,
+    outputPath: "/tmp/opencode/trunc.txt",
+  }));
+  const content = finalized.content as Array<{ text: string }>;
+  expect(content[0].text).toContain("[truncated at 10 chars");
+  expect(finalized.structuredContent.truncated).toBe(true);
+  expect(finalized.structuredContent.output_path).toBe("/tmp/opencode/trunc.txt");
+  expect(finalized.structuredContent.results).toEqual([{ title: "t", url: "u", snippet: "s" }]);
+});
+
+test("finalizeToolResult truncates after the compact rewrite", () => {
+  const body = `[OK] ${JSON.stringify({
+    status: "ok",
+    provider: "x",
+    results: [{ title: "t", url: "u", snippet: "s", published_date: "2026-01-01" }],
+  })}`;
+  const finalized = finalizeToolResult(textResult(body), [], true, (text) => ({
+    text: `${text.slice(0, 10)}...`,
+    truncated: true,
+    outputPath: "/tmp/opencode/compact-trunc.txt",
+  }));
+  const content = finalized.content as Array<{ text: string }>;
+  expect(content[0].text.endsWith("...")).toBe(true);
+  expect(finalized.structuredContent.published_date).toBeUndefined();
+  expect((finalized.structuredContent.results as Array<Record<string, unknown>>)[0].published_date).toBeUndefined();
+  expect(finalized.structuredContent.truncated).toBe(true);
+});
+
+test("finalizeToolResult leaves an already-truncated response alone", () => {
+  const body = `[OK] ${JSON.stringify({ status: "ok", provider: "x", results: [], truncated: true, output_path: "/tmp/opencode/page.txt" })}`;
+  const finalized = finalizeToolResult(textResult(body), [], false, () => ({
+    text: "should not be used",
+    truncated: true,
+    outputPath: "/tmp/opencode/other.txt",
+  }));
+  const content = finalized.content as Array<{ text: string }>;
+  expect(content[0].text).toBe(body);
+  expect(finalized.structuredContent.output_path).toBe("/tmp/opencode/page.txt");
+});
+
 test("rawRequestError accepts only a single URL without crawl or extract", () => {
   expect(rawRequestError("https://example.com", false, false)).toBeUndefined();
   expect(rawRequestError(["https://a", "https://b"], false, false)).toMatch(/single URL/);
