@@ -87,6 +87,46 @@ describe("report contract (REQ-116)", () => {
     expect(result.findings.some((finding) => finding.code === "register-accessed")).toBe(true);
   });
 
+  // @implements REQ-116 register-url
+  it("rejects a Source Register row without an http(s) URL", () => {
+    const result = validateReport(fixture("bad-register-url.md"));
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "register-url")).toBe(true);
+    expect(result.findings.some((finding) => finding.code === "register-empty")).toBe(false);
+  });
+
+  // @implements REQ-118 register-identity
+  it("rejects a Source Register row without a source name, type, or relevant interests", () => {
+    const result = validateReport(fixture("bad-register-identity.md"));
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "register-source")).toBe(true);
+    expect(result.findings.some((finding) => finding.code === "register-type")).toBe(true);
+    expect(result.findings.some((finding) => finding.code === "register-interests")).toBe(true);
+  });
+
+  // @implements REQ-118 undeterminable-publication-date
+  it("rejects a publication date that is neither ISO nor undeterminable", () => {
+    const result = validateReport(fixture("bad-register-published.md"));
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "register-published")).toBe(true);
+  });
+
+  // @implements REQ-118 undeterminable-publication-date
+  it("accepts an undeterminable publication date", () => {
+    const result = validateReport(fixture("good-undeterminable-published.md"));
+    expect(result.ok).toBe(true);
+    expect(result.findings.some((finding) => finding.code === "register-published")).toBe(false);
+  });
+
+  // @implements REQ-114 likelihood-vocabulary
+  // @implements REQ-114 verdict-vocabulary
+  it("rejects manifest values outside the likelihood and verdict lexicons", () => {
+    const result = validateReport(fixture("bad-manifest-vocabulary.md"));
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "manifest-likelihood")).toBe(true);
+    expect(result.findings.some((finding) => finding.code === "manifest-verdict")).toBe(true);
+  });
+
   it("requires an as-of date", () => {
     const result = validateReport(fixture("missing-as-of.md"));
     expect(result.ok).toBe(false);
