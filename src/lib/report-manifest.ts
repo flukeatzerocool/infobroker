@@ -132,9 +132,20 @@ export const RELIABILITY_VALUES = ["A", "B", "C", "D", "E", "F"] as const;
 export const CREDIBILITY_VALUES = ["1", "2", "3", "4", "5", "6"] as const;
 export const PRIMACY_VALUES = ["primary", "secondary", "aggregated"] as const;
 
-export const SHAPE_BLOCKS: Record<string, { heading: string; prefix?: boolean }[]> = {
+export interface ShapeBlock {
+  heading: string;
+  prefix?: boolean;
+  table?: readonly string[];
+}
+
+export const SHAPE_BLOCKS: Record<string, ShapeBlock[]> = {
   "Research & Write": [],
-  "Fact-Check": [],
+  "Fact-Check": [
+    {
+      heading: "Claim Verdicts",
+      table: ["Claim", "Verdict", "Confidence", "Likelihood", "Justification", "Sources"],
+    },
+  ],
   "Gated Analysis": [],
   "Deep-Dive": [
     { heading: "Subtopic Coverage" },
@@ -533,7 +544,31 @@ function validateKeyFindings(text: string): ReportFinding[] {
   return findings;
 }
 
-function shapeBlockFindings(manifest: ReportManifest | undefined, sections: string[]): ReportFinding[] {
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) return [];
+  return trimmed
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+/** The header cells of the first markdown table inside a `##` section, or null. */
+function tableHeaderCells(text: string, heading: string): string[] | null {
+  const body = sectionText(text, heading);
+  if (body === null) return null;
+  const lines = body.split("\n").map((line) => line.trim());
+  for (let index = 0; index < lines.length - 1; index++) {
+    if (!lines[index]!.startsWith("|") || !lines[index + 1]!.startsWith("|")) continue;
+    const separator = splitTableRow(lines[index + 1]!);
+    if (separator.length === 0 || !separator.every((cell) => /^:?-{2,}:?$/.test(cell))) continue;
+    return splitTableRow(lines[index]!).map((cell) => normalizeValue(cell));
+  }
+  return null;
+}
+
+function shapeBlockFindings(text: string, manifest: ReportManifest | undefined, sections: string[]): ReportFinding[] {
   const findings: ReportFinding[] = [];
   if (typeof manifest?.shape !== "string") return findings;
   const shape = SHAPE_VALUES.find((value) => normalizeValue(value) === normalizeValue(manifest.shape!));
@@ -550,6 +585,18 @@ function shapeBlockFindings(manifest: ReportManifest | undefined, sections: stri
         code: "shape-block",
         message: `${shape} report is missing the ${required.heading} block`,
       });
+      continue;
+    }
+    if (required.table !== undefined) {
+      const header = tableHeaderCells(text, required.heading);
+      const missing = required.table.filter((label) => header === null || !header.includes(normalizeValue(label)));
+      if (missing.length > 0) {
+        findings.push({
+          level: "error",
+          code: "shape-table",
+          message: `${shape} report's ${required.heading} block is missing the ${missing.join(", ")} column(s)`,
+        });
+      }
     }
   }
   return findings;
@@ -616,7 +663,7 @@ export function validateReport(text: string): ReportValidation {
     manifest = manifestResult.value;
     findings.push(...validateManifest(manifest));
     findings.push(...validateModality(text, manifest));
-    findings.push(...shapeBlockFindings(manifest, sections));
+    findings.push(...shapeBlockFindings(text, manifest, sections));
   }
 
   const register = parseSourceRegister(text);

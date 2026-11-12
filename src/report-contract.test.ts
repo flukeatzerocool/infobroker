@@ -99,6 +99,19 @@ describe("report contract (REQ-116)", () => {
     expect(result.findings.filter((finding) => finding.code === "shape-block").length).toBeGreaterThan(0);
   });
 
+  // @implements REQ-119 shape-table
+  it("rejects a Fact-Check report whose Claim Verdicts block has no table", () => {
+    const result = validateReport(fixture("missing-shape-table.md"));
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "shape-table")).toBe(true);
+  });
+
+  it("accepts a Fact-Check report whose Claim Verdicts block carries the required columns", () => {
+    const result = validateReport(fixture("good-report.md"));
+    expect(result.ok).toBe(true);
+    expect(result.findings.some((finding) => finding.code === "shape-table")).toBe(false);
+  });
+
   it("requires a confidence label on each finding", () => {
     const result = validateReport(fixture("bad-finding-unlabeled.md"));
     expect(result.ok).toBe(false);

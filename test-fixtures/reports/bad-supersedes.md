@@ -43,6 +43,12 @@ Two sources were fetched and compared. The scope was the 2026 inspection only.
 **Contradictions:** none found
 **Gaps:** no load-rating baseline
 
+## Claim Verdicts
+
+| # | Claim | Verdict | Confidence | Likelihood | Justification | Sources |
+|---|-------|---------|------------|------------|---------------|---------|
+| 1 | The bridge inspection found the structure sound. | Mostly True | High | likely | Two independent sources agree. | [S1] |
+
 ## Assumptions
 
 The cached source reflects the live inspection page.

@@ -127,6 +127,7 @@ change the judgment.]
 Uses the shared skeleton plus this verdict table.
 
 ```
+## Claim Verdicts
 | # | Claim | Verdict | Confidence | Likelihood | Justification | Sources |
 |---|-------|---------|------------|------------|---------------|---------|
 ```
