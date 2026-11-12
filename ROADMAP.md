@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R7 confidence and technique remediation
-
-- Remove the fourth confidence label from the analysis skill and make it cite the canonical three-label scale (F-R7-B-1).
-- Map each catalog technique to a family so the six-family claim is verifiable, or narrow the claim (F-R7-B-2).
-
-**Trigger:** start after chunk R8 closes; close when F-R7-B-1 and F-R7-B-2 are `Resolved`.
-
 ## R7 routing-citation remediation
 
 - Detect a renamed bare tool in the routing files without over-capturing prose (F-R7-G-2).
