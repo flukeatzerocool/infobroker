@@ -358,15 +358,16 @@ Read them with `manage_kb` action=claims, filtered by `query` or `source_url`
 and capped by `max_results` (default 8, max 50). The ledger is sealed at rest
 when encryption is on.
 
-A watchlist runner records due-topic claim deltas; cron owns the schedule. A
-report can carry a verification receipt: ingest claims, cited sources, and the
-Source Register; the server hashes the report and every cached source.
-`verify_report` rechecks it offline — no network call — and reports drift when
-the report or a source changed, unverifiable for an uncached source, and a
-digest mismatch for a tampered manifest. The manifest carries report metadata
-and a revision chain; `verify_report` reports age and staleness alongside
-drift, so monitoring can baseline, revalidate, and publish a delta revision.
-The manifest is sealed at rest, and encryption transitions reseal it.
+A watchlist runner records due-topic claim deltas, retains a topic's claims
+across a failed or empty result, and advances `last_run`; cron owns the
+schedule. A report can carry a verification receipt: ingest claims, cited
+sources, and the Source Register, which the server hashes. `verify_report`
+rechecks it offline and reports
+drift when the report or a source changed, unverifiable for an uncached source,
+and a digest mismatch for a tampered manifest. The manifest carries report
+metadata and a revision chain. `monitor-delta --receipt` revalidates a baseline
+before comparing and marks a receiptless run unverified. The manifest is sealed
+at rest, and encryption transitions reseal it.
 
 ### Research Pipeline
 

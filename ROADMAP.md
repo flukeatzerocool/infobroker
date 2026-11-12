@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R7 monitoring and watchlist remediation
-
-- Baseline a report with a verification receipt and revalidate it with `verify_report` before comparing (F-R7-E-1).
-- Report same-id source drift and an unverifiable set instead of id-set membership only (F-R7-E-2).
-- Carry revision/supersedes through the delta (F-R7-E-3), observe the dry-run and error-isolation paths (F-R7-E-5), stop overwriting prior claims (F-R7-E-6), and persist `last_run` so due selection advances (F-R7-E-7).
-
-**Trigger:** start after chunk R8 closes; close when F-R7-E-1, F-R7-E-2, F-R7-E-3, F-R7-E-5, F-R7-E-6, and F-R7-E-7 are `Resolved`.
-
 ## R7 confidence and technique remediation
 
 - Remove the fourth confidence label from the analysis skill and make it cite the canonical three-label scale (F-R7-B-1).

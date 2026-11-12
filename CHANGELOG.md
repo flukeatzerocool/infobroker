@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026.11.11 — R7 monitoring: receipt-backed delta, source drift, and runner lifecycle
+
+- `monitor-delta` can now revalidate a stored baseline before comparing it. With
+  `--receipt <report-id>` the tool calls `manage_kb action=verify_report`, refuses
+  an error envelope, a digest mismatch, an unverified report, or a claim count
+  that disagrees with the baseline file, and records a deterministic verification
+  block (state, receipt revision, supersession, drift URLs, unverifiable URLs,
+  report-level counts) on the delta. Without a receipt the run is stamped
+  `baseline_verified: false` with a warning instead of claiming a verified
+  baseline, and the entry point gained the `import.meta.url` guard its tests need
+  (REQ-117; `scripts/monitor-delta.ts`; `scripts/monitor-delta.test.ts`).
+- The delta reports same-id source drift. `ReportSnapshot` keeps the register's
+  URL, reliability, and credibility per source id, `changed_sources` lists the
+  fields that moved, and the delta carries `baseline_revision`,
+  `current_revision`, and `current_supersedes`; the new `successionIssues`
+  rejects a changed report whose revision did not increase and a supersession
+  that names a different baseline (REQ-117; `src/lib/report-delta.ts`;
+  `src/monitor-delta.test.ts`; `test-fixtures/reports/delta/current-drift.md`).
+- The watchlist runner's control flow moved into `src/lib/watchlist-run.ts` with
+  an injected tool call and clock, so a dry run selects topics without calling a
+  provider or creating an output directory, one failing topic no longer hides the
+  next, and each record separates the claims found this run from the prior set
+  retained across a failed or empty result (with `suspected_empty` marking an
+  empty success), while a genuine removal inside a non-empty result is still
+  reported (REQ-125; `src/lib/watchlist-run.ts`; `src/lib/watchlist-run.test.ts`).
+- A completed attempt now writes its `last_run` back to the watchlist file
+  atomically, so a second invocation selects only the topics that are due; the
+  runner owns that field alone and cron/CI still owns the schedule (REQ-125;
+  `src/lib/watchlist.ts`; `scripts/monitor-watchlist.ts`).
+
 ## 2026.11.11 — R7 report contract: verdict-table enforcement and register evidence
 
 - The report quality gate now rejects a `Fact-Check` report that omits its
