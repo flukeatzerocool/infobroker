@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.11 — R7 routing citations: derived surface, renamed bare tools, README user layer
+
+- The routing citation gate now derives its surface from every file in
+  `skills/infobroker/references/`, plus `SKILL.md` and the instruction file,
+  instead of a hand-maintained five-file list. A new reference file is covered
+  without registration, and a missing or empty reference directory exits 2
+  rather than passing vacuously (REQ-107; F-R7-G-1).
+- A renamed bare tool is caught when its name is within edit distance 2 of a
+  registered slug, uses a registered slug as a prefix or suffix, or carries
+  `action:`/`operation:` arguments; reordered prose such as `web_search` stays
+  prose. The gate reports `unknown_tool`, and the corpus stays at 0 findings
+  (REQ-107; F-R7-G-2; D-108).
+- The README provider-enable instruction now names the user layer
+  (`config.local.json` / `INFOBROKER_CONFIG_LOCAL`) instead of the shipped
+  `config.json`, matching the deployment section (REQ-054; F-R7-G-3).
+
 ## 2026.11.11 — R7 confidence and technique: one scale, declared families
 
 - The gated-analysis skill now uses the canonical confidence model. Its
