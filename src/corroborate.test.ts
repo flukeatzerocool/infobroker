@@ -60,6 +60,7 @@ import {
   corroborate,
   applyPriority,
   providerOperational,
+  confirmationEligible,
 } from "../src/corroborate.js";
 import type { CorroborationFinding as CF } from "../src/types.js";
 
@@ -133,6 +134,47 @@ describe("jaccardSimilarity", () => {
 
   it("filters short words (<3 chars)", () => {
     expect(jaccardSimilarity("a b c d e hello", "f g h i j hello")).toBe(1.0);
+  });
+
+  // @implements REQ-026b unrelated-result
+  it("ignores a stopword-only overlap", () => {
+    expect(jaccardSimilarity("the committee approved the budget", "the weather turned cold today")).toBe(0);
+  });
+
+  // @implements REQ-026b unrelated-result
+  it("still scores a shared content token", () => {
+    expect(jaccardSimilarity("the committee approved the budget", "committee vote on the budget")).toBeGreaterThan(0);
+  });
+
+  it("treats a lexicon content word as a stopword (recorded trade-off)", () => {
+    expect(jaccardSimilarity("we work on the bridge", "they work at the mill")).toBe(0);
+  });
+});
+
+// @implements REQ-026 confirmed-threshold
+// @implements REQ-026e kb-alone
+describe("confirmationEligible", () => {
+  const external = (url: string) => ({ title: "a", url, snippet: "x" });
+  const recalled = (url: string) => ({ title: "k", url, snippet: "x", retrieval_origin: "knowledge_base" as const });
+
+  it("requires at least two agreeing members", () => {
+    expect(confirmationEligible([external("https://a.com/1")], 0.9, 0.5)).toBe(false);
+  });
+
+  it("requires confidence at or above the threshold", () => {
+    const members = [external("https://a.com/1"), external("https://b.com/2")];
+    expect(confirmationEligible(members, 0.7, 0.8)).toBe(false);
+    expect(confirmationEligible(members, 0.7, 0.7)).toBe(true);
+  });
+
+  it("rejects a knowledge-base-only member set", () => {
+    const members = [recalled("https://kb-a.example/1"), recalled("https://kb-b.example/2")];
+    expect(confirmationEligible(members, 0.9, 0.5)).toBe(false);
+  });
+
+  it("accepts a mixed member set", () => {
+    const members = [recalled("https://kb.example/1"), external("https://b.com/2")];
+    expect(confirmationEligible(members, 0.7, 0.5)).toBe(true);
   });
 });
 
@@ -392,6 +434,120 @@ describe("reconcileClaims", () => {
     expect(f.perspectives).toBeDefined();
     expect(f.perspectives!.length).toBeGreaterThanOrEqual(2);
   });
+
+  // @implements REQ-026b unrelated-result
+  it("does not attribute a stopword-only overlap to a seeded claim", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "the committee approved the budget",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [],
+    });
+    reconcileClaims(
+      findings,
+      [makeResult("Weather", "https://a.com/1", "the weather turned cold today")],
+      0.3,
+      undefined,
+      true,
+    );
+    expect([...findings.values()][0].sources).toHaveLength(0);
+  });
+
+  // @implements REQ-026b unrelated-result
+  it("attributes a shared content token to a seeded claim", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "the committee approved the budget",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [],
+    });
+    reconcileClaims(
+      findings,
+      [makeResult("Budget", "https://a.com/1", "committee vote on the budget")],
+      0.3,
+      undefined,
+      true,
+    );
+    expect([...findings.values()][0].sources).toHaveLength(1);
+  });
+
+  // @implements REQ-026 confirmed-threshold
+  it("gates the confirmed verdict on the supplied threshold", () => {
+    const pair = [
+      makeResult("Quantum", "https://a.com/1", "quantum error correction is progressing rapidly"),
+      makeResult("Quantum", "https://b.com/2", "quantum error correction shows rapid progress"),
+    ];
+    const strict = new Map<string, CF>();
+    reconcileClaims(strict, pair, 0.3, undefined, false, undefined, 0.9, undefined, 0.8);
+    expect([...strict.values()][0].confidence).toBeCloseTo(0.7);
+    expect([...strict.values()][0].verdict).toBe("unverified");
+
+    const met = new Map<string, CF>();
+    reconcileClaims(met, pair, 0.3, undefined, false, undefined, 0.9, undefined, 0.7);
+    expect([...met.values()][0].verdict).toBe("confirmed");
+  });
+
+  // @implements REQ-026 confirmed-threshold
+  it("reports a below-threshold multi-cluster finding unverified, not contested", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "quantum error correction advances",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [
+        { title: "a", url: "https://a.com/1", snippet: "quantum error correction is progressing rapidly" },
+        { title: "b", url: "https://b.com/2", snippet: "quantum error correction shows rapid progress" },
+        { title: "c", url: "https://c.com/3", snippet: "volcanic ash delays northern flights" },
+      ],
+    });
+    reconcileClaims(findings, [], 0.3, undefined, false, undefined, 0.9, undefined, 0.8);
+    const f = [...findings.values()][0];
+    expect(f.confidence).toBeCloseTo(0.7);
+    expect(f.verdict).toBe("unverified");
+    expect(f.perspectives).toBeUndefined();
+  });
+
+  // @implements REQ-026e kb-alone
+  it("does not confirm a knowledge-base-only dominant cluster", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "quantum error correction advances",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [
+        { title: "a", url: "https://kb-a.example/1", snippet: "quantum error correction advances with surface codes", retrieval_origin: "knowledge_base" },
+        { title: "b", url: "https://kb-b.example/2", snippet: "quantum error correction advances using surface codes", retrieval_origin: "knowledge_base" },
+        { title: "c", url: "https://c.com/3", snippet: "volcanic ash delays northern flights" },
+      ],
+    });
+    reconcileClaims(findings, [], 0.3, undefined, false, undefined, 0.9, undefined, 0.3);
+    const f = [...findings.values()][0];
+    expect(f.verdict).toBe("unverified");
+  });
+
+  it("upgrades a knowledge-base source when a live result repeats its URL", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "quantum error correction advances",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [],
+    });
+    const kb = makeResult("Recalled", "https://a.com/1", "quantum error correction advances");
+    kb.retrieval_origin = "knowledge_base";
+    reconcileClaims(findings, [kb], 0.3, undefined, true);
+    reconcileClaims(findings, [makeResult("Live", "https://a.com/1", "quantum error correction advances")], 0.3, undefined, true);
+    const f = [...findings.values()][0];
+    expect(f.sources).toHaveLength(1);
+    expect(f.sources[0].retrieval_origin).toBeUndefined();
+  });
 });
 
 describe("corroborate", () => {
@@ -421,7 +577,9 @@ describe("corroborate", () => {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
         wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
       },
-      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+      // The two agreeing families yield 0.7; confirmation is threshold-gated
+      // (REQ-026), so the fixture sets the bar the finding actually meets.
+      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.7, first_pass_max_providers: 5 },
     });
     const snippet = "red teaming reduces model risk in production";
     const result = await corroborate("red teaming reduces model risk", {
@@ -537,6 +695,9 @@ describe("corroborate", () => {
         wikipedia: { enabled: true, capabilities: ["encyclopedia", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
         wikidata: { enabled: true, capabilities: ["structured_fact", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
       },
+      // Confirmation is threshold-gated (REQ-026); the fixture sets the bar
+      // the agreeing sources meet so the agreement path stays under test.
+      corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.7, first_pass_max_providers: 5 },
     });
 
     vi.mocked(retryWithBackoff).mockImplementation(async (fn) => fn());
@@ -561,6 +722,7 @@ describe("corroborate", () => {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
         wikipedia: { enabled: true, capabilities: ["encyclopedia", "web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
       },
+      corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.7, first_pass_max_providers: 5 },
     });
     const result = await corroborate("quantum computing error correction", {
       max_iterations: 1,
@@ -927,6 +1089,90 @@ describe("corroborate", () => {
     });
 
     expect(kbSearch).not.toHaveBeenCalled();
+  });
+
+  // @implements REQ-026 confirmed-threshold
+  it("gates confirmation on the effective confidence threshold", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    });
+    const searchers = {
+      duckduckgo: async () => [makeResult("Quantum advances", "https://a.com/1", "quantum error correction advances rapidly")],
+      wikipedia: async () => [makeResult("Quantum progress", "https://b.com/2", "quantum error correction advances steadily")],
+    };
+
+    const strict = await corroborate("quantum error correction advances", { max_iterations: 1, searchers });
+    expect(strict.findings[0].confidence).toBeCloseTo(0.7);
+    expect(strict.findings[0].verdict).toBe("unverified");
+    expect(strict.provenance?.confidence_threshold).toBe(0.8);
+
+    const relaxed = await corroborate("quantum error correction advances", {
+      max_iterations: 1,
+      confidence_threshold: 0.7,
+      searchers,
+    });
+    expect(relaxed.findings[0].verdict).toBe("confirmed");
+    expect(relaxed.provenance?.confidence_threshold).toBe(0.7);
+  });
+
+  // @implements REQ-026e kb-alone
+  it("never confirms a knowledge-base-only corroboration", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.3, kb_recall: true, first_pass_max_providers: 5 },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(kbSearch).mockReturnValue([
+      { title: "Recalled A", source_url: "https://kb-a.example/1", snippet: "quantum error correction advances with surface codes", score: 0.9, freshness_score: 0.9 },
+      { title: "Recalled B", source_url: "https://kb-b.example/2", snippet: "quantum error correction advances using surface codes", score: 0.9, freshness_score: 0.9 },
+    ] as any);
+
+    const result = await corroborate("quantum error correction advances", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Weather", "https://c.example/1", "volcanic ash delays northern flights")],
+      },
+    });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].confidence).toBeCloseTo(0.7);
+    expect(result.findings[0].verdict).toBe("unverified");
+    expect(result.findings[0].sources).toHaveLength(2);
+    expect(result.findings[0].sources.every((s) => s.retrieval_origin === "knowledge_base")).toBe(true);
+    expect(result.providers_used).not.toContain("knowledge_base");
+  });
+
+  // @implements REQ-026e kb-alone
+  it("confirms the same finding when one external source agrees", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.3, kb_recall: true, first_pass_max_providers: 5 },
+    });
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(kbSearch).mockReturnValue([
+      { title: "Recalled A", source_url: "https://kb-a.example/1", snippet: "quantum error correction advances with surface codes", score: 0.9, freshness_score: 0.9 },
+      { title: "Recalled B", source_url: "https://kb-b.example/2", snippet: "quantum error correction advances using surface codes", score: 0.9, freshness_score: 0.9 },
+    ] as any);
+
+    const result = await corroborate("quantum error correction advances", {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [makeResult("Advances", "https://c.example/1", "quantum error correction advances quickly")],
+      },
+    });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].verdict).toBe("confirmed");
+    expect(result.findings[0].sources.some((s) => s.retrieval_origin !== "knowledge_base")).toBe(true);
+    expect(result.providers_used).not.toContain("knowledge_base");
   });
 
   it("excludes providers whose auth env is unset", async () => {

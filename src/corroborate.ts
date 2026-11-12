@@ -98,9 +98,12 @@ export function extractTopic(title: string): string {
   return keywords.slice(0, 4).join(" ") || title.slice(0, 50).toLowerCase();
 }
 
+// REQ-026b: overlap is judged on content tokens only. Short tokens and the
+// shared stopword lexicon are not evidence of topical relation, so a snippet
+// sharing only "the"/"was" with a claim is never attributed to it (F-R5-A-1).
 export function jaccardSimilarity(a: string, b: string): number {
   const tokens = (s: string) => new Set(
-    s.toLowerCase().split(/\W+/).filter((t) => t.length > 2)
+    s.toLowerCase().split(/\W+/).filter((t) => t.length > 2 && !STOPWORDS.has(t))
   );
   const ta = tokens(a);
   const tb = tokens(b);
@@ -113,6 +116,22 @@ export function jaccardSimilarity(a: string, b: string): number {
 }
 
 const NEGATION_RE = /\b(not|no|never|none|without|cannot|can't|won't|doesn't|don't|isn't|aren't|wasn't|weren't|nor|neither|false|denies|denied|refutes|refuted|debunked|debunks|rises?|increases?|reduces?|reduction|growth|decline|higher|lower|more|less|benefit|harm|safe|unsafe|effective|ineffective|positive|negative|supports?|contradicts?|causes?|prevents?)\b/g;
+
+/**
+ * REQ-026 / REQ-026e: the single confirmation predicate. A finding is
+ * confirmed only when its agreeing cluster holds at least two members, its
+ * post-authority confidence meets the effective threshold, and at least one
+ * member came from a live provider rather than knowledge-base recall alone.
+ */
+export function confirmationEligible(
+  members: Source[],
+  confidence: number,
+  threshold: number,
+): boolean {
+  if (members.length < 2) return false;
+  if (confidence < threshold) return false;
+  return members.some((member) => member.retrieval_origin !== "knowledge_base");
+}
 
 // Directional/antonym pairs. Embeddings place a claim and its opposite close
 // together (they share topic), so agreement clustering alone would merge them
@@ -190,6 +209,7 @@ function attributeSource(
     source_family: r.source_family,
     provider: r.provider,
     content_sha256: r.content_sha256,
+    ...(r.retrieval_origin ? { retrieval_origin: r.retrieval_origin } : {}),
   };
 }
 
@@ -202,6 +222,7 @@ export function reconcileClaims(
   retrievedAt?: () => string,
   familySimilarityThreshold = 0.9,
   calibration?: CalibrationOptions,
+  confidenceThreshold = 0.5,
 ): void {
   for (const r of results) {
     if (!r.title) continue;
@@ -223,8 +244,13 @@ export function reconcileClaims(
       // claim. The old lone-claim exception attributed every result to the only
       // finding, so an unrelated page looked like support (CR-2).
       if (!best || bestScore <= 0) continue;
-      if (!best.sources.some((s) => s.url === r.url)) {
+      const existingSource = best.sources.find((s) => s.url === r.url);
+      if (!existingSource) {
         best.sources.push(attributeSource(r, retrievedAt, best.claim));
+      } else if (r.retrieval_origin !== "knowledge_base" && existingSource.retrieval_origin === "knowledge_base") {
+        // D3: the URL was retrieved live in this run, so the recall marker no
+        // longer describes how the source was obtained.
+        delete existingSource.retrieval_origin;
       }
       continue;
     }
@@ -242,9 +268,11 @@ export function reconcileClaims(
         sources: [attributeSource(r, retrievedAt, r.snippet)],
       });
     } else {
-      const alreadyHasSource = existing.sources.some((s) => s.url === r.url);
-      if (!alreadyHasSource) {
+      const existingSource = existing.sources.find((s) => s.url === r.url);
+      if (!existingSource) {
         existing.sources.push(attributeSource(r, retrievedAt, existing.claim));
+      } else if (r.retrieval_origin !== "knowledge_base" && existingSource.retrieval_origin === "knowledge_base") {
+        delete existingSource.retrieval_origin;
       }
     }
   }
@@ -305,14 +333,19 @@ export function reconcileClaims(
       finding.perspectives = clusters.map((c) => c.representative);
     } else if (clusters.length === 1) {
       finding.confidence = capConfidence(computeConfidence(dominant.members, authorityWeights), dominant.members, calibration);
-      if (dominant.members.length >= 2 && finding.confidence >= 0.5) {
-        finding.verdict = "confirmed";
-      } else {
-        finding.verdict = "unverified";
-      }
+      // REQ-026: the verdict follows the effective threshold, and REQ-026e
+      // forbids confirming from knowledge-base recall alone (F-R5-A-2,
+      // F-R5-D-1). A finding that misses either bar keeps its confidence.
+      finding.verdict = confirmationEligible(dominant.members, finding.confidence, confidenceThreshold)
+        ? "confirmed"
+        : "unverified";
     } else if (dominant.members.length >= 2) {
       finding.confidence = capConfidence(computeConfidence(dominant.members, authorityWeights), dominant.members, calibration);
-      finding.verdict = "confirmed";
+      // The explicit fallback keeps a non-conflicting finding out of
+      // `contested`, which REQ-026f reserves for contradictory propositions.
+      finding.verdict = confirmationEligible(dominant.members, finding.confidence, confidenceThreshold)
+        ? "confirmed"
+        : "unverified";
     } else {
       finding.confidence = Math.max(
         capConfidence(computeConfidence(dominant.members, authorityWeights), dominant.members, calibration),
@@ -640,8 +673,9 @@ export async function corroborate(
           url: r.source_url,
           snippet: r.snippet,
           source_type: r.source_type,
+          retrieval_origin: "knowledge_base" as const,
         }));
-        reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
+        reconcileClaims(findings, recalled, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions, confidenceThreshold);
       } catch {
         // KB unavailable for this claim — the external pass still runs.
       }
@@ -709,7 +743,7 @@ export async function corroborate(
             if (result.status === "fulfilled" && result.value) {
               providersUsed.add(result.value.slug);
               increment(result.value.slug, config.providers[result.value.slug]?.rate_limit);
-              reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
+              reconcileClaims(findings, result.value.results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions, confidenceThreshold);
             }
           }
 
@@ -760,7 +794,7 @@ export async function corroborate(
           const { slug, results } = result.value;
           providersUsed.add(slug);
           increment(slug, config.providers[slug]?.rate_limit);
-          reconcileClaims(findings, results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions);
+          reconcileClaims(findings, results, similarityThreshold, authorityWeights, true, undefined, familySimilarityThreshold, calibrationOptions, confidenceThreshold);
         }
       }
     }

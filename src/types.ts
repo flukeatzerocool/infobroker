@@ -37,6 +37,8 @@ export interface SearchResult {
   provider?: string;
   /** REQ-020g: every provider that contributed to this collapsed representative. */
   providers?: string[];
+  /** Retrieval channel when it is not a live provider search (REQ-026e). */
+  retrieval_origin?: "knowledge_base";
   /** SHA-256 of the stored source text (REQ-122/REQ-026d). */
   content_sha256?: string;
   /** ISO time the source was retrieved. */
@@ -287,6 +289,8 @@ export interface CorroborationSource {
   source_family?: string;
   /** Serving provider slug. */
   provider?: string;
+  /** REQ-026e: set when the source came from knowledge-base recall, not a live search. */
+  retrieval_origin?: "knowledge_base";
   /** SHA-256 of the snapshot text (REQ-122). */
   content_sha256?: string;
   /** Freshness tier used for the snapshot (REQ-122). */
