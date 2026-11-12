@@ -2,6 +2,24 @@
 
 ## Active Decisions
 
+### D-107: The Technique Catalog Claims Five Families, Not Six (2026.11.12)
+
+REQ-088 requires at least six techniques across at least three tradecraft
+families, and the analysis-loop catalog claimed six families while assigning no
+technique to any of them — "assessment of cause and effect" had no curated
+method at all. Decision: every technique in
+`skills/analysis-loop/references/techniques.md` declares exactly one family,
+the `## Families` index is the authoritative claim in both directions, and the
+catalog claims five families: hypothesis generation and testing (ACH), challenge
+analysis (Key Assumptions Check, Devil's Advocacy, Premortem Analysis,
+Structured Self-Critique), scenarios and indicators (Indicators), diagnostics
+(Quality-of-Information Check), and decision support (Decision Matrix). The
+cause-and-effect family is deliberately unclaimed until a curated technique
+fills it, rather than padding the catalog to preserve a count. `validate-spec`
+enforces the mapping, the index cross-check, single-family membership, and the
+three-family floor. This narrows the prose claim under the roadmap's stated
+alternative (`ROADMAP.md:20`) and does not change REQ-088.
+
 ### D-106: Preservation Governs Archiving, With an Archiving-Only Opt-Out (2026.11.12)
 
 REQ-026c keys the durable archive reference to "source preservation … enabled",
