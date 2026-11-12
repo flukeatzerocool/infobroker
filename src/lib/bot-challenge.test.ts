@@ -1,4 +1,4 @@
-// @implements REQ-021f
+// @implements REQ-021f verification REQ-021f captcha REQ-021f challenge-page
 import { describe, it, expect } from "vitest";
 import { isBotChallenge } from "./bot-challenge.js";
 
@@ -50,6 +50,30 @@ redirected to their dashboard. This page has plenty of real content, several
 paragraphs of documentation, and a normal title that mentions neither
 verification nor challenges.`;
     expect(isBotChallenge(article)).toBe(false);
+  });
+
+  it("does not flag an article whose title mentions CAPTCHA", () => {
+    const article = `<html><head><title>How CAPTCHA works</title></head><body><article>
+<p>CAPTCHA is a challenge-response test used to distinguish humans from bots.
+This article explains the history of the technique, the difference between
+image and audio challenges, how accessibility concerns shaped modern designs,
+and why the tests remain common on signup and login forms. It also covers the
+ways site owners tune difficulty, the privacy trade-offs of third-party
+solvers, and the failure modes that frustrate legitimate users.</p>
+</article></body></html>`;
+    expect(isBotChallenge(article)).toBe(false);
+  });
+
+  it("still flags a short title-only CAPTCHA wall", () => {
+    expect(isBotChallenge("<html><head><title>CAPTCHA</title></head><body>Verify to continue.</body></html>")).toBe(true);
+  });
+
+  it("records the accepted long-boilerplate residual", () => {
+    // D1: with the marker demoted to weak, a wall whose only signal is the
+    // captcha title is detected only when the visible text is short. A wall
+    // padded past the 400-character threshold is accepted as a residual (P3).
+    const boilerplate = "Please wait while we verify your request. ".repeat(12);
+    expect(isBotChallenge(`<html><head><title>CAPTCHA</title></head><body>${boilerplate}</body></html>`)).toBe(false);
   });
 
   it("does not flag a normal article page", () => {

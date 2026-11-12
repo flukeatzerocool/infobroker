@@ -2,9 +2,10 @@
 // Anti-bot challenge detection for the content_fetch renderer chain.
 // A renderer that returns an anti-bot verification page rather than the
 // target page is treated as a failed render so the chain can fall through
-// to the next renderer (REQ-021f). Detection is deliberately conservative:
-// long, distinctive markers are decisive on their own; shorter markers only
-// count when the page also has almost no textual content.
+// to the next renderer (REQ-021f). Detection has three tiers: long,
+// distinctive title markers are decisive on their own; distinctive body
+// markers are decisive; and weak markers (a topic word in the title, or a
+// challenge script) count only when the page has almost no textual content.
 
 const STRONG_TITLE_MARKERS: RegExp[] = [
   /just a moment/i,
@@ -12,10 +13,14 @@ const STRONG_TITLE_MARKERS: RegExp[] = [
   /performing security verification/i,
   /verify you(?: are|'re)(?: a)? human/i,
   /checking your browser/i,
-  /captcha/i,
   /access denied/i,
   /sorry, you have been blocked/i,
 ];
+
+// "CAPTCHA" is also an ordinary topic word ("How CAPTCHA works"), so it names a
+// challenge only when the page carries almost no text. MIN_TEXT_FOR_SCRIPT_SIGNAL
+// gates both weak families.
+const WEAK_TITLE_MARKERS: RegExp[] = [/captcha/i];
 
 const DISTINCTIVE_BODY_MARKERS: RegExp[] = [
   /performing security verification/i,
@@ -58,11 +63,11 @@ export function isBotChallenge(content: string): boolean {
   const title = extractTitle(content);
   if (STRONG_TITLE_MARKERS.some((re) => re.test(title))) return true;
   if (DISTINCTIVE_BODY_MARKERS.some((re) => re.test(content))) return true;
-  if (
-    CHALLENGE_SCRIPT_MARKERS.some((re) => re.test(content)) &&
-    visibleTextLength(content) < MIN_TEXT_FOR_SCRIPT_SIGNAL
-  ) {
-    return true;
-  }
+
+  // Weak markers need a page that is almost entirely chrome: a topic word in
+  // the title or a challenge script proves nothing on a page with real prose.
+  if (visibleTextLength(content) >= MIN_TEXT_FOR_SCRIPT_SIGNAL) return false;
+  if (WEAK_TITLE_MARKERS.some((re) => re.test(title))) return true;
+  if (CHALLENGE_SCRIPT_MARKERS.some((re) => re.test(content))) return true;
   return false;
 }
