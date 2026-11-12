@@ -582,7 +582,7 @@ result because their exit code is always 0.
 | §4 REQ verdict rows | 143 rows over **142 distinct IDs**; 0 missing from the §9.5 manifest, 0 extra. `REQ-106` carries two rows by design. One qualified cell, `REQ-091` = `holds` (live `NOT_RUN`), is the recorded live-publication caveat, not a gap |
 | Finding closure | 272 register rows, 272 distinct IDs; all **119** `finding:<ID>` citations in verdict tables resolve to a register row |
 | Severity census | P0 4 (all `Resolved`), P1 81, P2 97, P3 90 |
-| Disposition census | `Resolved` 10, `Scheduled-roadmap` 168, `Closed-P3` 93, `Deferred-R1` 1; 0 `Deferred-by-user` |
+| Disposition census | `Resolved` 13, `Scheduled-roadmap` 165, `Closed-P3` 93, `Deferred-R1` 1; 0 `Deferred-by-user` |
 | Open P0 | **0** |
 | Prose units | 22/22 ownership units now carry a row (the §1 goal 3 row was added at this close, F-M1-1); every chunk `Spec:` line's sections are represented by a prose row or that chunk's REQ rows |
 | Roadmap mapping | 74 rows name their ID in a `ROADMAP.md` section; 42 (R2 27 + R3 15) are covered only by that section's chunk-register trigger; 52 (R4 18, R5 27 + 1 malformed, R6 6) have no roadmap home — census recorded under F-M1-2. `F-R5-B-8` was unparseable (unescaped pipe characters inside its formula) and was repaired |
@@ -745,7 +745,7 @@ work.
 | F-R5-A-6 | R5 | Clause tags missing for REQ-026b's unrelated-SHALL-NOT leg and REQ-026g's dual-input/config-bound legs (`corroborate.test.ts:1,1061-1069`) | P3 | `Closed-P3` |
 | F-R5-A-7 | R5 | Paraphrase grouping is evidenced only by high lexical overlap; no synonym-level paraphrase case (`src/corroborate.ts:270-286`) | P3 | `Closed-P3` |
 | F-R5-A-8 | R5 | `src/corroborate.ts:1` header omits `REQ-026f` though the file implements reconciliation (`src/corroborate.ts:1` vs `corroborate.test.ts:1`) | P3 | `Closed-P3` |
-| F-R5-B-1 | R5 | The 20-token gate means short republished snippets never collapse into one family, and the test enshrines the non-collapse despite REQ-121's "republish substantially the same text" (`src/source-family.ts:88-90,132-138`; `source-family.test.ts:34-40`) | P1 | `Scheduled-roadmap` |
+| F-R5-B-1 | R5 | The 20-token gate means short republished snippets never collapse into one family, and the test enshrines the non-collapse despite REQ-121's "republish substantially the same text" (`src/source-family.ts:88-90,132-138`; `source-family.test.ts:34-40`) | P1 | `Resolved` |
 | F-R5-B-2 | R5 | Named clause tags absent for REQ-121's canonical-URL/near-duplicate legs, REQ-123's cap/measure/disable legs and REQ-026a's authoritative-vs-generic leg (`source-family.test.ts:1`; `calibration.test.ts:1`; `corroborate.test.ts:1`) | P3 | `Closed-P3` |
 | F-R5-B-3 | R5 | REQ-123's disableability clause is untested: nothing asserts `capConfidence(...,{enabled:false})` or that config `calibration.enabled:false` reaches a finding (`src/calibration.ts:39`; `calibration.test.ts:5-34`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-4 | R5 | REQ-121's "each finding SHALL report its family count" is static-only: `family_count` is written and spread but never asserted on a finding (`src/corroborate.ts:259,779-783`) | P2 | `Scheduled-roadmap` |
@@ -757,9 +757,9 @@ work.
 | F-R5-B-10 | R5 | `family_similarity_threshold` configurability is unproven: the only explicit pass is the default 0.9 (`source-family.test.ts:19`) | P2 | `Scheduled-roadmap` |
 | F-R5-B-11 | R5 | `reliabilityCurve` bands are half-open and `brierScore([])` returns 0, presenting no data as perfect calibration (`src/calibration.ts:45-72`) | P3 | `Closed-P3` |
 | F-R5-B-12 | R5 | Per-family authority uses only the first source's `source_type`, so an untyped first member neutralizes a typed family (`src/corroborate.ts:350-365`) | P3 | `Closed-P3` |
-| F-R5-C-1 | R5 | Archiving is gated on `corroboration.archive_sources` instead of `preservation.enabled`; shipped preservation-on plus archive-off means the preservation-enabled default never archives (`src/corroborate.ts:793`; `config.json:336,420`) | P1 | `Scheduled-roadmap` |
+| F-R5-C-1 | R5 | Archiving is gated on `corroboration.archive_sources` instead of `preservation.enabled`; shipped preservation-on plus archive-off means the preservation-enabled default never archives (`src/corroborate.ts:793`; `config.json:336,420`) | P1 | `Resolved` |
 | F-R5-C-2 | R5 | Snapshot basis was chosen by whether a fetcher existed, not whether the fetch succeeded, so a failed fetch stored the snippet while reporting `basis:"document"` (`src/corroborate.ts:866-886`) | **P0** | **Resolved 2026-11-09** — basis follows the stored text; regression test `REQ-122 snippet-basis-on-fetch-failure` |
-| F-R5-C-3 | R5 | Deep reading calls `snapshotSource` and discards the result, reporting neither snapshot hash nor freshness tier alongside the live URL (`src/index.ts:647-655`) | P1 | `Scheduled-roadmap` |
+| F-R5-C-3 | R5 | Deep reading calls `snapshotSource` and discards the result, reporting neither snapshot hash nor freshness tier alongside the live URL (`src/index.ts:647-655`) | P1 | `Resolved` |
 | F-R5-C-4 | R5 | Sources with a pre-existing `content_sha256` are skipped: no snapshot stored and no basis/truncation fields, so a hash can appear without a graded snapshot (`src/corroborate.ts:859`) | P2 | `Scheduled-roadmap` |
 | F-R5-C-5 | R5 | `provenance.sources[]` omits `snapshot_tier` although REQ-122 requires the freshness tier alongside the live URL (`src/corroborate.ts:833-843`) | P2 | `Scheduled-roadmap` |
 | F-R5-C-6 | R5 | Per-source-type contribution is global across findings and the flat `provenance.sources[]` carries no finding index (`src/corroborate.ts:803-809,833-843`) | P2 | `Scheduled-roadmap` |

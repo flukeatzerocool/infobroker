@@ -347,15 +347,16 @@ ingest returns a `report_id` linking the report to them. Revisit them with
 recall to a named `collection`, and `fresh: "blend"` keeps cached results
 beside fresh ones, reporting the kept count even when zero.
 
-Corroboration results are also kept as claim records. Each `verify_claims` run
-stores one ledger entry per finding, linked to its sources with each source's
-retrieval time; re-verifying updates that entry in place. Cited sources are copied into
-the knowledge base as retrievable, hashed snapshots, so a report can be
-rechecked after the live page changes. Each snapshot reports its basis —
-fetched document or supplied snippet — and whether it was truncated. Read them
-with `manage_kb` action=claims, optionally filtered by `query` (claim text) or
-`source_url`, newest first and capped by `max_results` (default 8, max 50).
-The ledger is sealed at rest when encryption is on.
+Corroboration results are also kept as claim records: one ledger entry per
+finding, linked to its sources' retrieval times and updated in place on
+re-verification. Cited sources are copied into the knowledge base as
+retrievable, hashed snapshots, so a report can be rechecked after the live page
+changes. Deep reading reports a snapshot hash and freshness tier per page.
+Each snapshot reports its basis (document or snippet) and truncation.
+`preservation.archive: false` keeps snapshots and disables Wayback archiving.
+Read them with `manage_kb` action=claims, filtered by `query` or `source_url`
+and capped by `max_results` (default 8, max 50). The ledger is sealed at rest
+when encryption is on.
 
 A watchlist runner records due-topic claim deltas; cron owns the schedule. A
 report can carry a verification receipt: ingest claims, cited sources, and the

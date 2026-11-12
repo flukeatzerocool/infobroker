@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-106: Preservation Governs Archiving, With an Archiving-Only Opt-Out (2026.11.12)
+
+REQ-026c keys the durable archive reference to "source preservation … enabled",
+but the implementation read `corroboration.archive_sources`, which shipped
+`false` while `preservation.enabled` shipped `true` — so the shipped default
+never archived, and a user could not tell which switch was authoritative.
+Decision: `preservation.enabled` governs both snapshots and archiving, and a new
+`preservation.archive` boolean (default `true`) disables archiving without
+disabling snapshots. This supersedes D-026. D-026's objection — default-on
+would send every cited URL to a third party and add Save-Page-Now latency to
+every corroboration — is met rather than ignored: the archive wave runs under one
+abortable budget (`ARCHIVE_TOTAL_BUDGET_MS`, default 2 s) that aborts in-flight
+saves at the deadline, a per-request 4 s ceiling still applies underneath it,
+concurrency stays at 4, and every failure is swallowed so confidence, verdict,
+and the response are unchanged. The request is a `GET` to
+`web.archive.org/save/`, not a POST. Migration: an operator who had set
+`archive_sources: false` and wants archiving off sets `preservation.archive:
+false`; `archive_sources` is ignored, and the local config layer is never
+rewritten. Accepted residual: archiving is on by default, so a
+`verify_claims` run sends corroborating URLs to the Wayback Machine without a
+per-call prompt unless the operator opts out.
+
 ### D-102: A Single Unavailable Credential Is Visible on the Provider Row (2026.11.11)
 
 `keyPoolStatus` reports per-key availability, but `inspect_providers` emitted
@@ -1730,6 +1752,12 @@ You.com, and Andi were likewise rejected (dormant, token-gated, or redundant
 with Tavily/Exa).
 
 ### D-026: Corroboration Source Preservation Off by Default (2026.08.23)
+
+**Superseded by D-106 (2026.11.12).** Archiving now follows
+`preservation.enabled` and is default-on, with `preservation.archive: false` as
+the archiving-only opt-out and an abortable wave budget bounding the latency
+this entry cited. The reasoning below is retained as the record of the original
+decision.
 
 Corroboration source preservation (`archive_sources`) is implemented as a
 best-effort, non-blocking Wayback save with bounded concurrency, but ships

@@ -2,6 +2,32 @@
 
 ## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
 
+- `verify_claims` archiving now follows source preservation instead of the
+  removed `corroboration.archive_sources` flag, so the shipped
+  `preservation.enabled: true` default attempts a Wayback reference for each
+  corroborating source and reports `archived_url`; `preservation.archive: false`
+  disables archiving while keeping snapshots, and an operator who had set
+  `archive_sources: false` should set that key instead (REQ-026c;
+  `src/corroborate.ts`, `src/types.ts`, `src/config.ts`, `config.json`;
+  `src/corroborate.test.ts`). The archive wave now runs under one abortable
+  budget (2 s, `corroborate` option `archiveBudgetMs` for tests) that aborts
+  in-flight saves at the deadline while a 4 s per-request ceiling still applies
+  beneath it, so default-on archiving cannot add a full request timeout to every
+  corroboration; failures stay non-fatal and change no verdict, confidence, or
+  source count.
+- Deep reading reports the snapshot it stores instead of discarding it: each
+  fetched page result carries `snapshot_sha256`, `snapshot_tier`,
+  `snapshot_basis`, `snapshot_url`, and `snapshot_truncated` in verbose output,
+  and omits all five when preservation is off or storage fails (REQ-122;
+  `src/deep-search.ts`, `src/index.ts`; `src/deep-search.test.ts`,
+  `src/dispatch-orchestration.test.ts`).
+- Short republished snippets now count as one source family: the 20-token gate
+  that suppressed every short-text comparison is replaced by a five-content-token,
+  two-shingle floor, so a republished wire sentence on two domains reports
+  `family_count: 1` while a single shared shingle or a shared title still does
+  not merge (REQ-121; `src/source-family.ts`; `src/source-family.test.ts`,
+  `src/corroborate.test.ts`).
+
 - `verify_claims` reports the ingest provider of a knowledge-base-recalled
   source in the corroboration provenance record instead of dropping it, so
   REQ-026d's per-source `provider` field is populated for recalled sources; a

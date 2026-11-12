@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R5 snapshot and family remediation
-
-- Gate archiving on `preservation.enabled` rather than `corroboration.archive_sources` (F-R5-C-1), report the deep-reading snapshot hash and freshness tier instead of discarding it (F-R5-C-3), and collapse short republished snippets into one source family (F-R5-B-1).
-- Each behavior change ships with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after chunk R6 closes; close when F-R5-C-1, F-R5-C-3, and F-R5-B-1 are `Resolved`.
-
 ## R5 citation and prose remediation
 
 - Preserve the per-provider status and zero-result provider list under compact verbosity (F-R5-E-3), and align §8.2's independence definition with source-family counting (F-R5-G-1).
