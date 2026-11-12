@@ -48,7 +48,7 @@ import { finalizeToolResult, parseEnvelopeObject, rawRequestError, rawTextFromEn
 import { deepRead } from "./deep-search.js";
 import { analyzeResults } from "./analysis.js";
 import { derivePrivacy } from "./privacy.js";
-import { detectUpdatedAt } from "./datetime.js";
+import { detectDocumentDate } from "./datetime.js";
 import { searchCitations } from "./cite.js";
 import { deriveExpansions } from "./expand.js";
 import { computeHedgeDelay, raceFirstSuccess } from "./hedge.js";
@@ -864,7 +864,7 @@ async function doWebSearch(
 // via a manual-redirect HEAD, then falls back to parsing HTML metadata via a
 // manual-redirect GET. Manual redirects avoid following a hop to a new host,
 // so the SSRF guard (already asserted for the requested URL) is not bypassed.
-async function detectPageDate(url: string, allowPrivate: boolean): Promise<{ date: string; source: string; confidence: string } | undefined> {
+async function detectPageDate(url: string, allowPrivate: boolean): Promise<{ date: string; source: string; confidence: string; kind: "modified" | "published" } | undefined> {
   try {
     // REQ-021a: the date-detection requests also resolve the target so a
     // rebinding hostname cannot reach a private address via this path.
@@ -872,14 +872,14 @@ async function detectPageDate(url: string, allowPrivate: boolean): Promise<{ dat
     const head = await infobrokerFetch(url, { method: "HEAD", redirect: "manual", providerSlug: "native_fetch" });
     const headerData: Record<string, string | string[] | undefined> = {};
     head.headers.forEach((v, k) => (headerData[k] = v));
-    let detected = detectUpdatedAt("", headerData);
+    let detected = detectDocumentDate("", headerData);
     if (detected) return detected;
 
     if (head.status < 300 || head.status >= 400) {
       const get = await infobrokerFetch(url, { redirect: "manual", providerSlug: "native_fetch" });
       if (get.ok) {
         const html = (await get.text()).slice(0, 200000);
-        detected = detectUpdatedAt(html);
+        detected = detectDocumentDate(html);
         if (detected) return detected;
       }
     }
@@ -1040,6 +1040,45 @@ export function renderersForUrl(url: string, fallback: string[]): string[] {
   return [special, ...fallback.filter((r) => r !== special)];
 }
 
+// REQ-021b / F-R4-D-1: a question that matched no passage returns the full
+// content with the same extraction metadata contract as one that matched, so
+// the two modes cannot be told apart by which fields are missing. Both no-match
+// returns call this builder; `question` and the note are omitted when the
+// request carried no question (the fallback path also serves a plain fetch).
+function fullContentEnvelope(input: {
+  provider: string;
+  url: string;
+  question?: string;
+  snippet: string;
+  meta: Record<string, unknown>;
+  dateMeta?: Record<string, unknown>;
+  truncated?: { truncated: boolean; outputPath?: string };
+}): Record<string, unknown> {
+  const dateMeta = input.dateMeta ?? {};
+  return {
+    status: "ok",
+    provider: input.provider,
+    url: input.url,
+    ...(input.question ? { question: input.question } : {}),
+    extraction_mode: "full_content",
+    results: [{ title: new URL(input.url).hostname, url: input.url, snippet: input.snippet, ...dateMeta }],
+    ...(input.question ? { note: "No passage addressed the question; returning the full content instead." } : {}),
+    ...dateMeta,
+    meta: {
+      ...input.meta,
+      passages_returned: 0,
+      match_quality: matchQuality(undefined, 0),
+    },
+    ...(input.truncated?.truncated
+      ? {
+          truncated: true,
+          output_path: input.truncated.outputPath,
+          truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path.",
+        }
+      : {}),
+  };
+}
+
 async function doFetchPage(
   url: string | string[],
   renderer?: string,
@@ -1147,7 +1186,7 @@ async function doFetchPage(
   if (crawl) {
     const maxPages = config.fetch?.crawl_max_pages ?? 10;
     const maxDepth = config.fetch?.crawl_max_depth ?? 2;
-    const pages: Array<{ url: string; depth: number; title: string; snippet: string }> = [];
+    const pages: Array<{ url: string; depth: number; title: string; snippet: string; truncated?: boolean; output_path?: string }> = [];
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url, depth: 0 }];
     let policyFlags = 0;
@@ -1157,7 +1196,9 @@ async function doFetchPage(
       visited.add(cur.url);
       let fetched;
       try {
-        fetched = await fetchPageContent(cur.url, ["native_fetch"], effectiveMax, allowPrivate, false);
+        // REQ-004: the renderer layer is left uncapped so the stripped page text
+        // below is the only thing bounded — one clipped page, one full-text file.
+        fetched = await fetchPageContent(cur.url, ["native_fetch"], Number.MAX_SAFE_INTEGER, allowPrivate, false);
       } catch (e) {
         // REQ-021a/021d: a refused crawl hop is skipped, not listed;
         // REQ-098: the refusal is recorded in the audit trail.
@@ -1174,11 +1215,14 @@ async function doFetchPage(
       const disp = disposition(policy.flagged);
       if (disp === "refuse") continue;
       if (policy.flagged) policyFlags++;
+      // REQ-004: a clipped page reports its own truncation and full-text path.
+      const pageText = maybeTruncate(text, effectiveMax);
       pages.push({
         url: cur.url,
         depth: cur.depth,
         title: new URL(cur.url).hostname,
-        snippet: text.slice(0, effectiveMax),
+        snippet: pageText.text,
+        ...(pageText.truncated ? { truncated: true, output_path: pageText.outputPath } : {}),
       });
       if (disp === "store") {
         autoIndex([{ title: new URL(cur.url).hostname, url: cur.url, snippet: text.slice(0, 4000) }], "native_fetch", undefined, "crawl");
@@ -1191,16 +1235,25 @@ async function doFetchPage(
         }
       }
     }
+    const truncatedPages = pages.filter((page) => page.truncated).length;
     return `[OK] ${json({
       status: "ok",
       provider: "native_fetch",
       results: pages,
+      ...(truncatedPages > 0
+        ? {
+            truncated: true,
+            truncation_hint:
+              "One or more crawled pages were clipped; read the `output_path` on each clipped page for its full text.",
+          }
+        : {}),
       meta: {
         query_time_ms: 0,
         fallback_used: false,
         pages: pages.length,
         max_pages: maxPages,
         max_depth: maxDepth,
+        ...(truncatedPages > 0 ? { truncated_pages: truncatedPages } : {}),
         ...(policyMeta(policyFlags, policyMode()) ?? {}),
       },
     })}`;
@@ -1213,7 +1266,7 @@ async function doFetchPage(
     let fetched;
     const extractFailures: FetchFailure[] = [];
     try {
-      fetched = await fetchPageContent(url, ["native_fetch"], effectiveMax, allowPrivate, false, (f) =>
+      fetched = await fetchPageContent(url, ["native_fetch"], Number.MAX_SAFE_INTEGER, allowPrivate, false, (f) =>
         extractFailures.push(f)
       );
     } catch (e) {
@@ -1242,6 +1295,9 @@ async function doFetchPage(
     }
     const structured = extractStructured(fetched.content);
     const hasData = structured.jsonld.length > 0 || structured.microdata.length > 0 || Object.keys(structured.open_graph).length > 0;
+    // REQ-004: the returned text is bounded once, and a clipped page names its
+    // full-text file.
+    const extractText = maybeTruncate(stripHtml(fetched.content), effectiveMax);
     return `[OK] ${json({
       status: "ok",
       provider: fetched.slug,
@@ -1250,7 +1306,7 @@ async function doFetchPage(
       results: [{
         title: new URL(url).hostname,
         url,
-        snippet: stripHtml(fetched.content).slice(0, effectiveMax),
+        snippet: extractText.text,
       }],
       extracted: structured,
       ...(hasData ? {} : { note: "No structured metadata found on this page." }),
@@ -1259,6 +1315,14 @@ async function doFetchPage(
         fallback_used: false,
         ...(policyMeta(policy.flagged ? 1 : 0, policyMode()) ?? {}),
       },
+      ...(extractText.truncated
+        ? {
+            truncated: true,
+            output_path: extractText.outputPath,
+            truncation_hint:
+              "Call fetch_page again with `question` to get the relevant passages instead of reading output_path.",
+          }
+        : {}),
     })}`;
   }
 
@@ -1372,11 +1436,11 @@ async function doFetchPage(
         }
       }
       const truncatedFallback = maybeTruncate(fallbackContent, effectiveMax);
-      return `[OK] ${json({
-        status: "ok",
+      return `[OK] ${json(fullContentEnvelope({
         provider: fallback.fetched.slug,
         url,
-        results: [{ title: new URL(url).hostname, url, snippet: truncatedFallback.text }],
+        question,
+        snippet: truncatedFallback.text,
         meta: {
           query_time_ms: fallback.fetched.elapsed,
           fallback_used: true,
@@ -1384,15 +1448,8 @@ async function doFetchPage(
           fallback_url: fallback.fetched_url,
           ...(policyMeta(fallbackPolicy.flagged ? 1 : 0, policyMode()) ?? {}),
         },
-        ...(truncatedFallback.truncated
-          ? {
-              truncated: true,
-              output_path: truncatedFallback.outputPath,
-              truncation_hint:
-                "Call fetch_page again with `question` to get the relevant passages instead of reading output_path.",
-            }
-          : {}),
-      })}`;
+        truncated: truncatedFallback,
+      }))}`;
     }
 
     const taxonomy = failureTaxonomy(failures);
@@ -1416,12 +1473,19 @@ async function doFetchPage(
   const policyNote = policyMeta(policy.flagged ? 1 : 0, policyMode());
 
   const pageDate = effectiveDetectDate ? await detectPageDate(url, allowPrivate) : undefined;
+  // REQ-021c: a modification timestamp answers "when was this last updated"; a
+  // publication timestamp does not, so it is reported as `published_date`
+  // instead of being relabelled (F-R4-C-2).
   const dateMeta = pageDate
-    ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
+    ? pageDate.kind === "modified"
+      ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
+      : { published_date: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
     : {};
 
   if (disp === "store") {
-    autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
+    // REQ-060: only a modification date is a source "last updated" date; a
+    // publication date is omitted rather than stored as one.
+    autoIndex([{ title: new URL(url).hostname, url, snippet: content, ...(pageDate && pageDate.kind === "modified" ? { source_updated_at: pageDate.date } : {}) }], slug, undefined, "fetch_page");
   }
 
   if (question) {
@@ -1450,31 +1514,28 @@ async function doFetchPage(
         },
       })}`;
     }
-    return `[OK] ${json({
-      status: "ok",
+    return `[OK] ${json(fullContentEnvelope({
       provider: slug,
+      url,
       question,
-      extraction_mode: "full_content",
-      results: [{
-        title: new URL(url).hostname,
-        url,
-        snippet: truncated.text,
-        ...dateMeta,
-      }],
-      note: "No passage addressed the question; returning the full content instead.",
-      ...dateMeta,
+      snippet: truncated.text,
       meta: {
         query_time_ms: elapsed,
         fallback_used: false,
         ...(policyNote ?? {}),
       },
-      ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath, truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path." } : {}),
-    })}`;
+      dateMeta,
+      truncated,
+    }))}`;
   }
 
   return `[OK] ${json({
     status: "ok",
     provider: slug,
+    url,
+    // REQ-021j: raw mode spreads this envelope into `structuredContent`, so a
+    // plain fetch must already name its extraction mode and passage count.
+    extraction_mode: "content",
     results: [{
       title: new URL(url).hostname,
       url,
@@ -1485,6 +1546,8 @@ async function doFetchPage(
     meta: {
       query_time_ms: elapsed,
       fallback_used: false,
+      passages_returned: 0,
+      match_quality: matchQuality(undefined, 0),
       ...(policyNote ?? {}),
     },
     ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath, truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path." } : {}),

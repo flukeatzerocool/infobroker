@@ -163,6 +163,26 @@ describe("mergeItems (REQ-020/REQ-021 array inputs)", () => {
     });
   });
 
+  it("reports zero passages and a none band for a no-match item", () => {
+    const noMatch = `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "native_fetch",
+      question: "When did Trump enter the WWE Hall of Fame?",
+      extraction_mode: "full_content",
+      results: [{ title: "b.example", url: "https://b.example/2", snippet: "full text" }],
+      note: "No passage addressed the question; returning the full content instead.",
+      meta: { passages_returned: 0, match_quality: "none" },
+    })}`;
+    const merged = mergeItems([{ query: "https://b.example/2", envelope: noMatch }]) as unknown as {
+      meta: {
+        per_query: Array<{ passages_returned?: number; match_quality?: string }>;
+      };
+    };
+
+    expect(merged.meta.per_query[0].passages_returned).toBe(0);
+    expect(merged.meta.per_query[0].match_quality).toBe("none");
+  });
+
   it("keeps the no-passage note on its own item", () => {
     const fullContent = `[OK] ${JSON.stringify({
       status: "ok",

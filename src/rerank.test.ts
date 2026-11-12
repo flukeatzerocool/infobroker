@@ -41,11 +41,9 @@ describe("scorePassages (REQ-021b content-mode)", () => {
     expect(ranked[0].score).toBeGreaterThan(0);
   });
 
-  it("returns no passages when nothing matches the question", () => {
-    const passages = ["Completely unrelated text about gardening tools."];
-    const ranked = scorePassages(passages, "quantum entanglement in birds");
-    expect(ranked.length).toBeGreaterThanOrEqual(0);
-    expect(ranked.every((r) => r.score === 0)).toBe(true);
+  it("returns no passages for unreadable content", () => {
+    expect(rankPassages("", "quantum entanglement in birds")).toEqual([]);
+    expect(rankPassages("   \n\t ", "quantum entanglement in birds")).toEqual([]);
   });
 });
 
@@ -53,10 +51,8 @@ describe("rankPassages (REQ-021b full-content-mode)", () => {
   it("returns top-k matches with an empty result signalling a non-answer", () => {
     const text = "Paris is the capital of France. The city sits on the river Seine. France is in Europe.";
     const top = rankPassages(text, "what river runs through Paris", 10, 1);
-    expect(top.length).toBeLessThanOrEqual(1);
-    if (top.length > 0) {
-      expect(top[0].score).toBeGreaterThan(0);
-    }
+    expect(top.length).toBe(1);
+    expect(top[0].score).toBeGreaterThan(0);
   });
 });
 

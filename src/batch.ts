@@ -210,6 +210,17 @@ export function mergeItems(items: BatchItem[]): Envelope {
           : []
       );
       const passages = env.snippets ?? (resultPassages.length > 0 ? resultPassages : undefined);
+      // REQ-021k / F-R4-D-1: an envelope that reports its own extraction
+      // metadata (a no-match fetch reports zero passages and a "none" band) is
+      // believed rather than re-derived from snippets it never carried.
+      const reportedPassages =
+        typeof env.meta?.["passages_returned"] === "number" ? (env.meta["passages_returned"] as number) : undefined;
+      const passagesReturned = reportedPassages ?? passages?.length;
+      const band: MatchQuality | undefined = passages
+        ? matchQuality(env.top_score, passages.length)
+        : typeof env.meta?.["match_quality"] === "string"
+          ? (env.meta["match_quality"] as MatchQuality)
+          : undefined;
       perQuery.push({
         query: item.query,
         ...(HTTP_URL_RE.test(item.query) ? { url: item.query } : {}),
@@ -220,9 +231,10 @@ export function mergeItems(items: BatchItem[]): Envelope {
         ...(typeof blockedCount === "number" ? { blocked_count: blockedCount } : {}),
         ...(env.extraction_mode ? { extraction_mode: env.extraction_mode } : {}),
         ...(typeof env.top_score === "number" ? { top_score: env.top_score } : {}),
-        ...(passages ? { passages_returned: passages.length, passages } : {}),
+        ...(passagesReturned !== undefined ? { passages_returned: passagesReturned } : {}),
+        ...(passages ? { passages } : {}),
         ...(env.note ? { note: env.note } : {}),
-        ...(passages ? { match_quality: matchQuality(env.top_score, passages.length) } : {}),
+        ...(band ? { match_quality: band } : {}),
       });
     } else {
       if (!firstError) firstError = env;
