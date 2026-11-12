@@ -54,6 +54,7 @@ describe("classifyTaskType (REQ-020a)", () => {
 
   // REQ-021i: an explicitly named measurable attribute is decisive even when a
   // title-plus-year token would otherwise read as an author-year citation.
+  // @implements REQ-021i measurable-attribute
   it("routes measurable-attribute queries to structured_fact", () => {
     expect(classifyTaskType("Survivor Series 1997 attendance")).toBe("structured_fact");
     expect(classifyTaskType("WrestleMania 23 attendance")).toBe("structured_fact");
@@ -64,6 +65,36 @@ describe("classifyTaskType (REQ-020a)", () => {
     expect(classifyTaskType("population of Austin")).toBe("structured_fact");
     expect(classifyTaskType("Smith et al. 2020 attention mechanisms")).toBe("academic");
     expect(classifyTaskType("capacity of the Suez Canal")).toBe("general_web");
+  });
+
+  // REQ-021i: area and elevation are measurable attributes the fact resolver
+  // already maps; the classifier must route the natural query forms to it.
+  it("routes area and elevation queries to structured_fact", () => {
+    for (const query of [
+      "area of Testville",
+      "surface area of Testville",
+      "total area of Testville",
+      "land area of Testville",
+      "elevation of Denver",
+      "Denver elevation",
+      "elevation gain",
+      "elevation above sea level",
+    ]) {
+      expect(classifyTaskType(query), query).toBe("structured_fact");
+    }
+    // The signal table carries every form, so dropping one cannot be masked by
+    // a broader form still routing the same probe.
+    for (const keyword of ["area of", "surface area", "total area", "land area", "elevation"]) {
+      expect(TASK_TYPE_KEYWORDS.structured_fact, keyword).toContain(keyword);
+    }
+    // Guards: bare "area" is not a signal, so a place/news phrase stays put.
+    expect(classifyTaskType("Bay Area news")).not.toBe("structured_fact");
+    // Accepted misroutes (P3): the phrase form is polysemous; the resolver
+    // reports not_found rather than computing a value.
+    expect(classifyTaskType("area of law")).toBe("structured_fact");
+    expect(classifyTaskType("area of study")).toBe("structured_fact");
+    expect(classifyTaskType("area of expertise")).toBe("structured_fact");
+    expect(classifyTaskType("angle of elevation")).toBe("structured_fact");
   });
 
   it("recognises biography queries", () => {

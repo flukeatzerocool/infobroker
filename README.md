@@ -236,8 +236,9 @@ so you get the specific text that answers the question instead of links. Pass
 `analyze: true` and the same response carries topic terms, entity mentions,
 semantic clusters, and a dated timeline derived from those results — computed
 in-process, with no extra request. A query that names a measurable attribute —
-attendance, population, a percentage, a date — resolves a sourced `facts`
-entry from Wikidata or a Wikipedia infobox/table ahead of the prose results.
+attendance, population, area, elevation, a percentage, a date — resolves a
+sourced `facts` entry from Wikidata or a Wikipedia infobox/table ahead of the
+prose results.
 Failed providers fall back silently through a configurable chain so you get
 results, not error messages. Other search tools lock you to one engine;
 Infobroker routes every query to the right provider and keeps going when one

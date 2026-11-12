@@ -93,6 +93,17 @@ export const TASK_TYPE_SIGNALS: Record<SearchableTaskType, Signal[]> = {
     { keyword: "how much", weight: 2 },
     { keyword: "what date", weight: 2 },
     { keyword: "when did", weight: 2 },
+    // REQ-021i names area and elevation as measurable attributes. The area
+    // forms are phrasal because bare "area" is polysemous ("Bay Area news",
+    // "area code"); elevation has no high-frequency non-attribute sense.
+    { keyword: "area of", weight: 4 },
+    { keyword: "surface area", weight: 4 },
+    { keyword: "total area", weight: 4 },
+    { keyword: "land area", weight: 4 },
+    { keyword: "elevation", weight: 4 },
+    { keyword: "elevation of", weight: 4 },
+    { keyword: "elevation gain", weight: 4 },
+    { keyword: "elevation above", weight: 4 },
   ],
   financial: [
     { keyword: "sec filing", weight: 2 },

@@ -8,6 +8,7 @@ import {
   unitLabel,
   wikipediaFacts,
 } from "./structured-fact.js";
+import { classifyTaskType } from "./task-type.js";
 
 const mockFetch = vi.fn(async (_url: string): Promise<Response> => new Response("{}", { status: 200 }));
 
@@ -445,6 +446,34 @@ describe("structured-fact resolution (REQ-021i)", () => {
       results: [{ title: "Survivor Series", url: "https://en.wikipedia.org/wiki/X", snippet: "" }],
     });
     expect(result?.fact_status).toBe("unavailable");
+  });
+
+  it("classifies an area query and resolves it end to end", async () => {
+    expect(classifyTaskType("area of Testville")).toBe("structured_fact");
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("wbgetclaims")) {
+        return new Response(
+          claimsBody({
+            P2046: [
+              {
+                rank: "normal",
+                mainsnak: {
+                  datavalue: { value: { amount: "+2.5", unit: "http://www.wikidata.org/entity/Q712226" } },
+                },
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+
+    const result = await enrichStructuredFacts("area of Testville", {
+      results: [{ title: "Testville", url: "https://www.wikidata.org/wiki/Q100", snippet: "" }],
+    });
+    expect(result?.fact_status).toBe("resolved");
+    expect(result?.facts[0]).toMatchObject({ kind: "area", value: 2.5, unit: "km²", property: "P2046" });
   });
 });
 
