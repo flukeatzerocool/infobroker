@@ -389,3 +389,77 @@ describe("blendResponseMeta (REQ-076a)", () => {
     }
   });
 });
+
+// F-R3-5 / REQ-020i: an all-fail batch reports every element's error in
+// per-input metadata, not only the first.
+describe("all-fail batch metadata (REQ-020i)", () => {
+  const failed = (provider: string, code: string) =>
+    `[ERROR] ${JSON.stringify({
+      status: "error",
+      provider,
+      error: { code, message: `${provider} failed`, remediation: "retry" },
+    })}`;
+
+  it("returns one per-input error row for every failed element", () => {
+    const merged = mergeItems([
+      { query: "alpha", envelope: failed("stub_a", "provider_unavailable") },
+      { query: "beta", envelope: failed("stub_b", "rate_limited") },
+    ]);
+    expect(merged.status).toBe("error");
+    const rows = (merged.meta?.per_query ?? []) as Array<{
+      query: string;
+      status: string;
+      error?: { code?: string };
+    }>;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.status)).toEqual(["error", "error"]);
+    expect(rows.map((row) => row.error?.code)).toEqual(["provider_unavailable", "rate_limited"]);
+    expect(rows.map((row) => row.query)).toEqual(["alpha", "beta"]);
+  });
+});
+
+// F-R3-26 / REQ-020i: a deep element carries its ranked passages on each
+// result, so per-input metadata reports the passage count.
+describe("deep batch passage counts (REQ-020i)", () => {
+  it("derives passages_returned from result passages", () => {
+    const envelope = `[OK] ${JSON.stringify({
+      status: "ok",
+      provider: "duckduckgo",
+      results: [
+        {
+          title: "t",
+          url: "https://a.example/1",
+          snippet: "s",
+          passages: [
+            { text: "p1", score: 0.9, index: 0, start: 0, end: 2 },
+            { text: "p2", score: 0.5, index: 1, start: 3, end: 5 },
+          ],
+        },
+      ],
+      meta: { query_time_ms: 5 },
+    })}`;
+    const merged = mergeItems([{ query: "deep query", envelope }]);
+    expect(merged.status).toBe("ok");
+    const rows = (merged.meta?.per_query ?? []) as Array<{ passages_returned?: number }>;
+    expect(rows[0]?.passages_returned).toBe(2);
+  });
+});
+
+// F-R3-27 / REQ-127: the merged envelope must not inherit one element's
+// analysis; the handler recomputes it over the merged set.
+describe("merged analysis (REQ-127)", () => {
+  it("drops the per-item analysis carried in the first success", () => {
+    const ok = (query: string) =>
+      `[OK] ${JSON.stringify({
+        status: "ok",
+        provider: "duckduckgo",
+        results: [{ title: query, url: `https://a.example/${query}`, snippet: "s" }],
+        meta: { analysis: { topics: [], entities: [], clusters: [], timeline: [] } },
+      })}`;
+    const merged = mergeItems([
+      { query: "alpha", envelope: ok("alpha") },
+      { query: "beta", envelope: ok("beta") },
+    ]);
+    expect(merged.meta?.analysis).toBeUndefined();
+  });
+});

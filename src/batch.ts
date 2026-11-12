@@ -124,6 +124,8 @@ interface EnvelopeError {
   status: "error";
   provider: string;
   error?: { code: string; message: string; remediation?: string };
+  /** REQ-020i: per-input metadata, carried on the all-fail envelope too. */
+  meta?: { per_query?: PerInputMeta[] } & Record<string, unknown>;
 }
 
 type Envelope = EnvelopeOk | EnvelopeError;
@@ -200,7 +202,14 @@ export function mergeItems(items: BatchItem[]): Envelope {
     if (env.status === "ok") {
       okItems.push({ query: item.query, env });
       const blockedCount = env.meta?.["blocked_count"];
-      const passages = env.snippets;
+      // REQ-020i: `search_web` deep puts ranked passages on each result rather
+      // than on the envelope, so both shapes count toward the element's total.
+      const resultPassages = env.results.flatMap((result) =>
+        Array.isArray((result as { passages?: unknown }).passages)
+          ? ((result as { passages: NonNullable<PerInputMeta["passages"]> }).passages)
+          : []
+      );
+      const passages = env.snippets ?? (resultPassages.length > 0 ? resultPassages : undefined);
       perQuery.push({
         query: item.query,
         ...(HTTP_URL_RE.test(item.query) ? { url: item.query } : {}),
@@ -237,7 +246,8 @@ export function mergeItems(items: BatchItem[]): Envelope {
   }
 
   if (okItems.length === 0) {
-    return firstError ?? { status: "error", provider: "none", error: { code: "internal_error", message: "no results", remediation: "retry with a different query or provider" } };
+    if (firstError) return { ...firstError, meta: { per_query: perQuery } };
+    return { status: "error", provider: "none", error: { code: "internal_error", message: "no results", remediation: "retry with a different query or provider" } };
   }
 
   const firstOk = okItems[0].env;
@@ -280,13 +290,17 @@ export function mergeItems(items: BatchItem[]): Envelope {
     .map((o) => o.env.meta?.["query_time_ms"])
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   const totalElapsed = elapsedValues.length > 0 ? elapsedValues.reduce((sum, value) => sum + value, 0) : undefined;
+  // REQ-127: analysis is computed over the merged set by the handler, so a
+  // stale per-item block must not be inherited from the first success.
+  const inheritedMeta = { ...(firstOk.meta ?? {}) };
+  delete inheritedMeta.analysis;
   return {
     status: "ok",
     provider: firstOk.provider,
     ...(sharedQuestion ? { question: sharedQuestion } : {}),
     results,
     meta: {
-      ...(firstOk.meta ?? {}),
+      ...inheritedMeta,
       ...(totalElapsed !== undefined ? { query_time_ms: totalElapsed } : {}),
       ...(hasBlockedCount ? { blocked_count: blockedTotal } : {}),
       ...(bestScore !== undefined ? { top_score: bestScore } : {}),
