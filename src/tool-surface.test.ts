@@ -235,6 +235,43 @@ test("search_web advertises the REQ-020 parameter contract and defaults", async 
   expect(tool!.inputSchema?.required).toEqual(["query"]);
 }, 30000);
 
+// @implements REQ-021 renderer-chain
+// @implements REQ-021j raw-parameter
+test("fetch_page advertises the renderer chain and the raw parameter", async () => {
+  const { tools } = await listTools();
+  const tool = tools.find((t) => t.name === "infobroker_fetch_page");
+  expect(tool, "fetch_page is not registered").toBeDefined();
+
+  const props = tool!.inputSchema?.properties ?? {};
+
+  // REQ-021: omitting `renderer` runs the configured content-fetch chain, so the
+  // schema must not declare a value default the handler would then pin to one
+  // renderer. The description has to name the omission behaviour and must not
+  // advertise a default the schema does not carry.
+  expect(props.renderer, "fetch_page.renderer is missing from the advertised schema").toBeDefined();
+  expect(props.renderer?.default, "fetch_page.renderer must not declare a schema default").toBeUndefined();
+  expect(props.renderer?.description ?? "", "renderer description must state the omission-to-chain behaviour").toMatch(/omit/i);
+  expect(props.renderer?.description ?? "", "renderer description must name the configured chain").toMatch(/chain/i);
+  expect(props.renderer?.description ?? "", "renderer description must not advertise a default").not.toMatch(/default/i);
+  expect(props.renderer?.enum, "renderer enum drifted from REQ-021").toEqual([
+    "jina",
+    "native_fetch",
+    "wikipedia",
+    "internet_archive",
+    "arxiv",
+    "stack_exchange",
+  ]);
+
+  // The tool description carries the same contract; it must not claim a default.
+  expect(tool!.description ?? "", "fetch_page description must name the configured renderer chain").toMatch(/configured renderer chain/i);
+  expect(tool!.description ?? "", "fetch_page description must not claim a Jina default").not.toMatch(/Jina Reader by default/i);
+
+  // REQ-021j: `raw` is part of the advertised parameter surface, with its default.
+  expect(props.raw, "fetch_page.raw is missing from the advertised schema").toBeDefined();
+  expect(props.raw?.default, "fetch_page.raw default drifted from REQ-021j").toBe(false);
+  expect(props.raw?.description).toBeTruthy();
+}, 30000);
+
 // @implements REQ-060 max-results-default
 // @implements REQ-060a max-results-default
 test("manage_kb advertises the REQ-060a max-results contract", async () => {
