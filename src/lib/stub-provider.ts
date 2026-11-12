@@ -18,6 +18,14 @@ export interface StubProviderOptions {
   mode?: StubMode;
   /** Delay the response so a hedge race can be observed. */
   delayMs?: number;
+  /** Number of results the `ok` mode returns (default 1). */
+  results?: number;
+  /** Explicit result URLs for the `ok` mode; the stub also serves them as HTML pages. */
+  urls?: string[];
+  /** Return this stub's own `/page/N` URLs so a deep read stays on loopback. */
+  servePages?: boolean;
+  /** Per-result content text for the `ok` mode. */
+  contents?: string[];
 }
 
 export interface StubProvider {
@@ -38,15 +46,32 @@ export async function startStubProvider(
   const options: StubProviderOptions = typeof modeOrOptions === "string" ? { mode: modeOrOptions } : modeOrOptions;
   const mode = options.mode ?? "ok";
   const delayMs = options.delayMs ?? 0;
+  const resultCount = options.results ?? 1;
   const state = { requests: 0 };
+  let selfUrl = "";
   const server = createHttpServer(async (req, res) => {
     state.requests++;
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    // A result URL served by this stub returns a small HTML page, so a deep
+    // read can fetch it without leaving the loopback interface.
+    if ((req.url ?? "").startsWith("/page/")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(
+        `<html><head><title>Stub page</title></head><body><p>Stub page content for deep reading with ranked passages and queries.</p></body></html>`
+      );
+      return;
+    }
     if (mode === "ok") {
+      const urls = options.urls ?? Array.from({ length: resultCount }, (_, i) =>
+        options.servePages ? `${selfUrl}/page/${i + 1}` : `https://example.com/stub-${i + 1}`
+      );
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          results: [{ title: "Stub result", url: "https://example.com/stub", content: "stub body" }],
+          results: urls.map((url, i) => {
+            const body = options.contents?.[i] ?? `stub body ${i + 1}`;
+            return { title: `Stub result ${i + 1}`, url, content: body, snippet: body };
+          }),
         })
       );
       return;
@@ -78,8 +103,9 @@ export async function startStubProvider(
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
+  selfUrl = `http://127.0.0.1:${port}`;
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: selfUrl,
     get requests() {
       return state.requests;
     },

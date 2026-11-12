@@ -139,10 +139,13 @@ export async function startServer(options: ServerOptions = {}): Promise<DebateSe
   const rpc = (method: string, params: unknown): Promise<RpcMessage> =>
     new Promise((resolve, reject) => {
       const id = nextId++;
+      // A research compile fans out to up to `research.max_variants` searches
+      // and deep-reads each variant's pages, so its worst case exceeds the
+      // single-search budget. 60 s bounds a hang without masking it.
       const timer = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`${method} timed out; stderr tail: ${stderrChunks.join("").slice(-400)}`));
-      }, 30000);
+      }, 60000);
       pending.set(id, (msg) => {
         clearTimeout(timer);
         resolve(msg);
