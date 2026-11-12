@@ -6,7 +6,7 @@
 import { afterAll, describe, expect, test } from "vitest";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   startStubProvider,
@@ -14,7 +14,10 @@ import {
   type HermeticConfig,
   type HermeticProvider,
   type StubMode,
+  type StubProviderOptions,
 } from "./lib/stub-provider.js";
+import { flushKbWrites, initKb, kbIngest } from "./kb.js";
+import type { KbConfig } from "./types.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -113,8 +116,10 @@ async function setup(
   return { cfg, env: cfg.env };
 }
 
-async function stub(mode: StubMode, delayMs?: number) {
-  const server = await startStubProvider(delayMs === undefined ? mode : { mode, delayMs });
+async function stub(mode: StubMode | StubProviderOptions, delayMs?: number) {
+  const server = await startStubProvider(
+    typeof mode === "string" ? (delayMs === undefined ? mode : { mode, delayMs }) : mode,
+  );
   cleanups.push(() => server.close());
   return server;
 }
@@ -314,6 +319,203 @@ describe("disabled provider exclusion (REQ-015)", () => {
       expect(payload.provider).toBe("stub_b");
       expect(disabled.requests - disabledBefore).toBe(0);
       expect(healthy.requests - healthyBefore).toBe(1);
+    });
+  });
+});
+
+// F-R3-1 / §7.4: an explicit provider keeps precedence over the priority chain.
+describe("explicit provider precedence (REQ-020a)", () => {
+  test("an explicit provider survives privacy and free_only selection", async () => {
+    const a = await stub("ok");
+    const b = await stub("ok");
+    const { cfg } = await setup(
+      [provider("stub_a", a.url), provider("stub_b", b.url)],
+      {
+        chains: { general_web: ["stub_a", "stub_b"], privacy_critical: ["stub_a"], free: ["stub_a", "stub_b"] },
+        output: { hedge_enabled: false },
+      },
+    );
+
+    await withServer(cfg.env, async (call) => {
+      for (const priority of ["privacy", "free_only", "quality"] as const) {
+        const payload = await search(call, { query: "precedence probe", provider: "stub_b", priority });
+        expect(payload.status, priority).toBe("ok");
+        expect(payload.provider, priority).toBe("stub_b");
+      }
+    });
+  });
+
+  test("an unusable explicit provider does not displace the selected chain", async () => {
+    const a = await stub("ok");
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      chains: { general_web: ["stub_a"], privacy_critical: ["stub_a"] },
+    });
+    await withServer(cfg.env, async (call) => {
+      const payload = await search(call, { query: "precedence probe", provider: "stub_a", priority: "privacy" });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("stub_a");
+    });
+  });
+});
+
+// F-R3-15 / REQ-020g: collapse consumes provider headroom before the caller's
+// maximum is applied, so duplicate-heavy leading results cannot undershoot.
+describe("collapse before the maximum slice (REQ-020g)", () => {
+  test("returns the requested maximum after collapsing duplicates", async () => {
+    const duplicate = "Quantum error correction breakthrough with logical qubits at scale";
+    const contents = [
+      duplicate,
+      duplicate,
+      "Sourdough baking guide for beginners at home",
+      "Orbital mechanics for small satellite operators",
+      "Medieval history of the Hanseatic League",
+      "Photosynthesis in deep ocean algae",
+      "Vintage motorcycle restoration checklist",
+      "Modern poetry translation practices",
+    ];
+    const a = await stub({ mode: "ok", results: contents.length, contents });
+    const { cfg } = await setup([provider("stub_a", a.url)], { output: { hedge_enabled: false } });
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await search(call, { query: "quantum error correction", max_results: 4 });
+      expect(payload.status).toBe("ok");
+      expect(payload.results).toHaveLength(4);
+      const titles = payload.results.map((row) => String(row.title));
+      expect(new Set(titles).size).toBe(4);
+    });
+  });
+});
+
+// F-R3-20 / REQ-128: every chain provider that cannot honor the language is
+// reported, including under compact verbosity.
+describe("chain-wide language reporting (REQ-128)", () => {
+  test("reports the non-capable chain-mates and keeps the field in compact mode", async () => {
+    const a = await stub("ok");
+    const b = await stub("ok");
+    for (const verbose of [true, false]) {
+      const { cfg } = await setup(
+        [provider("stub_a", a.url), provider("stub_b", b.url)],
+        { output: { hedge_enabled: false, verbose } },
+      );
+      await withServer(cfg.env, async (call) => {
+        const payload = await search(call, { query: "language probe", language: "fr" });
+        expect(payload.status).toBe("ok");
+        expect(payload.provider).toBe("stub_a");
+        expect(payload.meta?.language_unsupported).toEqual(["stub_b"]);
+      });
+    }
+  });
+});
+
+// F-R3-28 / REQ-127: analysis is omitted when the result set is empty after
+// blocklist filtering.
+describe("analysis omission (REQ-127)", () => {
+  test("omits analysis when every result is blocklisted", async () => {
+    const a = await stub("ok");
+    const { cfg } = await setup([provider("stub_a", a.url)], { output: { hedge_enabled: false } });
+    writeFileSync(
+      join(cfg.root, "config.local.json"),
+      JSON.stringify({ source_quality: { enabled: true, weight: 0.15, blocklist: ["example.com"] } }),
+    );
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await search(call, { query: "blocked probe", analyze: true });
+      expect(payload.status).toBe("ok");
+      expect(payload.results).toHaveLength(0);
+      expect(payload.meta?.blocked_count).toBe(1);
+      expect(payload.meta?.analysis).toBeUndefined();
+    });
+  });
+});
+
+// F-R3-24 / REQ-028: deep reading runs under compact verbosity instead of
+// silently returning a plain search.
+describe("deep reading under compact verbosity (REQ-028)", () => {
+  test("fetches and ranks pages while compact shaping trims the payload", async () => {
+    const a = await stub({ mode: "ok", servePages: true });
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      chains: { general_web: ["stub_a"], content_fetch: ["native_fetch"] },
+      output: { hedge_enabled: false, verbose: false },
+    });
+    writeFileSync(
+      join(cfg.root, "config.local.json"),
+      JSON.stringify({ fetch: { allow_private_urls: true } }),
+    );
+
+    await withServer(cfg.env, async (call) => {
+      const before = a.requests;
+      const payload = await search(call, { query: "deep compact probe", deep: true });
+      expect(payload.status).toBe("ok");
+      // The search hit the provider and the deep read fetched the page from the
+      // same loopback stub; compact shaping keeps `deep`/`pages_read` out of meta.
+      expect(a.requests - before).toBeGreaterThan(1);
+      expect(payload.meta?.pages_read).toBeUndefined();
+    });
+  });
+});
+
+// F-R3-23 / REQ-004: an oversized response is truncated at the boundary with
+// the flag and path preserved in the structured body.
+describe("response truncation (REQ-004)", () => {
+  test("bounds an oversized search response and keeps structuredContent intact", async () => {
+    const a = await stub("ok");
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      output: { hedge_enabled: false, response_max_chars: 220 },
+    });
+
+    await withServer(cfg.env, async (call) => {
+      const msg = await call("tools/call", { name: "infobroker_search_web", arguments: { query: "truncation probe" } });
+      const result = msg.result as {
+        content: Array<{ text: string }>;
+        structuredContent?: Record<string, unknown>;
+      };
+      expect(result.content[0].text).toContain("[truncated at 220 chars");
+      expect(result.structuredContent?.truncated).toBe(true);
+      expect(typeof result.structuredContent?.output_path).toBe("string");
+      expect((result.structuredContent?.results as unknown[]).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// F-R3-3 / F-R3-18: a KB-first hit reports the same request metadata as a
+// cache miss and takes the same source-quality ordering. The store is seeded
+// from this process before the server spawns, using the hermetic storage path.
+describe("KB-first metadata and ordering (REQ-020d, REQ-020h)", () => {
+  test("reports task type and ignored parameters on a cache hit", async () => {
+    const a = await stub("ok");
+    const { cfg } = await setup([provider("stub_a", a.url)], { output: { hedge_enabled: false } });
+    const rawConfig = JSON.parse(readFileSync(join(cfg.root, "config.json"), "utf-8")) as { kb: KbConfig };
+    initKb(rawConfig.kb);
+    kbIngest(
+      "Stored knowledge base note about catalogue archives and records",
+      "Catalogue archive note",
+      "https://archive.example/note",
+      "knowledge_base",
+      "default",
+      "note",
+      "stable",
+    );
+    kbIngest(
+      "Sourdough baking guide covering flour water salt and starter",
+      "Sourdough baking guide",
+      "https://kitchen.example/bread",
+      "knowledge_base",
+      "default",
+      "note",
+      "stable",
+    );
+    flushKbWrites();
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await search(call, { query: "catalogue archive note", fresh: false });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("knowledge_base");
+      expect(payload.meta?.kb_recall).toBe("hit");
+      expect(payload.meta?.task_type).toBeDefined();
+      expect(payload.meta?.ignored_params).toBeDefined();
+      expect(payload.meta?.ignored_operators).toBeDefined();
+      // REQ-020h: the stored rows are ordered by relevance, not insertion order.
+      expect(payload.results[0]?.url).toBe("https://archive.example/note");
     });
   });
 });

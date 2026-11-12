@@ -13,7 +13,7 @@ import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./provide
 import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
 import { corroborate, UnusableProviderError } from "./corroborate.js";
 import { snapshotSource } from "./preservation.js";
-import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
+import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable, languageUnsupportedProviders } from "./chain.js";
 import { ignoredOperators, parseQuery } from "./query.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs, activeCooldowns } from "./cooldown.js";
 import { recordAttempt, recordTool, callLogTarget } from "./call-log.js";
@@ -34,11 +34,11 @@ import { maybeTruncate } from "./truncate.js";
 import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
 import { settleBatch } from "./batch-run.js";
 import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
-import { reconcileResults } from "./dedup.js";
+import { orderByRelevance, reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
 import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
 import { createLatencyTracker } from "./latency.js";
-import { compactMode, compactResults } from "./verbosity.js";
+import { compactMode, compactResults, pickRequiredMeta } from "./verbosity.js";
 import { requestLimit } from "./normalizer.js";
 import { deriveResearchVariants, compileResearchGroups } from "./research.js";
 import { keyPoolStatus } from "./key-pool.js";
@@ -118,6 +118,11 @@ function ok(provider: string, results: SearchResult[], meta: Record<string, unkn
       quota_remaining: undefined,
       ...meta,
     };
+  } else {
+    // REQ-079: compact responses omit optional metadata, but a field another
+    // REQ makes required survives (REQ-020i per_query, REQ-128 language report).
+    const required = pickRequiredMeta(meta);
+    if (Object.keys(required).length > 0) base.meta = required as unknown as NonNullable<ToolOkResponse["meta"]>;
   }
   return base;
 }
@@ -217,6 +222,23 @@ function filterByContentType(results: SearchResult[], contentType: string): Sear
   return results.filter((r) => classifyContentType(r.url) === contentType);
 }
 
+// REQ-020b/REQ-020e/REQ-020f: provider suggestions are shared by the suggest,
+// expand, and research paths. An unavailable provider falls through to the
+// next one; the callers supply their own query-derived fallback.
+async function collectSuggestions(query: string): Promise<string[]> {
+  const config = getConfig();
+  for (const [slug, provider] of Object.entries(PROVIDERS)) {
+    if (!provider?.suggest) continue;
+    if (config.providers[slug] && !config.providers[slug].enabled) continue;
+    try {
+      return await provider.suggest(query);
+    } catch {
+      // suggestion provider unavailable — try the next one
+    }
+  }
+  return [];
+}
+
 async function doWebSearch(
   query: string | string[],
   preferredProvider?: string,
@@ -265,6 +287,10 @@ async function doWebSearch(
         `[ERROR] ${json(err("none", "internal_error", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), providerRemediation("Retry the query individually to isolate the failure")))}`,
     );
     const merged = mergeItems(queries.map((q, i) => ({ query: q, envelope: envelopes[i] })));
+    // REQ-127: analysis describes the merged result set, not the first query.
+    if (analyze && merged.status === "ok" && merged.results.length > 0) {
+      merged.meta = { ...(merged.meta ?? {}), analysis: analyzeResults(merged.results as unknown as SearchResult[], getConfig().analysis) };
+    }
     return merged.status === "ok" ? `[OK] ${json(merged)}` : `[ERROR] ${json(merged)}`;
   }
 
@@ -298,17 +324,7 @@ async function doWebSearch(
   }
 
   if (expand) {
-    const suggestions: string[] = [];
-    for (const [slug, provider] of Object.entries(PROVIDERS)) {
-      if (!provider?.suggest) continue;
-      if (config.providers[slug] && !config.providers[slug].enabled) continue;
-      try {
-        suggestions.push(...(await provider.suggest(query)));
-        break;
-      } catch {
-        // suggestion provider unavailable — expand from the query keywords alone
-      }
-    }
+    const suggestions = await collectSuggestions(query);
     const maxExpansions = config.expand?.max_expansions;
     const expansions = deriveExpansions(query, suggestions, maxExpansions);
     return `[OK] ${json({
@@ -326,7 +342,8 @@ async function doWebSearch(
   if (research) {
     const maxVariants = config.research?.max_variants ?? 3;
     const perVariantPages = config.research?.max_pages_per_variant ?? 2;
-    const variants = deriveResearchVariants(query, maxVariants);
+    const suggestions = await collectSuggestions(query);
+    const variants = deriveResearchVariants(query, maxVariants, suggestions);
     const groups = await compileResearchGroups(variants, (variant) => {
       const budget = { remaining: perVariantPages };
       return doWebSearch(
@@ -346,10 +363,22 @@ async function doWebSearch(
         research: true,
         kb_recall: "not_applicable",
         variants: groups.length,
-        ...(analyze ? { analysis: analyzeResults(groups.flatMap((g) => g.results), config.analysis) } : {}),
+        ...(analyze && groups.some((group) => group.results.length > 0)
+          ? { analysis: analyzeResults(groups.flatMap((group) => group.results), config.analysis) }
+          : {}),
       },
     })}`;
   }
+
+  // Task-type resolution and query parsing run before KB recall so a cache
+  // hit reports the same request metadata as a cache miss (REQ-020a,
+  // REQ-020d, REQ-124).
+  const resolvedTaskType = resolveTaskType(query, taskTypeOverride);
+  if (resolvedTaskType.error) {
+    return `[ERROR] ${json(err("none", "invalid_input", resolvedTaskType.error.message, resolvedTaskType.error.remediation))}`;
+  }
+  const taskType = resolvedTaskType.taskType;
+  const parsedQuery = parseQuery(Array.isArray(query) ? query[0] ?? "" : String(query));
 
   // REQ-076a: blend keeps the KB rows as a seed for the external response
   // instead of replacing it. `kbRecall` reports which path the request took.
@@ -396,14 +425,23 @@ async function doWebSearch(
             kbRecall = fresh === "blend" ? "blended" : "hit";
             if (fresh === false) {
               const kbProvider = "knowledge_base";
-              return `[OK] ${json(ok(kbProvider, kbKept, {
+              // REQ-020h: stored hits take the same source-quality ordering as
+              // external results, and the block-maximum slice applies after it.
+              const kbOrdered = reconcileResults(kbKept, query, undefined, {
+                qualityWeight: config.source_quality?.enabled === false ? 0 : (config.source_quality?.weight ?? 0.15),
+                qualityScore: (result) => qualityScore(result.url, config.source_quality),
+              }).slice(0, maxResults);
+              return `[OK] ${json(ok(kbProvider, kbOrdered, {
                 query_time_ms: 0,
                 fallback_used: false,
+                task_type: taskType,
                 quota_remaining: undefined,
                 kb_recall: kbRecall,
-                kb_results: kbKept.length,
+                kb_results: kbOrdered.length,
+                ignored_params: ignoredParams(kbProvider, { safe_search: safeSearch, time_range: timeRange, page, content_type: contentType, region, language }),
+                ignored_operators: ignoredOperators(kbProvider, parsedQuery),
                 ...(config.source_quality?.enabled !== false ? { blocked_count: kbBlocked } : {}),
-                ...(analyze ? { analysis: analyzeResults(kbKept, config.analysis) } : {}),
+                ...(analyze && kbOrdered.length > 0 ? { analysis: analyzeResults(kbOrdered, config.analysis) } : {}),
               }))}`;
             }
             kbCached = kbKept;
@@ -416,11 +454,6 @@ async function doWebSearch(
     }
   }
 
-  const resolvedTaskType = resolveTaskType(query, taskTypeOverride);
-  if (resolvedTaskType.error) {
-    return `[ERROR] ${json(err("none", "invalid_input", resolvedTaskType.error.message, resolvedTaskType.error.remediation))}`;
-  }
-  const taskType = resolvedTaskType.taskType;
   let chain: string[];
 
   if (preferredProvider && !config.providers[preferredProvider]?.enabled) {
@@ -443,6 +476,13 @@ async function doWebSearch(
   }
 
   chain = selectChain(chain, priority, latency.avg);
+  // REQ-020a / §7.4: an explicit provider keeps precedence over the priority
+  // chain. Re-inserted before the language and quota reorderings, so neither
+  // policy is overridden by the caller's choice.
+  if (preferredProvider && providerUsable(preferredProvider, config)) {
+    chain = [preferredProvider, ...chain.filter((slug) => slug !== preferredProvider)]
+      .slice(0, config.output.fallback_depth);
+  }
   // REQ-128: prefer providers that honor a caller-supplied language.
   chain = preferLanguageCapable(chain, language);
 
@@ -456,7 +496,6 @@ async function doWebSearch(
   }
 
   const opts: SearchOptions = { max_results: maxResults, safe_search: safeSearch, time_range: timeRange as SearchOptions["time_range"], page, region, content_type: contentType, language };
-  const parsedQuery = parseQuery(Array.isArray(query) ? query[0] ?? "" : String(query));
   let lastError: ToolErrorResponse | null = null;
   // REQ-002: any rate-limit-attributable failure in the chain makes the final
   // error `rate_limited` in preference to a generic provider-unavailable code.
@@ -534,7 +573,9 @@ async function doWebSearch(
         return withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
       };
       // REQ-032: retry backoff and count are configurable per provider.
-      const results = (await retryWithBackoff(timedCall, config.providers[slug])).slice(0, maxResults);
+      // REQ-020g/REQ-073: keep the provider headroom until after collapse; the
+      // caller's maximum is applied once the result set is final.
+      const results = (await retryWithBackoff(timedCall, config.providers[slug])).slice(0, requestLimit(maxResults));
 
       const elapsed = Date.now() - start;
       increment(slug, config.providers[slug]?.rate_limit);
@@ -595,6 +636,8 @@ async function doWebSearch(
   // "the serving provider was not the chain's first-choice provider" (the
   // hedge raced ahead of the primary), not merely "a provider errored".
   const buildSuccess = async (slug: string, filtered: SearchResult[], elapsed: number): Promise<string> => {
+    // REQ-128: every selected provider that cannot honor the requested language.
+    const languageUnsupported = languageUnsupportedProviders(chain, slug, language);
     for (const result of filtered) {
       result.provider = result.provider ?? slug;
     }
@@ -635,22 +678,30 @@ async function doWebSearch(
     // return. An external row wins a URL duplicate because it is fresher; the
     // displaced KB rows are counted, not silently dropped.
     const blended = mergeKnowledgeBaseResults(filtered, kbCached);
-    const finalResults = blended.results;
+    // REQ-020g: collapse consumes the provider headroom before the caller's
+    // maximum is applied, and the blend is ordered without collapsing across
+    // tiers. REQ-020h: the quality weights apply to cached rows too.
+    const ordered = orderByRelevance(blended.results, query, {
+      qualityWeight: sourceQuality?.enabled === false ? 0 : (sourceQuality?.weight ?? 0.15),
+      qualityScore: (result) => qualityScore(result.url, sourceQuality),
+    });
+    const finalResults = ordered.slice(0, maxResults);
+    const kbInFinal = finalResults.filter((result) => result.provider === "knowledge_base").length;
     const kbMeta = blendResponseMeta({
       kbRecall,
-      externalCount: filtered.length,
+      externalCount: finalResults.length - kbInFinal,
       finalCount: finalResults.length,
       duplicates: blended.duplicates,
     });
 
-    if (deep && !compactMode(config)) {
+    if (deep) {
       const deepConf = config.deep ?? { max_pages: 3, max_total_pages: 8, concurrency: 4, early_exit_score: 0.3, max_ms: 8000, detect_date: false };
       const maxPages = Math.min(deepConf.max_pages ?? 3, deepBudget ? deepBudget.remaining : (deepConf.max_pages ?? 3));
       const allowPrivateDeep = config.fetch?.allow_private_urls === true;
       const renderers = getDispatchChain("content_fetch");
       const deepMeta = await deepRead(
         query,
-        filtered,
+        finalResults,
         deepConf,
         config.fetch?.passage_size ?? 250,
         config.fetch?.max_passages ?? 6,
@@ -701,11 +752,12 @@ async function doWebSearch(
           ...(fresh === true && collection ? ["collection"] : []),
         ],
         ignored_operators: ignoredOperators(slug, parsedQuery),
+        ...(languageUnsupported.length > 0 ? { language_unsupported: languageUnsupported } : {}),
         deep: true,
         pages_read: deepMeta.pages_read,
         ...kbMeta,
         ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
-        ...(analyze ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
+        ...(analyze && deepMeta.results.length > 0 ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
         ...(policyNote ?? {}),
       }))}`;
     }
@@ -720,9 +772,10 @@ async function doWebSearch(
         ...(fresh === true && collection ? ["collection"] : []),
       ],
       ignored_operators: ignoredOperators(slug, parsedQuery),
+      ...(languageUnsupported.length > 0 ? { language_unsupported: languageUnsupported } : {}),
       ...kbMeta,
       ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
-      ...(analyze ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
+      ...(analyze && finalResults.length > 0 ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -777,12 +830,18 @@ async function doWebSearch(
     // REQ-076a: a blend whose external tier failed still returns the cached
     // work instead of degrading a useful answer into an error.
     if (kbCached.length > 0) {
-      return `[OK] ${json(ok("knowledge_base", kbCached, {
+      // REQ-020h: the failure path serves the same cached rows, so it takes the
+      // same source-quality ordering before the response bound applies.
+      const cachedOrdered = reconcileResults(kbCached, query, undefined, {
+        qualityWeight: config.source_quality?.enabled === false ? 0 : (config.source_quality?.weight ?? 0.15),
+        qualityScore: (result) => qualityScore(result.url, config.source_quality),
+      }).slice(0, maxResults);
+      return `[OK] ${json(ok("knowledge_base", cachedOrdered, {
         query_time_ms: 0,
         fallback_used: true,
         task_type: taskType,
         kb_recall: "blended",
-        kb_results: kbCached.length,
+        kb_results: cachedOrdered.length,
         kb_duplicates: 0,
       }))}`;
     }
@@ -1694,7 +1753,10 @@ const instrumentTool = (name: string, config: any, handler: any) =>
       toolMetrics.record(name, elapsed, true);
       recordTool(name, true, elapsed);
       const notices = collectNotices();
-      return finalizeToolResult(injectNotices(result, notices), notices, compactMode(getConfig()));
+      return finalizeToolResult(injectNotices(result, notices), notices, compactMode(getConfig()), (text) => {
+        const bounded = maybeTruncate(text, getConfig().output.response_max_chars ?? getConfig().output.max_chars);
+        return { text: bounded.text, truncated: bounded.truncated, ...(bounded.outputPath ? { outputPath: bounded.outputPath } : {}) };
+      });
     } catch (error) {
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, false);
