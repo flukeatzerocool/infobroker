@@ -31,12 +31,58 @@ describe("source-family (REQ-121)", () => {
     expect(families[0]).toBe(families[1]);
   });
 
-  it("does not merge short snippets that happen to match", () => {
+  it("merges short republished snippets that match", () => {
     const families = assignSourceFamilies([
-      { url: "https://one.example/a", title: "Common Topic", snippet: "shared claim" },
-      { url: "https://two.example/b", title: "Common Topic", snippet: "shared claim" },
+      {
+        url: "https://one.example/a",
+        title: "Claim Copy",
+        snippet: "bridge inspection found structure sound today",
+      },
+      {
+        url: "https://two.example/b",
+        title: "Claim Copy",
+        snippet: "bridge inspection found structure sound today",
+      },
+    ]);
+    expect(families[0]).toBe(families[1]);
+  });
+
+  it("keeps short snippets with different text in separate families", () => {
+    const families = assignSourceFamilies([
+      {
+        url: "https://one.example/a",
+        title: "Claim Copy",
+        snippet: "bridge inspection found structure sound today",
+      },
+      {
+        url: "https://two.example/b",
+        title: "Claim Copy",
+        snippet: "harbour dredging delayed until next spring",
+      },
     ]);
     expect(families[0]).not.toBe(families[1]);
+  });
+
+  it("does not merge on a single shared shingle or a shared title", () => {
+    const short = assignSourceFamilies([
+      { url: "https://one.example/a", title: "Wire", snippet: "bridge inspection sound" },
+      { url: "https://two.example/b", title: "Wire", snippet: "bridge inspection sound" },
+    ]);
+    expect(short[0]).not.toBe(short[1]);
+
+    const titles = assignSourceFamilies([
+      {
+        url: "https://one.example/a",
+        title: "Bridge inspection found structure sound",
+        snippet: "council voted",
+      },
+      {
+        url: "https://two.example/b",
+        title: "Bridge inspection found structure sound",
+        snippet: "mayor resigned",
+      },
+    ]);
+    expect(titles[0]).not.toBe(titles[1]);
   });
 
   it("scores identical long text as fully similar", () => {

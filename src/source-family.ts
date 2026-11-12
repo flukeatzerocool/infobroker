@@ -85,8 +85,16 @@ function familyText(item: FamilyInput): string {
   return `${item.title ?? ""} ${item.snippet ?? ""}`.trim();
 }
 
-function hasEnoughText(item: FamilyInput): boolean {
-  return tokens(familyText(item)).length >= 20;
+// A content match needs enough substance to be evidence of republication. One
+// shingle is the unit `textSimilarity` scores, so a single shared 4-gram is not
+// enough: a short snippet contained in an unrelated article would otherwise
+// merge into that article's family (F-R5-B-8 territory).
+const MIN_FAMILY_TOKENS = 5;
+const MIN_FAMILY_SHINGLES = 2;
+
+function hasComparableText(item: FamilyInput): boolean {
+  const snippet = item.snippet ?? "";
+  return tokens(snippet).length >= MIN_FAMILY_TOKENS && shingles(snippet).size >= MIN_FAMILY_SHINGLES;
 }
 
 /**
@@ -131,8 +139,8 @@ export function assignSourceFamilies<T extends FamilyInput>(
       }
       if (
         threshold <= 1 &&
-        hasEnoughText(items[i]) &&
-        hasEnoughText(items[j]) &&
+        hasComparableText(items[i]) &&
+        hasComparableText(items[j]) &&
         textSimilarity(familyText(items[i]), familyText(items[j])) >= threshold
       ) {
         union(i, j);
