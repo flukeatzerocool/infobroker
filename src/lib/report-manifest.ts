@@ -365,11 +365,23 @@ export function validateModality(text: string, manifest: ReportManifest): Report
   return findings;
 }
 
-export function parseSourceRegister(text: string): { sources: Map<string, string>; findings: ReportFinding[] } {
+export interface SourceRegisterRow {
+  url: string;
+  reliability?: string;
+  credibility?: string;
+}
+
+export function parseSourceRegister(text: string): {
+  sources: Map<string, string>;
+  /** Grade detail per source id, used by the monitoring delta (REQ-117). */
+  rows: Map<string, SourceRegisterRow>;
+  findings: ReportFinding[];
+} {
   const sources = new Map<string, string>();
+  const gradeRows = new Map<string, SourceRegisterRow>();
   const findings: ReportFinding[] = [];
   const register = sectionText(text, "Source Register");
-  if (register === null) return { sources, findings };
+  if (register === null) return { sources, rows: gradeRows, findings };
 
   const rows = register
     .split("\n")
@@ -380,7 +392,7 @@ export function parseSourceRegister(text: string): { sources: Map<string, string
   const headerIndex = rows.findIndex((cells) => cells.some((cell) => /^#$/i.test(cell)) && cells.some((cell) => /^url$/i.test(cell)));
   if (headerIndex === -1) {
     findings.push({ level: "error", code: "register-header", message: "Source Register has no table header with # and URL columns" });
-    return { sources, findings };
+    return { sources, rows: gradeRows, findings };
   }
 
   const header = rows[headerIndex]!.map((cell) => normalizeValue(cell));
@@ -422,10 +434,16 @@ export function parseSourceRegister(text: string): { sources: Map<string, string
     const value = (index: number): string => (index >= 0 ? (cells[index] ?? "") : "");
 
     const url = value(urlIndex);
+    const reliability = value(reliabilityIndex).toUpperCase();
     if (!/^https?:\/\//i.test(url)) {
       findings.push({ level: "error", code: "register-url", message: `Source Register row ${id} has no http(s) URL` });
     } else {
       sources.set(id, url);
+      gradeRows.set(id, {
+        url,
+        ...(reliability ? { reliability } : {}),
+        ...(value(credibilityIndex) ? { credibility: value(credibilityIndex) } : {}),
+      });
     }
 
     if (value(sourceIndex).trim() === "") {
@@ -461,7 +479,7 @@ export function parseSourceRegister(text: string): { sources: Map<string, string
       }
     }
   }
-  return { sources, findings };
+  return { sources, rows: gradeRows, findings };
 }
 
 function stripSection(text: string, name: string): string {
