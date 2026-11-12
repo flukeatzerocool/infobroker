@@ -2,6 +2,15 @@
 
 ## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
 
+- `get_citations` keeps its per-provider status and its zero-result diagnostic
+  under compact verbosity, so the metadata REQ-027a requires unconditionally no
+  longer disappears when `output.verbose` is `false`. The compact shaper now
+  accepts a tool-scoped required-key set in addition to the global one, and
+  `get_citations` declares `providers`, `no_results`, and `diagnostic`; every
+  other tool keeps the previous compact shape (REQ-027a, REQ-079;
+  `src/verbosity.ts`, `src/structured-output.ts`, `src/index.ts`;
+  `src/verbosity.test.ts`, `src/structured-output.test.ts`,
+  `src/dispatch-orchestration.test.ts`).
 - `verify_claims` archiving now follows source preservation instead of the
   removed `corroboration.archive_sources` flag, so the shipped
   `preservation.enabled: true` default attempts a Wayback reference for each

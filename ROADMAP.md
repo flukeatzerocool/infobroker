@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R5 citation and prose remediation
-
-- Preserve the per-provider status and zero-result provider list under compact verbosity (F-R5-E-3), and align §8.2's independence definition with source-family counting (F-R5-G-1).
-- Each change ships with a CHANGELOG entry and a re-run of the gates it feeds.
-
-**Trigger:** start after chunk R6 closes; close when F-R5-E-3 and F-R5-G-1 are `Resolved`.
-
 ## R7 report-contract evidence remediation
 
 - Add a defect fixture and asserting test for the `register-url` branch (F-R7-C-1), the `undeterminable` publication-date branch (F-R7-C-3), and the `manifest-likelihood`/`manifest-verdict` vocabularies (F-R7-C-5).
