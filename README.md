@@ -481,7 +481,9 @@ Twenty-six providers. Twenty-one work with zero configuration.
 
 Built-in providers and most free-HTTP providers are active out of the box;
 CORE needs a free API key. Exa, Tavily, and Yep ship disabled; set
-`"enabled": true` in `config.json` for those, and export the matching key. A
+`"enabled": true` for those in your user layer
+(`~/.config/infobroker/config.local.json` by default, or the path in
+`INFOBROKER_CONFIG_LOCAL`), and export the matching key. A
 keyed provider whose key is absent is excluded from dispatch, so nothing
 changes for a keyless install. Self-hosted providers point at a server you run
 yourself:
