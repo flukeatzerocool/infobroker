@@ -5,7 +5,9 @@
 // conditional). See scripts/validate-spec.ts for the calling gate.
 
 export interface ClauseRequirements {
-  // Number of "or"-joined parenthesized outcome branches the body defines.
+  // Number of "or"-joined outcome branches the body defines: parenthesized
+  // enumerations plus unparenthesized class lists introduced by a determiner
+  // inside a WHEN clause.
   orBranches: number;
   // Number of "when ... declares" conditionals the body contains.
   conditionals: number;
@@ -20,6 +22,70 @@ const OR_ENUM_RE = /\(([^)\n]*)\)/g;
 // or configuration declaration — the signature of never-triggered dead code.
 const CONDITIONAL_RE = /\bwhen\b[^.\n]*?\bdeclares\b/gi;
 
+// A prose class list is an unparenthesized alternative enumeration of target
+// classes ("a loopback, private, link-local, or metadata address"). The shape
+// is deliberately narrow so value unions and conjunctions do not match:
+// a WHEN clause, a determiner-introduced list, single-word legs before the
+// final "or", and a shared head noun on the last leg.
+const WHEN_CLAUSE_RE = /\bWHEN\b[^.]*/gi;
+const INTRODUCER_RE = /\b(?:a|an)\s+/gi;
+const LIST_TERMINATOR_RE = /^(?:the|this|that|these|those|its|their|it|they|he|she|we|you)\b/i;
+const OR_SEPARATOR_RE = /(?:^|\s)or\s+/i;
+const FINAL_LEG_STOP_WORDS = new Set(["rather", "than", "that", "which", "whose", "when"]);
+// A class list enumerates targets or conditions, introduced by a state
+// predicate or an appositive dash/colon. An action verb ("select a place,
+// fact, ...") enumerates selectable values, not classes, and is excluded.
+const CLASS_INTRO_RE = /(?:^|[\s(])(?:is|are|was|were|resolves? to|indicates?|means)\s+$/i;
+const APPOSITIVE_RE = /[—:]\s*$/;
+
+function detectProseClassLists(prose: string): number {
+  let total = 0;
+  for (const clause of prose.match(WHEN_CLAUSE_RE) ?? []) {
+    const starts: Array<{ prefixEnd: number; listStart: number }> = [];
+    for (const intro of clause.matchAll(INTRODUCER_RE)) {
+      starts.push({ prefixEnd: intro.index, listStart: intro.index + intro[0].length });
+    }
+
+    for (const { prefixEnd, listStart } of starts.reverse()) {
+      const prefix = clause.slice(0, prefixEnd);
+      if (!CLASS_INTRO_RE.test(prefix) && !APPOSITIVE_RE.test(prefix)) continue;
+      const rest = clause.slice(listStart);
+      if (!OR_SEPARATOR_RE.test(rest)) continue;
+
+      const listSegments: string[] = [];
+      for (const segment of rest.split(/\s*,\s*/)) {
+        const trimmed = segment.trim();
+        if (listSegments.length > 0 && LIST_TERMINATOR_RE.test(trimmed)) break;
+        listSegments.push(trimmed);
+        if (OR_SEPARATOR_RE.test(trimmed)) break;
+      }
+
+      const last = listSegments[listSegments.length - 1] ?? "";
+      if (!OR_SEPARATOR_RE.test(last)) continue;
+
+      const legs = listSegments
+        .join(", ")
+        .replace(/\s+or\s+/g, ", ")
+        .split(/\s*,\s*/)
+        .map((leg) => leg.trim())
+        .filter(Boolean);
+      if (legs.length < 3) continue;
+      if (!legs.slice(0, -1).every((leg) => /^[\w-]+$/.test(leg))) continue;
+
+      const trimmedTail: string[] = [];
+      for (const word of legs[legs.length - 1].split(/\s+/).filter(Boolean)) {
+        if (FINAL_LEG_STOP_WORDS.has(word.toLowerCase().replace(/[^\w-]/g, ""))) break;
+        trimmedTail.push(word);
+      }
+      if (trimmedTail.length < 1 || trimmedTail.length > 3) continue;
+
+      total += legs.length;
+      break;
+    }
+  }
+  return total;
+}
+
 export function detectClauseRequirements(prose: string): ClauseRequirements {
   let orBranches = 0;
   for (const grp of prose.matchAll(OR_ENUM_RE)) {
@@ -28,6 +94,7 @@ export function detectClauseRequirements(prose: string): ClauseRequirements {
     const parts = inner.split(/\s+or\s+/);
     if (parts.length >= 2) orBranches += parts.length;
   }
+  orBranches += detectProseClassLists(prose);
 
   const conditionals = prose.match(CONDITIONAL_RE)?.length ?? 0;
 

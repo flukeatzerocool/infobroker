@@ -2,6 +2,19 @@
 
 ## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
 
+- `fetch_page` no longer discards a page whose title merely contains "CAPTCHA":
+  the marker is now a weak signal that counts only when the page has almost no
+  visible text, while the strong title, body, and challenge-script markers are
+  unchanged (REQ-021f; `bot-challenge.test.ts`).
+- `search_web` classifies area and elevation queries as `structured_fact`
+  (`area of`, `surface area`, `total area`, `land area`, and the elevation
+  forms), so REQ-021i's resolver is reached for two attributes it previously
+  never saw; the search tool description and README name the new examples.
+- The G3 clause guard (`validate-spec`) now detects unparenthesized class lists
+  of a narrow shape inside `WHEN` clauses — `a loopback, private, link-local, or
+  metadata address` — and REQ-021a's and REQ-021f's branches carry named clause
+  tags (REQ-055, REQ-021a, REQ-021f; `clause-coverage.test.ts`).
+
 - A page's publication date is no longer reported as its `last_updated` date.
   Date evidence is split into modification (the `last-modified` header,
   `article:modified_time`, `og:updated_time`, JSON-LD `dateModified`) and

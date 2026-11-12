@@ -36,6 +36,38 @@ describe("detectClauseRequirements", () => {
   });
 });
 
+describe("clause-coverage detection of unparenthesized class lists", () => {
+  const REQ_021A =
+    "WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop.";
+  const REQ_021F =
+    "WHEN a `fetch_page` renderer returns content that indicates an anti-bot challenge — a verification, CAPTCHA, or challenge page rather than the target page — the tool SHALL treat that renderer as failed.";
+
+  it("counts the four target classes in REQ-021a", () => {
+    expect(detectClauseRequirements(REQ_021A).orBranches).toBe(4);
+  });
+
+  it("counts the three challenge kinds in REQ-021f", () => {
+    expect(detectClauseRequirements(REQ_021F).orBranches).toBe(3);
+  });
+
+  it("does not count value unions, conjunctions, or 'such as' enumerations", () => {
+    for (const prose of [
+      "The response SHALL report a status of High, Medium, or Low.",
+      "The assertion SHALL be asserted, reported, or speculative.",
+      "WHEN a query names a measurable attribute such as attendance, population, area, elevation, percentage, or date, search SHALL classify it.",
+      "The delta SHALL report new, changed, and removed claims.",
+      "WHEN the tool receives a value (see REQ-034), it SHALL report it.",
+    ]) {
+      expect(detectClauseRequirements(prose).orBranches, prose).toBe(0);
+    }
+  });
+
+  it("sums a parenthesized group and a prose list in one body", () => {
+    const prose = `${REQ_021A} It SHALL be refused (unreachable or invalid).`;
+    expect(detectClauseRequirements(prose).orBranches).toBe(6);
+  });
+});
+
 describe("clauseTagsFromPayload", () => {
   it("extracts branch slugs following a REQ ID", () => {
     const tags = clauseTagsFromPayload("REQ-013 REQ-013 latency-threshold REQ-013 partial-results");

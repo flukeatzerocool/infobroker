@@ -1,4 +1,4 @@
-// @implements REQ-021a resolved-address
+// @implements REQ-021a resolved-address REQ-021a loopback REQ-021a private REQ-021a link-local REQ-021a metadata-address REQ-021a configuration-opt-out REQ-021a per-redirect-reguard
 import { describe, it, expect } from "vitest";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, isPrivateHostname, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError } from "./url-guard.js";
 
