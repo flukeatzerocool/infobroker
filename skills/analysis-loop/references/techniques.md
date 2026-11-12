@@ -7,9 +7,22 @@ fit rationale in the output; apply it as one discrete pass.
 
 The taxonomy follows the intelligence-community tradecraft canon
 (Heuer & Pherson, *Structured Analytic Techniques*; the CIA *A Tradecraft
-Primer*; ICD 203). Eight techniques are curated here across the families of
-hypothesis generation and testing, challenge analysis, assessment of cause
-and effect, scenarios and indicators, diagnostics, and decision support.
+Primer*; ICD 203). Eight techniques are curated here. Each declares a single
+family from that canon, and the `## Families` index below is the authoritative
+family claim; a family with no curated technique is not claimed.
+
+## Families
+
+Each technique declares exactly one family, and this index lists the
+techniques in each. A technique appears under one family only.
+
+| Family | Techniques |
+|--------|------------|
+| hypothesis generation and testing | Analysis of Competing Hypotheses (ACH) |
+| challenge analysis | Key Assumptions Check; Devil's Advocacy; Premortem Analysis; Structured Self-Critique |
+| scenarios and indicators | Indicators |
+| diagnostics | Quality-of-Information Check |
+| decision support | Decision Matrix |
 
 ## Selection Guide
 
@@ -29,6 +42,8 @@ points to the technique(s) to apply. Apply one technique per discrete pass.
 
 ### Analysis of Competing Hypotheses (ACH)
 
+**Family.** hypothesis generation and testing
+
 **Fit.** Multiple competing explanations exist for the same body of evidence,
 and no single explanation is obviously correct.
 
@@ -43,6 +58,8 @@ evidence.
 
 ### Key Assumptions Check
 
+**Family.** challenge analysis
+
 **Fit.** Findings or a recommendation rest on assumptions that have not been
 made explicit.
 
@@ -56,6 +73,8 @@ how verifiable, with the ones that would change the conclusion if wrong
 highlighted.
 
 ### Devil's Advocacy
+
+**Family.** challenge analysis
 
 **Fit.** A consensus or a strong finding has formed and has not been
 seriously challenged.
@@ -72,6 +91,8 @@ mainline holds after the challenge.
 
 ### Premortem Analysis
 
+**Family.** challenge analysis
+
 **Fit.** The deliverable is a plan, forecast, or recommendation that could
 fail, and the hidden failure modes matter.
 
@@ -86,6 +107,8 @@ caveats they imply.
 
 ### Indicators
 
+**Family.** scenarios and indicators
+
 **Fit.** The value of the work is tracking whether a judgment holds or a
 change occurs over time.
 
@@ -98,6 +121,8 @@ indicators that are discriminating and checkable from outside sources.
 from its movement, usable later to re-assess whether the finding still holds.
 
 ### Quality-of-Information Check
+
+**Family.** diagnostics
 
 **Fit.** Source reliability is uneven, or a pivotal source is of questionable
 quality.
@@ -114,6 +139,8 @@ information.
 
 ### Decision Matrix
 
+**Family.** decision support
+
 **Fit.** A choice must be made among options against explicit, weighted
 criteria.
 
@@ -125,6 +152,8 @@ criteria for which evidence is missing rather than guessing a score.
 lack evidence (so a reader can see how sensitive the choice is).
 
 ### Structured Self-Critique
+
+**Family.** challenge analysis
 
 **Fit.** A strong conclusion is about to be treated as settled and deserves
 structured scrutiny before dissemination.

@@ -723,9 +723,107 @@ function checkArtifactContent(): void {
     error("skills/analysis-loop/references/techniques.md: missing (REQ-088)");
   } else {
     const catalog = readFileSync(catalogPath, "utf-8");
-    const techniqueCount = (catalog.match(/^###\s+/gm) ?? []).length;
-    if (techniqueCount < 6) {
-      error(`skills/analysis-loop/references/techniques.md: fewer than 6 techniques (${techniqueCount}) — REQ-088`);
+    const techniqueNames = [...catalog.matchAll(/^###\s+(.+)$/gm)].map((match) => match[1].trim());
+    if (techniqueNames.length < 6) {
+      error(`skills/analysis-loop/references/techniques.md: fewer than 6 techniques (${techniqueNames.length}) — REQ-088`);
+    }
+
+    // REQ-088 — every technique declares exactly one family, and the
+    // `## Families` index agrees with those declarations in both directions.
+    const familyHeading = catalog.search(/^## Families\s*$/m);
+    if (familyHeading === -1) {
+      error("skills/analysis-loop/references/techniques.md: missing '## Families' index (REQ-088)");
+    } else {
+      const familySection = catalog.slice(familyHeading).split("\n").slice(1).join("\n").split(/^## /m)[0] ?? "";
+      const tableRows = familySection
+        .split("\n")
+        .filter((line) => line.trim().startsWith("|"))
+        .map((line) =>
+          line
+            .trim()
+            .replace(/^\|/, "")
+            .replace(/\|$/, "")
+            .split("|")
+            .map((cell) => cell.trim()),
+        )
+        .filter(
+          (cells) =>
+            cells.length >= 2 && cells[0] !== "Family" && !cells.every((cell) => /^:?-{3,}:?$/.test(cell)),
+        );
+
+      if (tableRows.length === 0) {
+        error("skills/analysis-loop/references/techniques.md: '## Families' index has no data rows (REQ-088)");
+      } else {
+        const index = new Map<string, string[]>();
+        for (const cells of tableRows) {
+          const family = cells[0] ?? "";
+          const names = (cells[1] ?? "")
+            .split(";")
+            .map((name) => name.trim())
+            .filter(Boolean);
+          if (!family) {
+            error("skills/analysis-loop/references/techniques.md: '## Families' row has an empty Family cell (REQ-088)");
+            continue;
+          }
+          if (index.has(family)) {
+            error(`skills/analysis-loop/references/techniques.md: family '${family}' appears in more than one index row (REQ-088)`);
+          }
+          if (names.length === 0) {
+            error(`skills/analysis-loop/references/techniques.md: family '${family}' has an empty Techniques cell (REQ-088)`);
+          }
+          index.set(family, names);
+        }
+
+        const declared = new Map<string, string>();
+        for (const section of catalog.split(/^###\s+/m).slice(1)) {
+          const name = (section.split("\n")[0] ?? "").trim();
+          const familyLines = [...section.matchAll(/^\*\*Family\.\*\*\s*(.+)$/gm)].map((match) => match[1].trim());
+          if (familyLines.length !== 1) {
+            error(
+              `skills/analysis-loop/references/techniques.md: technique '${name}' declares ${familyLines.length} families, expected exactly one (REQ-088)`,
+            );
+            continue;
+          }
+          const family = familyLines[0] ?? "";
+          if (!index.has(family)) {
+            error(
+              `skills/analysis-loop/references/techniques.md: technique '${name}' names family '${family}' absent from the '## Families' index (REQ-088)`,
+            );
+          } else if (!(index.get(family) ?? []).includes(name)) {
+            error(
+              `skills/analysis-loop/references/techniques.md: technique '${name}' is missing from family '${family}' in the '## Families' index (REQ-088)`,
+            );
+          }
+          declared.set(name, family);
+        }
+
+        const membership = new Map<string, number>();
+        for (const [family, names] of index) {
+          for (const name of names) {
+            membership.set(name, (membership.get(name) ?? 0) + 1);
+            if (!techniqueNames.includes(name)) {
+              error(
+                `skills/analysis-loop/references/techniques.md: '## Families' index names technique '${name}' absent from the catalog (REQ-088)`,
+              );
+            }
+            const owner = declared.get(name);
+            if (owner !== undefined && owner !== family) {
+              error(
+                `skills/analysis-loop/references/techniques.md: technique '${name}' is listed under '${family}' but declares family '${owner}' (REQ-088)`,
+              );
+            }
+          }
+        }
+        for (const [name, count] of membership) {
+          if (count > 1) {
+            error(`skills/analysis-loop/references/techniques.md: technique '${name}' appears in ${count} index rows (REQ-088)`);
+          }
+        }
+        const distinctFamilies = [...index.values()].filter((names) => names.length > 0).length;
+        if (distinctFamilies < 3) {
+          error(`skills/analysis-loop/references/techniques.md: fewer than 3 families (${distinctFamilies}) — REQ-088`);
+        }
+      }
     }
   }
 
@@ -749,11 +847,49 @@ function checkArtifactContent(): void {
     error("skills/infobroker/references/report-template.md: missing monitoring baseline block (REQ-117)");
   }
   const confidencePath = join(refDir, "confidence.md");
+  const canonicalLabels = ["High", "Medium", "Low"];
   if (existsSync(confidencePath)) {
     const confidence = readFileSync(confidencePath, "utf-8");
     for (const required of ["High", "Medium", "Low", "almost certain", "Reliability", "Credibility", "GRADE"]) {
       if (!confidence.includes(required)) {
         error(`skills/infobroker/references/confidence.md: missing '${required}' (REQ-115)`);
+      }
+    }
+    const confidenceSection =
+      confidence.split(/^## /m).find((section) => section.startsWith("Confidence (strength of the judgment)")) ?? "";
+    for (const label of canonicalLabels) {
+      if (!new RegExp(`^\\|\\s*${label}\\s*\\|`, "m").test(confidenceSection)) {
+        error(`skills/infobroker/references/confidence.md: confidence table has no '${label}' row (REQ-115)`);
+      }
+    }
+
+    // REQ-115 — the gated-analysis skill cites the canonical scale and does not
+    // define a label outside its three-label set.
+    if (existsSync(analysisSkillPath)) {
+      const skill = readFileSync(analysisSkillPath, "utf-8");
+      const blockStart = skill.search(/^\d+\.\s+\*\*Confidence scoring\.\*\*/m);
+      if (blockStart === -1) {
+        error("skills/analysis-loop/SKILL.md: missing confidence-scoring block (REQ-115)");
+      } else {
+        const blockLines: string[] = [];
+        for (const line of skill.slice(blockStart).split("\n").slice(1)) {
+          if (/^\d+\.\s+\*\*/.test(line)) break;
+          blockLines.push(line);
+        }
+        const block = blockLines.join("\n");
+        if (!block.includes("skills/infobroker/references/confidence.md")) {
+          error(
+            "skills/analysis-loop/SKILL.md: confidence-scoring block does not cite skills/infobroker/references/confidence.md (REQ-115)",
+          );
+        }
+        const labels = [...block.matchAll(/^\s*-\s+\*\*([^*]+)\*\*\s*—/gm)].map((match) => match[1].trim());
+        if (labels.join("|") !== canonicalLabels.join("|")) {
+          const extra = labels.filter((label) => !canonicalLabels.includes(label));
+          const detail = extra.length > 0 ? ` — unexpected label(s): ${extra.join(", ")}` : "";
+          error(
+            `skills/analysis-loop/SKILL.md: confidence-scoring labels are [${labels.join(", ")}], expected [${canonicalLabels.join(", ")}]${detail} (REQ-115)`,
+          );
+        }
       }
     }
   }

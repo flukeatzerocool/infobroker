@@ -172,14 +172,19 @@ the intelligence cycle.
 1. **Cross-reference.** Compare findings across sources for each EEI. Weight
    by reliability — an A1 source contradicting a D3 source is not a tie.
 
-2. **Confidence scoring.** Assign to each key finding:
-   - **High** — A1 or A2 sources, multiple independent confirmations, no
-     credible contradictory evidence.
-   - **Medium** — B-level sources, some corroboration, minor inconsistencies.
-   - **Low** — C-level or below, single source, significant contradictions.
-   - **No confidence** — no reliable source found.
-   Give a likelihood term separately when the finding is probabilistic, and
-   state the assumption or alternative behind it.
+2. **Confidence scoring.** Assign exactly one of these three labels to each
+   key finding, taking the bands and definitions from
+   `skills/infobroker/references/confidence.md` rather than restating them:
+   - **High** — strong, independently corroborated evidence (canonical
+     High band).
+   - **Medium** — evidence points one way but is incomplete or partly
+     contested (canonical Medium band).
+   - **Low** — thin, single-source, or conflicting evidence (canonical Low
+     band).
+   A claim with no reliable source is not scored: record it in the finding's
+   `**Gaps:**` field, and in the `## Uncertainty Register` when it is a
+   collection gap. Give a likelihood term separately when the finding is
+   probabilistic, and state the assumption or alternative behind it.
 
 3. **Contradictions.** When sources disagree: report both sides with their
    reliability grades. Note whether the disagreement is factual (same claim,
