@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.11.11 — R7 report contract: verdict-table enforcement and register evidence
+
+- The report quality gate now rejects a `Fact-Check` report that omits its
+  declared shape block: `SHAPE_BLOCKS["Fact-Check"]` requires a `Claim Verdicts`
+  section carrying the six-column verdict table, and a heading without the table
+  fails with the new `shape-table` code. The bundled
+  `skills/infobroker/references/report-template.md` names the same heading inside
+  its Fact-Check snippet, so the template and the validator carry one contract
+  (REQ-119; `src/lib/report-manifest.ts`; `src/report-contract.test.ts`;
+  `test-fixtures/reports/missing-shape-table.md`).
+- The register and manifest rejection branches now have committed evidence:
+  a non-http Source Register URL (`register-url`, with the malformed row uncited
+  so it cannot cascade into citation failures), empty source name/type/interests
+  (`register-source`, `register-type`, `register-interests`), a guessed
+  publication date versus the accepted `undeterminable`, and manifest likelihood
+  and verdict values outside the standard (`manifest-likelihood`,
+  `manifest-verdict`) (REQ-114, REQ-116, REQ-118; `src/report-contract.test.ts`;
+  `test-fixtures/reports/`). `scripts/check-report-fixtures.ts` now covers 25
+  fixtures with zero expectation violations.
+
 ## 2026.11.11 — R4 fetch-page extraction: date evidence and response metadata
 
 - `get_citations` keeps its per-provider status and its zero-result diagnostic
