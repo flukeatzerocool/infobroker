@@ -804,6 +804,15 @@ describe("numeric config hardening (REQ-067, REQ-010)", () => {
     expect(() => validateConfig(configWith("output.latency_window_ms", 900000))).not.toThrow();
   });
 
+  // REQ-004 / F-R3-23: the response truncation bound is configurable and
+  // validated as a positive integer.
+  it("rejects a non-positive response truncation bound", () => {
+    expect(() => validateConfig(configWith("output.response_max_chars", 0))).toThrow(/response_max_chars/);
+    expect(() => validateConfig(configWith("output.response_max_chars", -1))).toThrow(/response_max_chars/);
+    expect(() => validateConfig(configWith("output.response_max_chars", 1.5))).toThrow(/response_max_chars/);
+    expect(() => validateConfig(configWith("output.response_max_chars", 25000))).not.toThrow();
+  });
+
   it("rejects finite values that would overflow the 32-bit timer", () => {
     expect(() => validateConfig(configWith("providers.duckduckgo.timeout", 1e308))).toThrow(new RegExp("timeout"));
     expect(() => validateConfig(configWith("kb.maintenance_interval_minutes", 1e308))).toThrow(

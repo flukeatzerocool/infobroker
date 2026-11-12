@@ -766,6 +766,14 @@ export function validateConfig(config: Config): void {
   if (!isFiniteNumber(config.output.max_chars) || !Number.isInteger(config.output.max_chars) || config.output.max_chars < 1) {
     errors.push("output.max_chars must be a positive integer");
   }
+  if (
+    config.output.response_max_chars !== undefined &&
+    (!isFiniteNumber(config.output.response_max_chars) ||
+      !Number.isInteger(config.output.response_max_chars) ||
+      config.output.response_max_chars < 1)
+  ) {
+    errors.push("output.response_max_chars must be a positive integer");
+  }
   if (!isFiniteNumber(config.output.latency_window_size) || !Number.isInteger(config.output.latency_window_size) || config.output.latency_window_size < 1) {
     errors.push("output.latency_window_size must be a positive integer");
   }
