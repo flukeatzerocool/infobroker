@@ -46,6 +46,7 @@ import { matchQuality, rankPassages } from "./rerank.js";
 import { envelopeOutputSchema } from "./output-schema.js";
 import { finalizeToolResult, parseEnvelopeObject, rawRequestError, rawTextFromEnvelope } from "./structured-output.js";
 import { deepRead } from "./deep-search.js";
+import type { DeepFetchResult } from "./deep-search.js";
 import { analyzeResults } from "./analysis.js";
 import { derivePrivacy } from "./privacy.js";
 import { detectDocumentDate } from "./datetime.js";
@@ -723,16 +724,28 @@ async function doWebSearch(
           // REQ-097: the strictest mode refuses flagged pages to the caller.
           const policy = await checkContent(fetched.content, url);
           if (disposition(policy.flagged) === "refuse") return null;
+          // REQ-122: deep reading reports the snapshot hash and freshness tier
+          // alongside the live URL, so the result is kept rather than discarded.
+          let snapshot: DeepFetchResult["snapshot"];
           if (config.preservation?.enabled !== false) {
-            snapshotSource({
+            const snap = snapshotSource({
               url,
               title: url,
               text: fetched.content,
               provider: fetched.slug,
               maxBytes: config.preservation?.max_bytes,
             });
+            if (snap) {
+              snapshot = {
+                snapshot_sha256: snap.snapshot_sha256,
+                snapshot_tier: snap.snapshot_tier,
+                hash_basis: snap.hash_basis,
+                snapshot_url: snap.snapshot_url,
+                truncated: snap.truncated,
+              };
+            }
           }
-          return { content: fetched.content, slug: fetched.slug };
+          return { content: fetched.content, slug: fetched.slug, ...(snapshot ? { snapshot } : {}) };
         },
         {
           detectDate: deepConf.detect_date ? (u: string) => detectPageDate(u, allowPrivateDeep) : undefined,

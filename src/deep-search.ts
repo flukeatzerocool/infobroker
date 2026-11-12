@@ -17,12 +17,26 @@ export interface DeepEnrichedResult {
   date_confidence?: string;
   retrieved_at?: string;
   content_sha256?: string;
+  // REQ-122: the snapshot covering the retrieved document, when one was stored.
+  snapshot_sha256?: string;
+  snapshot_tier?: string;
+  snapshot_basis?: "document" | "snippet";
+  snapshot_url?: string;
+  snapshot_truncated?: boolean;
   read_error?: string;
 }
 
 export interface DeepFetchResult {
   content: string;
   slug: string;
+  /** REQ-122: present only when preservation stored a snapshot. */
+  snapshot?: {
+    snapshot_sha256: string;
+    snapshot_tier: string;
+    hash_basis: "document" | "snippet";
+    snapshot_url: string;
+    truncated: boolean;
+  };
 }
 
 // Injected dependencies keep the orchestration (budget, concurrency, early-exit,
@@ -95,6 +109,19 @@ export function deepRead(
       ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
       : {};
 
+    // REQ-122: report the snapshot hash and freshness tier alongside the live
+    // URL. The names are mapped explicitly because SnapshotResult calls them
+    // hash_basis and truncated.
+    const snap = fetched.snapshot;
+    const snapshotMeta = snap
+      ? {
+          snapshot_sha256: snap.snapshot_sha256,
+          snapshot_tier: snap.snapshot_tier,
+          snapshot_basis: snap.hash_basis,
+          snapshot_url: snap.snapshot_url,
+          snapshot_truncated: snap.truncated,
+        }
+      : {};
     const enriched: DeepEnrichedResult = {
       ...base,
       ...(passages.length > 0
@@ -107,6 +134,7 @@ export function deepRead(
             extraction_mode: "full_content" as const,
           }),
       ...dateMeta,
+      ...snapshotMeta,
     };
     out.set(url, enriched);
     pagesRead++;

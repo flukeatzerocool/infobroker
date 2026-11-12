@@ -519,3 +519,47 @@ describe("KB-first metadata and ordering (REQ-020d, REQ-020h)", () => {
     });
   });
 });
+
+// F-R5-C-3 / REQ-122: deep reading reports the snapshot hash and freshness
+// tier alongside the live URL, and omits them when preservation is off.
+describe("deep-reading snapshot reporting (REQ-122)", () => {
+  test("carries the snapshot hash and tier for each fetched page", async () => {
+    const a = await stub({ mode: "ok", servePages: true });
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      chains: { general_web: ["stub_a"], content_fetch: ["native_fetch"] },
+      output: { hedge_enabled: false },
+    });
+    writeFileSync(
+      join(cfg.root, "config.local.json"),
+      JSON.stringify({ fetch: { allow_private_urls: true } }),
+    );
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await search(call, { query: "deep snapshot probe", deep: true });
+      expect(payload.status).toBe("ok");
+      const read = (payload.results ?? []).filter((r) => typeof r.snapshot_sha256 === "string");
+      expect(read.length).toBeGreaterThan(0);
+      expect(read[0]!.snapshot_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(read[0]!.snapshot_tier).toBe("evergreen");
+      expect(read[0]!.snapshot_basis).toBe("document");
+    });
+  });
+
+  test("omits the snapshot fields when preservation is disabled", async () => {
+    const a = await stub({ mode: "ok", servePages: true });
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      chains: { general_web: ["stub_a"], content_fetch: ["native_fetch"] },
+      output: { hedge_enabled: false },
+    });
+    writeFileSync(
+      join(cfg.root, "config.local.json"),
+      JSON.stringify({ fetch: { allow_private_urls: true }, preservation: { enabled: false } }),
+    );
+
+    await withServer(cfg.env, async (call) => {
+      const payload = await search(call, { query: "deep snapshot probe", deep: true });
+      expect(payload.status).toBe("ok");
+      expect((payload.results ?? []).every((r) => r.snapshot_sha256 === undefined)).toBe(true);
+    });
+  });
+});

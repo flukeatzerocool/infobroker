@@ -115,3 +115,41 @@ describe("deepRead (REQ-028)", () => {
     expect(indexed[0].title).toBe("A");
   });
 });
+
+// REQ-122: the deep-reading path reports the snapshot it stored instead of
+// discarding the result, and maps SnapshotResult's names onto the response.
+describe("deepRead snapshot reporting (REQ-122)", () => {
+  it("carries the snapshot hash, tier, basis, url, and truncation", async () => {
+    const results = [makeResult("A", "https://a.example/", "snippet A")];
+    const fetchPage = async () => ({
+      content: "full body text",
+      slug: "jina",
+      snapshot: {
+        snapshot_sha256: "abc123",
+        snapshot_tier: "evergreen",
+        hash_basis: "document" as const,
+        snapshot_url: "https://a.example/",
+        truncated: false,
+      },
+    });
+    const { results: out } = await deepRead("q", results, deepConf, 100, 1, 3, fetchPage, { rank });
+
+    expect(out[0].snapshot_sha256).toBe("abc123");
+    expect(out[0].snapshot_tier).toBe("evergreen");
+    expect(out[0].snapshot_basis).toBe("document");
+    expect(out[0].snapshot_url).toBe("https://a.example/");
+    expect(out[0].snapshot_truncated).toBe(false);
+  });
+
+  it("omits every snapshot field when no snapshot was stored", async () => {
+    const results = [makeResult("A", "https://a.example/", "snippet A")];
+    const fetchPage = async () => ({ content: "full body text", slug: "jina" });
+    const { results: out } = await deepRead("q", results, deepConf, 100, 1, 3, fetchPage, { rank });
+
+    expect(out[0].snapshot_sha256).toBeUndefined();
+    expect(out[0].snapshot_tier).toBeUndefined();
+    expect(out[0].snapshot_basis).toBeUndefined();
+    expect(out[0].snapshot_url).toBeUndefined();
+    expect(out[0].snapshot_truncated).toBeUndefined();
+  });
+});
