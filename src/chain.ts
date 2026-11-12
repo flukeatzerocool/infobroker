@@ -35,6 +35,22 @@ export function ignoredParams(
   return ignored;
 }
 
+// REQ-020c: order two providers by observed latency. Antisymmetric by
+// construction: an unmeasured provider sorts after a measured one, and two
+// unmeasured providers tie so the stable sort keeps configuration order.
+export function compareByLatency(
+  a: string,
+  b: string,
+  getLatency: (slug: string) => number,
+): number {
+  const la = getLatency(a);
+  const lb = getLatency(b);
+  if (la === 0 && lb === 0) return 0;
+  if (la === 0) return 1;
+  if (lb === 0) return -1;
+  return la - lb;
+}
+
 export function selectChain(
   chain: string[],
   priority: string | undefined,
@@ -61,13 +77,7 @@ export function selectChain(
       });
     }
   } else if (priority === "speed") {
-    selected = [...chain].sort((a, b) => {
-      const la = getLatency(a);
-      const lb = getLatency(b);
-      if (la === 0) return 1;
-      if (lb === 0) return -1;
-      return la - lb;
-    });
+    selected = [...chain].sort((a, b) => compareByLatency(a, b, getLatency));
   }
   return selected.slice(0, config.output.fallback_depth);
 }
@@ -114,4 +124,23 @@ export function preferLanguageCapable(chain: string[], language?: string): strin
     else rest.push(slug);
   }
   return capable.length > 0 ? [...capable, ...rest] : chain;
+}
+
+// REQ-128: report every selected provider that cannot honor the requested
+// language. The serving provider is excluded because its loss is already
+// named in `ignored_params` (REQ-020d).
+export function languageUnsupportedProviders(
+  chain: string[],
+  serving: string,
+  language?: string,
+): string[] {
+  if (!language) return [];
+  const seen = new Set<string>();
+  const unsupported: string[] = [];
+  for (const slug of chain) {
+    if (slug === serving || seen.has(slug)) continue;
+    seen.add(slug);
+    if (!SUPPORTED_OPTIONS[slug]?.language) unsupported.push(slug);
+  }
+  return unsupported;
 }

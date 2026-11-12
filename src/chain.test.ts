@@ -7,7 +7,7 @@ vi.mock("./config.js", () => ({
 }));
 
 import { getConfig, getDispatchChain } from "./config.js";
-import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable } from "./chain.js";
+import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable, languageUnsupportedProviders, compareByLatency } from "./chain.js";
 
 function makeProvider(tier: string) {
   return { tier, enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10 };
@@ -158,5 +158,45 @@ describe("preferLanguageCapable (REQ-128)", () => {
   it("preserves order when no language is requested", () => {
     const chain = ["duckduckgo", "wikipedia"];
     expect(preferLanguageCapable(chain, undefined)).toEqual(chain);
+  });
+});
+
+// F-R3-2 / REQ-020c: an unmeasured provider keeps its configuration order and
+// the comparator is antisymmetric.
+describe("speed tie order (REQ-020c)", () => {
+  it("keeps configuration order when both providers are unmeasured", () => {
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
+    expect(selectChain(["a", "b", "c"], "speed", () => 0)).toEqual(["a", "b", "c"]);
+    expect(selectChain(["c", "b", "a"], "speed", () => 0)).toEqual(["c", "b", "a"]);
+  });
+
+  it("compares antisymmetrically, with unmeasured providers tying", () => {
+    const latency = (slug: string) => (slug === "a" ? 120 : 0);
+    expect(compareByLatency("a", "a", latency)).toBe(0);
+    expect(compareByLatency("b", "b", latency)).toBe(0);
+    expect(compareByLatency("a", "b", latency)).toBe(-1);
+    expect(compareByLatency("b", "a", latency)).toBe(1);
+    expect(compareByLatency("b", "c", latency)).toBe(0);
+  });
+
+  it("is antisymmetric for a measured and an unmeasured provider", () => {
+    vi.mocked(getConfig).mockReturnValue({ providers: {}, dispatch: {}, output: { fallback_depth: 10 } } as any);
+    const latency = (slug: string) => (slug === "a" ? 120 : 0);
+    expect(selectChain(["a", "b"], "speed", latency)).toEqual(["a", "b"]);
+    expect(selectChain(["b", "a"], "speed", latency)).toEqual(["a", "b"]);
+  });
+});
+
+// F-R3-20 / REQ-128: every chain provider that cannot honor the language is
+// reported, excluding the serving provider.
+describe("languageUnsupportedProviders (REQ-128)", () => {
+  it("lists non-capable providers in chain order, excluding the server", () => {
+    const chain = ["duckduckgo", "mojeek", "wikipedia"];
+    expect(languageUnsupportedProviders(chain, "duckduckgo", "fr")).toEqual(["mojeek"]);
+  });
+
+  it("returns an empty list when no language is requested or every provider is capable", () => {
+    expect(languageUnsupportedProviders(["duckduckgo", "mojeek"], "duckduckgo", undefined)).toEqual([]);
+    expect(languageUnsupportedProviders(["wikipedia", "wiktionary"], "wikipedia", "de")).toEqual([]);
   });
 });
