@@ -736,6 +736,9 @@ export function validateConfig(config: Config): void {
     if (preservation.enabled !== undefined && typeof preservation.enabled !== "boolean") {
       errors.push("preservation.enabled must be a boolean");
     }
+    if (preservation.archive !== undefined && typeof preservation.archive !== "boolean") {
+      errors.push("preservation.archive must be a boolean");
+    }
     if (
       preservation.max_sources_per_finding !== undefined &&
       (!isFiniteNumber(preservation.max_sources_per_finding) || preservation.max_sources_per_finding < 0)

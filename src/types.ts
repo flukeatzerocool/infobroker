@@ -134,7 +134,6 @@ export interface Config {
     first_pass_max_providers: number;
     similarity_threshold: number;
     authority_weights?: Record<string, number>;
-    archive_sources?: boolean;
     kb_recall?: boolean;
     family_similarity_threshold?: number;
     calibration?: {
@@ -144,6 +143,9 @@ export interface Config {
   };
   preservation?: {
     enabled?: boolean;
+    /** REQ-026c: a durable archive reference is attempted when preservation is
+     * enabled; this opts archiving out without disabling snapshots. */
+    archive?: boolean;
     max_sources_per_finding?: number;
     max_bytes?: number;
   };

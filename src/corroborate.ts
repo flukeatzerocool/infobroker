@@ -557,6 +557,9 @@ export async function corroborate(
     latency?: (slug: string) => number;
     searchers?: Record<string, Searcher>;
     fetchSource?: (url: string) => Promise<string | null>;
+    /** REQ-026c: bounds the whole archive wave; internal, defaults to the
+     * module budget. Exposed so a test can assert the bound without timers. */
+    archiveBudgetMs?: number;
   } = {}
 ): Promise<CorroborationResult> {
   const config = getConfig();
@@ -846,8 +849,10 @@ export async function corroborate(
     confidenceThreshold
   );
 
-  if (config.corroboration.archive_sources === true) {
-    await archiveCondensedSources(condensed);
+  // REQ-026c: source preservation governs archiving, and `preservation.archive`
+  // is the archiving-only opt-out for an operator who wants snapshots kept.
+  if (config.preservation?.enabled !== false && config.preservation?.archive !== false) {
+    await archiveCondensedSources(condensed, options.archiveBudgetMs);
   }
 
   if (config.preservation?.enabled !== false) {
@@ -984,15 +989,17 @@ function truncateClaim(text: string): string {
 
 const ARCHIVE_CONCURRENCY = 4;
 const ARCHIVE_TIMEOUT_MS = 4000;
+const ARCHIVE_TOTAL_BUDGET_MS = 2000;
 
-async function archiveOne(url: string): Promise<string | undefined> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
+async function archiveOne(url: string, waveSignal: AbortSignal): Promise<string | undefined> {
+  // The per-request ceiling survives under the wave: whichever fires first
+  // aborts the fetch, so a slow save cannot outlive the wave budget.
+  const signal = AbortSignal.any([waveSignal, AbortSignal.timeout(ARCHIVE_TIMEOUT_MS)]);
   try {
     const resp = await fetch(`https://web.archive.org/save/${encodeURIComponent(url)}`, {
       method: "GET",
       redirect: "manual",
-      signal: controller.signal,
+      signal,
       headers: { "User-Agent": "Infobroker/1.0" },
     });
     const loc = resp.headers.get("location");
@@ -1000,12 +1007,13 @@ async function archiveOne(url: string): Promise<string | undefined> {
     return new URL(loc, "https://web.archive.org").toString();
   } catch {
     return undefined;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-async function archiveCondensedSources(findings: CorroborationFinding[]): Promise<void> {
+async function archiveCondensedSources(
+  findings: CorroborationFinding[],
+  budgetMs = ARCHIVE_TOTAL_BUDGET_MS,
+): Promise<void> {
   const targets: Array<{ finding: CorroborationFinding; source: CorroborationFinding["sources"][number] }> = [];
   for (const f of findings) {
     for (const s of f.sources) {
@@ -1015,15 +1023,24 @@ async function archiveCondensedSources(findings: CorroborationFinding[]): Promis
     }
   }
 
+  // REQ-026c: non-blocking and failure-tolerant, so the wave owns one budget
+  // and aborts in-flight saves at the deadline instead of only stopping new
+  // claims. Without the abort a single 4 s save would outlive a 2 s budget.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, budgetMs));
   let idx = 0;
   async function worker(): Promise<void> {
-    while (idx < targets.length) {
+    while (idx < targets.length && !controller.signal.aborted) {
       const i = idx++;
       const { source } = targets[i];
-      source.archived_url = await archiveOne(source.url);
+      source.archived_url = await archiveOne(source.url, controller.signal);
     }
   }
 
-  const workers = Array.from({ length: Math.min(ARCHIVE_CONCURRENCY, targets.length) }, worker);
-  await Promise.allSettled(workers);
+  try {
+    const workers = Array.from({ length: Math.min(ARCHIVE_CONCURRENCY, targets.length) }, worker);
+    await Promise.allSettled(workers);
+  } finally {
+    clearTimeout(timer);
+  }
 }

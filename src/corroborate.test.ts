@@ -81,6 +81,9 @@ function mockConfig(overrides: Record<string, unknown> = {}) {
     },
     dispatch: { general_web: ["duckduckgo"] },
     corroboration: { max_iterations: 5, max_http_calls: 30, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    // REQ-026c: archiving follows preservation, so the base fixture keeps it
+    // off; the archive tests opt in explicitly.
+    preservation: { enabled: false },
     output: { max_chars: 50000, latency_window_size: 100 },
     ...overrides,
   };
@@ -89,6 +92,22 @@ function mockConfig(overrides: Record<string, unknown> = {}) {
     Object.entries(base.providers).filter(([, p]: [string, any]) => p.enabled) as any
   );
 }
+
+// REQ-026c: archiving is default-on and `archiveOne` swallows every error, so
+// an unstubbed fixture would reach web.archive.org without failing the run.
+// Every test starts offline; the archive tests stub their own response.
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("offline: no outbound fetch in unit tests");
+    })
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("extractTopic", () => {
   it("returns keywords from title", () => {
@@ -870,7 +889,8 @@ describe("corroborate", () => {
         duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
         wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
       },
-      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, archive_sources: true },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+      preservation: { enabled: true },
     });
 
     const result = await corroborate("shared claim text", {
@@ -883,10 +903,9 @@ describe("corroborate", () => {
     expect(result.findings.length).toBeGreaterThan(0);
     const sources = result.findings.flatMap((f) => f.sources);
     expect(sources.some((s) => s.archived_url !== undefined)).toBe(true);
-
-    vi.unstubAllGlobals();
   });
 
+  // @implements REQ-026c preservation-gate
   it("does not archive when source preservation is disabled", async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -897,6 +916,7 @@ describe("corroborate", () => {
         wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
       },
       corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+      preservation: { enabled: false },
     });
 
     const result = await corroborate("shared claim text", {
@@ -909,8 +929,134 @@ describe("corroborate", () => {
     const sources = result.findings.flatMap((f) => f.sources);
     expect(sources.some((s) => s.archived_url !== undefined)).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
 
-    vi.unstubAllGlobals();
+  // @implements REQ-026c archive-opt-out
+  it("does not archive when the archive opt-out is set but snapshots stay on", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+      preservation: { enabled: true, archive: false },
+    });
+
+    await corroborate("shared claim text", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
+      },
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // @implements REQ-026c archive-failure-tolerant
+  it("changes no verdict, confidence, or source count when the archive request fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("archive offline");
+      })
+    );
+
+    const run = async (preservation: Record<string, unknown>) => {
+      mockConfig({
+        providers: {
+          duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+          wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+        },
+        corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+        preservation,
+      });
+      return corroborate("shared claim text", {
+        searchers: {
+          duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
+          wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
+        },
+      });
+    };
+
+    const withArchive = await run({ enabled: true });
+    const withoutArchive = await run({ enabled: false });
+
+    expect(withArchive.findings).toHaveLength(withoutArchive.findings.length);
+    expect(withArchive.findings[0]!.verdict).toBe(withoutArchive.findings[0]!.verdict);
+    expect(withArchive.findings[0]!.confidence).toBe(withoutArchive.findings[0]!.confidence);
+    expect(withArchive.findings[0]!.sources.length).toBe(withoutArchive.findings[0]!.sources.length);
+    expect(withArchive.findings[0]!.sources.every((s) => s.archived_url === undefined)).toBe(true);
+  });
+
+  // @implements REQ-026c archive-wave-budget
+  it("bounds the archive wave at its budget and keeps completed captures", async () => {
+    const hanging = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        })
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) =>
+        String(url).includes("https%3A%2F%2Fa.com%2F1")
+          ? Promise.resolve(new Response(null, { status: 302, headers: { location: "/web/20260101000000/https://a.com/1" } }))
+          : hanging(url, init)
+      )
+    );
+
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+      preservation: { enabled: true },
+    });
+
+    const started = Date.now();
+    const result = await corroborate("shared claim text", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
+        wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
+      },
+      archiveBudgetMs: 30,
+    });
+    const elapsed = Date.now() - started;
+
+    expect(elapsed).toBeLessThan(530);
+    const sources = result.findings.flatMap((f) => f.sources);
+    expect(sources.some((s) => s.archived_url !== undefined)).toBe(true);
+    expect(sources.some((s) => s.archived_url === undefined)).toBe(true);
+  });
+
+  // @implements REQ-121 short-republish-family
+  it("counts short republished snippets as one source family", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+    });
+
+    const result = await corroborate("bridge inspection found the structure sound", {
+      searchers: {
+        duckduckgo: async () => [
+          makeResult("Wire copy", "https://one.example/a", "bridge inspection found structure sound today"),
+        ],
+        wikipedia: async () => [
+          makeResult("Wire copy", "https://two.example/b", "bridge inspection found structure sound today"),
+        ],
+      },
+    });
+
+    const finding = result.findings.find((f) => f.sources.length >= 2);
+    expect(finding).toBeDefined();
+    expect(finding!.family_count).toBe(1);
+    const familyKeys = new Set(finding!.sources.map((s) => s.source_family));
+    expect(familyKeys.size).toBe(1);
   });
 
   it("includes a provenance record with version, thresholds, and source types", async () => {

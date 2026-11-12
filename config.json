@@ -333,7 +333,6 @@
     "first_pass_max_results": 5,
     "first_pass_max_providers": 5,
     "similarity_threshold": 0.3,
-    "archive_sources": false,
     "kb_recall": true,
     "family_similarity_threshold": 0.9,
     "calibration": { "enabled": true, "secondary_only_cap": 0.7 },
@@ -421,6 +420,7 @@
   },
   "preservation": {
     "enabled": true,
+    "archive": true,
     "max_sources_per_finding": 3,
     "max_bytes": 2000000
   }
