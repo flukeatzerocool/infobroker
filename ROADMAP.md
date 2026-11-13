@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R8 notice and gate-traceability evidence
-
-- Drive a provider cooldown through a tool call and assert the bounded notice on the response (F-R8-C-1).
-- Assert REQ-096's gate-traceability clause in `validate-spec`, or narrow the sentence to reference presence (F-R8-D-1).
-
-**Trigger:** start after the sweep reaches R9; close when F-R8-C-1 and F-R8-D-1 are `Resolved`.
-
 ## R8 state-hardening evidence
 
 - Assert REQ-100's ownership-refusal branch for key-pool/state directories (F-R8-F-1).
