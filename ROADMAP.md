@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R8 update-preservation evidence
-
-- Add a test that simulates an update (copy or reinstall over the tree) and asserts the user configuration layer, KB content, and quota counters survive without reconfiguration (F-R8-A-1).
-- Reconcile §2 F11's "G1 update-preservation tests guard the guarantee" with the test once it exists.
-
-**Trigger:** start after the sweep reaches R9; close when F-R8-A-1 is `Resolved` and `validate-spec` still passes.
-
 ## R8 notice and gate-traceability evidence
 
 - Drive a provider cooldown through a tool call and assert the bounded notice on the response (F-R8-C-1).
