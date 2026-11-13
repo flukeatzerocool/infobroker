@@ -2,6 +2,30 @@
 
 ## Active Decisions
 
+### D-110: Report Exports Validate by Default and Refuse With a Typed Error (2026.11.12)
+
+REQ-126 requires export to validate the report "unless the caller explicitly
+skips validation", but only the `render-report` CLI enforced it; the three
+library exports returned data for an invalid report (F-R7-F-2). Decision: the
+check lives in the library, not only the CLI. Each export takes
+`ExportOptions { skipValidation?: boolean }`, validates by default, and throws
+`ReportExportError` carrying the error-level findings; the message names codes
+only, never report text. `--no-validate` maps to `skipValidation: true`, so the
+existing opt-out becomes the library's explicit skip instead of a CLI-only
+branch. A discriminated-union return was rejected: it duplicates the union
+`validateReport` already returns and forces every call site into result
+handling, while the repo's libraries already throw on invalid input
+(`report-delta.ts`, `watchlist.ts`). A single `exportReport` wrapper was
+rejected because the CLI needs the individual functions (`--claims-out` writes a
+second format). The CLI's pre-check and the exports' check run the same pure
+validator twice when the flag is absent; that is deliberate defence in depth —
+the pre-check owns the multi-error listing and the HTML path, the exports own
+the library guarantee — and `ReportExportError` maps to the documented exit 1 so
+the contract stays coherent if the two ever diverge. No REQ body change: the
+spec was correct and the code was behind it. Determinism (F-R7-F-1) is asserted
+by repeat-and-compare and was already true; the finding was coverage, not a
+defect.
+
 ### D-109: The Manifest-Language Staleness Check Is Caller-Declared (2026.11.12)
 
 REQ-120 requires a translated report to record its language in the manifest, but
