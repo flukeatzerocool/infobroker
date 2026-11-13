@@ -124,13 +124,14 @@ export interface ClauseCoverageViolation {
 }
 
 // Evaluate whether a REQ's clause requirements are satisfied by its tagged
-// clause count. Returns null when covered; otherwise the violation.
+// clause count. Returns null when covered; otherwise the violation. The or-branch
+// rule is one named tag per detected branch (REQ-055 / §9.4), not "any two".
 export function evaluateClauseCoverage(
   reqId: string,
   req: ClauseRequirements,
   taggedCount: number
 ): ClauseCoverageViolation | null {
-  if (req.orBranches >= 2 && taggedCount < 2) {
+  if (req.orBranches >= 2 && taggedCount < req.orBranches) {
     return { reqId, kind: "or-branches" };
   }
   if (req.conditionals >= 1 && taggedCount < 1) {

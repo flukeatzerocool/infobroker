@@ -359,7 +359,7 @@ for (const rb of reqBodies) {
 
   if (violation?.kind === "or-branches") {
     error(
-      `${rb.id}: defines "or"-joined normative branches but tests tag fewer than 2 clause tags (found: ${[...(clauseTagsByReq.get(rb.id) ?? [])].join(", ") || "none"}) — add an inline clause tag per branch, e.g. \`// @implements ${rb.id} <branch-slug>\``
+      `${rb.id}: defines "or"-joined normative branches but tests tag fewer than ${req.orBranches} clause tags (one per branch, found: ${[...(clauseTagsByReq.get(rb.id) ?? [])].join(", ") || "none"}) — add an inline clause tag per branch, e.g. \`// @implements ${rb.id} <branch-slug>\``
     );
   } else if (violation?.kind === "conditional") {
     error(

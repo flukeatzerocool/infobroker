@@ -96,6 +96,27 @@ describe("evaluateClauseCoverage (regression guard)", () => {
     expect(evaluateClauseCoverage("REQ-013", orphanBranches, 2)).toBeNull();
   });
 
+  const threeBranches = { orBranches: 3, conditionals: 0 };
+  const fourBranches = { orBranches: 4, conditionals: 0 };
+
+  it("fails a three-branch REQ with only two tagged branches", () => {
+    expect(evaluateClauseCoverage("REQ-900", threeBranches, 2)).toEqual({
+      reqId: "REQ-900",
+      kind: "or-branches",
+    });
+  });
+
+  it("passes a three-branch REQ with one tag per branch", () => {
+    expect(evaluateClauseCoverage("REQ-900", threeBranches, 3)).toBeNull();
+  });
+
+  it("fails a four-branch REQ with three tagged branches", () => {
+    expect(evaluateClauseCoverage("REQ-901", fourBranches, 3)).toEqual({
+      reqId: "REQ-901",
+      kind: "or-branches",
+    });
+  });
+
   it("fails a conditional REQ with no tagged clause", () => {
     expect(evaluateClauseCoverage("REQ-003", deadConditional, 0)).toEqual({
       reqId: "REQ-003",
