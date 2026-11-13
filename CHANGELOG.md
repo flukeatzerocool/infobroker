@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.11.11 — R8 notice and REQ-096 gate-traceability evidence
+
+- `src/dispatch-orchestration.test.ts` drives a real provider cooldown through
+  the tool boundary: a loopback 429 cools the primary, the fallback serves, and
+  the successful response carries one bounded `provider_cooldown` notice naming
+  the provider and its remaining window. A pre-cooldown control call and a stub
+  request delta keep the causal claim honest, and a following
+  `inspect_providers` call proves the notice follows the cooldown onto a tool
+  that neither searched nor caused the 429.
+- The §E security-model check moved to `scripts/lib/security-model.ts` with one
+  negative fixture per branch. It now fails when an OWASP category row is
+  missing or unmapped, when a row names a code outside the standard, or when a
+  §4.11 security REQ has no §9.5 row or no gate. The scope is the §4.11 body
+  headings and the gates are the §9.5 manifest — the only gate-read declaration
+  — so neither is a second hand-kept list. The §9.2 cooldown bullet now names
+  the response-level notice.
+- `ROADMAP.md` § R8 notice and gate-traceability evidence is retired; the sweep
+  register rows now read `Resolved 2026-11-13`. No production handler, REQ
+  body, config, schema, or dependency change (REQ-096, REQ-111a; F-R8-C-1,
+  F-R8-D-1; D-112).
+
 ## 2026.11.11 — R8 update preservation: simulated-update G1 evidence
 
 - `src/update-preservation.test.ts` simulates an update in a hermetic temp
