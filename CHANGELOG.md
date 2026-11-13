@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026.11.11 — R8 state hardening: ownership refusal and keys-directory creation
+
+- `src/key-pool.ts` now refuses to **read** persisted state from a directory the
+  process does not own, mirroring the save-path guard that already existed; it
+  audits `key_pool_state_read_refused` and continues with reset in-memory state.
+  This is the increment's one behaviour change.
+- The ownership refusal is asserted by substituting `process.getuid` rather than
+  requiring root: `src/key-pool.test.ts` proves a foreign-owned directory
+  refuses both the write (no state file, no temp file) and the read (a persisted
+  rejection is ignored, then honoured once the uid is restored), and
+  `src/quota.test.ts` proves the same for the quota store's read path. Each
+  guard mutation fails the test that covers it. The quota write path is a named
+  residual.
+- `src/kb-encryption-tools.test.ts` asserts REQ-099's creation branch: an absent
+  `keys_dir` is created with owner-only permissions, a second call is
+  idempotent, and confinement still refuses an outside path. The previously
+  green malformed-state test now reads the file (fresh module instance) instead
+  of passing without exercising the sanitizer.
+- `ROADMAP.md` § R8 state-hardening evidence is retired; the sweep register rows
+  now read `Resolved 2026-11-13`. No REQ body, config, schema, dependency, or
+  tool-surface change (REQ-099, REQ-100; F-R8-F-1, F-R8-F-2; D-113).
+
 ## 2026.11.11 — R8 notice and REQ-096 gate-traceability evidence
 
 - `src/dispatch-orchestration.test.ts` drives a real provider cooldown through
