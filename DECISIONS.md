@@ -2,6 +2,37 @@
 
 ## Active Decisions
 
+### D-115: The TDQS Report Is Gate-Side, and Its Deterministic Proxies Fail the Gate (2026.11.13)
+
+REQ-106 said "the server" reports each tool's parameter counts, description
+coverage, invocation cost, and definition size, but no server response carried
+those metrics — `inspect_providers spec` reports an aggregate token footprint
+only. The REQ now names the conformance gate as the carrier. The rejected
+alternative was a second, server-side report: the registered schemas are Zod
+raw shapes, so a server-side `definitionBytes`/`paramCount` would not equal the
+JSON-Schema numbers the gate computes, and one metric with two derivations is
+drift waiting to happen. Every metric the REQ names is still reported, by the
+gate that also fails on violations.
+
+The annotation-contradiction branch now fails the gate, and the detector had to
+change with it. It tested the whole description for a negation, but REQ-089
+makes "Do NOT use" mandatory in every description, and that phrase contains
+`not`, so no conformant surface could ever produce a candidate. The check is
+now sentence-scoped and skips the usage-guidance sentence; the mutation-verb
+list is deliberately unchanged, because widening it to "caches" would flag
+`search_web`'s declared cache write — an annotation question, not a detector
+fix.
+
+Both deterministic checks are **proxies**: the contradiction rule proves a
+read-only description names a mutation outside a negation, and the disclosure
+matrix proves each tool states the classes it exercises. Neither proves the
+prose is accurate. The matrix spans five classes across seven tools;
+applicability is decided from tool behavior (never from the description under
+test, so a silent tool cannot score itself `n/a`), and every `n/a` cell carries
+a justification in `src/tool-surface.test.ts`. A marker hit is a lower bound on
+disclosure, and a false positive is fixed by rewording the description, never
+by widening the marker.
+
 ### D-114: The Taxonomy Gate Reads Rows, Not Mentions (2026.11.13)
 
 REQ-078's "exactly one feature area" was checked by grepping the whole §D
