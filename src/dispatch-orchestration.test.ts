@@ -1,4 +1,4 @@
-// @implements REQ-031 REQ-031a REQ-034 REQ-038 REQ-015 REQ-027a
+// @implements REQ-031 REQ-031a REQ-034 REQ-038 REQ-015 REQ-027a REQ-111a
 // Dispatch orchestration is asserted through the spawned server against
 // loopback providers, so the hedge switch, cross-task fallback, empty-vs-error
 // distinction, exhaustion skip, and cooldown skip are measured on the real
@@ -38,6 +38,7 @@ interface ToolPayload {
   provider: string;
   results: Array<Record<string, unknown>>;
   meta?: Record<string, unknown>;
+  notices?: Array<{ code: string; severity?: string; message: string; details?: Record<string, unknown> }>;
   error?: { code: string; message: string; details?: Record<string, unknown> };
 }
 
@@ -297,6 +298,72 @@ describe("hedge, cross-task fallback and cooldown (REQ-031, REQ-031a, REQ-038)",
       expect(second.status).toBe("error");
       expect(second.error?.code).toBe("rate_limited");
       // The cooldown skip makes no new outbound call.
+      expect(a.requests - before).toBe(1);
+    });
+  });
+});
+
+describe("cooldown notice on tool responses (REQ-111a)", () => {
+  // The existing search() helper hardcodes infobroker_search_web; the notice
+  // contract is about every tool response, so this local helper calls any tool
+  // and parses the same [OK] / [ERROR] envelope.
+  const toolPayload = async (
+    call: (method: string, params: unknown) => Promise<RpcMessage>,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolPayload> => {
+    const msg = await call("tools/call", { name, arguments: args });
+    const text = (msg.result as { content?: Array<{ text?: string }> } | undefined)?.content?.[0]?.text ?? "";
+    return parse(text);
+  };
+
+  test("a successful response carries the bounded cooldown notice", async () => {
+    const a = await stub("rate_limited");
+    const b = await stub("ok");
+    const { cfg } = await setup([provider("stub_a", a.url), provider("stub_b", b.url)], {
+      output: { hedge_enabled: false },
+    });
+    const window = (
+      JSON.parse(readFileSync(join(cfg.root, "config.json"), "utf-8")) as {
+        output?: { rate_limit_cooldown_ms?: number };
+      }
+    ).output?.rate_limit_cooldown_ms;
+    expect(typeof window).toBe("number");
+    const cooldownWindow = window as number;
+    expect(cooldownWindow).toBeGreaterThan(0);
+
+    await withServer(cfg.env, async (call) => {
+      // Control: before any provider is cooled down, the same tool carries no
+      // cooldown notice. This also proves its payload has no notices of its
+      // own, which is the precondition injectNotices requires.
+      const control = await toolPayload(call, "infobroker_inspect_providers", { action: "list" });
+      expect(control.status).toBe("ok");
+      expect((control.notices ?? []).filter((n) => n.code === "provider_cooldown")).toHaveLength(0);
+
+      // The search itself must be what cools stub_a down.
+      const before = a.requests;
+      const first = await search(call, { query: "cooldown notice first" });
+      expect(a.requests - before).toBe(1);
+      expect(first.status).toBe("ok");
+      expect(first.provider).toBe("stub_b");
+
+      const notices = (first.notices ?? []).filter((n) => n.code === "provider_cooldown");
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toMatchObject({ severity: "info", details: { provider: "stub_a" } });
+      expect(notices[0]!.message).toContain("stub_a");
+      const remaining = notices[0]!.details?.["remaining_ms"];
+      expect(typeof remaining).toBe("number");
+      expect(remaining as number).toBeGreaterThan(0);
+      expect(remaining as number).toBeLessThanOrEqual(cooldownWindow);
+      expect((first.notices ?? []).length).toBeLessThanOrEqual(5);
+
+      // Every successful tool response, not only the search that triggered it.
+      const second = await toolPayload(call, "infobroker_inspect_providers", { action: "list" });
+      expect(second.status).toBe("ok");
+      const repeated = (second.notices ?? []).filter((n) => n.code === "provider_cooldown");
+      expect(repeated).toHaveLength(1);
+      expect(repeated[0]!.details).toMatchObject({ provider: "stub_a" });
+      // No second outbound call: the notice came from the existing cooldown.
       expect(a.requests - before).toBe(1);
     });
   });
