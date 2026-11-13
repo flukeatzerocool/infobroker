@@ -216,7 +216,8 @@ Requirements: Node.js 24+.
 Your research backend. Seven tools, twenty-six providers, one
 corroboration engine. The complete feature inventory is documented in the
 [feature taxonomy](infobroker.md#d-appendix-feature-taxonomy) in the
-spec.
+spec. Each tool and requirement has exactly one home there, and each area's
+gate column matches its requirements' declared gates.
 
 ### Unified Search
 

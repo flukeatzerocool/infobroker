@@ -529,9 +529,13 @@ a manifest row, and no manifest row without a body. _Check:_ G3.
 **REQ-078 — Feature Taxonomy**
 The specification SHALL include a feature
 taxonomy appendix (§D) that lists every tool and every §4 REQ grouped by
-thematic feature area, with each area's primary REQ range and verification gate.
+thematic feature area, with each area's primary REQ set and verification gate.
 The taxonomy SHALL be exhaustive: every tool and every §4 REQ SHALL appear in
-exactly one feature area. The client-facing README SHALL link to the taxonomy.
+exactly one feature area's own list, and a group that restates the full tool set
+as a cross-cutting concern SHALL use a non-name placeholder rather than naming
+them. Each area's verification gate SHALL equal the union of the gates its
+primary REQs declare in the REQ manifest. The client-facing README SHALL link to
+the taxonomy.
 _Check:_ G3.
 
 **REQ-080 — Tool Default Consistency**
@@ -1155,6 +1159,8 @@ verdict is preserved (REQ-026f).
   optional single-letter sub-REQ suffix), and no REQ body is empty or begins
   with a lowercase letter
 - The REQ manifest matches the REQ bodies in §4 exactly
+- The feature taxonomy lists every tool and every §4 REQ exactly once, and each
+  area's gate column equals the union of its primary REQs' manifest gates
 - A REQ body that defines a status/outcome through "or"-joined normative
   branches, or gates a behavior on a "when … declares" conditional, carries a
   named clause tag per branch in a test file
@@ -1806,18 +1812,18 @@ Base" and immediately know which REQs and gates bound the work.
 
 Every tool and every §4 REQ appears in exactly one group (its primary home).
 Where a REQ supports more than one concern, the primary group is the one whose
-behavior the REQ most directly governs; the "also governs" column names the
-secondary concerns rather than duplicating the REQ.
+behavior the REQ most directly governs; secondary concerns are not duplicated in
+the table.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
-| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1 |
+| 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
 | 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G0, G1 |
-| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G3 |
+| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
+| 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
+| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G1, G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 
@@ -1833,6 +1839,9 @@ Notes:
   Group 7 (Client Artifacts) in its Skills section, and documents Group 9
   (Security & Content Safety) in its security section; Group 8 is a
   maintainer concern surfaced only in this spec.
+- A group whose Tools cell begins with `(all 7 tools` or reads `(no tools)`
+  restates tools as a cross-cutting concern rather than claiming a primary
+  home; the normative requirement is in REQ-078.
 
 ---
 
