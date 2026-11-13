@@ -2,6 +2,28 @@
 
 ## Active Decisions
 
+### D-111: Update-Preservation Evidence Is a Temp-Root Simulation (2026.11.12)
+
+REQ-043 requires that applying an update SHALL NOT remove, reset, or overwrite
+the user configuration layer, indexed KB content, or accumulated quota state,
+and that the server SHALL operate on preserved state afterwards without
+reconfiguration; §2 F11 claims "G1 update-preservation tests guard the
+guarantee". The guarantee's carrier is now `src/update-preservation.test.ts`, a
+G1 scenario in `npm run test`, not a packaging test. It builds a temp world with
+a replaceable `install/` root, an `$XDG_CONFIG_HOME` layer, and a data directory
+holding the SQLite KB and `quota.json`, writes all three through the real
+modules, deletes and re-creates `install/` from a newer shipped `config.json`,
+then re-imports and asserts six properties (new default active, layer still
+found and drift-free, layer bytes unchanged, KB text readable, counters intact,
+no user state under the tree). Packaging parity stays with `check-pack` and
+`check-shipped-kb-empty`; a `npm pack` + reinstall test was rejected as network-
+or install-dependent for a deterministic G1 gate. The release delta is a value
+(`output.max_chars`), not a schema key, so REQ-105 drift is correctly absent and
+a schema-advancing release remains that REQ's surface. `HOME` is pinned inside
+the temp root so even a fallback to shipped `~/.local/share` defaults cannot
+touch real user state during the mutation checks. No REQ body change: the spec
+was correct and the evidence was missing.
+
 ### D-110: Report Exports Validate by Default and Refuse With a Typed Error (2026.11.12)
 
 REQ-126 requires export to validate the report "unless the caller explicitly
