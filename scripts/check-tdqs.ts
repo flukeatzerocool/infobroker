@@ -1,24 +1,20 @@
 #!/usr/bin/env npx tsx
 // check-tdqs.ts — gate: the advertised tool surface satisfies the deterministic
 // layer of TDQS 1.2 (REQ-106): context signals, hard gates (missing or
-// tautological description), parameter/annotation preconditions, and
-// shadow-candidate reporting. The six dimension scores are LLM-judged and are
-// out of scope here (see scripts/tdqs-rubric.ts). Wired into `npm run check`.
+// tautological description), parameter/annotation preconditions, the
+// annotation-contradiction branch, and shadow-candidate reporting. The six
+// dimension scores are LLM-judged and are out of scope here (see
+// scripts/tdqs-rubric.ts). Wired into `npm run check`.
 //
-// Exit codes: 0 = conformant; 1 = a structural TDQS violation; 2 = fatal.
+// Exit codes: 0 = conformant; 1 = a structural or annotation-contradiction
+// violation; 2 = fatal.
 
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
 import { isolatedConfigEnv } from "../src/lib/test-isolation.js";
-import {
-  structuralViolations,
-  annotationContradictionCandidates,
-  shadowCandidates,
-  computeContextSignals,
-  type ToolDefinition,
-} from "../src/tdqs.js";
+import { buildQualityReport, type ToolDefinition } from "../src/tdqs.js";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -28,10 +24,11 @@ Usage:
   check-tdqs [--report] [--help]
 
 Options:
-  --report   Print the JSON report and always exit 0 (informational)
+  --report   Print the JSON report and exit 0 unless a fatal error occurs
   --help     Show this help (exit 0)
 
-Exit codes: 0 = conformant; 1 = structural violation; 2 = fatal.
+Exit codes: 0 = conformant; 1 = structural or annotation-contradiction
+violation; 2 = fatal.
 `;
 
 handleHelp(process.argv.slice(2), USAGE);
@@ -105,33 +102,17 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const signals = tools.map((t) => ({ name: t.name, ...computeContextSignals(t) }));
-  const violations = structuralViolations(tools);
-  const contradictions = annotationContradictionCandidates(tools);
-  const shadows = shadowCandidates(tools);
-
-  const report = {
-    standard: "TDQS 1.2 (deterministic layer)",
-    toolCount: tools.length,
-    tools: signals.map((s) => ({
-      name: s.name,
-      invocationCost: s.invocationCost,
-      definitionBytes: s.definitionBytes,
-      schemaDescriptionCoverage: s.schemaDescriptionCoverage,
-      schemaDepth: s.schemaDepth,
-      unionChoiceCount: s.unionChoiceCount,
-    })),
-    shadowCandidates: shadows,
-    annotationContradictionCandidates: contradictions,
-    violations,
-  };
+  const report = buildQualityReport(tools);
+  const contradictions = report.violations.filter((v) => v.rule === "annotation-contradiction").length;
 
   console.log(JSON.stringify(report, null, 2));
 
-  console.error(`[check-tdqs] ${tools.length} tool(s); ${shadows.length} shadow candidate(s); ${contradictions.length} contradiction candidate(s); ${violations.length} violation(s).`);
-  for (const v of violations) console.error(`  ${v.tool}: ${v.rule} — ${v.detail}`);
+  console.error(
+    `[check-tdqs] ${report.toolCount} tool(s); ${report.shadowCandidates.length} shadow candidate(s); ${contradictions} contradiction(s); ${report.violations.length} violation(s).`
+  );
+  for (const v of report.violations) console.error(`  ${v.tool}: ${v.rule} — ${v.detail}`);
 
-  if (violations.length > 0 && !reportOnly) process.exit(1);
+  if (report.violations.length > 0 && !reportOnly) process.exit(1);
 }
 
 main().catch((e) => {

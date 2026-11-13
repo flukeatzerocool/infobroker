@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.11 — R9 tool-quality reporting and evidence
+
+- `scripts/check-tdqs.ts` now reports `paramCount` and `requiredParamCount` for
+  every tool beside description coverage, invocation cost, and definition size,
+  so the report states all four metrics REQ-106 names; the report payload is
+  built once by `buildQualityReport` in `src/tdqs.ts`, and `violations` folds in
+  the contradiction entries (the separate `annotationContradictionCandidates`
+  key is gone).
+- The annotation-contradiction branch now **fails the gate**. The old detector
+  could never fire on a conformant surface: it tested the whole description for
+  a negation, and every description must contain "Do NOT use" (REQ-089), whose
+  `not` suppressed detection. The check is now sentence-scoped and skips the
+  usage-guidance sentence; the mutation-verb list is unchanged.
+- REQ-106 names the conformance gate as the report carrier instead of "the
+  server", which had no per-tool report to point at (D-115).
+
 ## 2026.11.11 — R9 traceability and taxonomy gates strengthened
 
 - `src/clause-coverage.ts` now requires **one clause tag per detected branch**

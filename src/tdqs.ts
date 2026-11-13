@@ -388,6 +388,10 @@ export function computeOverallScore(descriptionQualityScore: number, coherenceSc
 
 const MUTATION_VERBS = /\b(creates?|created|updates?|updated|deletes?|deleted|removes?|removed|writes?|wrote|ingests?|stores?|saves?|archives?|modifies|mutates?|overwrites?)\b/i;
 const NEGATIONS = /\b(never|not|no|without|cannot|does not|doesn't|isn't|aren't)\b/i;
+// "Do NOT use" is mandatory usage guidance (REQ-089), not a behavioral claim
+// about this tool. Its `not` would otherwise negate every description and make
+// the contradiction check unable to fire.
+const USAGE_GUIDANCE = /^\s*do\s+not\s+use\b/i;
 
 /**
  * Deterministic hard-gate and structural checks. These are the objective
@@ -422,18 +426,76 @@ export function structuralViolations(defs: ToolDefinition[]): Violation[] {
 }
 
 /**
- * Report-only candidates for the `Annotation Contradiction` flag: a
- * read-only tool whose description names a mutation verb outside a negation.
- * The authoritative check is the LLM rubric; this only surfaces suspects.
+ * Fail the gate on the `Annotation Contradiction` branch: a read-only tool
+ * whose description names a mutation in a sentence that carries no negation.
+ * The check is sentence-scoped and skips the mandatory "Do NOT use" guidance
+ * sentence, so a conformant description cannot suppress it; the mutation-verb
+ * list is deliberately narrow (a wider list is a separate review).
  */
 export function annotationContradictionCandidates(defs: ToolDefinition[]): Violation[] {
   const out: Violation[] = [];
   for (const def of defs) {
     if (def.annotations?.readOnlyHint !== true || !hasDescription(def)) continue;
-    const desc = def.description!;
-    if (MUTATION_VERBS.test(desc) && !NEGATIONS.test(desc)) {
-      out.push({ tool: def.name, rule: "annotation-contradiction-candidate", detail: "readOnlyHint is true but the description names a mutation verb" });
+    const sentences = def.description!.split(/(?<=[.!?])\s+/).filter((s) => !USAGE_GUIDANCE.test(s));
+    for (const sentence of sentences) {
+      if (MUTATION_VERBS.test(sentence) && !NEGATIONS.test(sentence)) {
+        out.push({
+          tool: def.name,
+          rule: "annotation-contradiction",
+          detail: `readOnlyHint is true but the sentence names a mutation: "${sentence.slice(0, 120)}"`,
+        });
+        break;
+      }
     }
   }
   return out;
+}
+
+/** Everything the conformance gate fails on: structural rules plus contradictions. */
+export function conformanceViolations(defs: ToolDefinition[]): Violation[] {
+  return [...structuralViolations(defs), ...annotationContradictionCandidates(defs)];
+}
+
+export interface QualityReport {
+  standard: string;
+  toolCount: number;
+  tools: Array<{
+    name: string;
+    paramCount: number;
+    requiredParamCount: number;
+    invocationCost: number;
+    definitionBytes: number;
+    schemaDescriptionCoverage: number;
+    schemaDepth: number;
+    unionChoiceCount: number;
+  }>;
+  shadowCandidates: ShadowCandidate[];
+  violations: Violation[];
+}
+
+/**
+ * The per-tool report REQ-106 requires: parameter counts, schema description
+ * coverage, invocation cost, and definition size, plus the shadow candidates
+ * and the conformance violations the same gate fails on.
+ */
+export function buildQualityReport(defs: ToolDefinition[]): QualityReport {
+  return {
+    standard: "TDQS 1.2 (deterministic layer)",
+    toolCount: defs.length,
+    tools: defs.map((def) => {
+      const signals = computeContextSignals(def);
+      return {
+        name: def.name,
+        paramCount: signals.paramCount,
+        requiredParamCount: signals.requiredParamCount,
+        invocationCost: signals.invocationCost,
+        definitionBytes: signals.definitionBytes,
+        schemaDescriptionCoverage: signals.schemaDescriptionCoverage,
+        schemaDepth: signals.schemaDepth,
+        unionChoiceCount: signals.unionChoiceCount,
+      };
+    }),
+    shadowCandidates: shadowCandidates(defs),
+    violations: conformanceViolations(defs),
+  };
 }

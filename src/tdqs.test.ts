@@ -18,6 +18,8 @@ import {
   computeOverallScore,
   structuralViolations,
   annotationContradictionCandidates,
+  conformanceViolations,
+  buildQualityReport,
   type ToolDefinition,
 } from "./tdqs.js";
 
@@ -231,4 +233,41 @@ test("structural violations and contradiction candidates are reported", () => {
     { name: "reader", description: "Returns metadata and never modifies it.", annotations: { readOnlyHint: true } },
   ]);
   expect(contradiction.map((v) => v.tool)).toEqual(["writer"]);
+});
+
+// @implements REQ-106 report-metrics
+test("the quality report states parameter counts, coverage, invocation cost, and definition size", () => {
+  const defs: ToolDefinition[] = [
+    {
+      name: "reader",
+      description: "Reads the index. Use when. Do NOT use for writes. Returns [OK].",
+      inputSchema: { type: "object", properties: { q: { type: "string", description: "query" } }, required: ["q"] },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+  ];
+  const report = buildQualityReport(defs);
+  expect(report.toolCount).toBe(1);
+  const row = report.tools[0]!;
+  expect(row.paramCount).toBe(1);
+  expect(row.requiredParamCount).toBe(1);
+  expect(row.schemaDescriptionCoverage).toBe(100);
+  expect(typeof row.invocationCost).toBe("number");
+  expect(row.definitionBytes).toBeGreaterThan(0);
+  expect(report.violations).toEqual([]);
+});
+
+// @implements REQ-106 contradiction-fails
+test("conformance violations fail on a contradiction and ignore guidance and negation", () => {
+  const base = { readOnlyHint: true as const };
+  const defs: ToolDefinition[] = [
+    { name: "writer", description: "Reads the index and writes findings back to the store.", annotations: base },
+    { name: "negated", description: "Reads the index and never writes to the store.", annotations: base },
+    { name: "guidance", description: "Reads the index. Do NOT use for writes.", annotations: base },
+    { name: "usage-only", description: "Reads the index. Use when. Do NOT use for deletes. Returns [OK].", annotations: base },
+  ];
+  const contradictions = conformanceViolations(defs).filter((v) => v.rule === "annotation-contradiction");
+  expect(contradictions.map((v) => v.tool)).toEqual(["writer"]);
+  // The same definitions produce structural violations for the undeclared hints,
+  // so assert the contradiction rule specifically rather than the whole list.
+  expect(annotationContradictionCandidates(defs).map((v) => v.tool)).toEqual(["writer"]);
 });

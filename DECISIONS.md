@@ -1185,11 +1185,10 @@ gates, and the shadow prefilter) and binds it to a new live-surface gate,
 `scripts/check-tdqs.ts`, alongside the opt-in LLM rubric runner
 `scripts/tdqs-rubric.ts`. `src/tdqs.ts` implements the spec's normative
 required-subtree traversal, invocation cost, exact-integer `round1` arithmetic,
-tier map, and server rollups. The gate fails on the objective preconditions
-(missing or tautological description, undocumented parameter, missing
-annotation) and reports shadow candidates, annotation-contradiction candidates,
-and per-tool signals; the six dimension scores remain LLM-judged and are
-deliberately out of the deterministic gate.
+tier map, and server rollups. The gate fails on structural and
+annotation-contradiction violations and reports shadow candidates and per-tool
+signals; the six dimension scores remain LLM-judged and are deliberately out of
+the deterministic gate.
 
 Second, it acts on the feedback: the six 4.8 tools' descriptions were rewritten
 to cut redundancy (Conciseness) and add parameter semantics, and `manage_kb`'s
