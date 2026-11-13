@@ -1,0 +1,11 @@
+tools: 7
+tool	stored	external	ratelimit	auth	destructive
+infobroker_search_web	disclosed	disclosed	disclosed	disclosed	n/a (no irreversible action)
+infobroker_fetch_page	disclosed	disclosed	disclosed	disclosed	n/a (no irreversible action)
+infobroker_inspect_providers	n/a (read-only, no persisted write)	disclosed	disclosed	n/a (takes no credential)	n/a (no irreversible action)
+infobroker_verify_claims	disclosed	disclosed	disclosed	disclosed	n/a (no irreversible action)
+infobroker_manage_kb	disclosed	disclosed	disclosed	disclosed	disclosed
+infobroker_reload_config	disclosed	n/a (local file I/O only)	n/a (no provider dispatch)	n/a (local file I/O only)	disclosed
+infobroker_get_citations	n/a (writes nothing)	disclosed	disclosed	disclosed	n/a (no irreversible action)
+
+gaps: 0
