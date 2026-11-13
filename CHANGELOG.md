@@ -15,6 +15,11 @@
   usage-guidance sentence; the mutation-verb list is unchanged.
 - REQ-106 names the conformance gate as the report carrier instead of "the
   server", which had no per-tool report to point at (D-115).
+- A live assertion now covers REQ-089's behavioral-consequence clause: every
+  tool definition must disclose the five classes it actually exercises
+  (stored state, external calls, rate limits, authentication, destructive
+  operations) against a declared matrix, and `verify_claims` and `manage_kb`
+  gained the sentences that close their gaps.
 
 ## 2026.11.11 — R9 traceability and taxonomy gates strengthened
 

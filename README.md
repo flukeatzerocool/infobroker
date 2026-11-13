@@ -401,7 +401,9 @@ needs your attention — configuration drift, a pending migration, or a
 provider cooling down — successful tool responses carry a bounded `notices`
 array with the condition and, where one exists, the fix, so a stale user
 layer does not stay invisible. You always know what your search server is
-doing and how much capacity remains.
+doing and how much capacity remains. The `check-tdqs` gate reports each tool's
+parameter counts, schema description coverage, invocation cost, and definition
+size, and fails when a definition breaks the deterministic TDQS bar.
 
 ## Skills
 

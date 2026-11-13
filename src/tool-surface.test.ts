@@ -286,3 +286,105 @@ test("manage_kb advertises the REQ-060a max-results contract", async () => {
   expect(props.max_results?.maximum, "manage_kb.max_results maximum drifted from REQ-060a").toBe(50);
   expect(props.max_results?.description, "manage_kb.max_results description lost the default").toContain("default 8");
 }, 30000);
+
+// REQ-089: every tool discloses the behavioral consequences it actually has.
+// The matrix is declared here, not read from the description under test, so a
+// silent tool cannot pass by scoring its own class `n/a`. The check proves
+// disclosure presence, not accuracy (D-115).
+type DisclosureClass = "stored" | "external" | "ratelimit" | "auth" | "destructive";
+
+const DISCLOSURE_CLASSES: DisclosureClass[] = ["stored", "external", "ratelimit", "auth", "destructive"];
+
+const DISCLOSURE_MARKERS: Record<DisclosureClass, RegExp> = {
+  stored: /\bstored\b|\bstore\b|\bpersist|knowledge base|\bcache|disk|config\.local\.json/i,
+  external: /\bnetwork\b|\bexternal\b|outbound|\bremote\b|\bHTTP\b|\bprovider|renderer/i,
+  ratelimit: /rate.?limit|\bquota\b|throttl/i,
+  auth: /authenticat|API key|credential/i,
+  destructive: /destructiv|cannot be undone|unrecoverable|\bdelet|\bremov|overwrit/i,
+};
+
+/** Classes the tool exercises; the value is the reason it must disclose them. */
+const DISCLOSURES: Record<string, Partial<Record<DisclosureClass, string>>> = {
+  infobroker_search_web: {
+    stored: "caches results in the knowledge base",
+    external: "dispatches every provider",
+    ratelimit: "per-provider throttling applies",
+    auth: "keyed providers need configured keys",
+  },
+  infobroker_fetch_page: {
+    stored: "fetched pages auto-index into the knowledge base",
+    external: "renderer chain makes outbound calls",
+    ratelimit: "renderer chain is throttled",
+    auth: "configured keys change renderer coverage",
+  },
+  infobroker_inspect_providers: {
+    external: "health action probes a provider",
+    ratelimit: "health is subject to provider limits",
+  },
+  infobroker_verify_claims: {
+    stored: "findings are written back to the knowledge base",
+    external: "dispatches every provider",
+    ratelimit: "per-provider limits apply",
+    auth: "keyed providers need configured keys",
+  },
+  infobroker_manage_kb: {
+    stored: "ingest, delete, and stats touch the store",
+    external: "URL ingest dispatches the fetch chain",
+    ratelimit: "URL ingest consumes chain quota",
+    auth: "URL ingest uses the chain's configured keys",
+    destructive: "the delete action is irreversible",
+  },
+  infobroker_reload_config: {
+    stored: "writes the user-layer config file",
+    destructive: "rewrites the user config layer",
+  },
+  infobroker_get_citations: {
+    external: "queries academic providers",
+    ratelimit: "provider throttling applies",
+    auth: "keyed providers need configured keys",
+  },
+};
+
+/** Classes the tool does not exercise, each with the justification. */
+const NOT_APPLICABLE: Record<string, Partial<Record<DisclosureClass, string>>> = {
+  infobroker_search_web: { destructive: "no irreversible action" },
+  infobroker_fetch_page: { destructive: "no irreversible action" },
+  infobroker_inspect_providers: {
+    stored: "read-only, no persisted write of its own",
+    auth: "takes no credential; reports provider credential state",
+    destructive: "no irreversible action",
+  },
+  infobroker_verify_claims: { destructive: "no irreversible action" },
+  infobroker_manage_kb: {},
+  infobroker_reload_config: {
+    external: "local file I/O only",
+    ratelimit: "no provider dispatch",
+    auth: "no provider dispatch",
+  },
+  infobroker_get_citations: {
+    stored: "writes nothing",
+    destructive: "no irreversible action",
+  },
+};
+
+// @implements REQ-089 behavioral-consequence
+test("every tool definition discloses its behavioral consequences", async () => {
+  const { tools } = await listTools();
+  for (const tool of tools) {
+    const required = DISCLOSURES[tool.name];
+    const notApplicable = NOT_APPLICABLE[tool.name];
+    expect(required, `${tool.name} has no disclosure row in the gate`).toBeDefined();
+    expect(notApplicable, `${tool.name} has no not-applicable row in the gate`).toBeDefined();
+    for (const cls of DISCLOSURE_CLASSES) {
+      const reason = required?.[cls];
+      const naReason = notApplicable?.[cls];
+      expect(
+        Boolean(reason) !== Boolean(naReason),
+        `${tool.name}.${cls} must be either required or n/a with a justification`
+      ).toBe(true);
+      if (reason) {
+        expect(DISCLOSURE_MARKERS[cls].test(tool.description ?? ""), `${tool.name} must disclose ${cls}: ${reason}`).toBe(true);
+      }
+    }
+  }
+}, 30000);
