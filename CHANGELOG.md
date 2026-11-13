@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.11.11 — R8 update preservation: simulated-update G1 evidence
+
+- `src/update-preservation.test.ts` simulates an update in a hermetic temp
+  world: it writes the user configuration layer, a KB document, and quota
+  counters through the real modules, replaces the package root with a newer
+  shipped `config.json`, then re-imports and asserts six properties — the new
+  default is active while the user value still wins, the layer is still found
+  with `hasDrift === false`, its bytes are unchanged, the KB text still reads,
+  the counters still count, and no user state lives under the package tree.
+- The test closes REQ-043's evidence gap and makes §2 F11's "G1
+  update-preservation tests guard the guarantee" sentence true; mutation checks
+  fail the KB and layer assertions, and `HOME` is pinned inside the temp root so
+  even a fallback to shipped defaults cannot touch real user state.
+- `ROADMAP.md` § R8 update-preservation evidence is retired; the sweep register
+  rows now read `Resolved 2026-11-12`, including the stale `infobroker.md:74`
+  anchor (corrected to `:76`). No production code, REQ body, config, schema, or
+  gate change (REQ-043; F-R8-A-1; D-111).
+
 ## 2026.11.11 — R7 export: library validation, explicit skip, determinism
 
 - The library exports `reportToJson`, `reportToSourcesCsv`, and
