@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.11.11 — R9 traceability and taxonomy gates strengthened
+
+- `src/clause-coverage.ts` now requires **one clause tag per detected branch**
+  instead of "any two tags": a three-branch REQ with two tags fails, and the
+  gate message names the branch count. The live tree needed no tag changes
+  (four multi-branch REQs, all already above quota), so the fail-before
+  evidence is the 3-branch/2-tag and 4-branch/3-tag cases in
+  `src/clause-coverage.test.ts`, which return `null` on the old threshold.
+- The §D taxonomy check replaces presence-grep with row parsing
+  (`src/lib/feature-taxonomy.ts`): exactly one home per tool and per §4 REQ, no
+  duplicated group, and each row's Gate cell must equal the canonical union of
+  its REQs' §9.5 manifest gates. `scripts/validate-spec.ts` drives it from live
+  tool registration and the §4 body; `deriveFeatureAreas` becomes a projection
+  of the same parser so the README reconciliation is unchanged.
+- REQ-078 is amended because the gate-column rule was new normative content,
+  not drift: each area's gate must equal the union of its primary REQs' manifest
+  gates, the primary REQ **set** replaces "range", and a group that restates the
+  full tool set must use a non-name placeholder rather than claiming a home.
+  Groups 2, 5, 6, and 7 now declare their real unions; the §D intro no longer
+  promises an "also governs" column that does not exist; the README states the
+  rule. The dry run against the saved pre-edit spec reported exactly the four
+  drifted rows, and the gate is green after the edit.
+- No runtime, config, schema, dependency, provider, or tool-surface change
+  (REQ-055, REQ-078; F-R9-A-1, F-R9-C-1; D-114).
+
 ## 2026.11.11 — R8 state hardening: ownership refusal and keys-directory creation
 
 - `src/key-pool.ts` now refuses to **read** persisted state from a directory the
