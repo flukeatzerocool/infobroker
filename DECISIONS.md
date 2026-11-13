@@ -2,6 +2,38 @@
 
 ## Active Decisions
 
+### D-113: Ownership Refusal Is Asserted by Substituting the UID (2026.11.13)
+
+REQ-100's "refuse to read or write state in a directory it does not own" and
+REQ-099's "designated directory SHALL be created with owner-only permissions
+when absent" had no asserting test. The refusal is now exercised by stubbing
+`process.getuid` to `(uid + 1) >>> 0`, which both guards read at call time
+(`src/key-pool.ts`, `src/quota.ts`), so an owned temp directory looks foreign
+without root, without `chown`, and without a skipped test. The evidence is
+behavioural — no state file is written, and a previously persisted rejection is
+not read — not the audit line, so the state test files need no
+`INFOBROKER_CONFIG` override.
+
+Reading the code changed the premise: the write guard existed in both stores,
+but the key-pool `loadState()` had no read guard, while the quota store already
+checked before reading. The read guard was added (~12 lines, mirroring quota)
+and audits `key_pool_state_read_refused`. This is the increment's one behaviour
+change. `src/key-pool.test.ts`'s shared `resetKeyPoolStateForTests()` seeds an
+empty in-memory state and so cannot force a re-read; the read tests therefore
+take a fresh module instance (`vi.resetModules()` + dynamic import), and the
+pre-existing malformed-state test was moved onto that path because it had been
+green without ever reading the file.
+
+Scope is recorded honestly: key-pool is asserted for read and write; quota for
+read only. The quota write path routes through the same `ensureDir()` whose
+throw the read test exercises, and triggering it needs the 30 s debounce, so it
+is a named residual rather than a claimed assertion. REQ-099's creation branch
+is asserted in `src/kb-encryption-tools.test.ts` (mode, idempotence, and that
+confinement still refuses an outside path) because the code lives in
+`resolveKeyFile` in `kb.ts`, not `kb-crypto.ts` — the finding's anchor was
+stale. No REQ body change: the contracts were correct and the evidence was
+missing.
+
 ### D-112: The Cooldown Notice and the Security-Model Gate Are Asserted, Not Restated (2026.11.13)
 
 REQ-111a's response-level cooldown notice and REQ-096's gate-traceability
