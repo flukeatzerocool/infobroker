@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R8 state-hardening evidence
-
-- Assert REQ-100's ownership-refusal branch for key-pool/state directories (F-R8-F-1).
-- Assert REQ-099's owner-only creation of an absent keys directory (F-R8-F-2).
-
-**Trigger:** start after the sweep reaches R9; close when F-R8-F-1 and F-R8-F-2 are `Resolved`.
-
 ## R9 traceability and taxonomy gate strength
 
 - Make the clause guard require one named tag per "or"-joined branch rather than two tags for any branch count (F-R9-A-1), and extend the taxonomy check to assert "exactly one feature area" per REQ plus a gate column that matches the §9.5 manifest (F-R9-C-1).
