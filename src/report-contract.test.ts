@@ -199,4 +199,24 @@ describe("report contract (REQ-116)", () => {
     expect(result.ok).toBe(false);
     expect(result.findings.some((finding) => finding.code === "manifest-handling-required")).toBe(true);
   });
+
+  it("accepts a report whose manifest language matches the requested output", () => {
+    const result = validateReport(fixture("good-report.md"), { expectLanguage: "en" });
+    expect(result.ok).toBe(true);
+    expect(result.findings.filter((finding) => finding.level === "error")).toEqual([]);
+  });
+
+  it("rejects a stale manifest language after translation", () => {
+    const result = validateReport(fixture("good-report.md"), { expectLanguage: "de" });
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "manifest-language-mismatch")).toBe(true);
+  });
+
+  it("requires the manifest to declare a language when one was requested", () => {
+    const withoutLanguage = fixture("good-report.md").replace(/\s*"language": "en",\n/, "\n");
+    expect(withoutLanguage).not.toBe(fixture("good-report.md"));
+    const result = validateReport(withoutLanguage, { expectLanguage: "en" });
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "manifest-language-required")).toBe(true);
+  });
 });

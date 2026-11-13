@@ -51,6 +51,15 @@ export interface ReportManifest {
   claims?: ManifestClaim[];
 }
 
+export interface ValidateOptions {
+  /**
+   * Language the caller asked the report to be produced in (REQ-120). When
+   * supplied, the manifest must declare it; a missing or stale value is an
+   * error, so a translated report cannot keep an earlier language.
+   */
+  expectLanguage?: string;
+}
+
 export interface ReportValidation {
   ok: boolean;
   findings: ReportFinding[];
@@ -256,7 +265,7 @@ function normalizeValue(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function validateManifest(manifest: ReportManifest): ReportFinding[] {
+function validateManifest(manifest: ReportManifest, options: ValidateOptions = {}): ReportFinding[] {
   const findings: ReportFinding[] = [];
   const push = (code: string, message: string): void => {
     findings.push({ level: "error", code, message });
@@ -278,6 +287,18 @@ function validateManifest(manifest: ReportManifest): ReportFinding[] {
   }
   if (typeof manifest.language === "string" && manifest.language.trim() === "") {
     push("manifest-language", "report-manifest.language must not be empty");
+  }
+  // REQ-120: a translated report records its language. The caller declares the
+  // language it asked for; a missing or stale manifest value is an error.
+  if (options.expectLanguage !== undefined) {
+    if (typeof manifest.language !== "string" || manifest.language.trim() === "") {
+      push("manifest-language-required", `report-manifest.language must record the output language (expected ${options.expectLanguage})`);
+    } else if (normalizeValue(manifest.language) !== normalizeValue(options.expectLanguage)) {
+      push(
+        "manifest-language-mismatch",
+        `report-manifest.language is '${manifest.language}' but the output language was '${options.expectLanguage}'`,
+      );
+    }
   }
   if (manifest.target_length !== undefined && (!Number.isInteger(manifest.target_length) || manifest.target_length <= 0)) {
     push("manifest-target-length", "report-manifest.target_length must be a positive integer");
@@ -658,7 +679,7 @@ function validateEvidence(text: string): ReportFinding[] {
   return findings;
 }
 
-export function validateReport(text: string): ReportValidation {
+export function validateReport(text: string, options: ValidateOptions = {}): ReportValidation {
   const findings: ReportFinding[] = [];
   const sections = extractSections(text);
   for (const required of REQUIRED_SECTIONS) {
@@ -679,7 +700,7 @@ export function validateReport(text: string): ReportValidation {
     findings.push({ level: "error", code: "manifest-missing", message: manifestResult.message });
   } else {
     manifest = manifestResult.value;
-    findings.push(...validateManifest(manifest));
+    findings.push(...validateManifest(manifest, options));
     findings.push(...validateModality(text, manifest));
     findings.push(...shapeBlockFindings(text, manifest, sections));
   }

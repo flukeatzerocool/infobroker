@@ -12,10 +12,13 @@ import { validateReport, type ReportValidation } from "../src/lib/report-manifes
 const USAGE = `validate-report — report contract validation (REQ-116)
 
 Usage:
-  validate-report --report <path> [--report-only] [--json] [--help]
+  validate-report --report <path> [--expect-language <tag>] [--report-only] [--json] [--help]
 
 Options:
   --report <path>   Report Markdown file to validate.
+  --expect-language <tag>
+                    Output language the report was asked for; the manifest must
+                    declare it (a translated report cannot keep an old value).
   --report-only     Print findings and always exit 0 (informational).
   --json            Emit the validation result as JSON on stdout.
   --help, -h        Show this help (exit 0).
@@ -25,6 +28,7 @@ Exit codes: 0 = valid or report-only; 1 = validation errors; 2 = fatal.
 
 interface ParsedArgs {
   report?: string;
+  expectLanguage?: string;
   reportOnly: boolean;
   json: boolean;
 }
@@ -39,6 +43,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.report = next;
     } else if (arg.startsWith("--report=")) {
       parsed.report = arg.slice("--report=".length);
+    } else if (arg === "--expect-language") {
+      const next = argv[++i];
+      if (next === undefined) throw new Error("--expect-language requires a language tag");
+      parsed.expectLanguage = next;
+    } else if (arg.startsWith("--expect-language=")) {
+      parsed.expectLanguage = arg.slice("--expect-language=".length);
     } else if (arg === "--report-only") {
       parsed.reportOnly = true;
     } else if (arg === "--json") {
@@ -82,7 +92,7 @@ function main(): void {
       process.exit(2);
     }
     const text = readFileSync(parsed.report, "utf-8");
-    const validation = validateReport(text);
+    const validation = validateReport(text, { expectLanguage: parsed.expectLanguage });
     if (parsed.json) {
       console.log(JSON.stringify(validation, null, 2));
     } else {
