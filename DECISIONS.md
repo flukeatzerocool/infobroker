@@ -2,6 +2,24 @@
 
 ## Active Decisions
 
+### D-109: The Manifest-Language Staleness Check Is Caller-Declared (2026.11.12)
+
+REQ-120 requires a translated report to record its language in the manifest, but
+`report-manifest.language` is optional (REQ-114 "MAY declare") and a
+deterministic validator cannot detect the body's language. Decision: the check
+is conditional on the caller's declared intent. `validate-report
+--expect-language <tag>` (and `validateReport(text, { expectLanguage })`) makes
+a missing value `manifest-language-required` and a differing value
+`manifest-language-mismatch`, so a translated report that still says
+`"language": "en"` fails its own REVALIDATE. Making the field unconditionally
+required was rejected: it would change a REQ-114 MAY into a MUST for untranslated
+reports. Auto-detection was rejected: a language heuristic in a gate is a new
+failure source. Two residuals are recorded, not discharged: a translated report
+whose pipeline omits the flag is unchecked, and a report whose manifest names
+the target language while the body remains untranslated is undetectable. The
+enforcement point is the skill instruction that passes the flag; the fix for a
+miss is to pass it, never to guess.
+
 ### D-108: The Reference Directory Is the Citation Surface, and Bare-Tool Detection Is Bounded (2026.11.12)
 
 REQ-107 requires every tool reference in the client routing surface to resolve
