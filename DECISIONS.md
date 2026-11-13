@@ -2,6 +2,29 @@
 
 ## Active Decisions
 
+### D-112: The Cooldown Notice and the Security-Model Gate Are Asserted, Not Restated (2026.11.13)
+
+REQ-111a's response-level cooldown notice and REQ-096's gate-traceability
+clause were implemented but only partially observed: the notice was unit-tested
+at `collectNotices()` and the security model was checked for reference presence.
+The notice is now asserted through the spawned-server harness in
+`src/dispatch-orchestration.test.ts`: a loopback 429 cools a provider, the
+fallback serves, and the successful response carries one bounded
+`provider_cooldown` notice naming the provider and its remaining window; a
+pre-cooldown control call and a stub request delta keep the causal claim
+honest, and a second `inspect_providers` call proves the notice follows the
+cooldown onto a tool that neither searched nor caused the 429. The
+security-model checks moved to `scripts/lib/security-model.ts` with one
+negative fixture per branch: §E presence, both OWASP headings, a §E reference
+for every §4.11 REQ, all twenty category rows mapped (non-empty controlling
+cell), no out-of-standard category code, and a §9.5 row carrying a gate for
+every §4.11 REQ. The scope is the §4.11 body headings and the gates are the
+§9.5 manifest — the only gate-read declaration, since `validate-spec` does not
+cross-check a REQ's `_Check:_` field — so neither is a second hand-kept list.
+Category-row *presence* is asserted; controller correctness belongs to the
+open R9 taxonomy roadmap item. No REQ body change: both contracts were correct
+and the evidence was missing.
+
 ### D-111: Update-Preservation Evidence Is a Temp-Root Simulation (2026.11.12)
 
 REQ-043 requires that applying an update SHALL NOT remove, reset, or overwrite
