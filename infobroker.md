@@ -1165,6 +1165,13 @@ verdict is preserved (REQ-026f).
 - Every skill reference file required by REQ-053 is present and the pipeline map
   carries a Mermaid diagram; the orchestrator references the four pipeline skills
   and states its completion token imperatively (REQ-051, REQ-052)
+- The client-artifact content checks fail, rather than warn, on a missing
+  instruction file or skill and on a missing clause: knowledge-base-first
+  recall, external fallback, and the reserved `manage_kb` search (REQ-050);
+  both pipelines, escalation, the manifest, the quality gate, the archive
+  receipt, and revalidation before reuse (REQ-051); the shared report tail and
+  every shape pipeline carrying translation, removal-or-unverified for an
+  unsupported claim, and the post-translation manifest language (REQ-120)
 - The AGENTS.md Gates table reconciles against the `npm run check` pipeline
 - The routing citation gate resolves every tool, operation, and parameter cited in the client routing surface against the live tool schema, and fails when a tool or operation is uncovered (REQ-107)
 - A companion `check-gate-coverage` gate requires every REQ whose manifest gate
