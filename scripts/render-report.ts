@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { handleHelp } from "./lib/args.js";
 import { validateReport } from "../src/lib/report-manifest.js";
 import { renderReportHtml, extractTitle } from "../src/lib/report-render.js";
-import { reportToJson, reportToSourcesCsv, reportToClaimsCsv } from "../src/lib/report-export.js";
+import { reportToJson, reportToSourcesCsv, reportToClaimsCsv, ReportExportError } from "../src/lib/report-export.js";
 
 const USAGE = `render-report — render a report to self-contained HTML
 
@@ -87,17 +87,24 @@ function main(): void {
       }
     }
     if (claimsOut !== undefined) {
-      writeFileSync(claimsOut, reportToClaimsCsv(markdown), { encoding: "utf-8", mode: 0o600 });
+      writeFileSync(claimsOut, reportToClaimsCsv(markdown, { skipValidation: !validate }), { encoding: "utf-8", mode: 0o600 });
     }
     const rendered =
       format === "json"
-        ? JSON.stringify(reportToJson(markdown), null, 2)
+        ? JSON.stringify(reportToJson(markdown, { skipValidation: !validate }), null, 2)
         : format === "csv"
-          ? reportToSourcesCsv(markdown)
+          ? reportToSourcesCsv(markdown, { skipValidation: !validate })
           : renderReportHtml(markdown, { title: extractTitle(markdown) });
     if (out === undefined) process.stdout.write(rendered);
     else writeFileSync(out, rendered, { encoding: "utf-8", mode: 0o600 });
   } catch (error) {
+    // An export refusal is a validation failure (exit 1). The pre-check above
+    // makes this unreachable today; the mapping keeps the exit contract true if
+    // the two checks ever diverge.
+    if (error instanceof ReportExportError) {
+      console.error(`ERROR [report-export] ${error.message}`);
+      process.exit(1);
+    }
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(2);
   }
