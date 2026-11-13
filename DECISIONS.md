@@ -2,6 +2,30 @@
 
 ## Active Decisions
 
+### D-114: The Taxonomy Gate Reads Rows, Not Mentions (2026.11.13)
+
+REQ-078's "exactly one feature area" was checked by grepping the whole §D
+appendix for each tool slug and REQ id, so a REQ named only in the Notes
+satisfied it and a duplicate home was invisible; the Gate column was never
+read. The gate now parses the table (`src/lib/feature-taxonomy.ts`) and asserts
+one home per tool and per §4 REQ, no duplicated group, and Gate cell equality
+with the canonical union (`G0 < G1 < G2 < G3`) of the row's REQs' §9.5 gates.
+
+Two consequences are deliberate. The Gate column was **new normative content**,
+not drift — REQ-078 previously said nothing about it — so the REQ body was
+amended in the same commit, and every future §9.5 gate change now forces a §D
+cell edit. And the all-tools groups (6 and 9) are cross-cutting: REQ-078
+requires a non-name placeholder for a full-tool-set restatement, so only a
+backticked name in the Tools cell is a home. The four drifted cells (groups 2,
+5, 6, 7) were corrected to their real unions, and the §D intro's stale "also
+governs" column reference was removed; there is no such column.
+
+The clause guard's per-branch rule (F-R9-A-1) makes a prose heuristic's count
+the tag quota. The measured population is four or-branch REQs, all already
+above quota, so nothing else changed. If a future REQ trips the count on a
+non-branch aside, the remedy is to narrow `OR_ENUM_RE`/`detectProseClassLists`
+with a fixture — never to invent a tag slug for a branch the REQ does not have.
+
 ### D-113: Ownership Refusal Is Asserted by Substituting the UID (2026.11.13)
 
 REQ-100's "refuse to read or write state in a directory it does not own" and
