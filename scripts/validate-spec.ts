@@ -16,6 +16,7 @@ import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
 import { writeProviderPrivacy, readPrivacyConfig } from "./lib/provider-privacy.js";
 import { GATES } from "./lib/gate-manifest.js";
+import { checkSecurityModel } from "./lib/security-model.js";
 
 // @implements REQ-055
 
@@ -1200,29 +1201,13 @@ checkAgentsDoc();
 
 // --- Security model completeness (REQ-096) ---
 //
-// §E must exist and name both OWASP mappings, and every security REQ must be
-// traceable into the model so a security requirement that loses its gate or
-// its model row is a spec defect.
-function checkSecurityModel(): void {
-  const eIdx = specText.indexOf("## §E Appendix: Security Model");
-  if (eIdx === -1) {
-    error("Security model appendix (§E) missing — REQ-096");
-    return;
-  }
-  const appendix = specText.slice(eIdx);
-  if (!/OWASP Top 10:2025/.test(appendix)) {
-    error("Security model (§E) missing OWASP Top 10:2025 mapping — REQ-096");
-  }
-  if (!/OWASP LLM Top 10:2025/.test(appendix)) {
-    error("Security model (§E) missing OWASP LLM Top 10:2025 mapping — REQ-096");
-  }
-  for (const req of ["REQ-096", "REQ-097", "REQ-098", "REQ-099", "REQ-100", "REQ-101", "REQ-102"]) {
-    if (!new RegExp(`\\b${req}\\b`).test(appendix)) {
-      error(`Security model (§E) does not reference ${req} — REQ-096`);
-    }
-  }
+// §E must exist, name both OWASP mappings, map every category, and trace every
+// §4.11 security REQ to a gate in the §9.5 manifest, so a requirement that
+// loses its gate or its model row is a spec defect. The checks live in a pure
+// module so each branch has a negative fixture.
+for (const message of checkSecurityModel(specText)) {
+  error(message);
 }
-checkSecurityModel();
 
 // --- Dependency vulnerability gate wiring (REQ-101) ---
 //

@@ -1085,7 +1085,7 @@ verdict is preserved (REQ-026f).
 - Error hygiene: force an internal error → verify the tool response contains no stack trace or absolute filesystem path (REQ-102)
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
-- Rate-limit cooldown: mock a provider returning a rate-limit or anti-bot response → verify it is skipped without a new outbound call on the following request within the cooldown window, and its quota counters are unchanged (REQ-038)
+- Rate-limit cooldown: mock a provider returning a rate-limit or anti-bot response → verify it is skipped without a new outbound call on the following request within the cooldown window, and its quota counters are unchanged (REQ-038); the following successful response carries a bounded cooldown notice naming the provider (REQ-111a)
 - Cross-task fallback: mock every provider in a non-`general_web` chain failing → verify the `general_web` chain serves, without re-trying an already-attempted provider (REQ-031a)
 - Normalizer: input from each provider format → verify common output shape
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
