@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## R7 export remediation
-
-- Assert export determinism with a repeat-and-compare test (F-R7-F-1).
-- Make the library exports enforce validation or expose an explicit skip (F-R7-F-2).
-
-**Trigger:** start after chunk R8 closes; close when F-R7-F-1 and F-R7-F-2 are `Resolved`.
-
 ## R8 update-preservation evidence
 
 - Add a test that simulates an update (copy or reinstall over the tree) and asserts the user configuration layer, KB content, and quota counters survive without reconfiguration (F-R8-A-1).
