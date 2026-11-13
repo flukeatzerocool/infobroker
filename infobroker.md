@@ -1081,7 +1081,9 @@ verdict is preserved (REQ-026f).
 - Content policy: retrieve content the policy flags → verify it is not stored in the knowledge base and the response reports the policy code distinct from a fetch failure; in the strictest mode verify the flagged content is refused to the caller (REQ-097)
 - Audit trail: perform a security-relevant event (refused target, config reload, key operation, quota exhaustion) → verify the audit file gains an owner-only, append-only entry containing no secret material (REQ-098)
 - Key confinement: request a key operation with a path outside the keys directory → verify the operation is refused with a confinement error (REQ-099)
+- Keys directory: point the configured keys directory at an absent path → verify the directory is created with owner-only permissions (REQ-099)
 - State validation: write a poisoned quota state file → verify the server resets state and continues rather than trusting the invalid values (REQ-100)
+- State ownership: point the state directory at one owned by another user → verify the server refuses to read or write persisted state there and continues with reset state (REQ-100)
 - Error hygiene: force an internal error → verify the tool response contains no stack trace or absolute filesystem path (REQ-102)
 - Rate limiting: mock clock, verify throttling enforces interval
 - Quota tracking: mock exhausted provider → verify fallback skip
