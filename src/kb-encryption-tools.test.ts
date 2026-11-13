@@ -3,7 +3,7 @@
 // verification, status, backup, path confinement, report sealing, and the
 // locked-store recovery path on the SQLite backend.
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, utimesSync, unlinkSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, statSync, utimesSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -179,6 +179,34 @@ describe("KB encryption tool surface (REQ-084, REQ-086)", () => {
       generateKeyFile(keyPath);
       initKb(makeConfig(dir, { enabled: true, key_file: keyPath }));
       expect(() => backupKeyFile(join(dir, "..", "leak.bak"))).toThrow(/outside the keys directory/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("creates an absent keys directory with owner-only permissions (REQ-099)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-tools-keysdir-"));
+    try {
+      const keysDir = join(dir, "nested", "keys");
+      initKb({ ...makeConfig(dir, { enabled: false }), keys_dir: keysDir });
+      expect(existsSync(keysDir)).toBe(false);
+
+      const resolved = resolveKeyFile(join(keysDir, "kb.key"));
+      expect(resolved).toBe(join(keysDir, "kb.key"));
+      expect(existsSync(keysDir)).toBe(true);
+      if (process.platform !== "win32") {
+        expect(statSync(keysDir).mode & 0o777).toBe(0o700);
+      }
+
+      // The creation branch is idempotent: a second call leaves the mode alone.
+      resolveKeyFile(join(keysDir, "kb.key"));
+      expect(existsSync(keysDir)).toBe(true);
+      if (process.platform !== "win32") {
+        expect(statSync(keysDir).mode & 0o777).toBe(0o700);
+      }
+
+      // Creation does not weaken confinement.
+      expect(() => resolveKeyFile(join(dir, "outside.key"))).toThrow(/outside the keys directory/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
