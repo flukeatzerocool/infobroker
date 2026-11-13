@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.11.11 — R7 client artifacts: failing content gates, translation tail, unverified claims
+
+- `validate-spec` now fails, rather than warns, when the instruction file is
+  missing or drops knowledge-base-first recall, the external fallback, or the
+  reserved `manage_kb` search; and when the orchestrator skill drops either
+  pipeline, a pipeline's KB phase, the Phase-0 escalation, the report manifest,
+  the quality gate, the archive receipt, or revalidation before reuse
+  (REQ-050; REQ-051; F-R7-A-1; F-R7-A-2). The imperative-token message now
+  names its carrier (`REQ-051/REQ-052, §9.4`) instead of implying a REQ body
+  states it.
+- The pipeline diagram's shared tail and the Fact-Check chain carry TRANSLATE,
+  and every shape `**Pipeline:**` paragraph must carry the full report tail,
+  including translation (REQ-120; F-R7-D-1).
+- Both REDRAFT-CHECK instructions now say a claim the evidence does not support
+  is removed or marked unverified, never rescued by attribution or softening to
+  the source's modality (REQ-120; F-R7-D-4).
+- `validate-report --expect-language <tag>` (and
+  `validateReport(text, { expectLanguage })`) rejects a missing or stale
+  manifest language, so a translated report cannot keep an earlier value; the
+  check is caller-declared by design (REQ-120; F-R7-D-3; D-109).
+
 ## 2026.11.11 — R7 routing citations: derived surface, renamed bare tools, README user layer
 
 - The routing citation gate now derives its surface from every file in
