@@ -85,12 +85,12 @@ WRITE        `technical-writing` skill — hand it the routed shape, audience, a
              target length; use the shared skeleton, the `report-manifest` block,
              and the shape's block in `references/report-template.md`
 REDRAFT-CHECK  FACT-CHECK DRAFT: extract every claim in the draft and verify
-             them in one `verify_claims (claims: [...])` batch call; fix what
-             the evidence does not support (attribute it, soften it to the
-             source's `modality` — reported or speculative — or delete it),
-             then re-run the batch once to confirm. Carry each claim's
-             `modality` and `attribution` into the report manifest; never
-             upgrade a hedged source ("reportedly") to a flat assertion.
+             them in one `verify_claims (claims: [...])` batch call; a claim
+             the evidence does not support is removed or marked unverified —
+             never rescued by attribution or softening. Then re-run the batch
+             once to confirm. Carry each remaining claim's `modality` and
+             `attribution` into the report manifest; never upgrade a hedged
+             source ("reportedly") to a flat assertion.
              Decompose an interpretive thesis into its checkable premises and
              verify those; the thesis itself is recorded as a manifest
              assumption with its strongest counter-reading, never as a verdict
@@ -100,9 +100,12 @@ VALIDATE     `scripts/validate-report.ts --report <file>` — fix every error
              invalid manifest value) before delivery
 POLISH       `proofreading` skill — grammar, spelling, style, clarity, tone
 TRANSLATE    load and apply the `translation` skill when the user asked for a
-             non-English output; keep the canonical section headings
-REVALIDATE   run `scripts/validate-report.ts` again on the final artifact after
-             polish and translation; fix every error before delivering
+             non-English output; record the output language in the manifest
+             `language` field; keep the canonical section headings
+REVALIDATE   run `scripts/validate-report.ts --report <file> --expect-language
+             <tag>` again on the final artifact after polish and translation
+             (pass the tag whenever TRANSLATE ran); fix every error before
+             delivering
 ARCHIVE      (required) `manage_kb (action: ingest, source_type: "report")` with a
              `receipt` carrying the manifest claims and `sources` (the Source
              Register URLs); ingest the finished deliverable, not the style
@@ -150,13 +153,16 @@ VERDICT      assign True→Unverifiable + confidence + likelihood + justificatio
 SUMMARIZE    `summarization` skill — executive summary
 WRITE        `technical-writing` skill — the shared skeleton plus the Fact-Check verdict table
 REDRAFT-CHECK  FACT-CHECK DRAFT: extract the draft's claims and re-verify them
-             in one `verify_claims (claims: [...])` batch call; fix or delete
-             anything the evidence does not support and preserve each source's
-             `modality` and `attribution` in the manifest
+             in one `verify_claims (claims: [...])` batch call; a claim the
+             evidence does not support is removed or marked unverified, and
+             each remaining claim's `modality` and `attribution` are preserved
+             in the manifest
 VALIDATE     run `scripts/validate-report.ts --report <file>` before delivery
 POLISH       `proofreading` skill
-TRANSLATE    `translation` skill when the user asked for a non-English output
-REVALIDATE   run the report validator again on the final artifact
+TRANSLATE    `translation` skill when the user asked for a non-English output;
+             record the output language in the manifest `language` field
+REVALIDATE   run the report validator again on the final artifact with
+             `--expect-language <tag>` when TRANSLATE ran
 ARCHIVE      (required) `manage_kb (action: ingest, source_type: "report")` with a
              `receipt` carrying the manifest claims and `sources` (the Source
              Register URLs); ingest the finished deliverable, not the style

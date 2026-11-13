@@ -573,27 +573,85 @@ function redraftBlock(text: string, start: RegExp, end: RegExp, lastStart = fals
   return text.slice(match.index ?? 0, from + endMatch.index);
 }
 
+function sectionBlock(text: string, heading: string): string | null {
+  const start = text.indexOf(heading);
+  if (start === -1) return null;
+  const rest = text.slice(start + heading.length);
+  const next = rest.search(/^## /m);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+function redraftBlocks(text: string, start: RegExp, end: RegExp): string[] {
+  const flags = start.flags.includes("g") ? start.flags : `${start.flags}g`;
+  const blocks: string[] = [];
+  for (const match of text.matchAll(new RegExp(start.source, flags))) {
+    const from = (match.index ?? 0) + match[0].length;
+    const endMatch = end.exec(text.slice(from));
+    if (!endMatch) continue;
+    blocks.push(text.slice(match.index ?? 0, from + endMatch.index));
+  }
+  return blocks;
+}
+
 function checkArtifactContent(): void {
   const prefPath = join(ROOT, "instructions", "search-preferences.md");
   const skillPath = join(ROOT, "skills", "infobroker", "SKILL.md");
 
-  if (existsSync(prefPath)) {
+  // REQ-050: presence and the three content clauses are errors, not warnings.
+  // The instruction file is G3's only carrier, so a deleted clause must fail.
+  if (!existsSync(prefPath)) {
+    error("instructions/search-preferences.md: missing (REQ-050)");
+  } else {
     const content = readFileSync(prefPath, "utf-8");
-    if (!/\bkb\b|\bknowledge base\b/i.test(content)) {
-      warn("instructions/search-preferences.md: missing knowledge base routing instruction");
+    if (!/\bknowledge base\b/i.test(content) || !/\bbefore\s+external\b/i.test(content)) {
+      error("instructions/search-preferences.md: does not direct knowledge-base-first retrieval before external providers (REQ-050)");
+    }
+    if (!/\bfallback\b/i.test(content)) {
+      error("instructions/search-preferences.md: does not treat external providers as the fallback (REQ-050)");
+    }
+    if (!/manage_kb \(action: search\)/.test(content) || !/stored-content-only/.test(content)) {
+      error("instructions/search-preferences.md: does not reserve a direct manage_kb search for stored-content-only answers or inspection (REQ-050)");
     }
   }
 
-  if (existsSync(skillPath)) {
+  if (!existsSync(skillPath)) {
+    error("skills/infobroker/SKILL.md: missing (REQ-051)");
+  } else {
     const content = readFileSync(skillPath, "utf-8");
-    if (!/(?:RECALL|knowledge base search)/i.test(content)) {
-      warn("skills/infobroker/SKILL.md: missing knowledge base search phase in pipelines");
+    // REQ-051: each pipeline carries its own knowledge-base retrieval phase
+    // before external search.
+    for (const heading of ["## Pipeline: Research & Write", "## Pipeline: Fact-Check"]) {
+      const block = sectionBlock(content, heading);
+      if (block === null) {
+        error(`skills/infobroker/SKILL.md: missing '${heading}' (REQ-051)`);
+        continue;
+      }
+      if (!/RECALL[\s\S]{0,200}?(?:KB-first|knowledge base)/i.test(block) || !/manage_kb \(action: search\)/.test(block)) {
+        error(`skills/infobroker/SKILL.md: '${heading}' does not carry a knowledge-base retrieval phase before external search (REQ-051)`);
+      }
     }
-    // REQ-051: the completion token must be an imperative emit instruction, not
-    // a declarative note — otherwise the agent never writes it.
+    // REQ-051: escalation is asserted on the imperative sentence inside
+    // Phase 0; the routing-table mention cannot satisfy it.
+    const phase0 = sectionBlock(content, "## Phase 0: Classify");
+    if (phase0 === null || !/Escalate to `analysis-loop` when/.test(phase0)) {
+      error("skills/infobroker/SKILL.md: Phase 0 does not escalate high-stakes requests to analysis-loop (REQ-051)");
+    }
+    // REQ-051: the skill, not each pipeline, owns these obligations.
+    for (const [token, label] of [
+      ["report-manifest", "the report manifest"],
+      ["validate-report", "the report quality gate before delivery"],
+    ] as const) {
+      if (!content.includes(token)) {
+        error(`skills/infobroker/SKILL.md: missing ${label} ('${token}') (REQ-051)`);
+      }
+    }
+    // The completion token must be an imperative emit instruction, not a
+    // declarative note — otherwise the agent never writes it. The rule is a
+    // G3 client-artifact check (§9.4), not a clause any REQ body states.
     if (!/End your reply with[\s\S]{0,160}token/i.test(content)) {
-      error("skills/infobroker/SKILL.md: completion token is not stated as an imperative emit instruction (REQ-051)");
+      error("skills/infobroker/SKILL.md: completion token is not stated as an imperative emit instruction (REQ-051/REQ-052, §9.4)");
     }
+
     const canonicalOrder = ["RECALL", "SEARCH", "EXTRACT", "VERIFY", "SUMMARIZE", "WRITE", "REDRAFT-CHECK", "VALIDATE", "POLISH", "TRANSLATE", "REVALIDATE", "ARCHIVE", "CITE"];
     let cursor = 0;
     for (const phase of canonicalOrder) {
@@ -607,13 +665,18 @@ function checkArtifactContent(): void {
     // REQ-120a: ARCHIVE is required and names the report identity + sources in
     // both the report pipeline and the fact-check pipeline.
     let archiveSteps = 0;
+    let verifyReportSteps = 0;
     for (const match of content.matchAll(/^ARCHIVE\s+\(required\)/gm)) {
       const step = content.slice(match.index, match.index + 600);
-      if (!step.includes("sources") || !step.includes("meta.report_id")) {
-        error("skills/infobroker/SKILL.md: ARCHIVE step must name sources and meta.report_id (REQ-120a)");
+      if (!step.includes("sources") || !step.includes("meta.report_id") || !step.includes("`receipt`")) {
+        error("skills/infobroker/SKILL.md: ARCHIVE step must name sources, meta.report_id, and the receipt (REQ-051/REQ-120a)");
         break;
       }
+      if (step.includes("verify_report")) verifyReportSteps++;
       archiveSteps++;
+    }
+    if (archiveSteps > 0 && verifyReportSteps === 0) {
+      error("skills/infobroker/SKILL.md: no ARCHIVE step runs verify_report before reuse (REQ-051)");
     }
     if (archiveSteps === 0) {
       error("skills/infobroker/SKILL.md: no ARCHIVE step found (REQ-120a)");
@@ -643,10 +706,27 @@ function checkArtifactContent(): void {
       } else if (!/modality/i.test(redraft)) {
         error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
       }
+      // REQ-120: the shared reference carries the same removal-or-unverified
+      // rule and the post-translation manifest-language instruction.
+      const workflowRedrafts = redraftBlocks(workflows, /- \*\*REDRAFT-CHECK\*\*/, /\n- \*\*VALIDATE\*\*/);
+      for (const block of workflowRedrafts) {
+        if (!/unverified/i.test(block) || !/remov|delet/i.test(block)) {
+          error("skills/infobroker/references/workflows.md: REDRAFT-CHECK does not remove or mark unverified a claim the evidence does not support (REQ-120)");
+        }
+        if (/soften[^.]{0,40}modality/i.test(block)) {
+          error("skills/infobroker/references/workflows.md: REDRAFT-CHECK still instructs softening an unsupported claim to the source's modality (REQ-120)");
+        }
+      }
+      if (!/- \*\*TRANSLATE\*\*[^\n]*\n[^\n]*manifest[^\n]*language/i.test(workflows)) {
+        error("skills/infobroker/references/workflows.md: TRANSLATE does not record the output language in the manifest (REQ-120)");
+      }
+      if (!/- \*\*REVALIDATE\*\*[\s\S]{0,400}--expect-language/.test(workflows)) {
+        error("skills/infobroker/references/workflows.md: REVALIDATE does not pass --expect-language after translation (REQ-120)");
+      }
       // REQ-120: every shape's own Pipeline paragraph carries the report tail.
       // The checks above only prove the phase names exist somewhere in the
       // file, so a shape could drop its validate/archive steps undetected.
-      const REPORT_TAIL = ["WRITE", "REDRAFT-CHECK", "VALIDATE", "POLISH", "REVALIDATE", "ARCHIVE", "CITE"];
+      const REPORT_TAIL = ["WRITE", "REDRAFT-CHECK", "VALIDATE", "POLISH", "TRANSLATE", "REVALIDATE", "ARCHIVE", "CITE"];
       for (const section of workflows.split(/^## /m).slice(1)) {
         const title = section.split("\n", 1)[0]!.trim();
         const pipeline = section.match(/\*\*Pipeline:\*\*([\s\S]*?)(?:\n\n|\n\*\*)/);
@@ -665,6 +745,35 @@ function checkArtifactContent(): void {
       if (!/TAIL\[/.test(diagram)) {
         error("skills/infobroker/references/pipeline-map.md: missing the shared report-tail node (REQ-120)");
       }
+      // REQ-120: the shared tail carries the canonical order, translation
+      // included, so the diagram cannot contradict SKILL.md.
+      const tail = diagram.match(/TAIL\["([^"]*)"\]/);
+      const tailPhases = ["write", "redraft-check", "validate", "polish", "translate", "revalidate", "archive", "cite"];
+      if (tail !== null) {
+        const label = tail[1]!.toLowerCase();
+        let cursor = 0;
+        for (const phase of tailPhases) {
+          const at = label.indexOf(phase, cursor);
+          if (at === -1) {
+            error(`skills/infobroker/references/pipeline-map.md: report-tail node is missing or out of order at ${phase} (REQ-120)`);
+            break;
+          }
+          cursor = at + phase.length;
+        }
+      }
+      // REQ-120: an inline shape chain that reaches the archive names
+      // translation and revalidation first. Single-phase nodes (e.g.
+      // "archive + cite") are not chains and are excluded by the arrow test.
+      for (const match of diagram.matchAll(/"([^"]*→[^"]*archive[^"]*)"/g)) {
+        const chain = match[1]!.toLowerCase();
+        const archiveAt = chain.indexOf("archive");
+        const translateAt = chain.indexOf("translate");
+        const revalidateAt = chain.indexOf("revalidate");
+        if (translateAt === -1 || revalidateAt === -1 || translateAt > archiveAt || revalidateAt > archiveAt) {
+          error("skills/infobroker/references/pipeline-map.md: a shape chain reaches archive without translate and revalidate first (REQ-120)");
+          break;
+        }
+      }
       const tailLinks = (diagram.match(/-->\s*TAIL\b/g) ?? []).length;
       if (tailLinks < 6) {
         error(`skills/infobroker/references/pipeline-map.md: ${tailLinks} shape(s) link to the report tail, expected 6 (REQ-120)`);
@@ -680,6 +789,41 @@ function checkArtifactContent(): void {
       error("skills/infobroker/SKILL.md: REDRAFT-CHECK block not found (REQ-026h)");
     } else if (!/modality/i.test(redraftSkill)) {
       error("skills/infobroker/SKILL.md: REDRAFT-CHECK does not preserve source modality (REQ-026h)");
+    }
+    // REQ-120: unsupported drafted claims are removed or marked unverified —
+    // never rescued by attribution or softening. Both SKILL.md pipelines carry
+    // a REDRAFT-CHECK block, and the shared reference carries one more.
+    const skillRedrafts = redraftBlocks(content, /^REDRAFT-CHECK/m, /^VALIDATE/m);
+    if (skillRedrafts.length < 2) {
+      error(`skills/infobroker/SKILL.md: expected two REDRAFT-CHECK blocks, found ${skillRedrafts.length} (REQ-120)`);
+    }
+    for (const block of skillRedrafts) {
+      if (!/unverified/i.test(block) || !/remov|delet/i.test(block)) {
+        error("skills/infobroker/SKILL.md: REDRAFT-CHECK does not remove or mark unverified a claim the evidence does not support (REQ-120)");
+      }
+      if (/soften[^.]{0,40}modality/i.test(block)) {
+        error("skills/infobroker/SKILL.md: REDRAFT-CHECK still instructs softening an unsupported claim to the source's modality (REQ-120)");
+      }
+    }
+    // REQ-120: translation records the output language in the manifest and the
+    // final validation checks it.
+    const translateBlocks = redraftBlocks(content, /^TRANSLATE/m, /^REVALIDATE/m);
+    if (translateBlocks.length === 0) {
+      error("skills/infobroker/SKILL.md: no TRANSLATE step found (REQ-120)");
+    }
+    for (const block of translateBlocks) {
+      if (!/manifest/i.test(block) || !/language/i.test(block)) {
+        error("skills/infobroker/SKILL.md: TRANSLATE does not record the output language in the manifest (REQ-120)");
+      }
+    }
+    const revalidateBlocks = redraftBlocks(content, /^REVALIDATE/m, /^ARCHIVE/m);
+    if (revalidateBlocks.length === 0) {
+      error("skills/infobroker/SKILL.md: no REVALIDATE step found (REQ-120)");
+    }
+    for (const block of revalidateBlocks) {
+      if (!/--expect-language/.test(block)) {
+        error("skills/infobroker/SKILL.md: REVALIDATE does not pass --expect-language after translation (REQ-120)");
+      }
     }
     const corroborationPath = join(ROOT, "skills", "infobroker", "references", "corroboration.md");
     if (existsSync(corroborationPath) && !/\bspan\b/i.test(readFileSync(corroborationPath, "utf-8"))) {

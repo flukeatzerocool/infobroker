@@ -32,7 +32,7 @@ flowchart TD
     subgraph FC["Fact-Check"]
         FCc["extract claims → search_web → verify_claims"] --> FCv["assign verdicts"]
         FCv --> FCw["write skeleton + verdict table"]
-        FCw --> FCd["redraft-check: fact-check draft → validate → polish → revalidate → archive"]
+        FCw --> FCd["redraft-check: fact-check draft → validate → polish → translate → revalidate → archive"]
     end
 
     subgraph DD["Deep-Dive"]
@@ -59,7 +59,7 @@ flowchart TD
         VEc["checklist → per-item search → verify_claims"] --> VEv["red-flag register"]
     end
 
-    TAIL["write → redraft-check → validate → polish → revalidate → archive → cite"]
+    TAIL["write → redraft-check → validate → polish → translate → revalidate → archive → cite"]
     DDs --> TAIL
     EVv --> TAIL
     LRs --> TAIL

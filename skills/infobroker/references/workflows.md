@@ -48,11 +48,11 @@ rather than restating them.
   target length. Every shape uses the shared skeleton unless its block says
   "skeleton omitted".
 - **REDRAFT-CHECK** — the FACT-CHECK DRAFT step: extract every claim from the
-  draft and verify them in one `verify_claims (claims: [...])` batch call. Fix
-  what the evidence does not support (attribute, soften to the source's
-  `modality`, or delete), then re-run the batch once to confirm. Carry each
-  claim's `modality` and `attribution` into the manifest; never upgrade a
-  hedged source to a flat assertion.
+  draft and verify them in one `verify_claims (claims: [...])` batch call. A
+  claim the evidence does not support is removed or marked unverified — never
+  rescued by attribution or softening. Then re-run the batch once to confirm.
+  Carry each remaining claim's `modality` and `attribution` into the manifest;
+  never upgrade a hedged source to a flat assertion.
 - **VALIDATE** — run `scripts/validate-report.ts --report <file>`; fix every
   error before delivering (missing section or shape block, uncited or
   unlabeled finding, unresolved `[S#]`, register row missing a grade, date, or
@@ -66,9 +66,11 @@ rather than restating them.
   reuse.
 - **POLISH** — `proofreading` for language quality.
 - **TRANSLATE** — `translation` when the target language is not English;
-  keep the canonical section headings.
+  record the output language in the manifest `language` field; keep the
+  canonical section headings.
 - **REVALIDATE** — run the report validator again on the final artifact after
-  polish and translation.
+  polish and translation, passing `--expect-language <tag>` whenever TRANSLATE
+  ran.
 - **CITE** — every factual claim carries an inline `[S#]` marker resolving to
   the Source Register, whose row carries the URL.
 
