@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.11.11 — R7 export: library validation, explicit skip, determinism
+
+- The library exports `reportToJson`, `reportToSourcesCsv`, and
+  `reportToClaimsCsv` now validate by default and throw `ReportExportError`
+  (error-level findings, no report text) for an invalid report; the explicit
+  `skipValidation` option is the only bypass, and `render-report --no-validate`
+  forwards it (REQ-126; F-R7-F-2; D-110).
+- `render-report` maps an export refusal to its documented validation exit
+  code (1) instead of the catch-all exit 2, so the CLI contract stays coherent
+  if its pre-check and the library check ever diverge (REQ-126).
+- Export determinism is now asserted by a repeat-and-compare test: JSON and
+  both CSVs are byte-identical across repeated calls, claim order follows the
+  manifest, and no clock or path field leaks into the payload (REQ-126;
+  F-R7-F-1).
+- A CLI integration test covers the invalid-report exit 1, the
+  `--no-validate` exit 0, and the valid-report path (REQ-126).
+
 ## 2026.11.11 — R7 client artifacts: failing content gates, translation tail, unverified claims
 
 - `validate-spec` now fails, rather than warns, when the instruction file is
