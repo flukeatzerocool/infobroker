@@ -12,6 +12,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
+import { checkFeatureTaxonomyCoverage } from "../src/lib/feature-taxonomy.js";
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
 import { writeProviderPrivacy, readPrivacyConfig } from "./lib/provider-privacy.js";
@@ -534,29 +535,13 @@ checkReservationParagraph(manifestReqs);
 
 // --- Feature taxonomy exhaustive coverage check ---
 
-function checkFeatureTaxonomy(): void {
-  const taxIdx = specText.indexOf("## §D Appendix: Feature Taxonomy");
-  if (taxIdx === -1) {
-    error("Feature taxonomy appendix (§D) not found");
-    return;
-  }
-  const appendix = specText.slice(taxIdx);
-
-  const toolSlugs = deriveToolSlugs();
-  for (const tool of toolSlugs) {
-    if (!new RegExp(`\`${tool}\``).test(appendix)) {
-      error(`Feature taxonomy (§D) is missing tool \`${tool}\``);
-    }
-  }
-
-  for (const req of allReqs) {
-    if (!new RegExp(`\\b${req}\\b`).test(appendix)) {
-      error(`Feature taxonomy (§D) is missing ${req}`);
-    }
-  }
+for (const message of checkFeatureTaxonomyCoverage(
+  specText,
+  deriveToolSlugs(),
+  reqBodies.map((rb) => rb.id),
+)) {
+  error(message);
 }
-
-checkFeatureTaxonomy();
 
 // --- Client artifact content verification ---
 

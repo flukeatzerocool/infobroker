@@ -1,7 +1,12 @@
 // @implements REQ-078
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
+  checkFeatureTaxonomyCoverage,
   deriveFeatureAreas,
+  parseFeatureTaxonomy,
+  parseManifestGates,
   reconcileReadmeFeatures,
   USER_FACING_GROUPS,
 } from "./feature-taxonomy.js";
@@ -94,5 +99,124 @@ describe("reconcileReadmeFeatures", () => {
   it("does not require the maintainer-only groups 6 and 8", () => {
     expect(USER_FACING_GROUPS.has(6)).toBe(false);
     expect(USER_FACING_GROUPS.has(8)).toBe(false);
+  });
+});
+
+describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
+  const LIVE = readFileSync(join(import.meta.dirname, "../../infobroker.md"), "utf-8");
+  const LIVE_GATES = parseManifestGates(LIVE);
+  const LIVE_ROWS = parseFeatureTaxonomy(LIVE);
+  // Derived once from the unmutated text: a fixture may delete a §9.5 row, and
+  // re-deriving from the mutated text would shrink the scope it is testing.
+  const TOOLS = LIVE_ROWS.flatMap((row) => row.tools);
+  const REQS = [...LIVE_GATES.keys()];
+
+  const run = (spec: string): string[] => checkFeatureTaxonomyCoverage(spec, TOOLS, REQS);
+
+  function mutate(anchor: string, replacement: string): string {
+    if (!LIVE.includes(anchor)) {
+      throw new Error(`fixture premise missing: ${anchor}`);
+    }
+    return LIVE.replace(anchor, replacement);
+  }
+
+  const rowFor = (spec: string, group: number): string => {
+    const row = spec.split("\n").find((line) => line.startsWith(`| ${group} |`));
+    if (!row) throw new Error(`fixture premise missing: group ${group} row`);
+    return row;
+  };
+
+  const group = (n: number) => LIVE_ROWS.find((row) => row.group === n)!;
+
+  it("passes the live spec", () => {
+    expect(run(LIVE)).toEqual([]);
+  });
+
+  it("reports a REQ listed in two groups", () => {
+    // REQ-003 is G1, which group 2 already carries, so only the home is wrong.
+    const gates = LIVE_GATES.get("REQ-003")!;
+    expect(gates.every((g) => group(2).gates.includes(g))).toBe(true);
+    const spec = mutate("| REQ-010, REQ-011, REQ-013,", "| REQ-003, REQ-010, REQ-011, REQ-013,");
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 1 'Core Retrieval': REQ-003 also appears in group 2 — exactly one home required",
+    ]);
+  });
+
+  it("reports a tool listed in two groups", () => {
+    const spec = mutate(
+      "`search_web`, `fetch_page`, `get_citations`",
+      "`search_web`, `fetch_page`, `get_citations`, `inspect_providers`",
+    );
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 1 'Core Retrieval': tool `inspect_providers` also appears in group 2 — exactly one home required",
+    ]);
+  });
+
+  it("reports a Gate cell that drops a member's gate", () => {
+    const spec = mutate(
+      "REQ-090, REQ-092, REQ-106 | G0, G1, G3 |",
+      "REQ-090, REQ-092, REQ-106 | G0 |",
+    );
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 6 'Tool Surface & Contracts': Gate [G0] does not match its REQs' manifest gates [G0, G1, G3]",
+    ]);
+  });
+
+  it("reports a REQ added to a second, gate-consistent group", () => {
+    expect(group(8).gates).toEqual(["G3"]);
+    expect(LIVE_GATES.get("REQ-125")).toEqual(["G1", "G3"]);
+    const spec = mutate(
+      "REQ-055, REQ-077, REQ-078, REQ-080 | G3 |",
+      "REQ-055, REQ-077, REQ-078, REQ-080, REQ-125 | G1, G3 |",
+    );
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 7 'Client Artifacts': REQ-125 also appears in group 8 — exactly one home required",
+    ]);
+  });
+
+  it("reports a REQ whose §9.5 row is absent", () => {
+    const others = group(7).reqs.filter((req) => req !== "REQ-125");
+    expect(others.every((req) => (LIVE_GATES.get(req) ?? []).join(",") === "G3")).toBe(true);
+    let spec = mutate("| REQ-125 | Watchlist Monitoring Runner | 4.7 | G1, G3 |\n", "");
+    spec = spec.replace(
+      "REQ-120a, REQ-125, REQ-126 | G1, G3 |",
+      "REQ-120a, REQ-125, REQ-126 | G3 |",
+    );
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 7 'Client Artifacts': REQ-125 declares no gate in §9.5",
+    ]);
+  });
+
+  it("accepts a Gate cell in any order", () => {
+    const spec = mutate("REQ-101, REQ-102 | G0, G1, G3 |", "REQ-101, REQ-102 | G3, G1, G0 |");
+    expect(run(spec)).toEqual([]);
+  });
+
+  it("reports a duplicated group number once", () => {
+    const row = rowFor(LIVE, 3);
+    const spec = LIVE.replace(row, `${row}\n${row}`);
+    expect(run(spec)).toEqual(["Feature taxonomy (§D): group 3 appears more than once"]);
+  });
+
+  it("reports a REQ whose §9.5 gate cell is empty", () => {
+    let spec = mutate(
+      "| REQ-125 | Watchlist Monitoring Runner | 4.7 | G1, G3 |",
+      "| REQ-125 | Watchlist Monitoring Runner | 4.7 | |",
+    );
+    spec = spec.replace(
+      "REQ-120a, REQ-125, REQ-126 | G1, G3 |",
+      "REQ-120a, REQ-125, REQ-126 | G3 |",
+    );
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 7 'Client Artifacts': REQ-125 declares no gate in §9.5",
+    ]);
+  });
+
+  it("reports a row with no REQs that declares a gate", () => {
+    const row = rowFor(LIVE, 9);
+    const spec = LIVE.replace(row, `${row}\n| 10 | Empty | (no tools) | | G1 |`);
+    expect(run(spec)).toEqual([
+      "Feature taxonomy (§D) group 10 'Empty': Gate [G1] does not match its REQs' manifest gates []",
+    ]);
   });
 });
