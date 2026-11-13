@@ -1,5 +1,5 @@
 // @implements REQ-033 REQ-034 REQ-100
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { writeFileSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -71,6 +71,31 @@ describe("quota state hardening (REQ-100)", () => {
     const c = getOrCreateCounter("wikipedia");
     expect(c.daily.count).toBe(7);
     expect(c.monthly.count).toBe(9);
+  });
+
+  // REQ-100: the same rule as the key-pool store — a foreign-owned directory is
+  // refused on the read path, and the refusal is distinguishable from corrupt
+  // state because the same file is read once the owner is restored.
+  it("refuses to read state from a directory it does not own (REQ-100)", () => {
+    const future = "2099-01-01T00:00:00.000Z";
+    writeFileSync(quotaFile, JSON.stringify({
+      providers: {
+        owned: {
+          daily: { count: 7, resetAt: future },
+          monthly: { count: 0, resetAt: future },
+        },
+      },
+    }));
+    const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
+    const spy = vi.spyOn(process, "getuid").mockReturnValue((uid + 1) >>> 0);
+    try {
+      loadQuotaState();
+      expect(checkQuota("owned", { per_day: 100 }).daily.used).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    loadQuotaState();
+    expect(checkQuota("owned", { per_day: 100 }).daily.used).toBe(7);
   });
 });
 

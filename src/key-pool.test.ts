@@ -1,6 +1,6 @@
-// @implements REQ-104 REQ-011
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync, statSync } from "node:fs";
+// @implements REQ-104 REQ-011 REQ-100
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, existsSync, writeFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +15,14 @@ import {
   keyPoolStatus,
   resetKeyPoolStateForTests,
 } from "./key-pool.js";
+
+// REQ-100 read-path tests need a module whose `state` is still null: the
+// shared seam clears the cached path but seeds an empty in-memory state, so
+// `loadState` returns early and never reads the file.
+async function freshKeyPool(): Promise<typeof import("./key-pool.js")> {
+  vi.resetModules();
+  return await import("./key-pool.js");
+}
 
 let dir: string;
 let stateFile: string;
@@ -105,14 +113,59 @@ describe("key pool (REQ-104)", () => {
     }
   });
 
-  it("discards and resets malformed persisted state (REQ-100)", () => {
+  it("discards and resets malformed persisted state (REQ-100)", async () => {
     writeFileSync(stateFile, JSON.stringify({ cursor: "not-a-number", keys: "nope" }));
-    resetKeyPoolStateForTests();
     process.env["INFOBROKER_ACME_API_KEY"] = "k1";
-    expect(resolveApiKey("acme")).toBe("k1");
+    const kp = await freshKeyPool();
+    expect(kp.resolveApiKey("acme")).toBe("k1");
     const raw = JSON.parse(readFileSync(stateFile, "utf-8")) as { cursor: unknown; keys: unknown };
     expect(typeof raw.cursor).toBe("number");
     expect(raw.keys).toEqual({});
+  });
+});
+
+// REQ-100: the server refuses to read or write state in a directory it does
+// not own. The guard reads process.getuid() at call time, so substituting a
+// foreign uid makes an owned directory look foreign without touching the
+// filesystem (no root, no chown).
+describe("state directory ownership (REQ-100)", () => {
+  function stubForeignUid(): () => void {
+    const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
+    const spy = vi.spyOn(process, "getuid").mockReturnValue((uid + 1) >>> 0);
+    return () => spy.mockRestore();
+  }
+
+  it("refuses to write state into a directory it does not own (REQ-100)", () => {
+    process.env["INFOBROKER_ACME_API_KEY"] = "k1";
+    const restore = stubForeignUid();
+    try {
+      markKeyRejected("acme", "k1");
+      expect(existsSync(stateFile)).toBe(false);
+      expect(readdirSync(dir)).toEqual([]);
+    } finally {
+      restore();
+    }
+    resetKeyPoolStateForTests();
+    markKeyRejected("acme", "k1");
+    expect(existsSync(stateFile)).toBe(true);
+  });
+
+  it("refuses to read state from a directory it does not own (REQ-100)", async () => {
+    process.env["INFOBROKER_ACME_API_KEYS"] = "k1,k2";
+    markKeyRejected("acme", "k1");
+    expect(existsSync(stateFile)).toBe(true);
+
+    const restore = stubForeignUid();
+    try {
+      const kp = await freshKeyPool();
+      // The persisted "k1 disabled" entry must be ignored in a foreign directory.
+      expect(kp.resolveApiKey("acme")).toBe("k1");
+    } finally {
+      restore();
+    }
+
+    const restored = await freshKeyPool();
+    expect(restored.resolveApiKey("acme")).toBe("k2");
   });
 });
 

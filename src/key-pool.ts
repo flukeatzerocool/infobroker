@@ -90,8 +90,27 @@ function sanitizePoolState(raw: unknown): PoolState {
   return out;
 }
 
+// REQ-100: reading is refused too, not only writing. The directory is not
+// created on the read path — a missing directory means "no state yet".
+function assertOwnedDir(dir: string): void {
+  if (!existsSync(dir)) return;
+  if (typeof process.getuid === "function") {
+    const st = statSync(dir);
+    if (st.uid !== process.getuid()) {
+      throw new Error(`Refusing to use key-pool state directory "${dir}" — not owned by this user`);
+    }
+  }
+}
+
 function loadState(): PoolState {
   if (state) return state;
+  try {
+    assertOwnedDir(dirname(resolveStatePath()));
+  } catch (e) {
+    audit("key_pool_state_read_refused", e instanceof Error ? e.message : String(e));
+    state = { cursor: 0, keys: {} };
+    return state;
+  }
   try {
     const raw = JSON.parse(readFileSync(resolveStatePath(), "utf-8")) as unknown;
     const cleaned = sanitizePoolState(raw);
