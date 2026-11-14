@@ -1,4 +1,4 @@
-// @implements REQ-004 REQ-021b content-mode REQ-021b full-content-mode REQ-021c date-determinable REQ-021j REQ-021k REQ-021d attempt-cap
+// @implements REQ-004 REQ-021b content-mode REQ-021b full-content-mode REQ-021c date-determinable REQ-021c crawl-date REQ-021c extract-date REQ-021g cache-hit REQ-021j REQ-021k REQ-021d attempt-cap
 // @implements REQ-021a redirect-hop-cap
 // @implements REQ-021d depth-cap
 // @implements REQ-021d per-hop-guard
@@ -145,9 +145,9 @@ async function fetchPage(args: Record<string, unknown>): Promise<{ result: ToolR
 }
 
 /** Poll `manage_kb get` until the deferred auto-index has stored the URL. */
-async function waitForStored(url: string): Promise<Record<string, unknown>> {
+async function waitForStoredOn(srv: Server, url: string): Promise<Record<string, unknown>> {
   for (let attempt = 0; attempt < 60; attempt++) {
-    const response = await server.call("tools/call", {
+    const response = await srv.call("tools/call", {
       name: "infobroker_manage_kb",
       arguments: { action: "get", source_url: url },
     });
@@ -158,6 +158,10 @@ async function waitForStored(url: string): Promise<Record<string, unknown>> {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`auto-index did not store ${url} within 3s`);
+}
+
+function waitForStored(url: string): Promise<Record<string, unknown>> {
+  return waitForStoredOn(server, url);
 }
 
 const LONG_BODY =
@@ -255,6 +259,183 @@ describe("date evidence classification (F-R4-C-2)", () => {
     await fetchPage({ url: modified.url, detect_date: true });
     const modifiedDoc = (await waitForStored(modified.url)).results as Array<Record<string, unknown>>;
     expect(modifiedDoc[0].source_updated_at).toBe("2025-03-12");
+  });
+});
+
+describe("crawl and extract date detection (F-R4-C-4 / REQ-021c crawl-date extract-date)", () => {
+  const MODIFIED_PAGE =
+    '<html><head><meta property="og:updated_time" content="2025-07-09T08:00:00Z"></head><body><p>Crawled and extracted.</p></body></html>';
+  const PUBLISHED_PAGE =
+    '<html><head><meta property="article:published_time" content="2024-03-05T10:00:00Z"></head><body><p>Published once.</p></body></html>';
+
+  test("a crawl reports a page date from document metadata with no extra request", async () => {
+    const { server: stub, url } = await page({ body: MODIFIED_PAGE });
+    const before = stub.requests;
+    const { envelope } = await fetchPage({ url, crawl: true, detect_date: true });
+
+    const pages = envelope.results as Array<Record<string, unknown>>;
+    expect(pages[0].last_updated).toBe("2025-07-09");
+    expect(pages[0].date_source).toBe("meta");
+    expect(pages[0].date_confidence).toBe("high");
+    // The date comes from the already-fetched HTML: one request for the page.
+    // A per-page HEAD or metadata GET would make this 2 or 3.
+    expect(stub.requests - before).toBe(1);
+  });
+
+  test("a crawl reports a publication date as published_date, never last_updated", async () => {
+    const { url } = await page({ body: PUBLISHED_PAGE });
+    const { envelope } = await fetchPage({ url, crawl: true, detect_date: true });
+
+    const pages = envelope.results as Array<Record<string, unknown>>;
+    expect(pages[0].published_date).toBe("2024-03-05");
+    expect(pages[0].last_updated).toBeUndefined();
+  });
+
+  test("an extract reports the same document date evidence", async () => {
+    const { url } = await page({ body: MODIFIED_PAGE });
+    const { envelope } = await fetchPage({ url, extract: true, detect_date: true });
+
+    expect(envelope.last_updated).toBe("2025-07-09");
+    expect(envelope.date_source).toBe("meta");
+    const first = (envelope.results as Array<Record<string, unknown>>)[0];
+    expect(first.last_updated).toBe("2025-07-09");
+  });
+});
+
+describe("metadata date after a HEAD redirect (F-R4-C-6 / REQ-021c date-determinable)", () => {
+  test("a redirected page still yields document-metadata evidence", async () => {
+    const http = createServer((req, res) => {
+      const path = req.url ?? "/";
+      if (path === "/start") {
+        // Both HEAD and GET redirect; only the redirect walk can reach the HTML.
+        res.writeHead(302, { location: "/article" });
+        res.end();
+        return;
+      }
+      if (path === "/article") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(
+          '<html><head><meta property="og:updated_time" content="2025-07-09T08:00:00Z"></head><body><p>Redirect target.</p></body></html>'
+        );
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+    const address = http.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    try {
+      const { envelope } = await fetchPage({ url: `http://127.0.0.1:${port}/start`, detect_date: true });
+      expect(envelope.last_updated).toBe("2025-07-09");
+      expect(envelope.date_source).toBe("meta");
+    } finally {
+      await new Promise<void>((resolve) => http.close(() => resolve()));
+    }
+  });
+});
+
+describe("knowledge-base cache parity for a question (F-R4-C-5 / REQ-021g cache-hit)", () => {
+  /** A second spawned server whose cache read is on (the shared one sets it off). */
+  async function startCacheServer(): Promise<Server> {
+    const cfg = writeHermeticConfig("http://127.0.0.1:1", {
+      fetch: {
+        allow_private_urls: true,
+        cache: { kb_read: true, kb_max_age_hours: 24 },
+        detect_date: false,
+      },
+      kb: { auto_index: true },
+    });
+    const srv = startServer(cfg.env);
+    const init = await srv.call("initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "fetch-cache-parity-test", version: "1.0.0" },
+    });
+    expect(init.error).toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return srv;
+  }
+
+  async function callFetch(
+    srv: Server,
+    args: Record<string, unknown>,
+  ): Promise<{ result: ToolResult; envelope: Record<string, unknown> }> {
+    const response = await srv.call("tools/call", {
+      name: "infobroker_fetch_page",
+      arguments: { renderer: "native_fetch", ...args },
+    });
+    expect(response.error).toBeUndefined();
+    const result = response.result as ToolResult;
+    return { result, envelope: payload(result) };
+  }
+
+  async function storedPage(body: string): Promise<{ srv: Server; stub: StubProvider; url: string }> {
+    const srv = await startCacheServer();
+    const stub = await startStubProvider({ pageBody: body });
+    stubs.push(stub);
+    const url = `${stub.url}/page/1`;
+    await callFetch(srv, { url, detect_date: false });
+    await waitForStoredOn(srv, url);
+    return { srv, stub, url };
+  }
+
+  test("a question is answered from a fresh copy without an outbound request", async () => {
+    const { srv, stub, url } = await storedPage(
+      "<html><body><p>The reactor core produces one point two terawatts of output.</p></body></html>"
+    );
+    try {
+      const before = stub.requests;
+      const { envelope } = await callFetch(srv, { url, detect_date: false, question: "reactor core output" });
+
+      expect(envelope.provider).toBe("knowledge_base");
+      expect(envelope.extraction_mode).toBe("content");
+      expect(envelope.question).toBe("reactor core output");
+      const meta = envelope.meta as Record<string, unknown>;
+      expect(meta.cache).toBe("hit");
+      expect(meta.passages_returned).toBeGreaterThan(0);
+      expect(meta.match_quality).not.toBe("none");
+      expect(stub.requests).toBe(before);
+    } finally {
+      srv.close();
+    }
+  });
+
+  test("a zero-passage cache hit returns the full content with the hit reported", async () => {
+    const { srv, url } = await storedPage(
+      "<html><body><p>The reactor core produces one point two terawatts of output.</p></body></html>"
+    );
+    try {
+      const { envelope } = await callFetch(srv, {
+        url,
+        detect_date: false,
+        question: "quantum chromodynamics lattice",
+      });
+
+      expect(envelope.provider).toBe("knowledge_base");
+      expect(envelope.extraction_mode).toBe("full_content");
+      expect(envelope.note).toContain("No passage addressed the question");
+      const meta = envelope.meta as Record<string, unknown>;
+      expect(meta.cache).toBe("hit");
+      expect(meta.passages_returned).toBe(0);
+      expect(meta.match_quality).toBe("none");
+    } finally {
+      srv.close();
+    }
+  });
+
+  test("raw mode refuses a JSON-array string instead of running a batch", async () => {
+    const response = await server.call("tools/call", {
+      name: "infobroker_fetch_page",
+      arguments: {
+        raw: true,
+        url: JSON.stringify(["http://127.0.0.1:1/page/1", "http://127.0.0.1:1/page/2"]),
+      },
+    });
+    expect(response.error).toBeUndefined();
+    const text = (response.result as ToolResult).content[0]?.text ?? "";
+    expect(text.startsWith("[ERROR] ")).toBe(true);
+    expect(text).toContain("single URL");
   });
 });
 

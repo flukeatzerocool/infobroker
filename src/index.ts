@@ -887,16 +887,19 @@ async function detectPageDate(url: string, allowPrivate: boolean): Promise<{ dat
     let detected = detectDocumentDate("", headerData);
     if (detected) return detected;
 
-    if (head.status < 300 || head.status >= 400) {
-      const get = await infobrokerFetch(url, { redirect: "manual", providerSlug: "native_fetch" });
-      if (get.ok) {
-        const html = (await get.text()).slice(0, 200000);
-        detected = detectDocumentDate(html);
-        if (detected) return detected;
-      }
-    }
+    // F-R4-C-6: a manual-redirect HEAD answers 3xx with no body, so the metadata
+    // read must follow the redirect chain rather than be skipped. The walk
+    // re-applies the SSRF guard at each hop and is bounded by the configured
+    // cap, so document metadata is reachable for redirected pages without
+    // opening an unguarded hop.
+    const html = (
+      await fetchFollowRedirects(url, allowPrivate, fetch, getConfig().output.max_redirect_hops)
+    ).slice(0, 200000);
+    detected = detectDocumentDate(html);
+    if (detected) return detected;
     return undefined;
   } catch {
+    // An unreachable, refused, or non-HTML target leaves the date undetermined.
     return undefined;
   }
 }
@@ -1094,6 +1097,46 @@ export function renderersForUrl(url: string, fallback: string[]): string[] {
   return [special, ...fallback.filter((r) => r !== special)];
 }
 
+// REQ-021b: the matched-passage envelope, shared by the fresh fetch, the
+// source fallback, and a knowledge-base cache hit so the three shapes cannot
+// drift apart (F-R4-C-5).
+function passageEnvelope(input: {
+  provider: string;
+  url: string;
+  question: string;
+  passages: Array<{ text: string; score: number; index: number }>;
+  meta: Record<string, unknown>;
+  dateMeta?: Record<string, unknown>;
+}): Record<string, unknown> {
+  const dateMeta = input.dateMeta ?? {};
+  const top = input.passages[0];
+  return {
+    status: "ok",
+    provider: input.provider,
+    url: input.url,
+    question: input.question,
+    extraction_mode: "content",
+    results: [{ title: new URL(input.url).hostname, url: input.url, snippet: top.text, ...dateMeta }],
+    snippets: input.passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
+    top_score: top.score,
+    ...dateMeta,
+    meta: {
+      ...input.meta,
+      passages_returned: input.passages.length,
+      match_quality: matchQuality(top.score, input.passages.length),
+    },
+  };
+}
+
+// REQ-021c: one mapping from detected evidence to response fields, so a
+// publication date is never relabelled `last_updated` on any path (F-R4-C-2).
+function dateMetaFrom(detected?: { date: string; source: string; confidence: string; kind: "modified" | "published" }): Record<string, string> {
+  if (!detected) return {};
+  return detected.kind === "modified"
+    ? { last_updated: detected.date, date_source: detected.source, date_confidence: detected.confidence }
+    : { published_date: detected.date, date_source: detected.source, date_confidence: detected.confidence };
+}
+
 // REQ-021b / F-R4-D-1: a question that matched no passage returns the full
 // content with the same extraction metadata contract as one that matched, so
 // the two modes cannot be told apart by which fields are missing. Both no-match
@@ -1201,28 +1244,60 @@ async function doFetchPage(
 
   // REQ-021: read a fresh knowledge-base copy before making an outbound call.
   // This cuts duplicate fetches across a session; stale entries fall through.
-  if (!crawl && !extract && !question && config.fetch?.cache?.kb_read !== false && isKbConfigured()) {
+  // F-R4-C-5: a question is a request for the same URL, so it is served from
+  // the copy too — the passages are ranked from the cached text instead of
+  // being dropped from the cache path.
+  if (!crawl && !extract && config.fetch?.cache?.kb_read !== false && isKbConfigured()) {
     const cached = kbGet(url);
     const maxAgeMs = (config.fetch?.cache?.kb_max_age_hours ?? 24) * 3_600_000;
     if (cached && shouldUseKbCache(cached, maxAgeMs)) {
+      const cacheMeta = {
+        query_time_ms: 0,
+        fallback_used: false,
+        cache: "hit",
+        cache_age_ms: Date.now() - cached.ingested_at,
+      };
+      // REQ-021c: only a stored source update date exists on a cached copy, and
+      // that is a modification date.
+      const cacheDateMeta = cached.source_updated_at
+        ? { last_updated: cached.source_updated_at, date_source: "knowledge_base", date_confidence: "medium" }
+        : {};
+      if (question) {
+        const passages = rankPassages(cached.text, question, effectivePassageSize ?? 250, effectiveMaxPassages ?? 6);
+        if (passages.length > 0) {
+          return `[OK] ${json(passageEnvelope({
+            provider: "knowledge_base",
+            url,
+            question,
+            passages,
+            meta: cacheMeta,
+            dateMeta: cacheDateMeta,
+          }))}`;
+        }
+        // REQ-021b: no passage addressed the question; return the cached full
+        // content with the same metadata a fresh no-match would report.
+        const cacheFull = cacheHitPayload(cached.text, effectiveMax);
+        return `[OK] ${json(fullContentEnvelope({
+          provider: "knowledge_base",
+          url,
+          question,
+          snippet: cacheFull.snippet,
+          meta: cacheMeta,
+          dateMeta: cacheDateMeta,
+          truncated: cacheFull,
+        }))}`;
+      }
       // REQ-004: reuse the same truncation path as a fresh fetch so a clipped
       // cached page still writes the full text, notes it in-band, and reports
       // output_path; a raw slice would hide the rest of the document.
       const cacheTrunc = cacheHitPayload(cached.text, effectiveMax);
-      const dateMeta = cached.source_updated_at
-        ? { last_updated: cached.source_updated_at, date_source: "knowledge_base", date_confidence: "medium" }
-        : {};
+      const dateMeta = cacheDateMeta;
       return `[OK] ${json({
         status: "ok",
         provider: "knowledge_base",
         results: [{ title: new URL(url).hostname, url, snippet: cacheTrunc.snippet, ...dateMeta }],
         ...dateMeta,
-        meta: {
-          query_time_ms: 0,
-          fallback_used: false,
-          cache: "hit",
-          cache_age_ms: Date.now() - cached.ingested_at,
-        },
+        meta: cacheMeta,
         ...(cacheTrunc.truncated
           ? {
               truncated: true,
@@ -1240,7 +1315,18 @@ async function doFetchPage(
   if (crawl) {
     const maxPages = config.fetch?.crawl_max_pages ?? 10;
     const maxDepth = config.fetch?.crawl_max_depth ?? 2;
-    const pages: Array<{ url: string; depth: number; title: string; snippet: string; truncated?: boolean; output_path?: string }> = [];
+    const pages: Array<{
+      url: string;
+      depth: number;
+      title: string;
+      snippet: string;
+      truncated?: boolean;
+      output_path?: string;
+      last_updated?: string;
+      published_date?: string;
+      date_source?: string;
+      date_confidence?: string;
+    }> = [];
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url, depth: 0 }];
     let policyFlags = 0;
@@ -1276,15 +1362,30 @@ async function doFetchPage(
       if (policy.flagged) policyFlags++;
       // REQ-004: a clipped page reports its own truncation and full-text path.
       const pageText = maybeTruncate(text, effectiveMax);
+      // REQ-021c crawl-date: the raw HTML is already in hand, so the page's
+      // document date costs no extra request. Header evidence is unavailable on
+      // this path because the renderer layer returns a body only (D-121).
+      const pageDate = effectiveDetectDate ? detectDocumentDate(fetched.content.slice(0, 200000)) : undefined;
       pages.push({
         url: cur.url,
         depth: cur.depth,
         title: new URL(cur.url).hostname,
         snippet: pageText.text,
+        ...dateMetaFrom(pageDate),
         ...(pageText.truncated ? { truncated: true, output_path: pageText.outputPath } : {}),
       });
       if (disp === "store") {
-        autoIndex([{ title: new URL(cur.url).hostname, url: cur.url, snippet: text.slice(0, 4000) }], "native_fetch", undefined, "crawl");
+        autoIndex(
+          [{
+            title: new URL(cur.url).hostname,
+            url: cur.url,
+            snippet: text.slice(0, 4000),
+            ...(pageDate && pageDate.kind === "modified" ? { source_updated_at: pageDate.date } : {}),
+          }],
+          "native_fetch",
+          undefined,
+          "crawl"
+        );
       }
       if (cur.depth < maxDepth) {
         for (const link of extractLinks(fetched.content, cur.url)) {
@@ -1358,6 +1459,10 @@ async function doFetchPage(
     // REQ-004: the returned text is bounded once, and a clipped page names its
     // full-text file.
     const extractText = maybeTruncate(stripHtml(fetched.content), effectiveMax);
+    // REQ-021c extract-date: the raw HTML is already in hand, so the document
+    // date costs no extra request (header evidence is unavailable here, D-121).
+    const extractDate = effectiveDetectDate ? detectDocumentDate(fetched.content.slice(0, 200000)) : undefined;
+    const extractDateMeta = dateMetaFrom(extractDate);
     return `[OK] ${json({
       status: "ok",
       provider: fetched.slug,
@@ -1367,8 +1472,10 @@ async function doFetchPage(
         title: new URL(url).hostname,
         url,
         snippet: extractText.text,
+        ...extractDateMeta,
       }],
       extracted: structured,
+      ...extractDateMeta,
       ...(hasData ? {} : { note: "No structured metadata found on this page." }),
       meta: {
         query_time_ms: fetched.elapsed,
@@ -1481,31 +1588,19 @@ async function doFetchPage(
           effectiveMaxPassages ?? 6
         );
         if (passages.length > 0) {
-          return `[OK] ${json({
-            status: "ok",
+          return `[OK] ${json(passageEnvelope({
             provider: fallback.fetched.slug,
             url,
             question,
-            extraction_mode: "content",
-            results: [
-              {
-                title: new URL(url).hostname,
-                url,
-                snippet: passages[0].text,
-              },
-            ],
-            snippets: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
-            top_score: passages[0].score,
+            passages,
             meta: {
               query_time_ms: fallback.fetched.elapsed,
               fallback_used: true,
               fallback_kind: fallback.fallback_kind,
               fallback_url: fallback.fetched_url,
-              passages_returned: passages.length,
-              match_quality: matchQuality(passages[0].score, passages.length),
               ...(policyMeta(fallbackPolicy.flagged ? 1 : 0, policyMode()) ?? {}),
             },
-          })}`;
+          }))}`;
         }
       }
       const truncatedFallback = maybeTruncate(fallbackContent, effectiveMax);
@@ -1549,11 +1644,7 @@ async function doFetchPage(
   // REQ-021c: a modification timestamp answers "when was this last updated"; a
   // publication timestamp does not, so it is reported as `published_date`
   // instead of being relabelled (F-R4-C-2).
-  const dateMeta = pageDate
-    ? pageDate.kind === "modified"
-      ? { last_updated: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
-      : { published_date: pageDate.date, date_source: pageDate.source, date_confidence: pageDate.confidence }
-    : {};
+  const dateMeta = dateMetaFrom(pageDate);
 
   if (disp === "store") {
     // REQ-060: only a modification date is a source "last updated" date; a
@@ -1564,28 +1655,18 @@ async function doFetchPage(
   if (question) {
     const passages = rankPassages(content, question, effectivePassageSize ?? 250, effectiveMaxPassages ?? 6);
     if (passages.length > 0) {
-      return `[OK] ${json({
-        status: "ok",
+      return `[OK] ${json(passageEnvelope({
         provider: slug,
+        url,
         question,
-        extraction_mode: "content",
-        results: [{
-          title: new URL(url).hostname,
-          url,
-          snippet: passages[0].text,
-          ...dateMeta,
-        }],
-        snippets: passages.map((p) => ({ text: p.text, score: p.score, index: p.index })),
-        top_score: passages[0].score,
-        ...dateMeta,
+        passages,
         meta: {
           query_time_ms: elapsed,
           fallback_used: false,
-          passages_returned: passages.length,
-          match_quality: matchQuality(passages[0].score, passages.length),
           ...(policyNote ?? {}),
         },
-      })}`;
+        dateMeta,
+      }))}`;
     }
     return `[OK] ${json(fullContentEnvelope({
       provider: slug,
@@ -1975,7 +2056,7 @@ instrumentTool(
       question: z.string().optional().describe("Question to extract ranked passages for, instead of returning the whole page"),
       passage_size: z.number().optional().describe("Target words per passage (default from config)"),
       max_passages: z.number().optional().describe("Number of passages to return (default from config)"),
-      detect_date: z.boolean().optional().describe("Detect and report the page's last-updated date (default from config)"),
+      detect_date: z.boolean().optional().describe("Detect and report the page's date (default from config; applies to plain, crawl, and extract responses — crawl and extract read document metadata, not headers)"),
       crawl: z.boolean().optional().default(false).describe("Bounded same-origin crawl: recursively fetch same-origin pages up to config caps (default off)"),
       extract: z.boolean().optional().default(false).describe("Return structured metadata (JSON-LD, OpenGraph, microdata) alongside the content (default off)"),
       raw: z.boolean().optional().default(false).describe("Return the extracted page text directly instead of a JSON envelope (single URL; not with crawl or extract)"),
