@@ -14,13 +14,35 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Full-review register reconciliation
+## Fetch and extraction fidelity
 
-- Retire the register rows already fixed in code — `F-R5-C-5` still reads `Scheduled-roadmap` although `src/corroborate.ts:958` writes the tier — and re-home every surviving row.
-- Resolve `F-M1-3`, whose description records `Resolved 2026-11-10` while its disposition column still says `Scheduled-roadmap`.
-- Strengthen `clauseTagsFromPayload`: it registers only the token after the REQ ID and cannot bind a tag to a test that drives the branch, so a tag on an unrelated test satisfies the G3 count (recorded from `F-R4-E-3`).
+- Make `detect_date` reach the crawl and extract paths, and consult document
+  metadata when HEAD redirects (`F-R4-C-4`, `F-R4-C-6`).
+- Serve the cached copy for a repeated `question` request and reject a
+  JSON-string array before raw mode runs it as a batch (`F-R4-C-5`,
+  `F-R4-D-4`).
+- Keep nested microdata items distinct and name an infobox-derived fact
+  differently from a table-derived one (`F-R4-C-11`, `F-R4-E-2`).
 
-**Trigger:** start when a register row is cited as open and the tree disagrees; close when the disposition census and the live tree agree.
+**Trigger:** start with the next change to the `fetch_page` response envelope
+or `src/extract.ts`; close when each named row is fixed with a driving test or
+re-dispositioned as a standing limitation.
+
+## Corroboration, citation, and benchmark fidelity
+
+- Make `priority:"privacy"` respect a caller's provider allowlist and give
+  `priority:"quality"` a defined effect (`F-R5-A-3`).
+- Grade a source that arrives with a hash, carry a finding index on
+  `provenance.sources[]`, and stop awaiting archive and snapshot work inline
+  (`F-R5-C-4`, `F-R5-C-6`, `F-R5-C-8`).
+- Stop truncating the academic chain at `fallback_depth`, merge a DOI-bearing
+  and a title-only reference to the same work, and let a reconciler failure
+  fail the benchmark rather than score the raw order (`F-R5-E-1`, `F-R5-E-2`,
+  `F-R5-F-1`).
+
+**Trigger:** start with the next change to `src/corroborate.ts`, `src/cite.ts`,
+or `src/retrieval-benchmark.ts`; close when each named row is fixed with a
+driving test or re-dispositioned as a standing limitation.
 
 ## Calibration gold-set refresh
 
