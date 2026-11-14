@@ -88,4 +88,32 @@ describe("source-family (REQ-121)", () => {
   it("scores identical long text as fully similar", () => {
     expect(textSimilarity(wire, wire)).toBe(1);
   });
+
+  // F-R5-B-8: containment must not count as republication. `words23` yields
+  // exactly 20 four-gram shingles; `words39` starts with it and yields 36.
+  const words23 = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey";
+  const words39 = `${words23} xray yankee zulu aardvark beetle camel dolphin eagle falcon giraffe hamster ibis jaguar koala lemur mongoose`;
+  const excerpt12 = words23.split(" ").slice(0, 12).join(" ");
+
+  it("scores a contained excerpt by the larger text, not the smaller", () => {
+    expect(textSimilarity(excerpt12, words39)).toBeCloseTo(9 / 36, 5);
+    expect(textSimilarity(excerpt12, words39)).toBeLessThan(0.9);
+  });
+
+  it("is symmetric in its arguments", () => {
+    expect(textSimilarity(words39, excerpt12)).toBeCloseTo(textSimilarity(excerpt12, words39), 10);
+  });
+
+  it("keeps a small boilerplate delta above the merge threshold", () => {
+    expect(textSimilarity(words23, `${words23} xray yankee`)).toBeCloseTo(20 / 22, 5);
+    expect(textSimilarity(words23, `${words23} xray yankee`)).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("keeps a short excerpt and its containing article in separate families", () => {
+    const families = assignSourceFamilies([
+      { url: "https://one.example/a", title: "", snippet: excerpt12 },
+      { url: "https://two.example/b", title: "", snippet: words39 },
+    ]);
+    expect(families[0]).not.toBe(families[1]);
+  });
 });

@@ -72,7 +72,14 @@ export function textSimilarity(a: string, b: string): number {
   if (sa.size === 0 || sb.size === 0) return 0;
   let shared = 0;
   for (const s of sa) if (sb.has(s)) shared++;
-  return shared / Math.min(sa.size, sb.size);
+  // F-R5-B-8 / REQ-121: divide by the larger set, so a short excerpt
+  // contained in a long article is not "substantially the same text". An
+  // asymmetric denominator made containment score 1.0 and merged an
+  // independent source into the article's family. The cost is stated in
+  // §8.2: a heavily truncated republication now scores low, which can split a
+  // genuine duplicate — the conservative direction for family counting is to
+  // split, so the trade is recorded rather than hidden.
+  return shared / Math.max(sa.size, sb.size);
 }
 
 export interface FamilyInput {
