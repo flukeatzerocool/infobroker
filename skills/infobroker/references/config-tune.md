@@ -59,7 +59,7 @@ fewer tokens/shorter runs, "looser" trades the reverse.
 |-----|---------|--------|
 | `hedge_enabled` | true | Hedge races fallback providers only when the primary is slow. Keep on — it shortens the common path. |
 | `hedge_min_delay_ms` / `hedge_max_delay_ms` | 200 / 1500 | Hedge window bounds. |
-| `fallback_depth` | 5 | Providers tried per dispatch chain. |
+| `fallback_depth` | 5 | Providers tried per sequential dispatch chain (`search_web`); citation aggregation walks the whole academic chain. |
 | `rate_limit_cooldown_ms` | 30000 | Hold-off after a 429/anti-bot. |
 | `call_log` | stderr | Operational call records: `stderr`, `file`, or `off`. No query or content is recorded; one line is written per tool call and per outbound provider request, so a batch or multi-query search multiplies the volume. |
 | `call_log_path` / `call_log_max_bytes` | `~/.local/share/infobroker/call-log.jsonl` / 2000000 | File sink target and rotation bound. |

@@ -341,27 +341,29 @@ tells you how sure it is.
 > "Search what you already found about the Rebel Alliance fleet."
 > "Ingest this article so it's cached for next time."
 
-Every search, fetch, and corroboration run is cached. `manage_kb`
-checks the cache before external providers, falling back when cached results
-aren't fresh or relevant. It ingests text or a URL, reports
-what's cached, and removes content. Content is age-scored, expired on a
-schedule, and deduplicated by source and by meaning — a differing name, date,
+Every search, fetch, and corroboration run is cached; `manage_kb` checks the
+cache before external providers, falling back when results aren't fresh or
+relevant, and ingests, reports, or removes content. Content is age-scored,
+expired on a schedule, and deduplicated by source and meaning; a differing
+name, date,
 or number keeps a page separate. Retrieval runs locally with a
 configurable embedding model; your content never leaves the machine. Beyond
 the cache, `manage_kb` archives generated reports: ingest with
-`source_type: "report"`, pass the Source Register URLs in the receipt, and the
-ingest returns a `report_id` linking the report to them. Revisit them with
+`source_type: "report"` and the Source Register URLs in the receipt; the ingest
+returns a `report_id` linking them. Revisit them with
 `manage_kb` list/get, or write them to a local directory. `search_web` scopes
 recall to a named `collection`, and `fresh: "blend"` keeps cached results
 beside fresh ones, reporting the kept count even when zero.
 
 Corroboration results are also kept as claim records: one ledger entry per
-finding, linked to its sources' retrieval times and updated in place on
+finding, linked to its sources' retrieval times and updated on
 re-verification. Cited sources are copied into the knowledge base as
-retrievable, hashed snapshots, so a report can be rechecked after the live page
-changes. Deep reading reports a snapshot hash and freshness tier per page.
-Each snapshot reports its basis (document or snippet) and truncation.
-`preservation.archive: false` keeps snapshots and disables Wayback archiving.
+retrievable, hashed snapshots, so a report can be rechecked after the page
+changes. Deep reading reports a snapshot hash and freshness tier per page;
+each snapshot reports its basis (document or snippet) and truncation.
+`preservation.archive: false` keeps snapshots and disables Wayback archiving,
+which is bounded and overlapped with snapshot storage, so a slow capture never
+delays the response.
 Read them with `manage_kb` action=claims, filtered by `query` or `source_url`
 and capped by `max_results` (default 8, max 50). The ledger is sealed at rest
 when encryption is on.

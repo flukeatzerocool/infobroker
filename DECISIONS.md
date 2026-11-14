@@ -2,6 +2,43 @@
 
 ## Active Decisions
 
+### D-122: Preservation Is Bounded and Concurrent, and the Archive Reference Is Reported When It Lands (2026.11.14)
+
+REQ-026c promised preservation was *non-blocking* **and** that
+`verify_claims` reports the durable archive reference in the finding. Those
+cannot both hold for a network save: a reference that is not awaited cannot be
+reported. The roadmap offered two exits — defer with a pending state, or
+re-disposition as a bounded inline budget. This takes the second, because the
+alternative reports a snapshot the caller cannot yet retrieve, which is the same
+provenance defect F-R5-C-4 fixed on the hash path.
+
+- **One wave, one deadline.** `preserveCondensedSources` starts archiving and
+  snapshotting concurrently under a single abortable budget
+  (`ARCHIVE_TOTAL_BUDGET_MS`, 2 s). Archiving is the only unbounded network cost
+  on the response path, and the shared signal aborts in-flight saves at the
+  deadline, so the response waits for the slower wave, not the sum.
+- **Snapshot coverage is not truncated.** The snippet snapshot is a
+  synchronous local `kbIngest`, so it is stored before any network work. The
+  optional document upgrade is bounded; when it does not finish, the source
+  keeps its snippet snapshot and reports `basis: "snippet"` — truthful, never a
+  document-grade hash for text that was not stored.
+- **REQ-122 disposition.** A configured external content-policy assessor that
+  does not answer inside the budget leaves that source ungraded. That is
+  REQ-122's storage-failure path ("SHALL NOT alter confidence, verdict, or the
+  response when storage fails"), not a new contract branch; policy mode is
+  `off` by default, so the common path never reaches it.
+- **Wording.** REQ-026c now says "bounded in time and concurrency, SHALL run
+  concurrently with snapshot storage", and qualifies reporting with "when the
+  attempt completes within the preservation budget".
+
+Rejected: detaching both waves and returning a `pending` state (REQ-122 requires
+the hash and tier in the same response); detaching only archiving (the
+report-the-reference clause becomes unreachable and provenance silently
+disappears); adding a time qualifier to REQ-122 as well (weakens a product
+promise to cover an opt-in assessor that already carries an 8 s per-call
+ceiling). The internal `archiveBudgetMs` option becomes
+`preservationBudgetMs`, since it now bounds the shared wave.
+
 ### D-121: Crawl and Extract Dates Come From Document Metadata, Not Headers (2026.11.14)
 
 `fetch_page`'s crawl and extract paths honour `detect_date` from the raw HTML

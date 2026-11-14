@@ -14,22 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Corroboration, citation, and benchmark fidelity
-
-- Stop awaiting archive and snapshot work inline, which now needs a decision:
-  REQ-026c requires preservation to be non-blocking while REQ-122 requires the
-  response to report the snapshot hash and freshness tier, and deferred work
-  cannot satisfy both (`F-R5-C-8`).
-- Stop truncating the academic chain at `fallback_depth`, merge a DOI-bearing
-  and a title-only reference to the same work, and let a reconciler failure
-  fail the benchmark rather than score the raw order (`F-R5-E-1`, `F-R5-E-2`,
-  `F-R5-F-1`).
-
-**Trigger:** start with the next change to `src/preservation.ts`,
-`src/corroborate.ts`, `src/cite.ts`, or `src/retrieval-benchmark.ts`; close when
-each named row is fixed with a driving test or re-dispositioned as a standing
-limitation.
-
 ## Calibration gold-set refresh
 
 - Re-derive the gold set's `correct` labels against the post-adjustment curve:
