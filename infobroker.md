@@ -844,7 +844,10 @@ Tool responses are JSON with this envelope:
 
 ### 6.4 Jina Reader
 Append the target URL to `https://r.jina.ai/`. Example:
-`https://r.jina.ai/https://example.com/article`. Jina returns the page content
+`https://r.jina.ai/https://example.com/article`. A deployment MAY point the
+renderer at a self-hosted Jina-compatible reader with `INFOBROKER_JINA_URL`; the
+value is normalized to a trailing slash and the default above is unchanged. Jina
+returns the page content
 rendered as Markdown and is the primary renderer in the shipped `content_fetch`
 chain. When it is slow, the chain hedges to the next renderer after the grace
 window; when it returns 429 or another error, or serves an anti-bot challenge
