@@ -2102,3 +2102,118 @@ describe("agreement-map classification (F-R5-A-5)", () => {
     expect(result.agreement_map.green).not.toContain(finding.topic);
   });
 });
+
+// @implements REQ-026 KB-recall-cap
+// @implements REQ-026 recall-before-external
+// @implements REQ-026 KB-recall-failure
+describe("KB recall bounds and ordering (F-R5-D-4/D-6/D-7)", () => {
+  const recalled = (url: string, snippet: string) => ({
+    score: 0.9,
+    freshness_score: 0.8,
+    freshness_tier: "stable",
+    source_url: url,
+    title: "Recalled Topic",
+    snippet,
+    collection: "default",
+    provider: "knowledge_base",
+    source_type: "encyclopedia",
+    ingested_at: Date.now(),
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(throttle).mockResolvedValue(undefined);
+    vi.mocked(checkQuota).mockReturnValue(makeQuota());
+    vi.mocked(increment).mockReturnValue(makeQuota());
+    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => (fn as () => Promise<any>)());
+    vi.mocked(isKbConfigured).mockReturnValue(true);
+    vi.mocked(getDispatchChain).mockReturnValue([]);
+  });
+
+  it("bounds KB recall by the configured first-pass result count", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: true, first_pass_max_results: 3 },
+    });
+    vi.mocked(kbSearch).mockReturnValue([recalled("https://wiki.example/capped", "recalled corroborating claim about the topic")]);
+
+    await corroborate("topic", {
+      searchers: { duckduckgo: async () => [makeResult("Recalled Topic Match", "https://a.com/1", "recalled corroborating claim")] },
+    });
+
+    // The cap is the configured first-pass count, not a hardcoded default.
+    expect(vi.mocked(kbSearch).mock.calls[0]).toEqual(["topic", 3]);
+  });
+
+  it("recalls from the knowledge base before any external search runs", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: true },
+    });
+    vi.mocked(kbSearch).mockReturnValue([recalled("https://wiki.example/order", "recalled corroborating claim about the topic")]);
+
+    let recallSeenBeforeSearch: number | undefined;
+    await corroborate("topic", {
+      searchers: {
+        duckduckgo: async () => {
+          recallSeenBeforeSearch = vi.mocked(kbSearch).mock.calls.length;
+          return [makeResult("Recalled Topic Match", "https://a.com/1", "recalled corroborating claim")];
+        },
+      },
+    });
+
+    // A reorder that dispatches before recall leaves this at zero.
+    expect(recallSeenBeforeSearch).toBeGreaterThan(0);
+  });
+
+  it("keeps the external pass when the knowledge base recall throws", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8, kb_recall: true },
+    });
+    vi.mocked(kbSearch).mockImplementation(() => {
+      throw new Error("KB unavailable");
+    });
+
+    const result = await corroborate("topic", {
+      searchers: { duckduckgo: async () => [makeResult("External Match", "https://a.com/1", "recalled corroborating claim about the topic")] },
+    });
+
+    // The failure is swallowed: the external pass still produces a finding.
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.findings[0]!.sources.every((s) => s.retrieval_origin !== "knowledge_base")).toBe(true);
+  });
+});
+
+// @implements REQ-123 calibration-disabled
+describe("calibration wiring at the reconciliation layer (F-R5-B-3)", () => {
+  const weights = { web_search: 0.7 };
+  const trio = () =>
+    [
+      ["https://a.example/1", "quantum error correction progresses rapidly"],
+      ["https://b.example/2", "quantum error correction shows rapid progress"],
+      ["https://c.example/3", "quantum error correction makes rapid progress"],
+    ].map(([url, snippet]) => ({
+      ...makeResult("Quantum", url, snippet),
+      source_type: "web_search" as const,
+    }));
+
+  it("leaves the ladder rung uncapped when the calibration correction is disabled", () => {
+    const run = (calibration: { enabled?: boolean; secondaryOnlyCap?: number }) => {
+      const findings = new Map<string, CF>();
+      reconcileClaims(findings, trio(), 0.3, weights, false, undefined, 0.9, calibration, 0.8);
+      return [...findings.values()][0]!;
+    };
+
+    // Three all-web families sit at 0.9 damped to 0.8325 by the 0.7 weight;
+    // only the correction decides whether that is capped at 0.7.
+    expect(run({ enabled: false, secondaryOnlyCap: 0.7 }).confidence).toBeCloseTo(0.8325);
+    expect(run({ enabled: true, secondaryOnlyCap: 0.7 }).confidence).toBeCloseTo(0.7);
+  });
+});
