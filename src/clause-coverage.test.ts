@@ -4,6 +4,7 @@ import {
   detectClauseRequirements,
   clauseTagsFromPayload,
   evaluateClauseCoverage,
+  bindClauseTags,
 } from "./clause-coverage.js";
 
 describe("detectClauseRequirements", () => {
@@ -78,6 +79,62 @@ describe("clauseTagsFromPayload", () => {
     const tags = clauseTagsFromPayload("REQ-014 REQ-003 original-source");
     expect(tags.get("REQ-014")).toBeUndefined();
     expect(tags.get("REQ-003")).toEqual(new Set(["original-source"]));
+  });
+
+  it("registers the whole slug run after one REQ ID", () => {
+    const tags = clauseTagsFromPayload(
+      "REQ-020 REQ-021 REQ-021b content-mode full-content-mode match-strong match-moderate match-weak match-none REQ-021k REQ-076a blend"
+    );
+    expect(tags.get("REQ-021b")).toEqual(
+      new Set(["content-mode", "full-content-mode", "match-strong", "match-moderate", "match-weak", "match-none"])
+    );
+    expect(tags.get("REQ-021k")).toBeUndefined();
+    expect(tags.get("REQ-076a")).toEqual(new Set(["blend"]));
+    expect(tags.get("REQ-020")).toBeUndefined();
+  });
+});
+
+describe("bindClauseTags (D5 binding rule)", () => {
+  const body = [
+    "// @implements REQ-121 short-republish-family",
+    'import { describe, it, expect } from "vitest";',
+    "",
+    "const SEVEN = 7;",
+    "const EIGHT = 8;",
+    "",
+    'describe("family", () => {',
+    '  it("counts short republished snippets as one family", () => {',
+    "    expect(1).toBe(1);",
+    "  });",
+    "});",
+  ].join("\n");
+
+  it("binds a file-header tag to a test title in the file", () => {
+    const [binding] = bindClauseTags(body);
+    expect(binding).toMatchObject({ req: "REQ-121", scope: "file", bound: true });
+  });
+
+  it("binds a tag placed directly above a block to that block", () => {
+    const text = ["describe('x', () => {", "  // @implements REQ-121 short-republish-family", '  it("counts short republished snippets as one family", () => {});', "});"].join("\n");
+    const [binding] = bindClauseTags(text);
+    expect(binding).toMatchObject({ scope: "block", title: "counts short republished snippets as one family", bound: true });
+  });
+
+  it("binds a tag inside a block to the enclosing block", () => {
+    const text = ['describe("x", () => {', '  it("does something else entirely", () => {', "    // @implements REQ-121 short-republish-family", "    expect(1).toBe(1);", "  });", "});"].join("\n");
+    const [binding] = bindClauseTags(text);
+    expect(binding).toMatchObject({ scope: "block", bound: false });
+  });
+
+  it("reports an unbound slug whose title never names it", () => {
+    const text = ["// @implements REQ-121 short-republish-family", "", "", "", "", 'it("checks an unrelated predicate", () => {});'].join("\n");
+    const [binding] = bindClauseTags(text);
+    expect(binding).toMatchObject({ scope: "file", bound: false });
+  });
+
+  it("does not bind a slug by a single shared word", () => {
+    const text = ["// @implements REQ-121 short-republish-family", 'it("reports the family count", () => {});'].join("\n");
+    expect(bindClauseTags(text)[0]!.bound).toBe(false);
   });
 });
 
