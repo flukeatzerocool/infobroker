@@ -34,6 +34,8 @@ function increment(name: string, token: "LOOP PAUSED" | "LOOP OPEN" | null): Inc
     hasAar: token !== null,
     loopToken: token,
     doneBar: "done",
+    planReviewCap: null,
+    aarReviewCap: null,
   };
 }
 

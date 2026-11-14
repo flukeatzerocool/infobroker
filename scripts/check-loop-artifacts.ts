@@ -6,7 +6,10 @@
  * aar.md ending in a LOOP PAUSED / LOOP OPEN token. Without this the plan and
  * the AAR are voluntary, and the loop cannot tell whether it completed. A
  * missing Done bar is a warning, not an error: the bar is a planning quality
- * signal, not a completion gate.
+ * signal, not a completion gate. An increment dated on or after 2026-11-14
+ * must also declare its review cap in plan.md and record the passes used in
+ * aar.md; a missing or malformed cap line is an error, because the cap is
+ * contract substance like the terminal token, not a planning-quality signal.
  *
  * Usage: npx tsx scripts/check-loop-artifacts.ts [--json] [--help]
  * Exit codes: 0 = contract satisfied (warnings allowed), 1 = errors found,

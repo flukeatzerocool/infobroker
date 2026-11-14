@@ -9,6 +9,18 @@ import { join } from "node:path";
 
 export const INCREMENTS_DIR = "docs/plans";
 
+/**
+ * CAP_CONTRACT_FROM — the first increment date that must declare and record a
+ * review cap. Earlier increments are grandfathered, so no closed plan is
+ * edited to satisfy a rule that did not exist when it was written.
+ */
+export const CAP_CONTRACT_FROM = "2026-11-14";
+
+/** The marker must begin a line; a quotation inside prose is not a declaration. */
+const CAP_LINE = /^\*\*Review cap:\*\*[ \t]*(.*)$/m;
+const CAP_PLAN_VALUE = /^\d+/;
+const CAP_AAR_VALUE = /;\s*used\s+\d+\s+pass(?:es)?\b/i;
+
 export type Level = "error" | "warning";
 
 export interface Finding {
@@ -25,6 +37,8 @@ export interface Increment {
   hasAar: boolean;
   loopToken: "LOOP PAUSED" | "LOOP OPEN" | null;
   doneBar: string | null;
+  planReviewCap: string | null;
+  aarReviewCap: string | null;
 }
 
 /** listIncrements — every directory under docs/plans, oldest first. */
@@ -42,6 +56,8 @@ export function listIncrements(root: string): Increment[] {
     const plan = hasPlan ? readFileSync(join(path, "plan.md"), "utf-8") : "";
     const token = aar.match(/LOOP PAUSED|LOOP OPEN/);
     const doneBar = plan.match(/\*\*Done bar:?\*\*\s*(.+)/i);
+    const planCap = plan.match(CAP_LINE);
+    const aarCap = aar.match(CAP_LINE);
     increments.push({
       name: dir.name,
       dir: path,
@@ -50,6 +66,8 @@ export function listIncrements(root: string): Increment[] {
       hasAar,
       loopToken: (token?.[0] as Increment["loopToken"]) ?? null,
       doneBar: doneBar?.[1]?.trim() ?? null,
+      planReviewCap: planCap?.[1]?.trim() ?? null,
+      aarReviewCap: aarCap?.[1]?.trim() ?? null,
     });
   }
   return increments.sort((a, b) => a.name.localeCompare(b.name));
@@ -59,15 +77,46 @@ export function listIncrements(root: string): Increment[] {
 export function validateIncrements(root: string): Finding[] {
   const findings: Finding[] = [];
   for (const increment of listIncrements(root)) {
+    const capped = capSubject(increment.name);
     if (!increment.hasPlan) {
       findings.push({ increment: increment.name, level: "error", message: "missing plan.md" });
     }
     if (!increment.hasTasks) {
       findings.push({ increment: increment.name, level: "error", message: "missing tasks.md" });
     }
+    if (capped && increment.hasPlan) {
+      if (increment.planReviewCap === null) {
+        findings.push({
+          increment: increment.name,
+          level: "error",
+          message: "plan.md has no **Review cap:** line",
+        });
+      } else if (!CAP_PLAN_VALUE.test(increment.planReviewCap)) {
+        findings.push({
+          increment: increment.name,
+          level: "error",
+          message: "plan.md **Review cap:** value does not open with a count",
+        });
+      }
+    }
     if (!increment.hasAar) {
       findings.push({ increment: increment.name, level: "error", message: "missing aar.md" });
       continue;
+    }
+    if (capped) {
+      if (increment.aarReviewCap === null) {
+        findings.push({
+          increment: increment.name,
+          level: "error",
+          message: "aar.md has no **Review cap:** line",
+        });
+      } else if (!CAP_AAR_VALUE.test(increment.aarReviewCap)) {
+        findings.push({
+          increment: increment.name,
+          level: "error",
+          message: "aar.md **Review cap:** line does not record `used <n> passes`",
+        });
+      }
     }
     if (!increment.loopToken) {
       findings.push({
@@ -85,6 +134,12 @@ export function validateIncrements(root: string): Finding[] {
     }
   }
   return findings;
+}
+
+/** capSubject — true when the increment is dated at or after the cap contract. */
+function capSubject(name: string): boolean {
+  if (nameProblem(name) !== null) return false;
+  return name.slice(0, 10) >= CAP_CONTRACT_FROM;
 }
 
 /** nameProblem — the naming rule, or null when the directory name is valid. */

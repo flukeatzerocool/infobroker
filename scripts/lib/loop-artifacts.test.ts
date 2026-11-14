@@ -123,3 +123,83 @@ describe("increment artifacts", () => {
     expect(nameProblem("2026-11-07-loop-and-gates")).toBeNull();
   });
 });
+
+const CAP_VALUE = "1 cold pass; used 2 passes";
+const CAPPED_PLAN = `# Plan\n\n**Done bar:** the gate is green.\n**Review cap:** ${CAP_VALUE}\n`;
+const CAPPED_AAR = `# AAR\n\n**Review cap:** ${CAP_VALUE}\n\nLOOP PAUSED\n`;
+
+describe("review cap contract", () => {
+  it("accepts a capped increment dated at or after the contract", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-20-capped", { plan: CAPPED_PLAN, tasks: TASKS, aar: CAPPED_AAR });
+    expect(validateIncrements(root)).toEqual([]);
+  });
+
+  it("errors when a capped increment's plan omits the review cap", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-20-uncapped", { plan: PLAN, tasks: TASKS, aar: CAPPED_AAR });
+    expect(validateIncrements(root)).toEqual([
+      { increment: "2026-11-20-uncapped", level: "error", message: "plan.md has no **Review cap:** line" },
+    ]);
+  });
+
+  it("errors when the AAR does not record the review cap", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-20-unrecorded", { plan: CAPPED_PLAN, tasks: TASKS, aar: AAR });
+    expect(validateIncrements(root)).toEqual([
+      { increment: "2026-11-20-unrecorded", level: "error", message: "aar.md has no **Review cap:** line" },
+    ]);
+  });
+
+  it("errors when the plan cap value does not open with a count", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-20-vague", {
+      plan: "# Plan\n\n**Done bar:** the gate is green.\n**Review cap:** the usual one\n",
+      tasks: TASKS,
+      aar: CAPPED_AAR,
+    });
+    expect(validateIncrements(root)).toEqual([
+      {
+        increment: "2026-11-20-vague",
+        level: "error",
+        message: "plan.md **Review cap:** value does not open with a count",
+      },
+    ]);
+  });
+
+  it("errors when the AAR cap line does not record the passes used", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-20-noused", {
+      plan: CAPPED_PLAN,
+      tasks: TASKS,
+      aar: "# AAR\n\n**Review cap:** 1 cold pass\n\nLOOP PAUSED\n",
+    });
+    expect(validateIncrements(root)).toEqual([
+      {
+        increment: "2026-11-20-noused",
+        level: "error",
+        message: "aar.md **Review cap:** line does not record `used <n> passes`",
+      },
+    ]);
+  });
+
+  it("grandfathers an increment dated before the contract", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-13-old", { plan: PLAN, tasks: TASKS, aar: AAR });
+    expect(validateIncrements(root)).toEqual([]);
+  });
+
+  it("reports only the missing plan.md for a capped increment without a plan", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-20-noplan", { tasks: TASKS, aar: CAPPED_AAR });
+    expect(validateIncrements(root)).toEqual([
+      { increment: "2026-11-20-noplan", level: "error", message: "missing plan.md" },
+    ]);
+  });
+
+  it("ignores the cap rules for a directory that is not date-prefixed", () => {
+    const root = makeRoot();
+    writeIncrement(root, "templates", { plan: PLAN, tasks: TASKS, aar: AAR });
+    expect(validateIncrements(root)).toEqual([]);
+  });
+});

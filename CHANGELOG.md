@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.11.11 — Review cap contract
+
+- `check-loop-artifacts` now requires every increment dated 2026-11-14 or later
+  to declare a review cap on a line-initial `**Review cap:**` line in
+  `plan.md` and to record the passes used on the same marker in `aar.md`. A
+  missing or malformed cap line is an error; increments before the cutoff,
+  including those using the older `## Review-loop cap` heading form, are
+  grandfathered, so no closed plan is edited.
+- The increment contract states the cap as the plan's own declaration rather
+  than an agent judgement, requires a recorded user authorization to exceed it,
+  and adds the narrowing rule: the first blocker whose cause is confined to one
+  finding's evidence narrows the increment instead of triggering another
+  revision of the combined scope (D-117).
+
 ## 2026.11.11 — R9 Appendix C carrier map
 
 - Appendix C no longer claims every rule is enforceable by G3. The preamble
