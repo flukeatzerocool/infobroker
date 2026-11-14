@@ -1,10 +1,13 @@
 // @implements REQ-004 REQ-021b content-mode REQ-021b full-content-mode REQ-021c date-determinable REQ-021j REQ-021k REQ-021d attempt-cap
+// @implements REQ-021a redirect-hop-cap
+// @implements REQ-021d depth-cap
 // fetch_page extraction is asserted through the spawned server against a
 // loopback page stub, so the no-match metadata, the plain/raw envelope, the
 // publication/modification split, and the crawl/extract truncation are measured
 // on the real handler rather than on a copy of it.
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import { createInterface } from "node:readline";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -87,7 +90,15 @@ afterAll(() => {
 
 beforeAll(async () => {
   const cfg = writeHermeticConfig("http://127.0.0.1:1", {
-    fetch: { allow_private_urls: true, cache: { kb_read: false, kb_max_age_hours: 24 }, crawl_max_pages: 4 },
+    fetch: {
+      allow_private_urls: true,
+      cache: { kb_read: false, kb_max_age_hours: 24 },
+      crawl_max_pages: 4,
+      crawl_max_depth: 1,
+    },
+    // REQ-021a: a non-default hop cap, so the assertion below proves the
+    // configured value reaches the redirect guard instead of a literal.
+    output: { max_redirect_hops: 2 },
     kb: { auto_index: true },
   });
   root = cfg.root;
@@ -310,5 +321,106 @@ describe("crawl attempt cap (F-R4-C-8 / REQ-021d attempt-cap)", () => {
     expect(meta.attempts).toBe(4);
     expect(results).toHaveLength(1);
     expect(stub.requests).toBe(4);
+  });
+});
+
+describe("crawl depth cap (F-R4-C-3 / REQ-021d depth-cap)", () => {
+  test("stops expanding at the configured depth and reports each page's depth", async () => {
+    // A loopback chain: /0 links to /1, /1 links to /2, and so on. The file's
+    // config sets crawl_max_depth: 1, so only /0 and /1 may be returned even
+    // though the page cap would allow more.
+    const http = createServer((req, res) => {
+      const path = req.url ?? "/";
+      const index = Number(path.replace("/", ""));
+      if (!Number.isFinite(index) || index < 0 || index > 6) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(`<html><body><a href="/${index + 1}">deeper</a><p>level ${index}</p></body></html>`);
+    });
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+    const address = http.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    try {
+      const { envelope } = await fetchPage({
+        url: `http://127.0.0.1:${port}/0`,
+        crawl: true,
+        detect_date: false,
+      });
+      const results = envelope.results as Array<Record<string, unknown>>;
+      const depths = results.map((page) => Number(page.depth));
+
+      expect(depths[0]).toBe(0);
+      expect(Math.max(...depths)).toBe(1);
+      expect(results).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => http.close(() => resolve()));
+    }
+  });
+});
+
+describe("redirect-hop cap (F-R4-A-3 / REQ-021a redirect-hop-cap)", () => {
+  /** A loopback chain: /start 302s to /r/1, ... and /r/<redirects> answers 200. */
+  async function redirectChain(redirects: number): Promise<{ url: string; close: () => Promise<void> }> {
+    const http = createServer((req, res) => {
+      const path = req.url ?? "/";
+      if (path === "/start") {
+        res.writeHead(302, { location: "/r/1" });
+        res.end();
+        return;
+      }
+      const hop = Number(path.replace("/r/", ""));
+      if (Number.isFinite(hop) && hop > 0 && hop <= redirects) {
+        if (hop < redirects) {
+          res.writeHead(302, { location: `/r/${hop + 1}` });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(`<html><body><p>terminal page after ${redirects} redirect(s)</p></body></html>`);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+    const address = http.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    return {
+      url: `http://127.0.0.1:${port}/start`,
+      close: () => new Promise<void>((resolve) => http.close(() => resolve())),
+    };
+  }
+
+  test("follows a chain within the configured cap", async () => {
+    const chain = await redirectChain(1);
+    try {
+      const { envelope } = await fetchPage({ url: chain.url, detect_date: false });
+      const results = envelope.results as Array<Record<string, unknown>>;
+      expect(String(results[0].snippet ?? results[0].content ?? "")).toContain("terminal page");
+    } finally {
+      await chain.close();
+    }
+  });
+
+  test("refuses a chain longer than the configured cap", async () => {
+    // The file's config sets output.max_redirect_hops: 2; a literal 5 in the
+    // handler would let this two-redirect chain through.
+    const chain = await redirectChain(2);
+    try {
+      const response = await server.call("tools/call", {
+        name: "infobroker_fetch_page",
+        arguments: { url: chain.url, renderer: "native_fetch", detect_date: false },
+      });
+      expect(response.error).toBeUndefined();
+      const text = (response.result as ToolResult).content[0]?.text ?? "";
+      expect(text.startsWith("[ERROR] ")).toBe(true);
+      expect(text.toLowerCase()).toContain("redirect");
+    } finally {
+      await chain.close();
+    }
   });
 });

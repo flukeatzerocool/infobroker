@@ -1,4 +1,7 @@
-// @implements REQ-021d REQ-021e
+// @implements REQ-021d same-origin-link-discovery
+// @implements REQ-021e json-ld
+// @implements REQ-021e opengraph
+// @implements REQ-021e microdata
 import { describe, it, expect } from "vitest";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 

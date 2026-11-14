@@ -1,4 +1,5 @@
-// @implements REQ-021g
+// @implements REQ-021g cache-hit
+// @implements REQ-021g stale-fallthrough
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { cacheHitPayload, shouldUseKbCache } from "./fetch-cache.js";
