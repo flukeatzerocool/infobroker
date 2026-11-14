@@ -21,6 +21,7 @@ import { sessionStats } from "./session-stats.js";
 import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
+import { withGuardedTarget } from "./lib/fetch-target.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
@@ -905,7 +906,25 @@ async function detectPageDate(url: string, allowPrivate: boolean): Promise<{ dat
 // truncation, and returns the first successful render. Returns null when every
 // renderer is exhausted. Date detection, auto-indexing, and response shaping
 // remain the caller's responsibility.
+// REQ-021a: resolve the target and refuse a private/internal address before any
+// renderer receives it. The native path re-guards every redirect hop inside
+// fetchFollowRedirects, but every other renderer would dereference the URL on
+// our behalf after only the string-level check, so the resolved-address guard
+// runs once here, ahead of cooldown checks, throttling, hedging, and dispatch.
 async function fetchPageContent(
+  url: string,
+  renderers: string[],
+  maxChars: number,
+  allowPrivate: boolean,
+  cleanHtml = false,
+  onFailure?: (failure: FetchFailure) => void,
+): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
+  return withGuardedTarget(url, allowPrivate, () =>
+    fetchPageContentInner(url, renderers, maxChars, allowPrivate, cleanHtml, onFailure)
+  );
+}
+
+async function fetchPageContentInner(
   url: string,
   renderers: string[],
   maxChars: number,
@@ -1356,11 +1375,24 @@ async function doFetchPage(
     const fallback =
       crawl || extract
         ? null
-        : await resolveFetchFallback(url, (target, targetRenderers) =>
-            fetchPageContent(target, targetRenderers, effectiveMax, allowPrivate, true, (failure) =>
-              failures.push(failure)
-            )
-          );
+        : await resolveFetchFallback(url, async (target, targetRenderers) => {
+            // REQ-021a: the fallback target (an open-access or archived copy) is
+            // not the URL the entry guard saw. A refusal here degrades to the
+            // metadata branch instead of failing the request, because a
+            // metadata-only fallback must still return the bibliographic record
+            // (REQ-021h).
+            try {
+              return await fetchPageContent(target, targetRenderers, effectiveMax, allowPrivate, true, (failure) =>
+                failures.push(failure)
+              );
+            } catch (e) {
+              if (e instanceof SsrRefusalError) {
+                audit("network_target_refused", target);
+                return null;
+              }
+              throw e;
+            }
+          });
 
     if (fallback?.kind === "metadata") {
       const record = fallback.record;
