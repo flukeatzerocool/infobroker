@@ -10,6 +10,8 @@ import type { CheerioAPI } from "cheerio";
 export interface InfoboxRow {
   key: string;
   value: string;
+  /** F-R4-E-2: the representation the row was parsed from. */
+  origin: "infobox" | "table";
 }
 
 export const MAX_INFOBOX_ROWS = 200;
@@ -24,16 +26,19 @@ function cleanText(text: string): string {
     .trim();
 }
 
-function cellsToRow(cells: Array<{ key: string; value: string }>): InfoboxRow | null {
+function cellsToRow(
+  origin: InfoboxRow["origin"],
+  cells: Array<{ key: string; value: string }>,
+): InfoboxRow | null {
   // A section header spans both columns and has no value cell.
   for (const cell of cells) {
     if (!cell.key || !cell.value) continue;
-    return { key: cell.key, value: cell.value };
+    return { key: cell.key, value: cell.value, origin };
   }
   return null;
 }
 
-function rowFromElement($: CheerioAPI, el: unknown): InfoboxRow | null {
+function rowFromElement($: CheerioAPI, origin: InfoboxRow["origin"], el: unknown): InfoboxRow | null {
   const node = $(el as never);
   const headers = node
     .find("th")
@@ -46,13 +51,18 @@ function rowFromElement($: CheerioAPI, el: unknown): InfoboxRow | null {
   if (values.length === 0) return null;
   const key = headers.filter(Boolean).join(" ");
   const value = values.filter(Boolean).join(" | ");
-  return cellsToRow([{ key, value }]);
+  return cellsToRow(origin, [{ key, value }]);
 }
 
 // A table row can either carry its own <th> key cells (the classic infobox
 // form) or inherit the most recent header row and be zipped with it. The
 // header row itself (no <td> cells) never becomes a key/value row.
-function rowsFromElement($: CheerioAPI, el: unknown, header: string[] | null): InfoboxRow[] {
+function rowsFromElement(
+  $: CheerioAPI,
+  origin: InfoboxRow["origin"],
+  el: unknown,
+  header: string[] | null,
+): InfoboxRow[] {
   const node = $(el as never);
   const headers = node
     .find("th")
@@ -65,7 +75,7 @@ function rowsFromElement($: CheerioAPI, el: unknown, header: string[] | null): I
     .map((cell) => cleanText($(cell).text()));
 
   if (headers.length > 0) {
-    const row = cellsToRow([{ key: headers.join(" "), value: values.filter(Boolean).join(" | ") }]);
+    const row = cellsToRow(origin, [{ key: headers.join(" "), value: values.filter(Boolean).join(" | ") }]);
     return row ? [row] : [];
   }
   // A rowspan/colspan header leaves data rows with a different cell count;
@@ -75,7 +85,7 @@ function rowsFromElement($: CheerioAPI, el: unknown, header: string[] | null): I
   const rows: InfoboxRow[] = [];
   for (let i = 0; i < header.length; i++) {
     if (!header[i] || !values[i] || !/[A-Za-z]/.test(header[i])) continue;
-    rows.push({ key: header[i], value: values[i] });
+    rows.push({ key: header[i], value: values[i], origin });
   }
   return rows;
 }
@@ -84,7 +94,7 @@ export function collectInfoboxRows($: CheerioAPI): InfoboxRow[] {
   const rows: InfoboxRow[] = [];
   $("table.infobox tr").each((_i, el) => {
     if (rows.length >= MAX_INFOBOX_ROWS) return false;
-    const row = rowFromElement($, el);
+    const row = rowFromElement($, "infobox", el);
     if (row) rows.push(row);
     return undefined;
   });
@@ -110,7 +120,7 @@ export function collectTableRows($: CheerioAPI): InfoboxRow[] {
           if (headers.length > 0) header = headers;
           return undefined;
         }
-        for (const row of rowsFromElement($, el, header)) {
+        for (const row of rowsFromElement($, "table", el, header)) {
           if (rows.length >= MAX_TABLE_ROWS) break;
           // A table row key must contain a letter; numeric-only cells are data,
           // not a dimension the caller can ask for.

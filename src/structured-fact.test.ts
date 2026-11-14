@@ -121,7 +121,11 @@ describe("structured-fact resolution (REQ-021i)", () => {
       value: 20593,
       display: "20,593",
       source: "wikipedia",
+      // F-R4-E-2: the representation the fact resolved from is reported, and
+      // the source stays the knowledge record it came from.
+      source_representation: "infobox",
     });
+    expect(result?.source_representation).toBe("infobox");
   });
 
   it("reports ambiguous when the page has two different values", async () => {
@@ -161,7 +165,14 @@ describe("structured-fact resolution (REQ-021i)", () => {
     );
     const result = await wikipediaFacts("https://en.wikipedia.org/wiki/X", "attendance");
     expect(result.fact_status).toBe("resolved");
-    expect(result.facts[0]).toMatchObject({ value: 17000, display: "17,000", source: "wikipedia" });
+    expect(result.facts[0]).toMatchObject({
+      value: 17000,
+      display: "17,000",
+      source: "wikipedia",
+      // F-R4-E-2: a table-derived fact is distinguishable from an infobox one.
+      source_representation: "table",
+    });
+    expect(result.source_representation).toBe("table");
   });
 
   it("reports ambiguous when a multi-row table has several values", async () => {

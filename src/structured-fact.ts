@@ -19,6 +19,8 @@ export interface FactEnrichment {
   facts: StructuredFact[];
   fact_status: FactStatus;
   source?: string;
+  /** REQ-021i: the source representation a wikipedia fact resolved from. */
+  source_representation?: string;
 }
 
 /**
@@ -355,11 +357,13 @@ function factFromRows(
         ...(displayUnit ? { unit: displayUnit } : {}),
         key: row.key,
         source,
+        source_representation: row.origin,
         url,
       },
     ],
     fact_status: "resolved",
     source,
+    source_representation: row.origin,
   };
 }
 

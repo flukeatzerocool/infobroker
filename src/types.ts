@@ -19,6 +19,8 @@ export interface StructuredFact {
   key?: string;
   as_of?: string;
   source: string;
+  /** The representation the fact resolved from, when the source has one (REQ-021i). */
+  source_representation?: string;
   url: string;
 }
 
