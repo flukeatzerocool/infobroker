@@ -65,3 +65,20 @@ describe("retrieval benchmark floor (REQ-130)", () => {
     expect(report.reconciled.ndcg).toBeGreaterThanOrEqual(baseline.reconciled.ndcg - 0.001);
   });
 });
+
+// @implements REQ-130 baseline-binding
+describe("retrieval baseline binding (F-R5-F-2)", () => {
+  const report = runBenchmark(fixture.queries, fixture.k);
+
+  it("binds the recorded baseline to the corpus, k, and case set it measured", () => {
+    expect(baseline.version).toBe(1);
+    expect(baseline.k).toBe(fixture.k);
+    expect(baseline.corpus).toBe(fixture.queries.length);
+    expect(baseline.cases).toHaveLength(fixture.queries.length);
+    expect(baseline.cases.map((c) => c.id)).toEqual(fixture.queries.map((c) => c.id));
+  });
+
+  it("records the raw (unreconciled) aggregates the floor is compared against", () => {
+    expect(baseline.raw).toEqual(report.raw);
+  });
+});
