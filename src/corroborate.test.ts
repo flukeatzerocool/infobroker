@@ -1,4 +1,4 @@
-// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f REQ-109 REQ-011
+// @implements REQ-026 REQ-026a REQ-026b REQ-026c REQ-026d REQ-026e REQ-026f REQ-026i REQ-109 REQ-011
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { SearchResult } from "../src/types.js";
 
@@ -1590,7 +1590,90 @@ describe("providerOperational optional keys (REQ-011)", () => {
   });
 });
 
-describe("applyPriority speed ordering (REQ-026)", () => {
+// @implements REQ-026i privacy-within-list
+// @implements REQ-026i quality-ordering
+// @implements REQ-026i intent-unfulfilled
+// @implements REQ-026d finding-attribution
+describe("routing and provenance fidelity (REQ-026i, REQ-026d)", () => {
+  it("re-snapshots a source that arrives with a hash but no tier (REQ-122)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+      preservation: { enabled: true },
+    });
+    vi.mocked(snapshotSource).mockReturnValue({
+      snapshot_sha256: "fresh-hash",
+      snapshot_tier: "evergreen",
+      hash_basis: "snippet",
+      snapshot_url: "https://a.example/x#snippet",
+      truncated: false,
+    });
+
+    const arriving = makeResult(
+      "Bridge inspection",
+      "https://a.example/x",
+      "the bridge inspection found the structure sound",
+    );
+    arriving.content_sha256 = "hash-with-no-grade";
+
+    const result = await corroborate("the bridge inspection found the structure sound", {
+      max_iterations: 1,
+      searchers: { duckduckgo: async () => [arriving] },
+    });
+
+    const source = result.findings[0]!.sources[0]!;
+    expect(source.snapshot_tier).toBe("evergreen");
+    expect(source.snapshot_basis).toBe("snippet");
+    // The stored snapshot's hash supersedes the arriving one, so hash and
+    // grade describe the same artifact.
+    expect(source.content_sha256).toBe("fresh-hash");
+  });
+
+  it("attributes each provenance source to its returned finding (REQ-026d)", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 20, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    });
+
+    // A duplicate claim sits between two others, so claim_index would read
+    // 0, 1, 3 while the returned findings array is 0, 1, 2.
+    const result = await corroborate(
+      ["alpha outage report", "beta outage report", "alpha outage report", "gamma outage report"],
+      {
+        max_iterations: 1,
+        searchers: {
+          duckduckgo: async (query) => [
+            makeResult(query, `https://a.example/${encodeURIComponent(query)}`, query),
+          ],
+        },
+      },
+    );
+
+    expect(result.findings).toHaveLength(3);
+    const provenance = (result as unknown as {
+      provenance: {
+        findings: Array<{ index: number; source_types: Record<string, number> }>;
+        sources: Array<{ finding_index?: number; url: string }>;
+      };
+    }).provenance;
+
+    expect(provenance.findings.map((f) => f.index)).toEqual([0, 1, 2]);
+    expect(new Set(provenance.sources.map((s) => s.finding_index))).toEqual(new Set([0, 1, 2]));
+    const globalTypes = Object.values(provenance.findings.reduce<Record<string, number>>((acc, f) => {
+      for (const [type, count] of Object.entries(f.source_types)) {
+        acc[type] = (acc[type] ?? 0) + count;
+      }
+      return acc;
+    }, {}));
+    expect(globalTypes.reduce((sum, n) => sum + n, 0)).toBe(provenance.sources.length);
+  });
+});
+
+describe("applyPriority routing intent (REQ-026i)", () => {
   it("orders the corroboration pool by ascending recent latency", () => {
     const lat = (s: string) => ({ a: 300, b: 100, c: 50 } as Record<string, number>)[s] ?? 0;
     expect(applyPriority(["a", "b", "c"], "speed", lat)).toEqual(["c", "b", "a"]);
@@ -1601,8 +1684,24 @@ describe("applyPriority speed ordering (REQ-026)", () => {
     expect(applyPriority(["a", "b"], "speed", lat)).toEqual(["a", "b"]);
   });
 
-  it("is a no-op for the quality intent", () => {
-    expect(applyPriority(["a", "b"], "quality")).toEqual(["a", "b"]);
+  it("orders the pool by configured provider priority for quality", () => {
+    mockConfig({
+      providers: {
+        low: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 5, timeout: 10000 },
+        high: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 50, timeout: 10000 },
+      },
+    });
+    expect(applyPriority(["low", "high"], "quality")).toEqual(["high", "low"]);
+  });
+
+  it("restricts privacy to the intersection with the caller's pool", () => {
+    vi.mocked(getDispatchChain).mockReturnValue(["b", "c"]);
+    expect(applyPriority(["a", "b"], "privacy")).toEqual(["b"]);
+  });
+
+  it("leaves a pool that satisfies no privacy provider unchanged", () => {
+    vi.mocked(getDispatchChain).mockReturnValue(["x", "y"]);
+    expect(applyPriority(["a", "b"], "privacy")).toEqual(["a", "b"]);
   });
 });
 

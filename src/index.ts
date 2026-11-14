@@ -2147,7 +2147,7 @@ instrumentTool(
       max_iterations: z.number().min(1).max(10).optional().default(5).describe("Maximum search-refinement passes (1-10, default 5)"),
       confidence_threshold: z.number().min(0).max(1).optional().default(0.8).describe("Minimum confidence to report a finding as confirmed (0-1, default 0.8)"),
       providers: z.array(z.string()).optional().describe("Optional array of provider slugs to limit the search to"),
-      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional().describe("Route the corroboration pool by intent"),
+      priority: z.enum(["speed", "quality", "privacy", "free_only"]).optional().describe("Route the corroboration pool by intent without leaving the provider list: privacy restricts it to non-forwarding providers, quality orders it by provider priority, free_only drops keyed and self-hosted tiers"),
     },
     annotations: {
       readOnlyHint: false,

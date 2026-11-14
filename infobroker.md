@@ -171,7 +171,7 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Durable citation identifier** | A persistent source identifier such as a DOI, ISBN, or archival permalink, recorded when the source provides one. |
 | **Client routing surface** | The instruction file and skill reference files that map user intent to Infobroker tools: `instructions/search-preferences.md`, `SKILL.md`, and the skill reference tables (REQ-050, REQ-053, REQ-107). |
 | **Provider priority** | A configuration value ordering providers within a dispatch chain (REQ-010). |
-| **Routing priority** | The `search_web` `priority` parameter (`privacy`, `free_only`, `speed`, `quality`) selecting a routing intent (REQ-020c). |
+| **Routing priority** | The `priority` parameter selecting a routing intent (`privacy`, `free_only`, `speed`, `quality`) for `search_web` (REQ-020c) or for the `verify_claims` pool (REQ-026i). |
 | **Provenance** | The recorded origin of a result or response — the serving provider, the source URL, and, for corroboration, the analytic settings and per-source contributions (REQ-020, REQ-026d). |
 | **Verbose output** | The default response mode, set by `output.verbose`; optional fields such as the corroboration provenance record (REQ-026d) are present. Compact output omits optional fields. |
 | **Span anchor** | An identifier locating a passage within its source page, used in ranked-passage responses (REQ-028). |
@@ -181,7 +181,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026h`, `027a`, 121–124, 127–128, 130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -325,7 +325,7 @@ Each finding returned by `verify_claims` SHALL associate every corroborating sou
 WHEN source preservation is enabled in the configuration, `verify_claims` SHALL attempt to capture a durable archive reference for each corroborating source URL and SHALL report that reference alongside the live URL in the finding. Preservation SHALL be non-blocking, bounded in concurrency, and SHALL NOT affect confidence, verdict, or the response on archive failure. Archiving SHALL be disableable without disabling source snapshots. _Check:_ G1.
 
 **REQ-026d — corroboration provenance record**
-The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, the per-source-type contribution to each finding, the effective configuration hash, and for each source its retrieval time, content hash, source family, and provider. The record SHALL be present in verbose output. _Check:_ G1.
+The `verify_claims` response SHALL include a provenance record naming the server version, the effective iteration limit, confidence threshold, the per-source-type contribution to each finding, the effective configuration hash, and for each source its retrieval time, content hash, source family, and provider. Each recorded source SHALL identify the finding it supports. The record SHALL be present in verbose output. _Check:_ G1.
 
 **REQ-026e — corroboration knowledge-base recall**
 WHEN the knowledge base is configured and recall is enabled, `verify_claims` SHALL query the knowledge base for prior findings before external search and SHALL reconcile any returned results as corroborating sources alongside fresh external results. Knowledge-base results SHALL be capped in number and SHALL carry their original source URLs. A knowledge base that is uninitialized, disabled, or failing SHALL NOT prevent external search, and a corroboration SHALL NOT be served from the knowledge base alone. _Check:_ G1.
@@ -338,6 +338,9 @@ WHEN `verify_claims` receives a claim list, it SHALL verify each distinct claim 
 
 **REQ-026h — Support span and source modality**
 Every corroborating source returned by `verify_claims` SHALL report the modality of the claim it supports: asserted, reported, or speculative. A source whose claim is attributed or hedged SHALL be reported as reported, and one that states a possibility SHALL be reported as speculative. WHEN the source text contains a sentence supporting the claim, the source SHALL report a span locating that sentence within the source text; WHEN no supporting sentence can be located, the span SHALL be omitted rather than fabricated. The reported modality SHALL NOT change confidence, verdict, or source-family count. The marker lexicon SHALL be configurable. _Check:_ G1.
+
+**REQ-026i — corroboration routing intent**
+WHEN `verify_claims` receives a `priority`, it SHALL route its corroboration pool by that intent within the caller's provider list. A caller-supplied list SHALL bound the pool and SHALL NOT be replaced by a dispatch chain. `privacy` SHALL restrict the pool to providers that do not forward queries to third parties. `quality` SHALL order the pool by configured provider priority. `free_only` SHALL exclude keyed and self-hosted tiers. WHEN no provider in the list satisfies the intent, the list SHALL be used unchanged. _Check:_ G1.
 
 **REQ-121 — Corroboration source families**
 Confidence counting for `verify_claims` SHALL count independent source families rather than registrable domains alone. Sources that share a canonical URL or republish substantially the same text SHALL be counted as one family, and sources on the same registrable domain SHALL remain one family. Each finding SHALL report its family count, and the family similarity threshold SHALL be configurable. _Check:_ G1.
@@ -925,6 +928,13 @@ chain with an intent-first selection:
 
 An explicit `provider` parameter takes precedence over priority routing.
 
+The same parameter on `verify_claims` (REQ-026i) routes the corroboration pool
+instead, and never replaces a caller-supplied provider list: `privacy`
+restricts the list to providers that do not forward queries to third parties,
+`quality` orders it by configured provider priority, `free_only` excludes the
+keyed and self-hosted tiers, and a list that satisfies no intent is used
+unchanged.
+
 ---
 
 ## §8 Corroboration Loop
@@ -1135,6 +1145,7 @@ verdict is preserved (REQ-026f).
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
 - Batch claim verification: pass two independent claims → verify two findings in caller order with `claim_index`; pass a claim containing "and" → verify it is seeded verbatim; make one claim unsourced → verify it is returned `unverified` rather than dropped; pass duplicate claims at non-adjacent positions → verify the collapsed finding reports every input index; run a 10-claim batch against five failing providers → verify the dispatch count never exceeds `max_http_calls` (REQ-026g)
 - Support span and modality: make a source snippet hedge ("reportedly") → verify the source reports `reported` with the marker, the span slices back to its text, and the verdict is unchanged (REQ-026h)
+- Routing intent: pass a caller list with `priority:"privacy"` → verify only private providers from that list are called and the list is not replaced; pass `priority:"quality"` → verify the pool is ordered by provider priority (REQ-026i)
 - Semantic claim reconciliation: mock two providers with paraphrased agreeing claims → verify one confirmed finding; mock a claim with opposed polarity or a conflicting value → verify the `contested` verdict with perspectives is preserved (REQ-026f)
 - Cross-provider reconciliation: mock results where two providers return the same page at different URLs → verify the results collapse to one representative with provenance retained and distinct results preserved (REQ-020g)
 - Rate-limit error code: mock an explicitly requested provider returning HTTP 429 → verify the error code is `rate_limited`, not `provider_unavailable` (REQ-002)
@@ -1277,6 +1288,7 @@ verdict is preserved (REQ-026f).
 | REQ-026f | Semantic claim reconciliation | 4.3 | G1 |
 | REQ-026g | Batch claim verification | 4.3 | G1 |
 | REQ-026h | Support span and source modality | 4.3 | G1 |
+| REQ-026i | corroboration routing intent | 4.3 | G1 |
 | REQ-121 | Corroboration source families | 4.3 | G1 |
 | REQ-122 | Citation-grade source snapshots | 4.3 | G1 |
 | REQ-123 | Confidence calibration | 4.3 | G1 |
@@ -1869,7 +1881,7 @@ the table.
 |---|--------------|-------|--------------|------|
 | 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-127, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
-| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-121, REQ-122, REQ-123 | G0, G1 |
+| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-121, REQ-122, REQ-123 | G0, G1 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |

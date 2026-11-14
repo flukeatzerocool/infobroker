@@ -508,11 +508,22 @@ export interface CorroborationProvenance {
   max_iterations: number;
   confidence_threshold: number;
   source_types: Record<string, number>;
+  /** REQ-026d: per-finding source-type contribution, indexed like `sources[].finding_index`. */
+  findings?: Array<{
+    index: number;
+    source_types: Record<string, number>;
+  }>;
   config_hash?: string;
   sources?: Array<{
+    /** REQ-026d: position of the finding this source supports in the returned findings array. */
+    finding_index?: number;
     url: string;
     retrieved_at?: string;
     content_sha256?: string;
+    snapshot_tier?: string;
+    snapshot_basis?: "document" | "snippet";
+    snapshot_url?: string;
+    snapshot_truncated?: boolean;
     source_family?: string;
     provider?: string;
   }>;

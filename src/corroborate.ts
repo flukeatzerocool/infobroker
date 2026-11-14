@@ -492,17 +492,23 @@ export class UnusableProviderError extends Error {
 
 // Apply the user's priority intent to the corroboration pool without the
 // fallback_depth slice that governs search_web's sequential chain — the
-// corroboration pool must stay broad for cross-referencing. REQ-026/§7.4:
-// `speed` orders the pool by the caller-supplied recent average latency;
-// providers with no recorded latency retain their pool position.
+// corroboration pool must stay broad for cross-referencing. REQ-026i: the
+// intent routes within the caller's list and never replaces it, so
+// `privacy` intersects the pool with the privacy chain (a list that satisfies
+// no intent is used unchanged), `quality` orders it by configured provider
+// priority, and `speed` orders it by the caller-supplied recent average
+// latency; providers with no recorded latency retain their pool position.
 export function applyPriority(
   slugs: string[],
   priority: "speed" | "quality" | "privacy" | "free_only" | undefined,
   latency?: (slug: string) => number,
 ): string[] {
   if (priority === "privacy") {
-    const privacyChain = getDispatchChain("privacy_critical");
-    if (privacyChain.length > 0) return privacyChain;
+    const privacyChain = new Set(getDispatchChain("privacy_critical"));
+    const restricted = slugs.filter((slug) => privacyChain.has(slug));
+    if (restricted.length > 0) return restricted;
+  } else if (priority === "quality") {
+    return orderFirstPassPool(slugs, getConfig());
   } else if (priority === "free_only") {
     const config = getConfig();
     const filtered = slugs.filter((slug) => {
@@ -902,12 +908,17 @@ export async function corroborate(
       max_iterations: maxIterations,
       confidence_threshold: confidenceThreshold,
       source_types: sourceTypes,
+      findings: condensed.map((f, index) => ({
+        index,
+        source_types: f.source_types,
+      })),
       config_hash: sha256Text(JSON.stringify({
         corroboration: config.corroboration,
         preservation: config.preservation ?? {},
       })),
-      sources: condensed.flatMap((f) =>
+      sources: condensed.flatMap((f, findingIndex) =>
         f.sources.map((s) => ({
+          finding_index: findingIndex,
           url: s.url,
           retrieved_at: s.retrieved_at,
           content_sha256: s.content_sha256,
@@ -933,7 +944,7 @@ async function snapshotCondensedSources(
   const tasks: Array<{ source: CorroborationSource }> = [];
   for (const finding of findings) {
     for (const source of finding.sources.slice(0, maxSources)) {
-      if (!source.content_sha256) tasks.push({ source });
+      if (!source.content_sha256 || !source.snapshot_tier) tasks.push({ source });
     }
   }
   let idx = 0;
