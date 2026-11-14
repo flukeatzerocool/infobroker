@@ -261,8 +261,61 @@ describe("computeConfidence", () => {
     const web = (url: string) => ({ title: "w", url, snippet: "x", source_type: "web_search" });
 
     expect(computeConfidence([academic("https://a.com/1"), academic("https://b.com/2")], weights)).toBeCloseTo(0.7);
-    expect(computeConfidence([web("https://a.com/1"), web("https://b.com/2")], weights)).toBeCloseTo(0.7 * 0.7);
+    expect(computeConfidence([web("https://a.com/1"), web("https://b.com/2")], weights)).toBeCloseTo(0.6475);
     expect(computeConfidence([academic("https://a.com/1"), academic("https://b.com/2"), academic("https://c.com/3")], weights)).toBeCloseTo(0.9);
+  });
+
+  it("keeps the 0.9 rung above the shipped threshold at the lowest shipped weight", () => {
+    const web = (i: number) => ({
+      title: "w",
+      url: `https://${i}.example/1`,
+      snippet: "x",
+      source_type: "web_search",
+      source_family: `family-${i}`,
+    });
+    expect(computeConfidence([web(1), web(2), web(3)], { web_search: 0.7 })).toBeCloseTo(0.8325, 5);
+  });
+
+  it("returns the ladder exactly when every weight is 1.0", () => {
+    const set = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        title: "a",
+        url: `https://${i}.example/1`,
+        snippet: "x",
+        source_type: "academic",
+        source_family: `family-${i}`,
+      }));
+    const weights = { academic: 1 };
+    expect(computeConfidence(set(1), weights)).toBeCloseTo(0.3);
+    expect(computeConfidence(set(2), weights)).toBeCloseTo(0.7);
+    expect(computeConfidence(set(3), weights)).toBeCloseTo(0.9);
+    expect(computeConfidence(set(5), weights)).toBeCloseTo(1.0);
+  });
+
+  it("returns 0 rather than NaN for an empty source list with weights present", () => {
+    expect(computeConfidence([], { academic: 1 })).toBe(0);
+  });
+
+  it("takes the maximum weight in a mismatched-type family regardless of order", () => {
+    const web = { title: "a", url: "https://a.example/1", snippet: "x", source_type: "web_search", source_family: "f1" };
+    const paper = { title: "b", url: "https://b.example/1", snippet: "x", source_type: "academic", source_family: "f1" };
+    const weights = { web_search: 0.7, academic: 1.0 };
+    expect(computeConfidence([web, paper], weights)).toBeCloseTo(computeConfidence([paper, web], weights));
+    expect(computeConfidence([web, paper], weights)).toBeCloseTo(0.3);
+  });
+
+  it("clamps out-of-range weights and folds non-finite weights to 1.0", () => {
+    const set = (n: number, type: string) =>
+      Array.from({ length: n }, (_, i) => ({
+        title: "a",
+        url: `https://${i}.example/1`,
+        snippet: "x",
+        source_type: type,
+        source_family: `family-${i}`,
+      }));
+    expect(computeConfidence(set(5, "academic"), { academic: 2.0 })).toBe(1.0);
+    expect(computeConfidence(set(2, "academic"), { academic: 0 })).toBeCloseTo(0.525);
+    expect(computeConfidence(set(2, "academic"), { academic: Number.NaN })).toBeCloseTo(0.7);
   });
 
   it("does not exceed 1.0 with high authority weights", () => {
@@ -497,7 +550,7 @@ describe("reconcileClaims", () => {
   // @implements REQ-026 confirmed-threshold
   it("gates the confirmed verdict on the supplied threshold", () => {
     const pair = [
-      makeResult("Quantum", "https://a.com/1", "quantum error correction is progressing rapidly"),
+      makeResult("Quantum", "https://a.com/1", "quantum error correction progresses rapidly"),
       makeResult("Quantum", "https://b.com/2", "quantum error correction shows rapid progress"),
     ];
     const strict = new Map<string, CF>();
@@ -519,7 +572,7 @@ describe("reconcileClaims", () => {
       confidence: 0.1,
       verdict: "unverified",
       sources: [
-        { title: "a", url: "https://a.com/1", snippet: "quantum error correction is progressing rapidly" },
+        { title: "a", url: "https://a.com/1", snippet: "quantum error correction progresses rapidly" },
         { title: "b", url: "https://b.com/2", snippet: "quantum error correction shows rapid progress" },
         { title: "c", url: "https://c.com/3", snippet: "volcanic ash delays northern flights" },
       ],
@@ -1867,5 +1920,116 @@ describe("explicit provider selection and per-attempt throttling", () => {
       },
     });
     expect(vi.mocked(throttle).mock.calls.filter(([slug]) => slug === "duckduckgo")).toHaveLength(2);
+  });
+});
+
+describe("authority adjustment at the reconciliation layer (REQ-026a)", () => {
+  const weights = { web_search: 0.7, encyclopedia: 1.0, academic: 1.0 };
+  const typed = (title: string, url: string, snippet: string, source_type: string) => ({
+    ...makeResult(title, url, snippet),
+    source_type,
+  });
+  const webPair = () => [
+    typed("Quantum", "https://a.example/1", "quantum error correction progresses rapidly", "web_search"),
+    typed("Quantum", "https://b.example/2", "quantum error correction shows rapid progress", "web_search"),
+  ];
+  const webTrio = () => [
+    ...webPair(),
+    typed("Quantum", "https://c.example/3", "quantum error correction makes rapid progress", "web_search"),
+  ];
+
+  it("reports two all-web families at the damped rung, still unverified", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, webPair(), 0.3, weights, false, undefined, 0.9, undefined, 0.8);
+    const f = [...findings.values()][0];
+    expect(f.family_count).toBe(2);
+    expect(f.confidence).toBeCloseTo(0.6475);
+    expect(f.verdict).toBe("unverified");
+  });
+
+  it("confirms the same pair at a 0.5 threshold", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, webPair(), 0.3, weights, false, undefined, 0.9, undefined, 0.5);
+    expect([...findings.values()][0].verdict).toBe("confirmed");
+  });
+
+  it("caps three all-web families at the secondary-only cap", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, webTrio(), 0.3, weights, false, undefined, 0.9, undefined, 0.8);
+    const f = [...findings.values()][0];
+    expect(f.family_count).toBe(3);
+    expect(f.confidence).toBeCloseTo(0.7);
+    expect(f.verdict).toBe("unverified");
+  });
+
+  it("reports three mixed families at 0.8775 and confirms them", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(
+      findings,
+      [
+        typed("Quantum", "https://a.example/1", "quantum error correction progresses rapidly", "web_search"),
+        typed("Quantum", "https://b.example/2", "quantum error correction shows rapid progress", "encyclopedia"),
+        typed("Quantum", "https://c.example/3", "quantum error correction makes rapid progress", "academic"),
+      ],
+      0.3,
+      weights,
+      false,
+      undefined,
+      0.9,
+      undefined,
+      0.8,
+    );
+    const f = [...findings.values()][0];
+    expect(f.family_count).toBe(3);
+    expect(f.confidence).toBeCloseTo(0.8775);
+    expect(f.verdict).toBe("confirmed");
+  });
+
+  it("applies the authority weight to a one-source finding", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "quantum error correction advances",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [{ title: "a", url: "https://a.example/1", snippet: "quantum error correction advances", source_type: "web_search" }],
+    });
+    reconcileClaims(findings, [], 0.3, weights, false, undefined, 0.9, undefined, 0.8);
+    const f = [...findings.values()][0];
+    expect(f.confidence).toBeCloseTo(0.2775);
+    expect(f.verdict).toBe("unverified");
+  });
+
+  it("reports a zero-source finding at the ladder's row 0", () => {
+    const findings = new Map<string, CF>();
+    findings.set("claim", {
+      topic: "claim",
+      claim: "quantum error correction advances",
+      confidence: 0.1,
+      verdict: "unverified",
+      sources: [],
+    });
+    reconcileClaims(findings, [], 0.3, weights, false, undefined, 0.9, undefined, 0.8);
+    const f = [...findings.values()][0];
+    expect(f.confidence).toBe(0);
+    expect(f.verdict).toBe("unverified");
+  });
+});
+
+// @implements REQ-121 contained-excerpt-family
+describe("contained excerpt is not a republication (REQ-121)", () => {
+  const base23 = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey";
+  const article39 = `${base23} xray yankee zulu aardvark beetle camel dolphin eagle falcon giraffe hamster ibis jaguar koala lemur mongoose`;
+  const excerpt12 = base23.split(" ").slice(0, 12).join(" ");
+
+  it("counts a short excerpt and the article containing it as two families", () => {
+    const findings = new Map<string, CF>();
+    reconcileClaims(findings, [
+      makeResult("Report", "https://one.example/a", excerpt12),
+      makeResult("Report", "https://two.example/b", article39),
+    ], 0.3, undefined, false, undefined, 0.9, undefined, 0.8);
+    const f = [...findings.values()][0];
+    expect(f.sources).toHaveLength(2);
+    expect(f.family_count).toBe(2);
   });
 });

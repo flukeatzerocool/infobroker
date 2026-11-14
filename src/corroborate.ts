@@ -8,7 +8,7 @@ import { retryWithBackoff } from "./retry.js";
 import { isKbConfigured, kbSearch } from "./kb.js";
 import { pairwiseSimilarity } from "./embed.js";
 import { assignSourceFamilies, familyCount } from "./source-family.js";
-import { capConfidence, type CalibrationOptions } from "./calibration.js";
+import { applyAuthorityWeight, capConfidence, type CalibrationOptions } from "./calibration.js";
 import { sha256Text, snapshotSource } from "./preservation.js";
 import { checkContent, disposition } from "./content-policy.js";
 import { locateSupport } from "./span.js";
@@ -287,7 +287,16 @@ export function reconcileClaims(
       finding.family_count = familyCount(families);
     }
     if (sources.length < 2) {
-      finding.confidence = capConfidence(0.3, sources, calibration);
+      // REQ-026a: the weighted path includes a lone source, and the ladder's
+      // row 0 (no sources) is 0.0, not the 0.3 single-source rung.
+      const familyWeights =
+        sources.length === 1 && authorityWeights
+          ? [authorityWeights[sources[0].source_type ?? ""] ?? 1.0]
+          : sources.length === 1
+            ? [1.0]
+            : [];
+      const weighted = sources.length === 0 ? 0 : applyAuthorityWeight(0.3, familyWeights);
+      finding.confidence = capConfidence(weighted, sources, calibration);
       finding.verdict = "unverified";
       continue;
     }
@@ -379,8 +388,11 @@ export function computeConfidence(
   authorityWeights?: Record<string, number>,
 ): number {
   // REQ-121: count distinct source families, not distinct hosts. A caller that
-  // has not assigned families falls back to the registrable domain.
-  const uniqueFamilies = new Map<string, string>();
+  // has not assigned families falls back to the registrable domain. The map
+  // keeps every member's type (including `undefined`) so a family holding
+  // mismatched types resolves by its maximum weight rather than by whichever
+  // provider settled first.
+  const familyTypes = new Map<string, Array<string | undefined>>();
   for (const s of sources) {
     let family: string;
     if (s.source_family) {
@@ -392,12 +404,12 @@ export function computeConfidence(
         family = s.url;
       }
     }
-    if (!uniqueFamilies.has(family)) {
-      uniqueFamilies.set(family, s.source_type ?? s.url);
-    }
+    const types = familyTypes.get(family);
+    if (types) types.push(s.source_type);
+    else familyTypes.set(family, [s.source_type]);
   }
 
-  const count = uniqueFamilies.size;
+  const count = familyTypes.size;
   let base: number;
   if (count >= 5) base = 1.0;
   else if (count >= 3) base = 0.9;
@@ -406,9 +418,12 @@ export function computeConfidence(
   else base = 0.0;
 
   if (!authorityWeights) return base;
-  const weights = [...uniqueFamilies.values()].map((st) => authorityWeights[st] ?? 1.0);
-  const avgWeight = weights.reduce((a, b) => a + b, 0) / weights.length;
-  return Math.min(1.0, base * avgWeight);
+  const familyWeights = [...familyTypes.values()].map((types) =>
+    Math.max(
+      ...types.map((type) => (type === undefined ? 1.0 : authorityWeights[type] ?? 1.0)),
+    ),
+  );
+  return Math.min(1.0, applyAuthorityWeight(base, familyWeights));
 }
 
 function getGaps(
