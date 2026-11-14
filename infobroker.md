@@ -972,13 +972,15 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
       if agree.length >= 2 and compute_confidence(agree) >= confidence_threshold
          and has_external(agree):  // REQ-026e: never KB-only
         findings[topic] = {
-          confidence: compute_confidence(agree.length, providers),
+          confidence: compute_confidence(agree),
           sources: agree.slice(0, 3).map(source_info),  // REQ-026: report at most three
           verdict: "confirmed"
         }
       else if disagree.length > 0:
         findings[topic] = {
-          confidence: low,
+          // The dominant perspective's confidence, floored at 0.1. It can be
+          // high (0.9/1.0 rung) even though the finding is contested.
+          confidence: max(compute_confidence(dominant_cluster), 0.1),
           sources: disagree.slice(0, 3).map(source_info),
           verdict: "contested",
           perspectives: map_variants(disagree)
@@ -999,7 +1001,12 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
 
   return {
     findings: [{topic, claim, confidence, verdict, sources, perspectives?}],
-    agreement_map: {green: [...], yellow: [...], red: gaps},
+    // green: sourced findings at or above the effective threshold;
+    // yellow: sourced findings in [0.5, threshold);
+    // red: sourced findings below 0.5. A finding with no attributed source is
+    // omitted from the map entirely — it is a gap, not a red result, and it
+    // remains in `findings` as unverified.
+    agreement_map: {green: [...], yellow: [...], red: [...]},
     synthesis: summary(findings),
     iteration_count: iteration,
     providers_used: [...],
@@ -1009,7 +1016,7 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
 
 ### 8.2 Confidence Scoring
 
-| Sources agreeing | Confidence | Rating |
+| Sources agreeing | Independence base | Rating |
 |-----------------|-----------|--------|
 | 0 | 0.0 | Unverified |
 | 1 | 0.3 | Single source |
@@ -1017,19 +1024,47 @@ function corroborate(query=None, claims=None, max_iterations=5, confidence_thres
 | 3+ (independent) | 0.9 | Well-corroborated |
 | 5+ (independent) | 1.0 | Established |
 
+The reported confidence applies the two adjustments below to this base; the
+Rating name describes the base rung, not the reported number.
+
 The default `confidence_threshold` of 0.8 therefore gates `green` on the 0.9
-tier (three or more independent sources); the 0.7 tier (two independent
-sources) reports as `yellow`. Confirmation follows the same bar: a finding is
-`confirmed` only when its confidence meets the effective `confidence_threshold`
-and at least one agreeing source comes from outside the knowledge base
-(REQ-026e). A finding that misses either condition keeps its computed
-confidence and reports `unverified`; the Rating column above names a confidence
-band, not the verdict. Source authority (REQ-026a) scales the
-independence-based confidence above by a per-source-type weight, so a finding
-backed only by generic web pages scores below one backed by scholarly or
-encyclopedia sources at the same source count. A finding carries the
-`unverified` verdict at the 0.1 placeholder from its seeding (§8.1) until
-sources are attributed; the ladder above applies once they are.
+rung (three or more independent sources) before the adjustments are applied;
+the 0.7 rung (two independent sources) reports as `yellow`. Confirmation
+follows the same bar: a finding is `confirmed` only when its reported
+confidence meets the effective `confidence_threshold` and at least one agreeing
+source comes from outside the knowledge base (REQ-026e). A finding that misses
+either condition keeps its computed confidence and reports `unverified`; the
+Rating column above names a confidence rung, not the verdict.
+
+Source authority (REQ-026a) adjusts the base rather than multiplying it:
+`reported = base × (1 − 0.25 × (1 − mean family weight))`, where the mean is
+taken over one weight per source family and a family holding mixed source types
+contributes its highest weight. The `0.25` is a code constant, not a
+configuration key. Because the adjustment is bounded, the 0.9 rung still clears
+the shipped threshold at the lowest shipped weight (`0.9 × 0.925 = 0.8325`), so
+authority orders findings within a rung instead of silently dropping a rung
+below the bar. A finding backed only by generic web pages therefore scores
+below one backed by scholarly or encyclopedia sources at the same source count.
+
+When every supporting source is secondary or aggregated — `web_search`, `news`,
+`semantic`, or `synthesis`, with no original-source attribution — the reported
+confidence is additionally capped at `corroboration.calibration.secondary_only_cap`
+(REQ-123, default `0.7`). That cap is why generic web sources alone cannot
+confirm a finding at the default threshold; the cap is disableable and its value
+is configurable.
+
+At the shipped defaults this derives: one `web_search` source `0.2775`; two web
+families `0.6475` (`yellow`); three web families `0.9 × 0.925 = 0.8325`, capped
+to `0.7` (`yellow`); two families `web_search` plus `encyclopedia` `0.67375`;
+three families `web_search`, `encyclopedia`, and `academic` `0.8775` (`green`);
+and no attributed source `0.0`.
+
+A zero-source finding reports the ladder's row 0 (`0.0`) once reconciliation
+runs; a seeded finding that no source ever corroborates keeps its `0.1`
+placeholder until then. A one-source finding takes the adjusted single-source
+rung. Contested findings carry the dominant perspective's confidence, floored at
+`0.1` (§8.1), so the number can reach the upper rungs while the verdict stays
+`contested`.
 
 Independence: sources are counted in source families (REQ-121). Sources that
 share a canonical URL, republish the same text with enough substance for the
