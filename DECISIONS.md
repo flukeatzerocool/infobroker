@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### D-120: Clause-Tag Binding Is Reported, Not Gated (2026.11.14)
+
+The G3 clause-tag count cannot tell a tag on a driving test from a tag on an
+unrelated one. The fix under consideration bound each tag to a test title: a
+tag binds to the test block that follows it, the enclosing block when it sits
+inside one, or any test in the file when it precedes every test, and the test's
+title must name the branch slug (exact token, or a ≥4-character stem match).
+Measured across the tree before the resolver's own tests existed: **176 of 249
+`(REQ, slug)` pairs (70.7%) do not bind** — titles describe behavior in prose
+("counts short republished snippets as one family") while slugs are
+kebab-case shorthand ("short-republish-family"). At a 70.7% unbound rate the
+rule would fail the gate on correct tests, so it ships **report-only**:
+`validate-spec` prints the unbound count and the first five sites to stderr and
+exits 0. Rejected: making it fatal (the measured rate exceeds the 10% bar by
+7×), and requiring a `:: test-name` suffix on every tag (rewrites 194 tag lines
+for a guarantee the prose titles still would not provide). The tag parser did
+change: a run of slugs after a REQ ID now belongs to that REQ, recovering 17
+slug instances that the one-token rule dropped. Revisit the binding rule only
+with a measured rate below 10% after authoring conventions change.
+
 ### D-119: The Reader Endpoint Is a Deployment Variable, and the Guard's Protocol Branch Is the Hermetic Refusal (2026.11.14)
 
 Two clauses lacked driving evidence. REQ-021f's "continue to the next renderer"

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.11 — Register reconciliation and clause-tag run registration
+
+- The full-review register's disposition census is re-derived from the file
+  rather than adjusted by delta: 276 rows / 276 distinct IDs, 170 `Resolved`,
+  93 `Closed-P3`, 13 `Scheduled-roadmap`. Every surviving row names a live
+  `ROADMAP.md` section, and the two stale M1 census cells plus `F-M1-2`'s
+  "deferred" note now agree with the tree.
+- Three rows closed with proof: `F-R4-A-2` (every renderer path resolves the
+  target through `withGuardedTarget`), `F-R5-B-6` (the calibration tool reads
+  `calibration.enabled` and `secondary_only_cap` instead of hardcoding them),
+  and `F-R5-C-5` (`snapshot_tier` now appears in `provenance.sources[]`, per
+  REQ-122).
+- `clauseTagsFromPayload` registers the whole slug run after a REQ ID instead
+  of one token, recovering 17 tag instances; the tag-to-test binding is
+  measured and reported (70.7% unbound) rather than gated (D-120).
+
 ## 2026.11.11 — AAR close gate: `LOOP OPEN` blocks the seal
 
 - The session seal now refuses an increment whose after-action report ends
