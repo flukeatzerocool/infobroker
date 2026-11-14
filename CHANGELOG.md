@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.11.11 — Hermetic option forwarding
+
+- The hermetic harness merges `preservation` and `source_quality` overrides like
+  the existing `fetch` and `kb` hooks, and `writeHermeticConfig` throws on an
+  option it does not understand instead of dropping it, so a fixture can no
+  longer keep running against a shipped default while the test author believes
+  an override is set.
+- `src/dispatch-orchestration.test.ts` `setup()` now forwards every declared
+  harness option; the suite's four `config.local.json` workarounds are ordinary
+  options again.
+
 ## 2026.11.11 — Review cap contract
 
 - `check-loop-artifacts` now requires every increment dated 2026-11-14 or later

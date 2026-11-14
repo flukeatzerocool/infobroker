@@ -166,8 +166,32 @@ export interface HermeticConfigOptions {
   fetch?: Record<string, unknown>;
   /** Overrides merged into the shipped `kb` block (e.g. auto-index). */
   kb?: Record<string, unknown>;
+  /** Overrides merged into the shipped `preservation` block (e.g. disabling snapshots). */
+  preservation?: Record<string, unknown>;
+  /** Overrides merged into the shipped `source_quality` block (e.g. a blocklist). */
+  source_quality?: Record<string, unknown>;
   /** Write the call log and audit log into the temp root. */
   fileLogs?: boolean;
+}
+
+/** Every option `writeHermeticConfig` understands; a stray key is rejected, not dropped. */
+const HERMETIC_OPTION_KEYS: ReadonlySet<string> = new Set([
+  "providers",
+  "chains",
+  "output",
+  "fetch",
+  "kb",
+  "preservation",
+  "source_quality",
+  "fileLogs",
+]);
+
+function assertKnownOptions(options: HermeticConfigOptions): void {
+  for (const key of Object.keys(options)) {
+    if (!HERMETIC_OPTION_KEYS.has(key)) {
+      throw new Error(`writeHermeticConfig: unknown option "${key}"`);
+    }
+  }
 }
 
 /** Drop every credential variable so a spawned server cannot inherit one. */
@@ -189,6 +213,7 @@ export function writeHermeticConfig(
   searxngUrl: string,
   options: HermeticConfigOptions = {},
 ): HermeticConfig {
+  assertKnownOptions(options);
   const root = mkdtempSync(join(tmpdir(), "infobroker-health-"));
   const storage = join(root, "knowledge-base");
   mkdirSync(storage, { recursive: true, mode: 0o700 });
@@ -197,6 +222,8 @@ export function writeHermeticConfig(
     kb?: Record<string, unknown>;
     output?: Record<string, unknown>;
     fetch?: Record<string, unknown>;
+    preservation?: Record<string, unknown>;
+    source_quality?: Record<string, unknown>;
     dispatch: Record<string, string[]>;
     providers: Record<string, Record<string, unknown>>;
   };
@@ -234,6 +261,12 @@ export function writeHermeticConfig(
   if (options.output) config.output = { ...(config.output ?? {}), ...options.output };
   if (options.fetch) config.fetch = { ...(config.fetch ?? {}), ...options.fetch };
   if (options.kb) config.kb = { ...(config.kb ?? {}), ...options.kb };
+  if (options.preservation) {
+    config.preservation = { ...(config.preservation ?? {}), ...options.preservation };
+  }
+  if (options.source_quality) {
+    config.source_quality = { ...(config.source_quality ?? {}), ...options.source_quality };
+  }
 
   let callLogPath: string | undefined;
   let auditLogPath: string | undefined;

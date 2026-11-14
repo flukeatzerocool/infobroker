@@ -12,6 +12,7 @@ import {
   startStubProvider,
   writeHermeticConfig,
   type HermeticConfig,
+  type HermeticConfigOptions,
   type HermeticProvider,
   type StubMode,
   type StubProviderOptions,
@@ -107,12 +108,11 @@ async function search(call: (method: string, params: unknown) => Promise<RpcMess
 
 async function setup(
   providers: HermeticProvider[],
-  options: { chains?: Record<string, string[]>; output?: Record<string, unknown> } = {},
+  options: Omit<HermeticConfigOptions, "providers"> = {},
 ): Promise<{ cfg: HermeticConfig; env: NodeJS.ProcessEnv }> {
   const cfg = writeHermeticConfig(providers[0]?.url ?? "http://127.0.0.1:1", {
     providers,
-    ...(options.chains ? { chains: options.chains } : {}),
-    ...(options.output ? { output: options.output } : {}),
+    ...options,
   });
   return { cfg, env: cfg.env };
 }
@@ -479,11 +479,10 @@ describe("chain-wide language reporting (REQ-128)", () => {
 describe("analysis omission (REQ-127)", () => {
   test("omits analysis when every result is blocklisted", async () => {
     const a = await stub("ok");
-    const { cfg } = await setup([provider("stub_a", a.url)], { output: { hedge_enabled: false } });
-    writeFileSync(
-      join(cfg.root, "config.local.json"),
-      JSON.stringify({ source_quality: { enabled: true, weight: 0.15, blocklist: ["example.com"] } }),
-    );
+    const { cfg } = await setup([provider("stub_a", a.url)], {
+      output: { hedge_enabled: false },
+      source_quality: { enabled: true, weight: 0.15, blocklist: ["example.com"] },
+    });
 
     await withServer(cfg.env, async (call) => {
       const payload = await search(call, { query: "blocked probe", analyze: true });
@@ -503,11 +502,8 @@ describe("deep reading under compact verbosity (REQ-028)", () => {
     const { cfg } = await setup([provider("stub_a", a.url)], {
       chains: { general_web: ["stub_a"], content_fetch: ["native_fetch"] },
       output: { hedge_enabled: false, verbose: false },
+      fetch: { allow_private_urls: true },
     });
-    writeFileSync(
-      join(cfg.root, "config.local.json"),
-      JSON.stringify({ fetch: { allow_private_urls: true } }),
-    );
 
     await withServer(cfg.env, async (call) => {
       const before = a.requests;
@@ -595,11 +591,8 @@ describe("deep-reading snapshot reporting (REQ-122)", () => {
     const { cfg } = await setup([provider("stub_a", a.url)], {
       chains: { general_web: ["stub_a"], content_fetch: ["native_fetch"] },
       output: { hedge_enabled: false },
+      fetch: { allow_private_urls: true },
     });
-    writeFileSync(
-      join(cfg.root, "config.local.json"),
-      JSON.stringify({ fetch: { allow_private_urls: true } }),
-    );
 
     await withServer(cfg.env, async (call) => {
       const payload = await search(call, { query: "deep snapshot probe", deep: true });
@@ -617,11 +610,9 @@ describe("deep-reading snapshot reporting (REQ-122)", () => {
     const { cfg } = await setup([provider("stub_a", a.url)], {
       chains: { general_web: ["stub_a"], content_fetch: ["native_fetch"] },
       output: { hedge_enabled: false },
+      fetch: { allow_private_urls: true },
+      preservation: { enabled: false },
     });
-    writeFileSync(
-      join(cfg.root, "config.local.json"),
-      JSON.stringify({ fetch: { allow_private_urls: true }, preservation: { enabled: false } }),
-    );
 
     await withServer(cfg.env, async (call) => {
       const payload = await search(call, { query: "deep snapshot probe", deep: true });
