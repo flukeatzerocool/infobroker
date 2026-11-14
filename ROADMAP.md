@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Review-loop convergence
-
-- Cap the cold-review loop inside the plan itself (for example, one re-audit of a failed stage) and record the cap in the increment AAR, instead of letting the number of passes be an agent judgement.
-- Narrow a multi-finding increment at the first blocker that belongs to one finding's evidence rather than revising the combined scope again.
-
-**Trigger:** start with the next increment that plans a multi-finding remediation; close when an increment records a cap and stops at it.
-
 ## Hermetic test option forwarding
 
 - Make the dispatch-orchestration `setup()` forward every config option a caller passes, or reject an unknown option rather than dropping it silently.
