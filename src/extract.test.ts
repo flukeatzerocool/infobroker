@@ -24,6 +24,32 @@ describe("extractStructured (REQ-021e)", () => {
     expect(out.microdata[0].properties.name).toBe("Widget");
   });
 
+  it("attaches a nested item's properties to the nested item, not its parent", () => {
+    // F-R4-C-11: a nested itemscope declares its own properties. Flattening
+    // them onto the parent reports the author's name as the product's.
+    const html = `
+      <html><body>
+        <div itemscope itemtype="https://schema.org/Product">
+          <span itemprop="name" content="Widget">Widget</span>
+          <span itemprop="brand" content="Acme">Acme</span>
+          <div itemscope itemtype="https://schema.org/Person">
+            <span itemprop="name" content="Ada Lovelace">Ada Lovelace</span>
+            <span itemprop="email" content="ada@example.com">ada@example.com</span>
+          </div>
+        </div>
+      </body></html>`;
+    const out = extractStructured(html);
+
+    expect(out.microdata).toHaveLength(2);
+    const product = out.microdata.find((item) => item.type.endsWith("Product"))!;
+    const person = out.microdata.find((item) => item.type.endsWith("Person"))!;
+    expect(product.properties.name).toBe("Widget");
+    expect(product.properties.brand).toBe("Acme");
+    expect(product.properties.email).toBeUndefined();
+    expect(person.properties.name).toBe("Ada Lovelace");
+    expect(person.properties.email).toBe("ada@example.com");
+  });
+
   it("reports no structured objects on a plain page", () => {
     const out = extractStructured("<html><body><p>hi</p></body></html>");
     expect(out.jsonld).toHaveLength(0);

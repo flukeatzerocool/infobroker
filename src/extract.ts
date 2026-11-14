@@ -38,6 +38,11 @@ export function extractStructured(html: string): StructuredExtraction {
     $(el)
       .find("[itemprop]")
       .each((_j, child) => {
+        // F-R4-C-11: a property belongs to its nearest `itemscope` ancestor.
+        // A nested item declares its own properties, and each nested item is
+        // visited by the outer loop, so this entry keeps only its own.
+        const owner = $(child).closest("[itemscope]").get(0);
+        if (owner !== el) return;
         const name = $(child).attr("itemprop");
         if (!name) return;
         const value = $(child).attr("content") || $(child).text().trim();
