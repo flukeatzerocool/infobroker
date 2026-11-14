@@ -117,6 +117,30 @@ describe("increment artifacts", () => {
     expect(newestIncrement(root)).toBeNull();
   });
 
+  it("reads the Done bar from its declaration line, not a quotation in prose", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-quoted", {
+      plan: "# Plan\n\nThis plan mentions `**Done bar:**` in prose.\n\n**Done bar:** the gate is green.\n",
+      tasks: TASKS,
+      aar: AAR,
+    });
+    expect(newestIncrement(root)?.doneBar).toBe("the gate is green.");
+    expect(validateIncrements(root)).toEqual([]);
+  });
+
+  it("reports no Done bar when the marker appears only inside prose", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-inline", {
+      plan: "# Plan\n\nThis plan only mentions `**Done bar:**` inline.\n",
+      tasks: TASKS,
+      aar: AAR,
+    });
+    expect(listIncrements(root)[0]?.doneBar).toBeNull();
+    expect(validateIncrements(root)).toEqual([
+      { increment: "2026-11-07-inline", level: "warning", message: "plan.md has no **Done bar:** line" },
+    ]);
+  });
+
   it("rejects a directory name that is not dated and hyphenated", () => {
     expect(nameProblem("loop-and-gates")).toContain("<YYYY-MM-DD>-<slug>");
     expect(nameProblem("2026-11-07-Loop")).toContain("<YYYY-MM-DD>-<slug>");

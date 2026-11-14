@@ -21,6 +21,9 @@ const CAP_LINE = /^\*\*Review cap:\*\*[ \t]*(.*)$/m;
 const CAP_PLAN_VALUE = /^\d+/;
 const CAP_AAR_VALUE = /;\s*used\s+\d+\s+pass(?:es)?\b/i;
 
+/** The Done bar must also begin a line, for the same reason as the cap marker. */
+const DONE_BAR = /^\*\*Done bar:?\*\*[ \t]*(.+)$/m;
+
 export type Level = "error" | "warning";
 
 export interface Finding {
@@ -55,7 +58,7 @@ export function listIncrements(root: string): Increment[] {
     const aar = hasAar ? readFileSync(join(path, "aar.md"), "utf-8") : "";
     const plan = hasPlan ? readFileSync(join(path, "plan.md"), "utf-8") : "";
     const token = aar.match(/LOOP PAUSED|LOOP OPEN/);
-    const doneBar = plan.match(/\*\*Done bar:?\*\*\s*(.+)/i);
+    const doneBar = plan.match(DONE_BAR);
     const planCap = plan.match(CAP_LINE);
     const aarCap = aar.match(CAP_LINE);
     increments.push({
