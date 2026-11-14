@@ -747,8 +747,12 @@ implemented by the shared generic backend. A slug that matches a built-in
 provider is rejected. Add the entry to `config.local.json` and call
 `reload_config` to use it immediately.
 
-`priority` orders the first-pass provider pool for `verify_claims`; it does
-not reorder `search_web`, which follows dispatch-chain order.
+`priority` routes the `verify_claims` pool by intent without leaving the
+provider list: `privacy` restricts it to providers that do not forward queries
+to third parties, `quality` orders it by configured provider priority, and
+`free_only` drops the keyed and self-hosted tiers. A list that satisfies no
+intent is used unchanged. It does not reorder `search_web`, which follows
+dispatch-chain order.
 
 ### Per-provider status and provenance
 
