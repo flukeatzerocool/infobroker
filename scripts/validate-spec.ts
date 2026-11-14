@@ -11,7 +11,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage } from "../src/clause-coverage.js";
+import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage, bindClauseTags } from "../src/clause-coverage.js";
 import { checkFeatureTaxonomyCoverage } from "../src/lib/feature-taxonomy.js";
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
@@ -328,6 +328,8 @@ for (let i = 0; i < reqBodies.length; i++) {
 // Collect clause tags from test files (recursively under src/): `REQ-NNN
 // <slug>` pairs beyond the bare REQ ID.
 const clauseTagsByReq = new Map<string, Set<string>>();
+const unboundClauseTags: Array<{ file: string; line: number; req: string; slug: string }> = [];
+let clauseTagPairs = 0;
 {
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -344,10 +346,30 @@ const clauseTagsByReq = new Map<string, Set<string>>();
             for (const t of tags) clauseTagsByReq.get(req)!.add(t);
           }
         }
+        // D5 binding measurement: report-only. It binds each tag to a test
+        // title; measured unbound rate is far above the 10% bar, so the gate
+        // reports rather than fails (see the increment's plan).
+        for (const binding of bindClauseTags(text)) {
+          clauseTagPairs++;
+          if (!binding.bound) {
+            unboundClauseTags.push({ file: full.slice(ROOT.length + 1), line: binding.line, req: binding.req, slug: binding.slug });
+          }
+        }
       }
     }
   };
   walk(join(ROOT, "src"));
+}
+
+if (clauseTagPairs > 0) {
+  const rate = ((unboundClauseTags.length / clauseTagPairs) * 100).toFixed(1);
+  console.error(
+    `clause-tag binding (report-only): ${unboundClauseTags.length}/${clauseTagPairs} pairs (${rate}%) do not name their branch in a bound test title`
+  );
+  for (const u of unboundClauseTags.slice(0, 5)) {
+    console.error(`  ${u.file}:${u.line} ${u.req} ${u.slug}`);
+  }
+  if (unboundClauseTags.length > 5) console.error(`  … ${unboundClauseTags.length - 5} more`);
 }
 
 for (const rb of reqBodies) {
