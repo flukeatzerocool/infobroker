@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026.11.11 — Corroboration confidence contract
+
+- `verify_claims` now reports a confidence that agrees with §8.2. Source
+  authority adjusts the independence rung instead of multiplying it
+  (`base × (1 − 0.25 × (1 − mean family weight))`), so a two-family web-only
+  finding reports `0.6475` rather than `0.49` and three web families reach
+  `0.8325` before the secondary-only cap, which still pins them at `0.7`. The
+  three-family mixed case moves from `0.81` to `0.8775`; its verdict is
+  unchanged. REQ-026a's weighted path now covers the one-source case
+  (`0.3 → 0.2775`), and a finding with no attributed source reports the
+  ladder's `0.0` instead of the single-source `0.3`.
+- A source family holding mismatched types resolves by its highest weight
+  instead of whichever provider settled first, so the reported number no longer
+  depends on batch order. Weights above `1.0` are clamped, and a non-finite
+  weight folds to neutral.
+- `textSimilarity` divides by the larger shingle set, so a snippet contained in
+  a long article no longer counts as a republication of it (REQ-121). The
+  trade — a heavily truncated republication may now split — is recorded in
+  §8.2 and on the roadmap.
+- §8.1/§8.2 now state the ladder, the adjustment formula and its constant, the
+  secondary-only cap, the agreement-map bands (`green ≥ threshold`,
+  `yellow ∈ [0.5, threshold)`, `red < 0.5`, unsourced omitted), and the
+  contested-confidence rule, so every shipped-default number is derivable.
+- `scripts/calibrate-confidence.ts` measures the adjusted value through
+  `buildCalibrationReport`, reporting each entry's raw rung beside it. The
+  shipped gold run moves from Brier `0.1892` to `0.1865`.
+
 ## 2026.11.11 — Renderer-path target resolution
 
 - `fetch_page` now resolves the target and refuses a loopback, private,

@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Corroboration confidence contract
-
-- Reconcile the shipped confidence weights with the spec ladder: `web_search: 0.7` turns a two-family base 0.7 into 0.49, below the confirm threshold (`F-R5-B-9`).
-- Fix `textSimilarity`'s asymmetric containment, so a snippet contained in a long article stops merging into that article's family (`F-R5-B-8`).
-- Align §8.1/§8.2 prose with the code on contested confidence, the agreement-map `red` definition, and the omitted secondary-only calibration cap (`F-R5-G-2`, `F-R5-G-3`, `F-R5-G-4`).
-
-**Trigger:** start when a calibration run reports a Brier score or curve that diverges from the server's configured correction, or when a confidence tier is disputed; close when the shipped defaults and the prose agree and each branch is asserted.
-
 ## Fetch and KB resource bounds
 
 - Bound `sqliteSearch` so a broad query over an oversize store stops accumulating matches before it slices (`F-R6-E-4`), and make the crawl page cap count outbound fetches rather than returned pages (`F-R4-C-8`).
@@ -49,6 +41,19 @@
 - Resolve `F-M1-3`, whose description records `Resolved 2026-11-10` while its disposition column still says `Scheduled-roadmap`.
 
 **Trigger:** start when a register row is cited as open and the tree disagrees; close when the disposition census and the live tree agree.
+
+## Calibration gold-set refresh
+
+- Re-derive the gold set's `correct` labels against the post-adjustment curve:
+  the entries were judged against the pre-damping ladder, and the `0.9-1.0`
+  band now holds two entries instead of five.
+- Measure the truncated-excerpt family case (§8.2, D2 trade): a genuinely
+  republished article seen through a short snippet may no longer collapse into
+  one family, which raises confidence.
+
+**Trigger:** start with the next change to `test-fixtures/calibration/gold.json`
+or `src/source-family.ts`; close when the labels and the curve are re-derived
+and the excerpt case has a recorded measurement.
 
 ## Non-goals
 
