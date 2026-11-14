@@ -2033,3 +2033,72 @@ describe("contained excerpt is not a republication (REQ-121)", () => {
     expect(f.family_count).toBe(2);
   });
 });
+
+// @implements REQ-026 agreement-map-green
+// @implements REQ-026 agreement-map-yellow
+describe("agreement-map classification (F-R5-A-5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(throttle).mockResolvedValue(undefined);
+    vi.mocked(checkQuota).mockReturnValue(makeQuota());
+    vi.mocked(increment).mockReturnValue(makeQuota());
+    vi.mocked(retryWithBackoff).mockImplementation(async (fn) => (fn as () => Promise<any>)());
+    vi.mocked(isKbConfigured).mockReturnValue(false);
+    vi.mocked(kbSearch).mockReturnValue([]);
+    vi.mocked(getDispatchChain).mockReturnValue([]);
+  });
+
+  const claim = "red teaming reduces model risk";
+  const sentence = "red teaming reduces model risk in production deployments";
+  const typedResult = (title: string, url: string, sourceType: string) => ({
+    ...makeResult(title, url, sentence),
+    source_type: sourceType,
+  });
+
+  it("classifies a three-family finding green at the threshold", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+        wikidata: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    });
+    const result = await corroborate(claim, {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [typedResult("One", "https://a.example/1", "web_search")],
+        wikipedia: async () => [typedResult("Two", "https://b.example/2", "encyclopedia")],
+        wikidata: async () => [typedResult("Three", "https://c.example/3", "academic")],
+      },
+    });
+    const finding = result.findings.find((f) => f.claim === claim)!;
+    // Three independent families at the ladder's 0.9 rung clear the 0.8 bar.
+    expect(finding.family_count).toBe(3);
+    expect(finding.confidence).toBeCloseTo(0.9);
+    expect(result.agreement_map.green).toContain(finding.topic);
+    expect(result.agreement_map.yellow).not.toContain(finding.topic);
+  });
+
+  it("classifies a two-family finding yellow below the threshold", async () => {
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 10, confidence_threshold: 0.8, first_pass_max_providers: 5 },
+    });
+    const result = await corroborate(claim, {
+      max_iterations: 1,
+      searchers: {
+        duckduckgo: async () => [typedResult("One", "https://a.example/1", "web_search")],
+        wikipedia: async () => [typedResult("Two", "https://b.example/2", "encyclopedia")],
+      },
+    });
+    const finding = result.findings.find((f) => f.claim === claim)!;
+    // The 0.7 rung sits in [0.5, threshold), which is the yellow band.
+    expect(finding.confidence).toBeCloseTo(0.7);
+    expect(result.agreement_map.yellow).toContain(finding.topic);
+    expect(result.agreement_map.green).not.toContain(finding.topic);
+  });
+});

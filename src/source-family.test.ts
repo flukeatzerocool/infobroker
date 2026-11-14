@@ -117,3 +117,23 @@ describe("source-family (REQ-121)", () => {
     expect(families[0]).not.toBe(families[1]);
   });
 });
+
+// @implements REQ-121 threshold-configurable
+describe("family similarity threshold is honoured (F-R5-B-10)", () => {
+  const wireA = "The committee released its findings on Tuesday after a year-long inquiry into procurement practices across three agencies and two contractors.";
+  const wireB = "The committee released its findings on Wednesday after a year-long inquiry into procurement practices across three agencies and two contractors.";
+
+  it("merges the same pair at a lenient threshold and splits it at a strict one", () => {
+    const pair = [
+      { url: "https://alpha.example/story", title: "Report", snippet: wireA },
+      { url: "https://beta.example/republish", title: "Report", snippet: wireB },
+    ];
+    // The pair scores ~0.75; a non-default 0.7 merges it, a 0.8 splits it.
+    // A hardcoded 0.9 would also split it, so the merge is the discriminating
+    // assertion; the split proves the parameter is not ignored downward.
+    expect(textSimilarity(wireA, wireB)).toBeGreaterThan(0.7);
+    expect(textSimilarity(wireA, wireB)).toBeLessThan(0.8);
+    expect(familyCount(assignSourceFamilies(pair, 0.7))).toBe(1);
+    expect(familyCount(assignSourceFamilies(pair, 0.8))).toBe(2);
+  });
+});
