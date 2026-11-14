@@ -300,32 +300,48 @@ export function chunkText(text: string, title: string): string[] {
   return chunks;
 }
 
+/**
+ * REQ-066/REQ-074: resolve a tier name to a tier the configuration defines.
+ * An undefined name falls back to the configured default (validated to exist
+ * whenever tiers are configured), so it still decays and expires. When no tier
+ * is configured at all the name passes through and the callers' guards hold.
+ */
+function resolveTier(name?: string): string {
+  const tiers = kbConfig?.freshness?.tiers;
+  if (!tiers) return name ?? "stable";
+  if (name && tiers[name]) return name;
+  const fallback = kbConfig?.freshness?.default_tier;
+  if (fallback && tiers[fallback]) return fallback;
+  return name ?? "stable";
+}
+
 function classifyFreshness(query?: string, timeRange?: string, provider?: string, sourceType?: string): string {
   if (!kbConfig?.freshness?.auto_classify) {
-    return kbConfig?.freshness?.default_tier || "stable";
+    return resolveTier();
   }
 
-  if (timeRange === "day") return "ephemeral";
-  if (timeRange === "week") return "recent";
+  if (timeRange === "day") return resolveTier("ephemeral");
+  if (timeRange === "week") return resolveTier("recent");
 
-  if (provider === "wikipedia") return "evergreen";
-  if (sourceType === "corroborate") return "stable";
-  if (sourceType === "fetch_page") return "stable";
+  if (provider === "wikipedia") return resolveTier("evergreen");
+  if (sourceType === "corroborate") return resolveTier("stable");
+  if (sourceType === "fetch_page") return resolveTier("stable");
 
   if (query) {
     const lower = query.toLowerCase();
-    if (/\b(latest|current|today|breaking|live|now|just\s+in)\b/.test(lower)) return "ephemeral";
-    if (/\b(recent|update|this\s+week|this\s+month)\b/.test(lower)) return "recent";
-    if (/\b(202\d|this\s+year)\b/.test(lower)) return "recent";
+    if (/\b(latest|current|today|breaking|live|now|just\s+in)\b/.test(lower)) return resolveTier("ephemeral");
+    if (/\b(recent|update|this\s+week|this\s+month)\b/.test(lower)) return resolveTier("recent");
+    if (/\b(202\d|this\s+year)\b/.test(lower)) return resolveTier("recent");
   }
 
-  return kbConfig?.freshness?.default_tier || "stable";
+  return resolveTier();
 }
 
 function computeFreshnessScore(tier: string, ingestedAt: number, now: number): number {
   const tiers = kbConfig?.freshness?.tiers;
-  if (!tiers || !tiers[tier]) return 1;
-  const def = tiers[tier];
+  if (!tiers) return 1;
+  const def = tiers[resolveTier(tier)];
+  if (!def) return 1;
   if (!def.decay_hours || def.decay_hours === 0) return 1;
   const ageHours = (now - ingestedAt) / (1000 * 60 * 60);
   const factor = Math.max(0, 1 - ageHours / def.decay_hours);
@@ -698,7 +714,9 @@ function sqliteIngest(
   if (!sqliteStore) return 0;
   const resolvedCollection = resolveCollection(collection);
   const resolvedSourceType = sourceType || "web_search";
-  const resolvedTier = freshnessTier || kbConfig?.freshness?.default_tier || "stable";
+  // REQ-074: an explicit caller tier is stored verbatim; only an absent one
+  // resolves through the configured default.
+  const resolvedTier = freshnessTier ?? resolveTier();
   const chunks = chunkText(text, title);
   if (chunks.length === 0) {
     sqliteStore.appendEvent(`Ingest skipped at ${new Date().toISOString()}: empty or unsplittable text (${text.slice(0, 80)})`);
@@ -1251,7 +1269,7 @@ export function runMaintenance(): void {
       // indefinite retention, so tier expiry never removes it (REQ-066's
       // precedence clause). Its confidence still decays with age.
       if (chunk.source_type === "report") return false;
-      const def = tiers[chunk.freshness_tier];
+      const def = tiers[resolveTier(chunk.freshness_tier)];
       if (!def || !def.expiry_hours || def.expiry_hours <= 0) return false;
       const cutoff = now - def.expiry_hours * 60 * 60 * 1000;
       return chunk.ingested_at <= cutoff;

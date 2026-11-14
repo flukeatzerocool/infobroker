@@ -1202,3 +1202,30 @@ describe("provider auth field recovery and reload (REQ-037, REQ-113)", () => {
     expect(message).not.toContain("sk-sentin");
   });
 });
+
+// @implements REQ-074 default-tier-defined
+describe("freshness default tier validation (REQ-074)", () => {
+  it("rejects a default tier the configuration does not define", () => {
+    expect(() => validateConfig(configWith("kb.freshness.default_tier", "stabel"))).toThrow(
+      /default_tier must name a defined freshness tier/,
+    );
+  });
+
+  it("rejects a freshness block with no default tier", () => {
+    const cfg = structuredClone(BASE);
+    delete (cfg.kb!.freshness as Record<string, unknown>).default_tier;
+    expect(() => validateConfig(cfg)).toThrow(/default_tier must be a string/);
+  });
+
+  it("accepts every tier the configuration defines", () => {
+    const cfg = structuredClone(BASE);
+    cfg.kb!.freshness!.tiers = {
+      ephemeral: { decay_hours: 24, expiry_hours: 168 },
+      stable: { decay_hours: 720, expiry_hours: 0 },
+    };
+    for (const tier of ["ephemeral", "stable"]) {
+      cfg.kb!.freshness!.default_tier = tier;
+      expect(() => validateConfig(cfg), `tier ${tier}`).not.toThrow();
+    }
+  });
+});

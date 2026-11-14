@@ -1044,6 +1044,14 @@ export function validateConfig(config: Config): void {
       }
       if (typeof kb.freshness.default_tier !== "string") {
         errors.push("kb.freshness.default_tier must be a string");
+      } else if (
+        kb.freshness.tiers &&
+        typeof kb.freshness.tiers === "object" &&
+        !Object.hasOwn(kb.freshness.tiers, kb.freshness.default_tier)
+      ) {
+        // REQ-074: the default names a defined tier, so an undefined
+        // classification still has a tier to decay and expire by.
+        errors.push("kb.freshness.default_tier must name a defined freshness tier");
       }
     }
     if (kb.kb_first_relevance_threshold !== undefined && !isFiniteNumber(kb.kb_first_relevance_threshold)) {
