@@ -18,6 +18,7 @@ import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } fr
 import { writeProviderPrivacy, readPrivacyConfig } from "./lib/provider-privacy.js";
 import { GATES } from "./lib/gate-manifest.js";
 import { checkSecurityModel } from "./lib/security-model.js";
+import { reconcile } from "./lib/tool-defaults.js";
 
 // @implements REQ-055
 
@@ -1031,42 +1032,42 @@ checkArtifactContent();
 
 // A) No divergent numeric fallback on a config lookup: REQ-080 requires that a
 // value the configuration supplies is read from the configuration without a
-// substitute literal in source.
-const toolLayerFiles = ["index.ts", "corroborate.ts", "config.ts", "kb.ts"];
-for (const f of toolLayerFiles) {
-  const filePath = join(SRC, f);
-  if (!existsSync(filePath)) continue;
+// substitute literal in source. Every source file is scanned, not a curated
+// list, so a new module cannot escape the rule by not being named here.
+function sourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...sourceFiles(path));
+    } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      out.push(path);
+    }
+  }
+  return out;
+}
+for (const filePath of sourceFiles(SRC)) {
+  const rel = filePath.slice(ROOT.length + 1);
   const text = readFileSync(filePath, "utf-8");
   const re = /config\.[A-Za-z0-9_.()]+\s*\?\?\s*[0-9]/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
-    error(`${f}: numeric fallback on a config lookup (${m[0].trim()}) — violates REQ-080`);
+    error(`${rel}: numeric fallback on a config lookup (${m[0].trim()}) — violates REQ-080`);
   }
 }
 
-// B) The max_results default declared in the spec SHALL match the zod schema
-// default for search_web and kb (REQ-020, REQ-060a).
-const indexText = readFileSync(join(SRC, "index.ts"), "utf-8");
-function schemaDefault(slug: string, param: string, max: number): string | undefined {
-  const toolRe = new RegExp(`(?:server\\.registerTool|instrumentTool)\\(\\s*"infobroker_${slug}"[\\s\\S]*?${param}:\\s*z\\.number\\(\\)\\.min\\(1\\)\\.max\\(${max}\\)\\.optional\\(\\)\\.default\\((\\d+)\\)`);
-  return toolRe.exec(indexText)?.[1];
+// B) Every default §4 declares SHALL equal the default the tool schema
+// applies, every declared maximum SHALL match the schema maximum, and every
+// config value that describes the same limit SHALL match. The declaration
+// table lives in scripts/lib/tool-defaults.ts.
+const shippedConfig: unknown = JSON.parse(readFileSync(join(ROOT, "config.json"), "utf-8"));
+for (const problem of reconcile({
+  spec: specText,
+  schemaSource: readFileSync(join(SRC, "index.ts"), "utf-8"),
+  config: shippedConfig,
+})) {
+  error(problem);
 }
-function requireDefault(re: RegExp, label: string, schema: string | undefined): void {
-  const declared = re.exec(specText)?.[1];
-  if (declared === undefined) {
-    warn(`${label}: no default declared in spec`);
-    return;
-  }
-  if (schema === undefined) {
-    error(`${label}: schema default not found — REQ-080 check unable to reconcile`);
-    return;
-  }
-  if (schema !== declared) {
-    error(`${label}: schema default ${schema} diverges from spec-declared default ${declared} — violates REQ-080`);
-  }
-}
-requireDefault(/`max_results`\s+\(default\s+(\d+)\s*,/ , "REQ-020 search_web max_results", schemaDefault("search_web", "max_results", 30));
-requireDefault(/maximum-results count\s+\(default\s+(\d+)\s*,/, "REQ-060a manage_kb max_results", schemaDefault("manage_kb", "max_results", 50));
 
 // --- Tool-definition quality bar (REQ-092) ---
 //

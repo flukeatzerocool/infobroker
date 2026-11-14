@@ -260,7 +260,9 @@ renderers for source-specific extraction. Ask a page a question — pass
 `question` to `fetch_page` and it returns the passages that answer it, each
 scored and ranked, instead of the whole document. Fetch several URLs at once
 and each result keeps its own renderer, ranked passages, and top score. Pass
-`raw: true` to get the page text directly, without the JSON wrapper.
+`raw: true` to get the page text directly, without the JSON wrapper. Long
+pages are truncated to 50,000 characters by default; set `max_length` to
+change the cap.
 Built-in web fetchers return raw HTML; Infobroker gives you clean, readable
 content from any source — ready for summarization or analysis. Fetch also
 reports the page's last-updated date when it can determine one, so you know

@@ -265,7 +265,7 @@ WHEN `search_web` returns results, including knowledge-base recall used to answe
 WHEN `search_web` receives an array of queries, a failing element SHALL NOT fail the batch. The response SHALL return every successful element's results with per-input metadata, and SHALL report each failed element's error in that metadata. The batch SHALL report success when at least one element succeeds, and SHALL return an error per REQ-002 only when every element fails. Per-input metadata SHALL name the input, the serving provider, and the status, and SHALL report the ranked passage count and truncation state when those apply to the element. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
-Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` primary, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50k chars), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, `extract`, and `raw`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
+Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` primary, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50000), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, `extract`, and `raw`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render and preferring the primary within a configurable grace window; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
 
 **REQ-021a — `fetch_page` network-target safety**
 WHEN `fetch_page` receives a URL whose host resolves to a loopback, private, link-local, or metadata address, the tool SHALL refuse to fetch it and SHALL return an error per REQ-002 unless the configuration permits private-network targets. The guard SHALL be reapplied after each redirect hop, up to a maximum number of hops that SHALL be configurable in the configuration file. A refused target SHALL be reported with a code that distinguishes the safety refusal from a general fetch failure. _Check:_ G1.
@@ -1167,7 +1167,7 @@ verdict is preserved (REQ-026f).
   (`// @implements REQ-NNN <branch-slug>`), so no branch ships untested
 - Appendix B mechanical violations are errors; Appendix B judgment violations
   (what/how, red-team, EARS, readability, proofreading dimensions) are
-  warnings; Appendix C violations are errors
+  warnings; a violated Appendix C rule that names G3 as its carrier is an error
 - The spec carries a `**Spec version:**` stamp equal to the package version, and
   the README cites that same version (parity enforced)
 - Every skill reference file required by REQ-053 is present and the pipeline map
@@ -1723,7 +1723,11 @@ spec-maintainer signal, not a build requirement.
 ## §C Appendix: Spec-Driven Development Discipline
 
 This appendix defines the development discipline that prevents spec-code drift.
-It is prescriptive — every rule is enforceable by G3 (§9.4).
+It is prescriptive, and every rule names the carrier that enforces it: G3
+(§9.4) for C.1, C.2, C.3, C.5, and C.6; the read-through and the code review
+C.4 itself requires for C.4; `scripts/push-pipeline.sh` and
+`npm run test-push-pipeline` for C.9; the push pipeline's changelog step guard
+for C.10. C.7 and C.8 are review lenses, not gate claims.
 
 **C.1 Spec-anchored model.** The specification lives in the repository alongside
 the code. Both evolve together; divergence is a defect. The specification is the
@@ -1793,12 +1797,17 @@ change set it is about to ship, before committing or pushing, and SHALL fail
 fast on a dirty working tree before staging. Release tooling SHALL NOT move a
 version tag that already exists on the push remote; a correction SHALL be a
 new version, never a relabeled tag. Release tooling SHALL refuse to commit
-material that would expose secret material (REQ-011).
+material that would expose secret material (REQ-011). The carriers for this
+rule are `scripts/push-pipeline.sh`, which performs the staging, dirty-tree,
+tag, and secret checks, and `npm run test-push-pipeline`, which exercises them
+against a disposable repository and bare remote.
 
 **C.10 Provenance.** Every REQ SHALL be traceable to the spec version and
 CHANGELOG entry in which it was introduced or last modified. A modified REQ's
 CHANGELOG entry SHALL cite the REQ ID and the nature of the change. The REQ
-manifest (§9.5) is the index; version-control history is the record.
+manifest (§9.5) is the index; version-control history is the record. The
+carrier for this rule is the push pipeline's changelog step: a semantic change
+with no reported CHANGELOG entry is retried and then fails the run.
 
 ---
 

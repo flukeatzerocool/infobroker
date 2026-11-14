@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.11.11 — R9 default consistency gate
+
+- REQ-080's G3 check now reconciles every default §4 declares — the six numeric
+  parameters and the literal declarations (`safe_search`, `content_type`, and
+  the six-flag "each default false" clause) — against the registered schema,
+  instead of two defaults over four hardcoded files. The declaration table
+  lives in `scripts/lib/tool-defaults.ts`; a declaration no entry claims fails
+  the gate, so a new default cannot ship unreconciled.
+- Four config-vs-tool limit pairs are reconciled against the shipped
+  `config.json`: `output.max_chars` ↔ `fetch_page.max_length`,
+  `kb.max_results` ↔ `manage_kb.max_results` maximum, and the two
+  `corroboration` values ↔ their `verify_claims` defaults. Pairs are
+  enumerated, never inferred by name (D-116).
+- The numeric-fallback scan (block A) now walks every `src/**/*.ts` file rather
+  than a four-file list; the current tree has no matches, so no behavior
+  change beyond the wider net.
+- REQ-021 states the `fetch_page` truncation default as `(default 50000)` so
+  the declaration is machine-readable, and the README names the same default.
+
 ## 2026.11.11 — R9 tool-quality reporting and evidence
 
 - `scripts/check-tdqs.ts` now reports `paramCount` and `requiredParamCount` for
