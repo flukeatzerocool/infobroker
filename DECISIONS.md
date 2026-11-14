@@ -2,6 +2,44 @@
 
 ## Active Decisions
 
+### D-119: The Reader Endpoint Is a Deployment Variable, and the Guard's Protocol Branch Is the Hermetic Refusal (2026.11.14)
+
+Two clauses lacked driving evidence. REQ-021f's "continue to the next renderer"
+could not be driven because `src/providers/jina.ts` hardcoded the reader
+endpoint; REQ-021d's per-hop guard could not be driven because a loopback hop is
+never refused while `fetch.allow_private_urls` is true. The decision for the
+first: the endpoint is a deployment surface, read through
+`getEnvVar("jina", "_URL")` as `INFOBROKER_JINA_URL` — the same
+`INFOBROKER_<NAME>_URL` convention `searxng` uses — normalized to a trailing
+slash because the target URL is appended to it, with `https://r.jina.ai/` as the
+unchanged default. Rejected: a `providers.jina.base_url` config key (a renderer
+endpoint is a deployment concern, and the key would need a schema addition and a
+hot-reload answer for no added capability), and a declared `url_env` (that field
+marks the variable *required*, so `providerUsable` would report Jina unusable and
+drop it from every shipped chain whenever the override is absent).
+
+The decision for the second: no seam is added. A crawl hop whose redirect leaves
+HTTP is refused by `assertPublicUrl`'s protocol branch
+(`src/lib/url-guard.ts:94-96`) even when private targets are permitted, because
+that test does not consult the flag; the refusal reaches the crawl's existing
+`SsrRefusalError` branch, which audits the hop and continues. This is the
+clause's own words — "at every hop including each redirect" — driven on the real
+handler and offline. Rejected: threading an injected resolver into the crawl's
+fetch call (the tests spawn the server, so it would need a test-only config or
+env hook), a `.invalid` redirect (runner-dependent resolver latency), and
+extracting the crawl loop (a larger refactor for no guarantee the redirect hop
+does not already demonstrate).
+
+Scope of the evidence, recorded so it is not overread: REQ-021a's body states the
+address-class refusal and the per-redirect re-application, not a protocol rule.
+The observed refusal is therefore the guard's protocol branch, which REQ-021h's
+"an unsupported protocol SHALL NOT justify private targets" bounds; the
+address-class branch is proven separately at the unit seam. The register row names
+which branch drove the clause. REQ-021f's exhausted-chain half is not re-driven:
+an exhausted `fetch_page` chain enters `resolveFetchFallback`, which contacts the
+archive provider for any non-DOI URL, and that path cannot be made hermetic from
+this increment, so it keeps its REQ-021h taxonomy coverage.
+
 ### D-118: A Migration Artifact Is Preserved Sealed, Not Preserved Plaintext or Discarded (2026.11.14)
 
 When at-rest encryption is enabled at upgrade time, the legacy-JSON migration

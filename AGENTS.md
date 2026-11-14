@@ -281,7 +281,7 @@ has no non-whitespace diff, the pipeline fails (spec→README binding).
 |----------|---------|
 | `INFOBROKER_CONFIG` | Path to config.json (default: package-relative `config.json`) |
 | `INFOBROKER_<PROVIDER>_API_KEY` | API key for keyed providers |
-| `INFOBROKER_<PROVIDER>_URL` | URL for self-hosted providers (SearXNG) |
+| `INFOBROKER_<PROVIDER>_URL` | URL for self-hosted providers (SearXNG) or an alternate renderer endpoint (`INFOBROKER_JINA_URL`) |
 
 ## Spec Authoring
 

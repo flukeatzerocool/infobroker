@@ -28,19 +28,6 @@
 
 **Trigger:** start when the read path is stable at a reduced heap and a payload fits the gate budget; close when clause (a) has a gate-asserted test.
 
-## Hermetic seam for the fetch-renderer chain and the crawl guard
-
-- Give the Jina renderer a configurable base URL so a two-renderer fall-through
-  can be driven against a loopback stub — closes `F-R4-B-3` (REQ-021f).
-- Drive the crawl's per-hop guard at a seam that accepts an injected refusal, so
-  a hop can be refused while `allow_private_urls` stays true — closes the
-  remaining per-hop-guard clause of `F-R4-C-3` (REQ-021d); its page-cap and
-  depth-cap clauses are already driven.
-- Both are production-seam changes plus the tests they unlock; take them as one
-  fetch-module increment.
-
-**Trigger:** start with the next change to `src/providers/jina.ts` or `src/lib/url-guard.ts`; close when both clauses have driving tests and the register rows read `Resolved`.
-
 ## Full-review register reconciliation
 
 - Retire the register rows already fixed in code — `F-R5-C-5` still reads `Scheduled-roadmap` although `src/corroborate.ts:958` writes the tier — and re-home every surviving row.

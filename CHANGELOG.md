@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.11.11 — Hermetic fetch seams for the renderer chain and the crawl guard
+
+- The Jina reader endpoint can be pointed at a self-hosted Jina-compatible
+  reader through `INFOBROKER_JINA_URL` (the `INFOBROKER_<NAME>_URL` convention,
+  normalized to a trailing slash). The shipped default stays
+  `https://r.jina.ai/`, and a wrong endpoint cannot break fetching: a reader
+  that fails or answers a challenge is skipped by the chain (REQ-021).
+- REQ-021f's renderer fall-through is now driven on the real handler: against a
+  loopback reader that returns a verification page, `fetch_page` falls through
+  to `native_fetch` and returns the page, with hedging off so the challenge must
+  actually be classified. Closes `F-R4-B-3` (REQ-021f).
+- REQ-021d's per-hop guard is driven without adding a seam: with
+  `allow_private_urls: true`, a crawl hop whose redirect leaves HTTP is refused
+  by the guard's protocol branch, audited, and skipped while the crawl
+  continues. Closes the last `F-R4-C-3` clause (REQ-021d, REQ-021h).
+
 ## 2026.11.11 — Handler-level evidence for verify_claims and the locked KB
 
 - `verify_claims`' four call-shape gates — both a query and a claim list,

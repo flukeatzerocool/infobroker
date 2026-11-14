@@ -522,7 +522,8 @@ Environment variables tune a deployment. `INFOBROKER_CONFIG` overrides
 the shipped default config (resolved from the installed package when unset),
 `INFOBROKER_CONFIG_LOCAL` points at a user config layer,
 `INFOBROKER_<NAME>_API_KEY` supplies a keyed provider's credential, and
-`INFOBROKER_<NAME>_URL` points at a self-hosted provider.
+`INFOBROKER_<NAME>_URL` points at a self-hosted provider or an alternate
+renderer endpoint (`INFOBROKER_JINA_URL` for the Jina Reader).
 
 `config.json` ships with the package and the repository and holds the
 defaults: which providers are enabled, their priority in fallback chains,
