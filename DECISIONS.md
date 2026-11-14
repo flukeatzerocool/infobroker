@@ -33,6 +33,33 @@ a justification in `src/tool-surface.test.ts`. A marker hit is a lower bound on
 disclosure, and a false positive is fixed by rewording the description, never
 by widening the marker.
 
+### D-116: Default Consistency Is Two-Layer and Appendix C Names Its Carriers (2026.11.13)
+
+REQ-080's G3 check reconciled two defaults and scanned four hardcoded files.
+It now reconciles every default §4 declares — numeric and literal, including
+the six-flag "each default false" clause — against `src/index.ts`, and four
+enumerated config-vs-tool limit pairs against the shipped `config.json`.
+Declarations are enumerated, never inferred: a declaration entry may claim
+several parameters, and an unclaimed `(default …)` or `(each default …)` in §4
+fails the gate. Config pairs are enumerated too, because name-matching would
+pair `corroboration.max_iterations` (a loop bound) with unrelated `max_*` keys.
+A schema default with no spec declaration stays out of scope — the REQ governs
+declared defaults — and a user `config.local.json` override is a deployment
+choice, so the gate reads the shipped config only.
+
+`tool_schema_bytes` now derives from the advertised JSON Schema for both input
+and output schemas, through the SDK encoder the list handler uses, filtered by
+`enabled`. The previous total serialized Zod internals and counted input only,
+so it measured neither half of REQ-081's "advertised tool schemas".
+
+Appendix C's preamble claimed every rule was G3-enforceable, but C.4, C.9, and
+C.10 never had a G3 carrier; the push pipeline already enforces C.9 and C.10.
+The preamble now names each rule's carrier (G3 for C.1/C.2/C.3/C.5/C.6, the
+read-through and code review for C.4, the push pipeline and
+`test-push-pipeline` for C.9, the changelog step guard for C.10), and §9.4 says
+a violated Appendix C rule that names G3 as its carrier is an error. C.7 and
+C.8 are review lenses, not gate claims.
+
 ### D-114: The Taxonomy Gate Reads Rows, Not Mentions (2026.11.13)
 
 REQ-078's "exactly one feature area" was checked by grepping the whole §D

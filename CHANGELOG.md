@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.11.11 — R9 Appendix C carrier map
+
+- Appendix C no longer claims every rule is enforceable by G3. The preamble
+  names each rule's carrier: G3 for C.1/C.2/C.3/C.5/C.6, the read-through and
+  code review C.4 requires for C.4, the push pipeline and
+  `test-push-pipeline` for C.9, and the changelog step guard for C.10. C.7 and
+  C.8 are review lenses.
+- §9.4 now says a violated Appendix C rule that names G3 as its carrier is an
+  error, instead of treating all of Appendix C as G3-checked (D-116).
+
 ## 2026.11.11 — R9 token footprint derivation
 
 - `inspect_providers` `token_footprint.tool_schema_bytes` now measures the
