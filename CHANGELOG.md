@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.11 — KB migration artifact preservation
+
+- An encryption-enabled migration of the legacy JSON store no longer destroys
+  the prior store. It is preserved as a sealed artifact
+  (`vector-store.json.migrated-<timestamp>.enc`) under the migration key,
+  written atomically, and the status event names its absolute path; the
+  plaintext source is still removed, so nothing is persisted in the clear
+  (REQ-084, REQ-108).
+- A sealed artifact is never mistaken for a benchmark corpus seed: the seed
+  selector skips `*.enc` migration archives, so the plaintext benchmark lane
+  cannot migrate ciphertext and measure an empty store (REQ-108).
+
 ## 2026.11.11 — Fetch and KB resource bounds
 
 - `fetch_page`'s crawl page cap now counts outbound attempts rather than

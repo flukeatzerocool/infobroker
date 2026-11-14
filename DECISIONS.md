@@ -2,6 +2,37 @@
 
 ## Active Decisions
 
+### D-118: A Migration Artifact Is Preserved Sealed, Not Preserved Plaintext or Discarded (2026.11.14)
+
+When at-rest encryption is enabled at upgrade time, the legacy-JSON migration
+had two mutually exclusive obligations: REQ-084 forbids persisting knowledge-base
+content in plaintext, and the register's clause (b) of REQ-108 requires the prior
+store to survive as a recoverable artifact. The shipped code satisfied the first
+by unlinking the renamed source (`src/kb-migrate.ts`), so the upgrade destroyed
+the only copy at the moment the store format changed. The decision is neither
+"plaintext wins" nor "deletion wins": the artifact is written as a sealed
+envelope under the migration key, named `vector-store.json.migrated-<ts>.enc`,
+and the plaintext source is removed. Both obligations hold because the plaintext
+bytes and the key are already in memory at that point.
+
+The rejected alternatives were keeping the plaintext artifact (violates
+REQ-084), keeping the deletion (violates REQ-108), and amending REQ-108 with an
+encryption carve-out (cheapest, but it trades away recoverability for nothing
+since the sealed write costs one call on bytes already in hand). REQ-108 gained
+one sentence so the contract states the sealed requirement.
+
+Three limits are accepted. The name must stay out of `ARCHIVE_RE` /
+`isKbArchiveArtifact`, because that predicate drives the plaintext-archive sweep;
+`isKbStoreArtifact` is only the shipped-KB gate's predicate and is not the
+deletion mechanism. The artifact is bound to the key in effect at migration: a
+later `rekey` does not reseal it, so it stops opening under the new secret and
+retains its full size as dead weight. It is removed only by the operator — the
+status event names its absolute path so that is possible — and no automatic
+reclaim is scheduled, because a retention policy for backup artifacts is a
+standing decision rather than a work item. If sealing or the artifact write
+fails, the plaintext source is still removed and the event states the artifact
+was discarded and why: the no-plaintext invariant outranks recoverability.
+
 ### D-117: The Review Cap Is a Plan Declaration, Not an Agent Judgement (2026.11.13)
 
 The cold-pass cap lived only in the `independent-review` skill, which is user

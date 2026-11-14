@@ -14,12 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## KB migration preservation decision
-
-- Decide whether REQ-084's no-plaintext rule or the migration's clause-(b) artifact preservation wins when encryption is enabled at upgrade time, then implement the winner (`F-R6-E-2`).
-
-**Trigger:** start with the next change to `src/kb-migrate.ts`; close when the spec and the unlink step agree.
-
 ## Missing test evidence across R4–R6
 
 - Close the pure evidence rows left in the full-review register — six in R4, twelve in R5, two in R6 — each a missing driving test or clause tag rather than a behavior change.
