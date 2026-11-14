@@ -12,7 +12,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -22,6 +21,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 import { initKb, kbSearch, flushKbWrites, getKbLockError } from "../src/kb.js";
 import { LEGACY_JSON_STORE } from "../src/kb-store.js";
+import { selectLegacySeed } from "./lib/kb-seed.js";
 import type { KbConfig } from "../src/types.js";
 
 const USAGE = `benchmark-kb-store — knowledge-base search latency benchmark (REQ-060a, REQ-108)
@@ -31,7 +31,8 @@ Usage:
 
 Options:
   --store <dir>        Source knowledge-base directory. Finds ${LEGACY_JSON_STORE},
-                       else the newest ${LEGACY_JSON_STORE}.migrated-* archive.
+                       else the newest plaintext ${LEGACY_JSON_STORE}.migrated-*
+                       archive (sealed *.enc artifacts are skipped).
   --seed <file>        Explicit legacy JSON store to use as the corpus seed.
   --queries <file>     JSON file with { queries: [{ query: "..." }, ...] }.
                        Default: test-fixtures/retrieval/queries.json
@@ -136,18 +137,14 @@ function findSeed(): string {
   const storeDir = takeValue("--store");
   if (!storeDir) fatal("provide --store <dir> or --seed <file>");
   if (!existsSync(storeDir)) fail(`store directory not found: ${storeDir}`);
-  const direct = join(storeDir, LEGACY_JSON_STORE);
-  if (existsSync(direct)) return direct;
-  const archives = readdirSync(storeDir)
-    .filter((name) => name.startsWith(`${LEGACY_JSON_STORE}.migrated-`))
-    .sort();
-  if (archives.length === 0) {
+  const selected = selectLegacySeed(storeDir);
+  if (!selected) {
     fail(
-      `no ${LEGACY_JSON_STORE} or ${LEGACY_JSON_STORE}.migrated-* seed in ${storeDir}; ` +
-        `the benchmark migrates a legacy store on first use`
+      `no ${LEGACY_JSON_STORE} or plaintext ${LEGACY_JSON_STORE}.migrated-* seed in ${storeDir}; ` +
+        `the benchmark migrates a legacy store on first use (sealed *.enc artifacts are not usable seeds)`
     );
   }
-  return join(storeDir, archives[archives.length - 1]!);
+  return selected;
 }
 
 const seed = findSeed();

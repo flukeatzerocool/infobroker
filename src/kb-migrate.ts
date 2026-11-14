@@ -12,9 +12,10 @@ import {
   readFileSync,
   renameSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
-import { isEncryptedEnvelope, openEnvelope, resolveKeySource, type ResolvedKey } from "./kb-crypto.js";
+import { dirname, join } from "node:path";
+import { isEncryptedEnvelope, openEnvelope, resolveKeySource, sealEnvelope, type ResolvedKey } from "./kb-crypto.js";
 import { LEGACY_JSON_STORE, LIVE_SQLITE_STORE } from "./kb-store.js";
 import { SqliteStore } from "./kb-sqlite.js";
 import type { KbChunk } from "./types.js";
@@ -61,10 +62,34 @@ function fsyncDir(dir: string): void {
   }
 }
 
+/**
+ * Writes a migration artifact atomically (REQ-085): a partial file must never
+ * appear under the final name. Exported so the failure branch is testable at a
+ * named seam rather than through filesystem permissions.
+ */
+export function writeMigrationArtifact(finalPath: string, bytes: Buffer): void {
+  const tempPath = `${finalPath}.tmp-${randomUUID()}`;
+  try {
+    writeFileSync(tempPath, bytes, { mode: 0o600 });
+    fsyncFile(tempPath);
+    renameSync(tempPath, finalPath);
+    fsyncDir(dirname(finalPath));
+  } catch (e) {
+    try {
+      if (existsSync(tempPath)) unlinkSync(tempPath);
+    } catch {
+      // best effort cleanup: the original error is the useful one
+    }
+    throw e;
+  }
+}
+
 export function migrateLegacyJson(opts: {
   storagePath: string;
   encryptionEnabled: boolean;
   keyFile?: string;
+  /** Test seam for the artifact write; defaults to `writeMigrationArtifact`. */
+  writeArtifact?: (path: string, bytes: Buffer) => void;
 }): MigrationResult {
   const jsonPath = join(opts.storagePath, LEGACY_JSON_STORE);
   const dbPath = join(opts.storagePath, LIVE_SQLITE_STORE);
@@ -170,10 +195,35 @@ export function migrateLegacyJson(opts: {
 
     const migratedPath = join(opts.storagePath, `vector-store.json.migrated-${Date.now()}`);
     renameSync(jsonPath, migratedPath);
-    if (opts.encryptionEnabled) unlinkSync(migratedPath);
-    const event = opts.encryptionEnabled
-      ? `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${new Date().toISOString()}; plaintext prior store removed because at-rest encryption is enabled`
-      : `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${new Date().toISOString()}; prior store preserved as ${migratedPath}`;
+    let artifactPath: string | null = null;
+    let artifactError: string | null = null;
+    if (opts.encryptionEnabled) {
+      // REQ-084 forbids persisting the migrated content in plaintext, and the
+      // register's clause (b) of REQ-108 forbids losing the upgrade artifact.
+      // Both hold: the artifact is preserved sealed under the migration key,
+      // and the plaintext source is removed. `.enc` keeps the name out of
+      // `ARCHIVE_RE`, so the plaintext-archive sweep never reaps it.
+      const sealedPath = `${migratedPath}.enc`;
+      try {
+        const write = opts.writeArtifact ?? writeMigrationArtifact;
+        write(sealedPath, sealEnvelope(secret!, clear));
+        artifactPath = sealedPath;
+      } catch (e) {
+        artifactError = e instanceof Error ? e.message : String(e);
+      } finally {
+        // The no-plaintext invariant wins even when the artifact write failed.
+        unlinkSync(migratedPath);
+      }
+    }
+    const stamp = new Date().toISOString();
+    let event: string;
+    if (!opts.encryptionEnabled) {
+      event = `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${stamp}; prior store preserved as ${migratedPath}`;
+    } else if (artifactPath) {
+      event = `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${stamp}; prior plaintext store sealed as ${artifactPath}`;
+    } else {
+      event = `Knowledge base migrated to ${LIVE_SQLITE_STORE} at ${stamp}; prior plaintext store discarded because at-rest encryption is enabled and the sealed artifact could not be written (${artifactError})`;
+    }
     return { status: "migrated", event };
   } catch (e) {
     store?.close();
