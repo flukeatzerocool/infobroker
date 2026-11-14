@@ -99,6 +99,46 @@ describe("increment artifacts", () => {
     expect(listIncrements(root)[0]?.loopToken).toBe("LOOP OPEN");
   });
 
+  it("errors on LOOP OPEN when that increment is being closed", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-open", {
+      plan: PLAN,
+      tasks: TASKS,
+      aar: "# AAR\n\nLOOP OPEN — one scheduled action.\n",
+    });
+    expect(validateIncrements(root, { requirePausedFor: "2026-11-07-open" })).toEqual([
+      {
+        increment: "2026-11-07-open",
+        level: "error",
+        message:
+          "aar.md reports LOOP OPEN — give every finding a terminal disposition, then re-run after-action-report",
+      },
+    ]);
+  });
+
+  it("does not error on another increment's LOOP OPEN", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-open", {
+      plan: PLAN,
+      tasks: TASKS,
+      aar: "# AAR\n\nLOOP OPEN — one scheduled action.\n",
+    });
+    writeIncrement(root, "2026-11-08-paused", { plan: PLAN, tasks: TASKS, aar: AAR });
+    expect(validateIncrements(root, { requirePausedFor: "2026-11-08-paused" })).toEqual([]);
+  });
+
+  it("still reports a missing token rather than LOOP OPEN when named", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-partial", { plan: PLAN, tasks: TASKS, aar: "# AAR\n\nstill going\n" });
+    expect(validateIncrements(root, { requirePausedFor: "2026-11-07-partial" })).toEqual([
+      {
+        increment: "2026-11-07-partial",
+        level: "error",
+        message: "aar.md has no LOOP PAUSED / LOOP OPEN terminal token",
+      },
+    ]);
+  });
+
   it("sorts increments by date and names the newest", () => {
     const root = makeRoot();
     writeIncrement(root, "2026-11-06-first", { plan: PLAN, tasks: TASKS, aar: AAR });

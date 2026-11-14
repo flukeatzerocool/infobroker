@@ -80,7 +80,9 @@ function main(): number {
     return 1;
   }
 
-  const findings = validateIncrements(ROOT).filter((finding) => finding.increment === target.name);
+  const findings = validateIncrements(ROOT, {
+    requirePausedFor: target.name,
+  }).filter((finding) => finding.increment === target.name);
   const errors = findings.filter((finding) => finding.level === "error");
   const warnings = findings.filter((finding) => finding.level === "warning");
   for (const finding of findings) {

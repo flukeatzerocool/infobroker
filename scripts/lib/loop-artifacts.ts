@@ -77,7 +77,10 @@ export function listIncrements(root: string): Increment[] {
 }
 
 /** validateIncrements — the contract findings for every increment. */
-export function validateIncrements(root: string): Finding[] {
+export function validateIncrements(
+  root: string,
+  options: { requirePausedFor?: string } = {},
+): Finding[] {
   const findings: Finding[] = [];
   for (const increment of listIncrements(root)) {
     const capped = capSubject(increment.name);
@@ -126,6 +129,16 @@ export function validateIncrements(root: string): Finding[] {
         increment: increment.name,
         level: "error",
         message: "aar.md has no LOOP PAUSED / LOOP OPEN terminal token",
+      });
+    } else if (
+      increment.loopToken === "LOOP OPEN" &&
+      options.requirePausedFor === increment.name
+    ) {
+      findings.push({
+        increment: increment.name,
+        level: "error",
+        message:
+          "aar.md reports LOOP OPEN — give every finding a terminal disposition, then re-run after-action-report",
       });
     }
     if (increment.hasPlan && !increment.doneBar) {

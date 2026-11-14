@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.11.11 — AAR close gate: `LOOP OPEN` blocks the seal
+
+- The session seal now refuses an increment whose after-action report ends
+  `LOOP OPEN`. A finding with no terminal disposition must be fixed, scheduled
+  on `ROADMAP.md`, registered, or explicitly closed before the session seals.
+- The two tokens now have one definition, in `docs/plans/README.md`: `LOOP
+  PAUSED` means every finding has a terminal disposition and the gate suite is
+  green; `LOOP OPEN` means at least one does not. `AGENTS.md` points at it
+  rather than restating it.
+- The history is unaffected: increments that ended `LOOP OPEN` before this
+  change keep passing the standalone artifact check, so a past session cannot
+  retroactively block the next one.
+- Commits made after the seal, under the split-commit series, are not
+  re-checked against the token. The seal is the checkpoint.
+
 ## 2026.11.11 — Heap-bounded retrieval evidence for the knowledge base
 
 - REQ-108 clause (a) now has a gate-asserted test. `src/kb-capacity-heap.test.ts`
