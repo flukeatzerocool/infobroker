@@ -14,20 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Missing test evidence across R4–R6
-
-- One row remains: `F-R6-E-3` (REQ-108 clause (a), heap-bounded retrieval). The
-  2026-11-14 increment closed four of the five leftovers — `F-R5-A-4` and
-  `F-R6-D-3` now drive the handler through spawned-server suites
-  (`src/verify-claims-bounds.test.ts`, `src/kb-handler-lock.test.ts`).
-- The reduced-heap probe measured `H0 = 48 MB` (32 MB aborts at boot), a
-  99–129 MB payload built in 17–25 s, and a read path that passed five of six
-  runs — one `get` died with a V8 heap trace, and a repeated cycle hung past
-  15 min. The next attempt needs an affordable payload and a stable read path,
-  not another one-off probe.
-
-**Trigger:** start when the read path is stable at a reduced heap and a payload fits the gate budget; close when clause (a) has a gate-asserted test.
-
 ## Full-review register reconciliation
 
 - Retire the register rows already fixed in code — `F-R5-C-5` still reads `Scheduled-roadmap` although `src/corroborate.ts:958` writes the tier — and re-home every surviving row.

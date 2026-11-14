@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.11.11 — Heap-bounded retrieval evidence for the knowledge base
+
+- REQ-108 clause (a) now has a gate-asserted test. `src/kb-capacity-heap.test.ts`
+  stores 146.6 MiB of chunk data (288 chunks of 512 KiB plus eight small
+  documents) and drives the real server over stdio at
+  `--max-old-space-size=64`, asserting complete `search`, `list`, `get`, and
+  `stats` results plus one process issuing all four in sequence. Closes
+  `F-R6-E-3`.
+- The suite seeds the store directly through `SqliteStore.insertChunks`. That
+  removes the previous blocker instead of accommodating it: ingesting the same
+  volume took 17–25 s because each document re-scanned the whole store to
+  resolve dedup identity, while direct insertion builds the payload in 2.76 s.
+- The one `get` crash recorded in the 2026-11-14 probe did not reproduce at the
+  new heap (48 MB floor + 16 MB margin, over a store twice that size): 20/20
+  `get` runs, 15/15 inspection actions, and 8/8 sequential children passed. The
+  probe-6 hang was a harness race — `once(child, "exit")` attached after
+  `SIGKILL` — not a server stall.
+- The `search` case covers both read paths: the cold first call builds the
+  candidate prefilter and collects from a full scan, and a second call in the
+  same process reads only the candidates by id. Disabling the by-id read fails
+  the second pass, and materializing the store inside `list` fails with a V8
+  heap abort, so neither assertion passes vacuously.
+
 ## 2026.11.11 — Hermetic fetch seams for the renderer chain and the crawl guard
 
 - The Jina reader endpoint can be pointed at a self-hosted Jina-compatible
