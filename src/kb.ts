@@ -62,6 +62,7 @@ import { KbStoreCorruptError, KbStoreFormatError, SqliteStore, sqliteStoreFormat
 import { migrateLegacyJson } from "./kb-migrate.js";
 import { SNIPPET_SOURCE_TYPE } from "./kb-store.js";
 import { KbPrefilter } from "./kb-prefilter.js";
+import { BoundedRank } from "./lib/bounded-rank.js";
 
 let sqliteStore: SqliteStore | null = null;
 let kbConfig: KbConfig | null = null;
@@ -558,7 +559,14 @@ function sqliteSearch(
   const queryVec = activeModel.embed(query);
   const kwRegexes = queryTokens.map((t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
   const actualMax = Math.min(maxResults, kbConfig?.max_results ?? maxResults);
-  const results: KbSearchResult[] = [];
+  // F-R6-E-4: retain only the best `actualMax` matches as the scan runs, so a
+  // broad query over an oversize store cannot accumulate one result per match.
+  // The comparator is the same expression the final sort used, and equal
+  // adjusted scores keep insertion order, so the output is unchanged.
+  const ranker = new BoundedRank<KbSearchResult>(
+    actualMax,
+    (a, b) => b.score * b.freshness_score - a.score * a.freshness_score,
+  );
   const now = Date.now();
   const collect = (chunk: KbChunk): void => {
     if (collection && chunk.collection !== collection) return;
@@ -567,7 +575,7 @@ function sqliteSearch(
     const kwScore = keywordScore(kwRegexes, chunk.text);
     const combinedScore = vecSimilarity * 0.7 + kwScore * 0.3;
     if (combinedScore <= 0) return;
-    results.push({
+    ranker.offer({
       score: combinedScore,
       freshness_score: computeFreshnessScore(chunk.freshness_tier, chunk.ingested_at, now),
       freshness_tier: chunk.freshness_tier,
@@ -601,8 +609,7 @@ function sqliteSearch(
     for (const chunk of chunks) collect(chunk);
   }
 
-  results.sort((a, b) => b.score * b.freshness_score - a.score * a.freshness_score);
-  return results.slice(0, actualMax);
+  return ranker.values();
 }
 
 /** REQ-072: the similarity at which two documents are treated as one document. */
