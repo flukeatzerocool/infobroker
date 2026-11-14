@@ -27,8 +27,12 @@ Rules:
 - When the first blocker's cause is confined to one finding's evidence, the
   increment narrows to that finding and the rest move to a follow-on
   increment, instead of revising the combined scope again.
-- `LOOP PAUSED` requires a green gate suite and no open P0/P1 beyond what
-  `ROADMAP.md` schedules. `LOOP OPEN` names the action that is still open.
+- `LOOP PAUSED` requires every finding to carry a terminal disposition — fixed
+  in the increment, a dated `ROADMAP.md` entry, a `spec/audit/review-register.md`
+  row, or record-and-closed in the AAR — and a green gate suite. `LOOP OPEN`
+  means at least one finding has no such disposition, and names it. The seal
+  refuses an increment whose `aar.md` ends `LOOP OPEN`. Commits made after the
+  seal under the split-commit series are not re-checked.
 - A deviation from the plan is recorded in `aar.md` and, when it changes scope,
   as an amendment to `plan.md`.
 - Plans are not edited after close. A follow-on change is a new increment.

@@ -458,8 +458,8 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
   `npm run check-roadmap` enforces the section shape and the `**Trigger:**`
   line, and `npm run check-non-goals` checks the list and the pointer
   (`## Non-goals` is exempt from the item shape because of that check).
-- **Loop status.** Every AAR ends with `LOOP PAUSED` or `LOOP OPEN`.
-  PAUSED requires: gates green, no open P0/P1 beyond the scheduled
-  roadmap. When PAUSED, the AAR lists zero new action items; the next plan
-  comes from `ROADMAP.md` or a direct user request — never from "AAR
-  recommendations."
+- **Loop status.** Every AAR ends with `LOOP PAUSED` or `LOOP OPEN`; the
+  definition of both lives in `docs/plans/README.md` under "AAR terminal
+  tokens" — do not restate it here. When PAUSED, the AAR lists zero new action
+  items; the next plan comes from `ROADMAP.md` or a direct user request — never
+  from "AAR recommendations."
