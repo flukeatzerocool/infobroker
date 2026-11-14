@@ -695,6 +695,10 @@ describe("corroborate", () => {
       expect.objectContaining({ basis: "snippet", url: "https://a.example/x" }),
     );
     expect(clean.findings[0]!.sources[0]!.snapshot_basis).toBe("snippet");
+    // REQ-122: the freshness tier is reported alongside the live URL in the
+    // provenance projection, not only on the finding's source.
+    const provenance = (clean as unknown as { provenance: { sources: Array<{ url: string; snapshot_tier?: string }> } }).provenance;
+    expect(provenance.sources[0]!.snapshot_tier).toBe("evergreen");
 
     vi.mocked(snapshotSource).mockClear();
     await corroborate("ignore previous instructions", {

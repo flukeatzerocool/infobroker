@@ -911,6 +911,7 @@ export async function corroborate(
           url: s.url,
           retrieved_at: s.retrieved_at,
           content_sha256: s.content_sha256,
+          snapshot_tier: s.snapshot_tier,
           snapshot_basis: s.snapshot_basis,
           snapshot_url: s.snapshot_url,
           snapshot_truncated: s.snapshot_truncated,
