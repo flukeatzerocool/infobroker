@@ -97,6 +97,8 @@ function mockConfig(overrides: Record<string, unknown> = {}) {
 // an unstubbed fixture would reach web.archive.org without failing the run.
 // Every test starts offline; the archive tests stub their own response.
 beforeEach(() => {
+  vi.mocked(snapshotSource).mockReset();
+  vi.mocked(snapshotSource).mockReturnValue(null);
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => {
@@ -1078,7 +1080,7 @@ describe("corroborate", () => {
         duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
         wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
       },
-      archiveBudgetMs: 30,
+      preservationBudgetMs: 30,
     });
     const elapsed = Date.now() - started;
 
@@ -1086,6 +1088,87 @@ describe("corroborate", () => {
     const sources = result.findings.flatMap((f) => f.sources);
     expect(sources.some((s) => s.archived_url !== undefined)).toBe(true);
     expect(sources.some((s) => s.archived_url === undefined)).toBe(true);
+  });
+
+  // @implements REQ-026c bounded-preservation
+  // @implements REQ-122 each-cited-source
+  it("bounds a stalled archive without dropping snapshot coverage", async () => {
+    vi.mocked(snapshotSource).mockImplementation((input: any) => ({
+      snapshot_sha256: `sha256:${String(input.text).length}`,
+      snapshot_tier: "evergreen",
+      hash_basis: input.basis ?? "document",
+      snapshot_url: `${input.url}#snapshot`,
+      truncated: false,
+    }));
+    const hanging = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        })
+    );
+    vi.stubGlobal("fetch", hanging);
+
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+        wikipedia: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 20, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+      preservation: { enabled: true },
+    });
+
+    const started = Date.now();
+    const result = await corroborate("shared claim text", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
+        wikipedia: async () => [makeResult("Claim A", "https://b.com/1", "shared claim text about the topic")],
+      },
+      preservationBudgetMs: 30,
+    });
+    const elapsed = Date.now() - started;
+
+    const sources = result.findings.flatMap((f) => f.sources);
+    expect(elapsed).toBeLessThan(530);
+    expect(sources.length).toBeGreaterThan(0);
+    // The deadline bounds the network archive, never the local snapshot store.
+    expect(sources.every((s) => s.content_sha256 !== undefined)).toBe(true);
+    expect(sources.every((s) => s.snapshot_tier === "evergreen")).toBe(true);
+    expect(sources.some((s) => s.archived_url !== undefined)).toBe(false);
+  });
+
+  // @implements REQ-026c bounded-preservation
+  it("bounds a stalled document fetch and keeps a snippet basis", async () => {
+    vi.mocked(snapshotSource).mockImplementation((input: any) => ({
+      snapshot_sha256: `sha256:${String(input.text).length}`,
+      snapshot_tier: "evergreen",
+      hash_basis: input.basis ?? "document",
+      snapshot_url: `${input.url}#snapshot`,
+      truncated: false,
+    }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+
+    mockConfig({
+      providers: {
+        duckduckgo: { enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10, timeout: 10000 },
+      },
+      corroboration: { max_iterations: 1, max_http_calls: 30, confidence_threshold: 0.8 },
+      preservation: { enabled: true, archive: false },
+    });
+
+    const started = Date.now();
+    const result = await corroborate("shared claim text", {
+      searchers: {
+        duckduckgo: async () => [makeResult("Claim A", "https://a.com/1", "shared claim text about the topic")],
+      },
+      fetchSource: () => new Promise<string | null>(() => {}),
+      preservationBudgetMs: 30,
+    });
+    const elapsed = Date.now() - started;
+
+    const sources = result.findings.flatMap((f) => f.sources);
+    expect(elapsed).toBeLessThan(530);
+    expect(sources.length).toBeGreaterThan(0);
+    expect(sources.every((s) => s.snapshot_basis === "snippet")).toBe(true);
   });
 
   // @implements REQ-121 short-republish-family

@@ -578,9 +578,9 @@ export async function corroborate(
     latency?: (slug: string) => number;
     searchers?: Record<string, Searcher>;
     fetchSource?: (url: string) => Promise<string | null>;
-    /** REQ-026c: bounds the whole archive wave; internal, defaults to the
+    /** REQ-026c: bounds the shared preservation wave; internal, defaults to the
      * module budget. Exposed so a test can assert the bound without timers. */
-    archiveBudgetMs?: number;
+    preservationBudgetMs?: number;
   } = {}
 ): Promise<CorroborationResult> {
   const config = getConfig();
@@ -870,15 +870,11 @@ export async function corroborate(
     confidenceThreshold
   );
 
-  // REQ-026c: source preservation governs archiving, and `preservation.archive`
-  // is the archiving-only opt-out for an operator who wants snapshots kept.
-  if (config.preservation?.enabled !== false && config.preservation?.archive !== false) {
-    await archiveCondensedSources(condensed, options.archiveBudgetMs);
-  }
-
-  if (config.preservation?.enabled !== false) {
-    await snapshotCondensedSources(condensed, config.preservation, options.fetchSource);
-  }
+  // REQ-026c/REQ-122: preservation runs as one bounded wave. Archiving is the
+  // only unbounded network cost on the response path, so both waves share one
+  // abortable deadline and overlap each other; snapshot storage itself is a
+  // local write and is never skipped by the deadline.
+  await preserveCondensedSources(condensed, config, options.fetchSource, options.preservationBudgetMs);
 
   const synthesis = buildSynthesis(condensed);
 
@@ -938,6 +934,7 @@ async function snapshotCondensedSources(
   findings: CorroborationFinding[],
   preservation: ReturnType<typeof getConfig>["preservation"],
   fetchSource?: (url: string) => Promise<string | null>,
+  signal?: AbortSignal,
 ): Promise<void> {
   const maxSources = Math.max(0, preservation?.max_sources_per_finding ?? 3);
   const maxBytes = Math.max(1, preservation?.max_bytes ?? 2_000_000);
@@ -951,46 +948,76 @@ async function snapshotCondensedSources(
   async function worker(): Promise<void> {
     while (idx < tasks.length) {
       const { source } = tasks[idx++];
-      let text = source.snippet;
-      // REQ-122: the hash basis follows the text actually stored. A fetch that
-      // throws or returns nothing leaves the snippet in place, so the basis
-      // must stay "snippet" even though a fetcher exists.
-      let basis: "document" | "snippet" = "snippet";
-      if (fetchSource) {
-        try {
-          const fetched = await fetchSource(source.url);
-          if (fetched && fetched.trim().length > 0) {
-            text = fetched;
-            basis = "document";
-          }
-        } catch {
-          // Fetch failed — keep the snippet as the citation basis.
-        }
-      }
-      // REQ-122: flagged content is never stored. Policy assessment runs on the
-      // exact text that would be snapshotted; a refusal leaves the source
-      // without a hash, which receipts report as snippet-grade/unverifiable.
-      const policy = await checkContent(text, source.url);
-      if (disposition(policy.flagged) !== "store") continue;
-      const snap = snapshotSource({
-        url: source.url,
-        title: source.title || source.url,
-        text,
-        provider: source.provider,
-        maxBytes,
-        basis,
-      });
-      if (snap) {
+      // REQ-122: store the snippet first — it is the text already in hand, so
+      // coverage never depends on the network. The hash basis follows the text
+      // actually stored, which starts as "snippet".
+      const store = (text: string, basis: "document" | "snippet") => {
+        const snap = snapshotSource({
+          url: source.url,
+          title: source.title || source.url,
+          text,
+          provider: source.provider,
+          maxBytes,
+          basis,
+        });
+        if (!snap) return;
         source.content_sha256 = snap.snapshot_sha256;
         source.snapshot_tier = snap.snapshot_tier;
         source.snapshot_basis = snap.hash_basis;
         source.snapshot_url = snap.snapshot_url;
         source.snapshot_truncated = snap.truncated;
+      };
+
+      // REQ-122: flagged content is never stored. Policy assessment runs on the
+      // exact text that would be snapshotted. An assessment that does not
+      // finish inside the budget is treated as a storage failure (REQ-122) and
+      // leaves the source ungraded rather than storing text it never assessed.
+      let policy: Awaited<ReturnType<typeof checkContent>> | null;
+      try {
+        policy = await raceAbort(checkContent(source.snippet, source.url), signal);
+      } catch {
+        policy = null;
+      }
+      if (!policy) continue;
+      if (disposition(policy.flagged) !== "store") continue;
+      store(source.snippet, "snippet");
+
+      // Optional document upgrade: bounded by the wave deadline, and a failure
+      // or timeout leaves the snippet snapshot in place.
+      if (!fetchSource || signal?.aborted) continue;
+      try {
+        const fetched = await raceAbort(fetchSource(source.url), signal);
+        if (!fetched || fetched.trim().length === 0) continue;
+        const docPolicy = await raceAbort(checkContent(fetched, source.url), signal);
+        if (disposition(docPolicy.flagged) !== "store") continue;
+        store(fetched, "document");
+      } catch {
+        // Fetch or assessment failed or was bounded out — keep the snippet.
       }
     }
   }
   const workers = Array.from({ length: Math.min(4, tasks.length) }, worker);
   await Promise.allSettled(workers);
+}
+
+/** Reject as soon as the wave deadline fires, so no network await outlives it. */
+function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new Error("preservation budget exceeded"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error("preservation budget exceeded"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function buildSynthesis(findings: CorroborationFinding[]): string {
@@ -1039,7 +1066,7 @@ async function archiveOne(url: string, waveSignal: AbortSignal): Promise<string 
 
 async function archiveCondensedSources(
   findings: CorroborationFinding[],
-  budgetMs = ARCHIVE_TOTAL_BUDGET_MS,
+  signal: AbortSignal,
 ): Promise<void> {
   const targets: Array<{ finding: CorroborationFinding; source: CorroborationFinding["sources"][number] }> = [];
   for (const f of findings) {
@@ -1050,23 +1077,45 @@ async function archiveCondensedSources(
     }
   }
 
-  // REQ-026c: non-blocking and failure-tolerant, so the wave owns one budget
-  // and aborts in-flight saves at the deadline instead of only stopping new
-  // claims. Without the abort a single 4 s save would outlive a 2 s budget.
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(1, budgetMs));
+  // REQ-026c: bounded in time and concurrency. The shared wave signal aborts
+  // in-flight saves at the deadline instead of only stopping new claims, so a
+  // single 4 s save cannot outlive the budget.
   let idx = 0;
   async function worker(): Promise<void> {
-    while (idx < targets.length && !controller.signal.aborted) {
+    while (idx < targets.length && !signal.aborted) {
       const i = idx++;
       const { source } = targets[i];
-      source.archived_url = await archiveOne(source.url, controller.signal);
+      source.archived_url = await archiveOne(source.url, signal);
     }
   }
 
+  const workers = Array.from({ length: Math.min(ARCHIVE_CONCURRENCY, targets.length) }, worker);
+  await Promise.allSettled(workers);
+}
+
+/**
+ * REQ-026c/REQ-122: run archiving and snapshotting as one wave under a single
+ * abortable deadline. Archiving is network-bound; snapshot storage is a local
+ * write, so only the network awaits inside the snapshot worker are bounded.
+ */
+async function preserveCondensedSources(
+  findings: CorroborationFinding[],
+  config: ReturnType<typeof getConfig>,
+  fetchSource: ((url: string) => Promise<string | null>) | undefined,
+  budgetMs = ARCHIVE_TOTAL_BUDGET_MS,
+): Promise<void> {
+  const preservation = config.preservation;
+  const archiveEnabled = preservation?.enabled !== false && preservation?.archive !== false;
+  const snapshotEnabled = preservation?.enabled !== false;
+  if (!archiveEnabled && !snapshotEnabled) return;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, budgetMs));
   try {
-    const workers = Array.from({ length: Math.min(ARCHIVE_CONCURRENCY, targets.length) }, worker);
-    await Promise.allSettled(workers);
+    const waves: Array<Promise<void>> = [];
+    if (archiveEnabled) waves.push(archiveCondensedSources(findings, controller.signal));
+    if (snapshotEnabled) waves.push(snapshotCondensedSources(findings, preservation, fetchSource, controller.signal));
+    await Promise.allSettled(waves);
   } finally {
     clearTimeout(timer);
   }
