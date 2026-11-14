@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.11.11 — Handler-level evidence for verify_claims and the locked KB
+
+- `verify_claims`' four call-shape gates — both a query and a claim list,
+  neither, an empty list, and a batch above the configured cap — are now
+  asserted through the spawned server, with one named clause tag per case
+  (REQ-026g).
+- A locked knowledge base is refused at the `manage_kb` handler while the
+  encryption action stays reachable with its state, on-disk format, and
+  recovery directive; a configured key file opens the store with no
+  environment key, and an unreadable key file never falls back to one. The
+  store is left byte-identical (REQ-084, REQ-085, REQ-086, REQ-060h).
+- The REQ-108 clause (a) reduced-heap probe is recorded as blocked, not
+  approximated: a 48 MB boot floor, 17–25 s to build a 99–129 MB payload, and
+  one non-deterministic `get` crash at 48 MB. The row stays scheduled with its
+  measurements (REQ-108).
+- The fetch-renderer fall-through and the crawl's per-hop guard moved to a
+  named seam section: neither can be driven hermetically without a production
+  seam, so they are no longer counted as test-only debt (REQ-021d, REQ-021f).
+
 ## 2026.11.11 — KB migration artifact preservation
 
 - An encryption-enabled migration of the legacy JSON store no longer destroys

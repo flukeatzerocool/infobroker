@@ -16,17 +16,30 @@
 
 ## Missing test evidence across R4–R6
 
-- Close the pure evidence rows left in the full-review register — the census is
-  twenty-two (six in R4, thirteen in R5, three in R6), not the twenty a hand
-  count produced; the 2026-11-14 increment closed seventeen and left five.
-- Residual: `F-R4-B-3` is blocked on a production seam (no hermetic second
-  fetch renderer), `F-R4-C-3`'s per-hop-guard clause needs a non-loopback hop,
-  and `F-R5-A-4` (REQ-026g handler bounds), `F-R6-D-3` (handler lock refusal),
-  and `F-R6-E-3` (heap-bounded capacity) each need a spawned-server or
-  reduced-heap suite.
-- Batch by module, so each commit is one test file and its tags.
+- One row remains: `F-R6-E-3` (REQ-108 clause (a), heap-bounded retrieval). The
+  2026-11-14 increment closed four of the five leftovers — `F-R5-A-4` and
+  `F-R6-D-3` now drive the handler through spawned-server suites
+  (`src/verify-claims-bounds.test.ts`, `src/kb-handler-lock.test.ts`).
+- The reduced-heap probe measured `H0 = 48 MB` (32 MB aborts at boot), a
+  99–129 MB payload built in 17–25 s, and a read path that passed five of six
+  runs — one `get` died with a V8 heap trace, and a repeated cycle hung past
+  15 min. The next attempt needs an affordable payload and a stable read path,
+  not another one-off probe.
 
-**Trigger:** start with a regression that a missing test would have caught, or the next increment in the same module; close when the register holds no open evidence-only row.
+**Trigger:** start when the read path is stable at a reduced heap and a payload fits the gate budget; close when clause (a) has a gate-asserted test.
+
+## Hermetic seam for the fetch-renderer chain and the crawl guard
+
+- Give the Jina renderer a configurable base URL so a two-renderer fall-through
+  can be driven against a loopback stub — closes `F-R4-B-3` (REQ-021f).
+- Drive the crawl's per-hop guard at a seam that accepts an injected refusal, so
+  a hop can be refused while `allow_private_urls` stays true — closes the
+  remaining per-hop-guard clause of `F-R4-C-3` (REQ-021d); its page-cap and
+  depth-cap clauses are already driven.
+- Both are production-seam changes plus the tests they unlock; take them as one
+  fetch-module increment.
+
+**Trigger:** start with the next change to `src/providers/jina.ts` or `src/lib/url-guard.ts`; close when both clauses have driving tests and the register rows read `Resolved`.
 
 ## Full-review register reconciliation
 
