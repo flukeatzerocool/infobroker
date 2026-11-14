@@ -1202,7 +1202,10 @@ verdict is preserved (REQ-026f).
 - A REQ body that defines a status/outcome through "or"-joined normative
   branches, or gates a behavior on a "when … declares" conditional, carries a
   named clause tag per branch in a test file
-  (`// @implements REQ-NNN <branch-slug>`), so no branch ships untested
+  (`// @implements REQ-NNN <branch-slug>`), so no branch ships untested. A run
+  of slugs after one REQ ID belongs to that REQ; the next REQ ID starts a new
+  run. The same check reports, without failing, a tag whose bound test title
+  does not name the branch.
 - Appendix B mechanical violations are errors; Appendix B judgment violations
   (what/how, red-team, EARS, readability, proofreading dimensions) are
   warnings; a violated Appendix C rule that names G3 as its carrier is an error
