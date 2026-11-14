@@ -1,8 +1,9 @@
 // @implements REQ-027 REQ-027a REQ-031 REQ-033 REQ-038
-// Citation aggregation: walk the configured academic dispatch chain, call each
-// eligible provider's own search implementation (single HTTP/parse path per
-// provider), report per-provider status, and dedupe references by DOI with a
-// title fallback. A chain where every provider failed (or was skipped) is
+// Citation aggregation: walk the configured academic dispatch chain whole —
+// `output.fallback_depth` bounds sequential dispatch, not this fan-out — call
+// each eligible provider's own search implementation (single HTTP/parse path
+// per provider), report per-provider status, and dedupe references across DOI
+// and title identity. A chain where every provider failed (or was skipped) is
 // reported so the tool can answer all_providers_exhausted instead of a silent
 // empty [OK].
 import type { SearchResult, SearchOptions } from "./types.js";
@@ -112,30 +113,70 @@ function doiKey(doi: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
-function titleKey(citation: CitationResult): string {
-  return `${citation.title.toLowerCase().replace(/[^a-z0-9]+/g, "")}|${citation.year ?? ""}`;
+// Title identity ignores the year so a DOI-bearing and a title-only reference
+// for the same work can meet across namespaces; the year is compared
+// separately by `yearCompatible`.
+function titleSlug(citation: CitationResult): string {
+  return citation.title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+// A missing year is not evidence of a different work, so it never blocks a
+// merge; two known and differing years do.
+function yearCompatible(a: CitationResult, b: CitationResult): boolean {
+  if (!a.year || !b.year) return true;
+  return a.year === b.year;
+}
+
+// Keep the first-seen representative and adopt the richer fields from a later
+// duplicate (REQ-027a).
+function mergeCitation(existing: CitationResult, incoming: CitationResult): void {
+  if (!existing.doi && incoming.doi) existing.doi = incoming.doi;
+  if (incoming.authors.length > existing.authors.length) existing.authors = incoming.authors;
+  if (!existing.venue && incoming.venue) existing.venue = incoming.venue;
+  if (!existing.year && incoming.year) existing.year = incoming.year;
+  if (!existing.url && incoming.url) existing.url = incoming.url;
+  existing.bibtex = citationFor(existing.title, existing.authors, existing.year, existing.venue, existing.url);
 }
 
 function dedupeCitations(citations: CitationResult[]): CitationResult[] {
-  const byKey = new Map<string, CitationResult>();
+  const byDoi = new Map<string, CitationResult>();
+  // One bucket per normalized title: distinct works can share a title, so the
+  // bucket holds every representative that title has produced.
+  const byTitle = new Map<string, CitationResult[]>();
+  const unique: CitationResult[] = [];
+
   for (const citation of citations) {
     const doi = doiKey(citation.doi);
-    const key = doi ? `doi:${doi}` : `title:${titleKey(citation)}`;
-    const existing = byKey.get(key);
+    const title = titleSlug(citation);
+    const bucket = byTitle.get(title) ?? [];
+
+    let existing = doi ? byDoi.get(doi) : undefined;
     if (!existing) {
-      byKey.set(key, { ...citation });
+      // Cross-namespace match. Two different DOIs are two different works, so a
+      // candidate that carries its own distinct DOI is never a title twin.
+      existing = bucket.find((candidate) => {
+        const candidateDoi = doiKey(candidate.doi);
+        if (doi && candidateDoi && candidateDoi !== doi) return false;
+        return yearCompatible(candidate, citation);
+      });
+    }
+
+    if (existing) {
+      mergeCitation(existing, citation);
+      if (doi) byDoi.set(doi, existing);
+      if (!bucket.includes(existing)) bucket.push(existing);
+      byTitle.set(title, bucket);
       continue;
     }
-    // Keep the richest field set across providers; the representative stays
-    // the first (highest-priority) provider's reference.
-    if (!existing.doi && citation.doi) existing.doi = citation.doi;
-    if (citation.authors.length > existing.authors.length) existing.authors = citation.authors;
-    if (!existing.venue && citation.venue) existing.venue = citation.venue;
-    if (!existing.year && citation.year) existing.year = citation.year;
-    if (!existing.url && citation.url) existing.url = citation.url;
-    existing.bibtex = citationFor(existing.title, existing.authors, existing.year, existing.venue, existing.url);
+
+    const representative = { ...citation };
+    unique.push(representative);
+    if (doi) byDoi.set(doi, representative);
+    bucket.push(representative);
+    byTitle.set(title, bucket);
   }
-  return [...byKey.values()];
+
+  return unique;
 }
 
 export async function searchCitations(
@@ -145,7 +186,7 @@ export async function searchCitations(
 ): Promise<CitationReport> {
   const started = Date.now();
   const config = getConfig();
-  const chain = (options.chain ?? getDispatchChain("academic")).slice(0, config.output.fallback_depth);
+  const chain = options.chain ?? getDispatchChain("academic");
   const isEligible = options.eligibility ?? defaultEligibility;
   const providers: CitationProviderStatus[] = [];
   const collected: CitationResult[] = [];

@@ -149,6 +149,108 @@ describe("searchCitations aggregation (REQ-027a)", () => {
     expect(report.deduped).toBe(1);
   });
 
+  // @implements REQ-027a full-chain
+  it("walks the whole academic chain regardless of output.fallback_depth", async () => {
+    h.config.output.fallback_depth = 1;
+    try {
+      const report = await searchCitations("q", 8, {
+        chain: ["a", "b", "c"],
+        searchers: searchers({
+          a: async () => [result({ title: "A", url: "https://example.com/a", doi: "10.1/a" })],
+          b: async () => [result({ title: "B", url: "https://example.com/b", doi: "10.1/b" })],
+          c: async () => [result({ title: "C", url: "https://example.com/c", doi: "10.1/c" })],
+        }),
+      });
+
+      expect(report.providers.map((p) => p.slug)).toEqual(["a", "b", "c"]);
+      expect(report.providers.map((p) => p.status)).toEqual(["ok", "ok", "ok"]);
+      expect(report.citations.map((c) => c.title)).toEqual(["A", "B", "C"]);
+    } finally {
+      h.config.output.fallback_depth = 5;
+    }
+  });
+
+  // @implements REQ-027a cross-namespace-merge
+  it("merges a DOI-bearing reference with a later title-only twin", async () => {
+    const report = await searchCitations("q", 8, {
+      chain: ["a", "b"],
+      searchers: searchers({
+        a: async () => [
+          result({ title: "Shared Work", url: "https://example.com/a", doi: "10.1/shared", published_date: "2022" }),
+        ],
+        b: async () => [
+          result({ title: "shared work", url: "https://example.com/b", authors: ["Ada Lovelace"] }),
+        ],
+      }),
+    });
+
+    expect(report.citations).toHaveLength(1);
+    expect(report.deduped).toBe(1);
+    expect(report.citations[0].doi).toBe("10.1/shared");
+    expect(report.citations[0].authors).toEqual(["Ada Lovelace"]);
+    expect(report.citations[0].url).toBe("https://example.com/a");
+  });
+
+  // @implements REQ-027a cross-namespace-merge
+  it("adopts the DOI when the title-only reference arrives first", async () => {
+    const report = await searchCitations("q", 8, {
+      chain: ["a", "b"],
+      searchers: searchers({
+        a: async () => [
+          result({ title: "Shared Work", url: "https://example.com/a", authors: ["Ada Lovelace"] }),
+        ],
+        b: async () => [
+          result({ title: "Shared Work", url: "https://example.com/b", doi: "10.1/shared", published_date: "2022" }),
+        ],
+      }),
+    });
+
+    expect(report.citations).toHaveLength(1);
+    expect(report.deduped).toBe(1);
+    // The first-seen representative stays; it is enriched, not replaced.
+    expect(report.citations[0].url).toBe("https://example.com/a");
+    expect(report.citations[0].doi).toBe("10.1/shared");
+    expect(report.citations[0].year).toBe("2022");
+  });
+
+  it("does not merge same-title works with different known years", async () => {
+    const report = await searchCitations("q", 8, {
+      chain: ["a", "b"],
+      searchers: searchers({
+        a: async () => [result({ title: "Editorial", url: "https://example.com/a", doi: "10.1/one", published_date: "2020" })],
+        b: async () => [result({ title: "Editorial", url: "https://example.com/b", doi: "10.1/two", published_date: "2021" })],
+      }),
+    });
+
+    expect(report.citations).toHaveLength(2);
+    expect(report.deduped).toBe(0);
+  });
+
+  it("does not merge two distinct DOIs that share a title and year", async () => {
+    const report = await searchCitations("q", 8, {
+      chain: ["a", "b"],
+      searchers: searchers({
+        a: async () => [result({ title: "Editorial", url: "https://example.com/a", doi: "10.1/one", published_date: "2020" })],
+        b: async () => [result({ title: "Editorial", url: "https://example.com/b", doi: "10.1/two", published_date: "2020" })],
+      }),
+    });
+
+    expect(report.citations).toHaveLength(2);
+  });
+
+  it("merges a title-only reference whose year is absent", async () => {
+    const report = await searchCitations("q", 8, {
+      chain: ["a", "b"],
+      searchers: searchers({
+        a: async () => [result({ title: "Yearless", url: "https://example.com/a", doi: "10.1/yearless", published_date: "2019" })],
+        b: async () => [result({ title: "Yearless", url: "https://example.com/b" })],
+      }),
+    });
+
+    expect(report.citations).toHaveLength(1);
+    expect(report.citations[0].doi).toBe("10.1/yearless");
+  });
+
   it("keeps distinct works separate", async () => {
     const report = await searchCitations("q", 8, {
       chain: ["a", "b"],
