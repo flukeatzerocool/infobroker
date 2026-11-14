@@ -4,6 +4,7 @@
 // `structuredContent`, and extract raw page text for fetch_page's raw mode.
 // Kept as pure functions so the contract is unit-testable without a server.
 import { compactEnvelope } from "./verbosity.js";
+import { coerceStringArray } from "./batch.js";
 
 export interface ToolResultLike {
   content?: unknown;
@@ -155,9 +156,14 @@ function replaceFirstText<T extends ToolResultLike>(result: T, text: string): T 
  * extract. Returns an error message when the request is invalid.
  */
 export function rawRequestError(url: unknown, crawl: unknown, extract: unknown): string | undefined {
-  if (Array.isArray(url) || crawl === true || extract === true) {
-    return "raw mode requires a single URL and cannot be combined with crawl or extract";
-  }
+  const singleUrlMessage = "raw mode requires a single URL and cannot be combined with crawl or extract";
+  if (crawl === true || extract === true) return singleUrlMessage;
+  // F-R4-D-4: judge the value doFetchPage would run. A JSON-encoded array is a
+  // batch once coerced, so the guard must refuse it here rather than let the
+  // string reach the batch path.
+  const coerced = coerceStringArray(url);
+  if (coerced.error) return coerced.error.message;
+  if ((coerced.values?.length ?? 0) > 1) return singleUrlMessage;
   return undefined;
 }
 

@@ -143,6 +143,19 @@ test("rawRequestError accepts only a single URL without crawl or extract", () =>
   expect(rawRequestError("https://example.com", false, true)).toMatch(/single URL/);
 });
 
+test("rawRequestError judges a JSON-array string by its coerced value", () => {
+  // F-R4-D-4: a stringified array is a batch once doFetchPage coerces it, so
+  // the guard must refuse it before that path runs.
+  expect(rawRequestError(JSON.stringify(["https://a", "https://b"]), false, false)).toMatch(/single URL/);
+  // A genuine coercion error is surfaced rather than deferred.
+  expect(rawRequestError("[]", false, false)).toMatch(/empty array/);
+  expect(rawRequestError(["  "], false, false)).toMatch(/non-string or empty/);
+  // One URL, whatever its shape, stays a single-URL request for the guard;
+  // doFetchPage's strict coercion judges it afterwards.
+  expect(rawRequestError(JSON.stringify(["https://a"]), false, false)).toBeUndefined();
+  expect(rawRequestError("[http://a", false, false)).toBeUndefined();
+});
+
 test("rawTextFromEnvelope prefers the top result, then snippets, then note", () => {
   expect(rawTextFromEnvelope({ results: [{ snippet: "top passage" }], snippets: [{ text: "other" }] })).toBe("top passage");
   expect(rawTextFromEnvelope({ results: [], snippets: [{ text: "first snippet" }] })).toBe("first snippet");
