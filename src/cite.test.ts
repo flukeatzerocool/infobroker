@@ -1,4 +1,6 @@
 // @implements REQ-027 REQ-027a REQ-003
+// @implements REQ-027a zero-result
+// @implements REQ-027a all-providers-exhausted
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchCitations, type Searcher } from "./cite.js";
 import type { SearchResult } from "./types.js";

@@ -1,4 +1,7 @@
 // @implements REQ-122
+// @implements REQ-122 document-snapshot
+// @implements REQ-122 snippet-snapshot
+// @implements REQ-122 truncated-copy
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

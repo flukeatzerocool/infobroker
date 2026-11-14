@@ -97,3 +97,14 @@ describe("calibration report under the authority adjustment", () => {
     expect(computeConfidence(webFamilies(3), SHIPPED_WEIGHTS)).toBeCloseTo(0.8325, 10);
   });
 });
+
+// @implements REQ-123 disableable
+describe("calibration disableability (F-R5-B-3)", () => {
+  it("returns the underlying rung unchanged when the correction is disabled", () => {
+    const secondary = [{ source_type: "web_search" }, { source_type: "news" }];
+    expect(capConfidence(0.9, secondary, { enabled: false, secondaryOnlyCap: 0.7 })).toBe(0.9);
+    // The same inputs cap when the correction is on, so the flag is the only
+    // difference between the two results.
+    expect(capConfidence(0.9, secondary, { enabled: true, secondaryOnlyCap: 0.7 })).toBe(0.7);
+  });
+});
