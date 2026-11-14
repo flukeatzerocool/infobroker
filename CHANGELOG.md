@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.11.14 — Corroboration routing and provenance fidelity
+
+- The `verify_claims` `priority` parameter now routes within the caller's
+  provider list instead of replacing it: `privacy` restricts the pool to
+  providers that do not forward queries, `quality` orders it by configured
+  provider priority, and a list that satisfies no intent is used unchanged
+  (REQ-026i). Previously `privacy` swapped in the `privacy_critical` chain —
+  re-admitting providers the caller had excluded and providers the
+  operational filter had just dropped — and `quality` did nothing.
+- A source that arrives with a `content_sha256` but no freshness tier is now
+  snapshot-graded instead of skipped for having a hash, so a reported hash
+  always carries the basis and truncation fields REQ-122 requires.
+- The corroboration provenance record reports source-type contribution per
+  finding (`provenance.findings[]`) and tags every recorded source with the
+  finding it supports (`provenance.sources[].finding_index`), so a batch's
+  sources are attributable rather than one global tally (REQ-026d).
+- `F-R5-A-3`, `F-R5-C-4`, and `F-R5-C-6` move to `Resolved`; the register
+  census is re-derived at 179 resolved / 4 scheduled.
+
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 
 - The full-review register's disposition census is re-derived from the file
