@@ -14,14 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Fetch and KB resource bounds
-
-- Bound `sqliteSearch` so a broad query over an oversize store stops accumulating matches before it slices (`F-R6-E-4`), and make the crawl page cap count outbound fetches rather than returned pages (`F-R4-C-8`).
-- Cancel hedge losers once the deadline fires, so they stop spending quota and recording stats (`F-R4-B-1`).
-- Validate `freshness.default_tier` against the known tier names instead of accepting any string (`F-R6-C-1`).
-
-**Trigger:** start with a broad-query memory or latency report, or the next increment that touches the KB store; close when a bounded-store test passes.
-
 ## KB migration preservation decision
 
 - Decide whether REQ-084's no-plaintext rule or the migration's clause-(b) artifact preservation wins when encryption is enabled at upgrade time, then implement the winner (`F-R6-E-2`).

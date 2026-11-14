@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.11.11 — Fetch and KB resource bounds
+
+- `fetch_page`'s crawl page cap now counts outbound attempts rather than
+  returned pages. A refused hop, a 404, and a policy-refused page each consume
+  budget, so a page linking to many dead URLs can no longer multiply requests;
+  the response reports `meta.attempts` beside `meta.pages`, and `pages` is
+  always ≤ `attempts` ≤ `max_pages` (REQ-021d).
+- A hedged renderer that loses the race is cancelled. Each renderer attempt
+  carries an `AbortSignal` through `infobrokerFetch` and the provider
+  `fetchPage` seam, the race aborts every loser when it settles, and a
+  cancelled attempt records no quota, latency sample, cooldown, or serving
+  attempt (REQ-021).
+- `sqliteSearch` retains only the best `max_results` matches in a bounded
+  ranker instead of accumulating one result per matching chunk and sorting
+  them all. The returned ranking is unchanged, including on tied scores, so a
+  broad query over an oversize store is now heap-bounded (REQ-075).
+- `kb.freshness.default_tier` must name a defined tier, and it is required
+  whenever tiers are configured. A chunk stored under a tier the configuration
+  no longer defines resolves to the default tier, so it decays and expires
+  instead of scoring 1 forever (REQ-066, REQ-074).
+
 ## 2026.11.11 — Corroboration confidence contract
 
 - `verify_claims` now reports a confidence that agrees with §8.2. Source
