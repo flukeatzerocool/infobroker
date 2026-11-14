@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.11.11 — Renderer-path target resolution
+
+- `fetch_page` now resolves the target and refuses a loopback, private,
+  link-local, or metadata address before any renderer receives it. Previously
+  only the native path re-guarded each hop, so a hostname that passed the
+  string-level check was handed to Jina (or any configured renderer) unchanged;
+  REQ-021a applies to every path, and `fetch.allow_private_urls` remains the
+  escape hatch for intentionally private targets.
+- A hostname that cannot be resolved is refused rather than attempted.
+- A refused fallback target degrades to the metadata branch instead of failing
+  the request, so a DOI whose open-access copy resolves privately still returns
+  the bibliographic record (REQ-021h).
+
 ## 2026.11.11 — Hermetic option forwarding
 
 - The hermetic harness merges `preservation` and `source_quality` overrides like
