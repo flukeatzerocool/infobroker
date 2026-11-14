@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.11.11 — R9 token footprint derivation
+
+- `inspect_providers` `token_footprint.tool_schema_bytes` now measures the
+  tool schemas a client actually receives: input **and** output schemas,
+  encoded by the SDK encoder the list handler uses, filtered by `enabled`.
+  The previous total serialized Zod internals and counted input only, so it
+  measured neither half of REQ-081's "advertised tool schemas" (D-116).
+- The Arena contract test asserts byte equality against the schemas returned by
+  `tools/list` — the byte total, not just its presence — and a fresh-server
+  test asserts `median_response_bytes` equals the median of the response
+  bodies it observed, with both token fields equal to `ceil(bytes / 4)`. A
+  hardcoded number can no longer pass.
+
 ## 2026.11.11 — R9 default consistency gate
 
 - REQ-080's G3 check now reconciles every default §4 declares — the six numeric

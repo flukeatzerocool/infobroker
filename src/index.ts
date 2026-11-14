@@ -58,6 +58,7 @@ import { htmlToText, stripHtml } from "./lib/html.js";
 import { cacheHitPayload, shouldUseKbCache } from "./fetch-cache.js";
 import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
+import { advertisedSchemaBytes, medianOfWindow, type RegisteredTool } from "./tool-footprint.js";
 import { withTimeout } from "./lib/timeout.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
@@ -163,10 +164,7 @@ function json(data: unknown): string {
 }
 
 function medianResponseBytes(): number {
-  if (responseBytes.length === 0) return 0;
-  const sorted = [...responseBytes].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  return medianOfWindow(responseBytes, RESPONSE_WINDOW);
 }
 
 async function startupHealthCheck(): Promise<void> {
@@ -1730,14 +1728,8 @@ function doSpecHealth(): string {
 
   const toolCount = Object.keys((server as any)._registeredTools).length;
 
-  let toolSchemaBytes = 0;
-  const registered = (server as any)._registeredTools as Record<string, { inputSchema?: { shape?: { [k: string]: unknown } } }> | undefined;
-  if (registered) {
-    for (const tool of Object.values(registered)) {
-      const shape = tool?.inputSchema?.shape;
-      toolSchemaBytes += shape ? JSON.stringify(shape).length : 0;
-    }
-  }
+  const registered = (server as any)._registeredTools as Record<string, RegisteredTool> | undefined;
+  const toolSchemaBytes = advertisedSchemaBytes(registered);
 
   return `[OK] ${json({
     status: "ok",

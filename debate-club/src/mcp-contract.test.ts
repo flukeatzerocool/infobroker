@@ -411,12 +411,51 @@ test("inspect_providers list and spec report operational state", async () => {
   expect(enabledCount).toBeLessThanOrEqual(providerCount);
   expect(activeCount).toBeLessThanOrEqual(enabledCount);
   expect(listRows.filter((r) => r.slug !== "native_fetch").length).toBe(providerCount);
-  // REQ-081: the token-footprint record is present, numeric, and derived.
+  // REQ-081: the token-footprint record measures the schemas the client
+  // receives, not a Zod internal shape — the byte total equals the advertised
+  // input and output schemas summed from tools/list.
+  const defs = await server.listToolDefs();
+  const advertised = defs.reduce(
+    (total, tool) =>
+      total +
+      (tool.inputSchema ? JSON.stringify(tool.inputSchema).length : 0) +
+      (tool.outputSchema ? JSON.stringify(tool.outputSchema).length : 0),
+    0,
+  );
   const footprint = specRow.token_footprint as Record<string, unknown>;
-  expect(typeof footprint.tool_schema_bytes).toBe("number");
-  expect(Number(footprint.tool_schema_bytes)).toBeGreaterThan(0);
+  expect(Number(footprint.tool_schema_bytes)).toBe(advertised);
+  expect(Number(footprint.tool_schema_tokens)).toBe(Math.ceil(advertised / 4));
   expect(typeof footprint.median_response_bytes).toBe("number");
   expect(Number(footprint.median_response_bytes)).toBeGreaterThanOrEqual(0);
+});
+
+test("token footprint re-derives the median from the response window (REQ-081)", async () => {
+  // A fresh server has an empty response window and no startup tool response,
+  // so the reported median is exactly the median of the calls this test makes.
+  const fresh = await startServer();
+  try {
+    const bodies: number[] = [];
+    const localCall = async (tool: string, args: Record<string, unknown>) => {
+      const r = await fresh.call(tool, args);
+      const e = parseEnvelope(r.text);
+      bodies.push(r.text.length - (e.prefix === "[OK]" ? 5 : 8));
+      return { text: r.text };
+    };
+    for (let i = 0; i < 5; i += 1) {
+      expectOk((await localCall("infobroker_inspect_providers", { action: "list" })).text);
+    }
+    const prior = [...bodies];
+    const spec = expectOk((await localCall("infobroker_inspect_providers", { action: "spec" })).text);
+    const row = (spec.results as Array<Record<string, unknown>>)[0]!;
+    const footprint = row.token_footprint as Record<string, unknown>;
+    const sorted = [...prior].sort((a, b) => a - b);
+    const expected = sorted[Math.floor(sorted.length / 2)]!;
+    expect(prior).toHaveLength(5);
+    expect(Number(footprint.median_response_bytes)).toBe(expected);
+    expect(Number(footprint.median_response_tokens)).toBe(Math.ceil(expected / 4));
+  } finally {
+    fresh.stop();
+  }
 });
 
 test("inspect_providers health runs a live probe against the pinned provider", async () => {
