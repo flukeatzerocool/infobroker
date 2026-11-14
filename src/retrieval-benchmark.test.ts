@@ -67,8 +67,7 @@ describe("retrieval benchmark floor (REQ-130)", () => {
 });
 
 // @implements REQ-130 baseline-binding
-describe("retrieval baseline binding (F-R5-F-2)", () => {
-  const report = runBenchmark(fixture.queries, fixture.k);
+describe("retrieval baseline binding (F-R5-F-2)", () => {  const report = runBenchmark(fixture.queries, fixture.k);
 
   it("binds the recorded baseline to the corpus, k, and case set it measured", () => {
     expect(baseline.version).toBe(1);
@@ -80,5 +79,24 @@ describe("retrieval baseline binding (F-R5-F-2)", () => {
 
   it("records the raw (unreconciled) aggregates the floor is compared against", () => {
     expect(baseline.raw).toEqual(report.raw);
+  });
+});
+
+// @implements REQ-130 reconciler-failure
+describe("retrieval benchmark fails on a broken reconciler (F-R5-F-1)", () => {
+  it("propagates a reconciler error instead of scoring raw order", () => {
+    expect(() =>
+      runBenchmark(fixture.queries, fixture.k, () => {
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+  });
+
+  it("still scores the raw order through the boolean path, not the reconciler", () => {
+    const report = runBenchmark(fixture.queries, fixture.k, () => []);
+    // An empty reconciled ranking is scored as such; the raw aggregate keeps
+    // the provider order and is unaffected by the injected reconciler.
+    expect(report.reconciled.mean_precision).toBe(0);
+    expect(report.raw).toEqual(runBenchmark(fixture.queries, fixture.k).raw);
   });
 });

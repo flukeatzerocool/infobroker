@@ -1,8 +1,10 @@
 // @implements REQ-130
 // Retrieval-quality measurement over committed fixtures. Pure scoring helpers
 // plus a runner that exercises the real reconciliation path, so the benchmark
-// tests pipeline behavior rather than a frozen output. Distinct from the
-// REQ-123 confidence-calibration gold set.
+// tests pipeline behavior rather than a frozen output. A reconciler failure
+// propagates: a benchmark that silently scored raw order could not observe a
+// broken reconciliation path. Distinct from the REQ-123 confidence-calibration
+// gold set.
 import type { SearchResult } from "./types.js";
 import { reconcileResults } from "./dedup.js";
 
@@ -96,22 +98,31 @@ function round(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-function rankedUrls(candidates: SearchResult[], query: string, reconcile: boolean): string[] {
-  if (!reconcile) return candidates.map((r) => r.url);
-  try {
-    return reconcileResults(candidates, query).map((r) => r.url);
-  } catch {
-    return candidates.map((r) => r.url);
-  }
+function rankedUrls(
+  candidates: SearchResult[],
+  query: string,
+  reconcile: boolean,
+  reconciler: Reconciler,
+): string[] {
+  // A reconciler failure is a benchmark failure: scoring the raw order here
+  // would report a result the pipeline never produced (F-R5-F-1).
+  const ranked = reconcile ? reconciler(candidates, query) : candidates;
+  return ranked.map((r) => r.url);
 }
 
-export function runBenchmark(cases: RetrievalCase[], k = 5): BenchmarkReport {
+export type Reconciler = (results: SearchResult[], query: string) => SearchResult[];
+
+export function runBenchmark(
+  cases: RetrievalCase[],
+  k = 5,
+  reconciler: Reconciler = reconcileResults,
+): BenchmarkReport {
   const reconciled: Array<Omit<RetrievalCaseMetrics, "id">> = [];
   const raw: Array<Omit<RetrievalCaseMetrics, "id">> = [];
   const perCase: RetrievalCaseMetrics[] = [];
   for (const entry of cases) {
-    const recon = scoreCase(rankedUrls(entry.results, entry.query, true), entry.judgments, k);
-    const base = scoreCase(rankedUrls(entry.results, entry.query, false), entry.judgments, k);
+    const recon = scoreCase(rankedUrls(entry.results, entry.query, true, reconciler), entry.judgments, k);
+    const base = scoreCase(rankedUrls(entry.results, entry.query, false, reconciler), entry.judgments, k);
     reconciled.push(recon);
     raw.push(base);
     perCase.push({ id: entry.id, ...recon });
