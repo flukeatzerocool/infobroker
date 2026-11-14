@@ -14,13 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Hermetic test option forwarding
-
-- Make the dispatch-orchestration `setup()` forward every config option a caller passes, or reject an unknown option rather than dropping it silently.
-- Add a case that fails today, so a dropped `preservation` or `kb` option cannot quietly weaken a fixture.
-
-**Trigger:** start with the next increment that touches the hermetic harness; close when an unknown option is forwarded or rejected with a test.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
