@@ -5,9 +5,9 @@ import { infobrokerFetch } from "../http.js";
 
 const JINA_BASE = "https://r.jina.ai/";
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
   const target = `${JINA_BASE}${url}`;
-  const resp = await infobrokerFetch(target, { providerSlug: "jina" });
+  const resp = await infobrokerFetch(target, { providerSlug: "jina", signal });
 
   if (!resp.ok) {
     throw new RetryableError(`Jina returned HTTP ${resp.status}`, resp.status);

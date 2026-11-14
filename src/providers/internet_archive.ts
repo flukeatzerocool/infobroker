@@ -6,8 +6,8 @@ import { infobrokerFetch } from "../http.js";
 
 const IA_API = "https://archive.org/wayback/available";
 
-async function fetchPage(url: string): Promise<string> {
-  const checkResp = await infobrokerFetch(`${IA_API}?url=${encodeURIComponent(url)}`, { providerSlug: "internet_archive" });
+async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
+  const checkResp = await infobrokerFetch(`${IA_API}?url=${encodeURIComponent(url)}`, { providerSlug: "internet_archive", signal });
 
   if (!checkResp.ok) {
     throw new RetryableError(`Internet Archive returned HTTP ${checkResp.status}`, checkResp.status);
@@ -22,7 +22,7 @@ async function fetchPage(url: string): Promise<string> {
     throw new Error("No archived snapshot available");
   }
 
-  const pageResp = await infobrokerFetch(snapshot.url, { providerSlug: "internet_archive" });
+  const pageResp = await infobrokerFetch(snapshot.url, { providerSlug: "internet_archive", signal });
 
   if (!pageResp.ok) {
     throw new RetryableError(`Internet Archive page fetch returned HTTP ${pageResp.status}`, pageResp.status);

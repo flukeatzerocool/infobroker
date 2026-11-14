@@ -37,6 +37,10 @@ export interface RaceOptions {
   // lower-quality fallback.
   prefer?: string;
   graceMs?: number;
+  // Cancellation handles, one per task. When the race settles, every handle
+  // except the winner's is aborted on a win and every handle is aborted on
+  // exhaustion, so a losing task stops spending quota and recording stats.
+  signals?: ReadonlyArray<{ slug: string; controller: AbortController }>;
 }
 
 interface Failure {
@@ -73,13 +77,22 @@ export async function raceFirstSuccess<T>(
       if (done) return;
       done = true;
       if (graceTimer) clearTimeout(graceTimer);
+      cancelOthers(r.slug);
       resolve(r);
+    };
+
+    // REQ-021: losing renderers are cancelled, not left running.
+    const cancelOthers = (keepSlug?: string) => {
+      for (const entry of opts.signals ?? []) {
+        if (entry.slug !== keepSlug) entry.controller.abort();
+      }
     };
 
     const settleFailure = () => {
       remaining--;
       if (remaining === 0 && !done) {
         done = true;
+        cancelOthers();
         reject(
           new Error(
             `all providers failed: ${failures.map((f) => `${f.slug}(${f.reason})`).join(", ")}`,

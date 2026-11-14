@@ -123,3 +123,57 @@ describe("raceFirstSuccess", () => {
     });
   });
 });
+
+describe("hedge cancellation (REQ-021)", () => {
+  it("aborts every losing renderer when a winner settles", async () => {
+    const primary = new AbortController();
+    const alt = new AbortController();
+    const out = await raceFirstSuccess(
+      [
+        { slug: "primary", run: async () => { await sleep(120); return "P"; } },
+        { slug: "alt", run: async () => "A" },
+      ],
+      {
+        prefer: "primary",
+        graceMs: 20,
+        signals: [
+          { slug: "primary", controller: primary },
+          { slug: "alt", controller: alt },
+        ],
+      },
+    );
+    expect(out).toEqual({ slug: "alt", value: "A" });
+    expect(alt.signal.aborted).toBe(false);
+    expect(primary.signal.aborted).toBe(true);
+  });
+
+  it("aborts every renderer when the race is exhausted", async () => {
+    const a = new AbortController();
+    const b = new AbortController();
+    await expect(
+      raceFirstSuccess(
+        [
+          { slug: "a", run: async () => null },
+          { slug: "b", run: async () => { throw new Error("boom"); } },
+        ],
+        {
+          graceMs: 0,
+          signals: [
+            { slug: "a", controller: a },
+            { slug: "b", controller: b },
+          ],
+        },
+      ),
+    ).rejects.toThrow(/all providers failed/);
+    expect(a.signal.aborted).toBe(true);
+    expect(b.signal.aborted).toBe(true);
+  });
+
+  it("leaves signals untouched when no cancellation handles are given", async () => {
+    const out = await raceFirstSuccess(
+      [{ slug: "primary", run: async () => "P" }],
+      { prefer: "primary", graceMs: 0 },
+    );
+    expect(out).toEqual({ slug: "primary", value: "P" });
+  });
+});

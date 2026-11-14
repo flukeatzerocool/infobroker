@@ -45,7 +45,7 @@ async function search(query: string): Promise<SearchResult[]> {
   return normalize(raw, "stack_exchange");
 }
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
   const id = extractQuestionId(url);
   if (!id) throw new Error("Could not extract Stack Exchange question ID from URL");
 
@@ -57,7 +57,7 @@ async function fetchPage(url: string): Promise<string> {
   if (key) params.set("key", key);
 
   const answersUrl = `https://api.stackexchange.com/2.3/questions/${id}/answers?${params.toString()}`;
-  const resp = await infobrokerFetch(answersUrl, { providerSlug: "stack_exchange" });
+  const resp = await infobrokerFetch(answersUrl, { providerSlug: "stack_exchange", signal });
 
   if (!resp.ok) throw new RetryableError(`Stack Exchange returned HTTP ${resp.status}`, resp.status);
 

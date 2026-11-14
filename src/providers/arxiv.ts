@@ -47,12 +47,12 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   return normalize(raw, "arxiv");
 }
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
   const id = extractId(url);
   if (!id) throw new Error("Could not extract arXiv ID from URL");
 
   const params = new URLSearchParams({ id_list: id });
-  const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv" });
+  const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv", signal });
 
   if (!resp.ok) throw new RetryableError(`arXiv returned HTTP ${resp.status}`, resp.status);
 

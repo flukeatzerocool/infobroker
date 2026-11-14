@@ -7,13 +7,15 @@ import { sessionStats } from "./session-stats.js";
 export interface InfobrokerFetchOptions extends Omit<RequestInit, "signal"> {
   providerSlug?: string;
   timeoutMs?: number;
+  /** A caller cancellation signal, composed with the request timeout. */
+  signal?: AbortSignal;
 }
 
 export async function infobrokerFetch(
   url: string | URL,
   options: InfobrokerFetchOptions = {}
 ): Promise<Response> {
-  const { providerSlug, timeoutMs, ...fetchInit } = options;
+  const { providerSlug, timeoutMs, signal: callerSignal, ...fetchInit } = options;
   const config = getConfig();
 
   let timeout = timeoutMs;
@@ -29,7 +31,8 @@ export async function infobrokerFetch(
     headers.set("User-Agent", USER_AGENT);
   }
 
-  const signal = AbortSignal.timeout(timeout);
+  const timeoutSignal = AbortSignal.timeout(timeout);
+  const signal = callerSignal ? AbortSignal.any([timeoutSignal, callerSignal]) : timeoutSignal;
   const start = Date.now();
 
   try {

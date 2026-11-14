@@ -47,7 +47,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
 // The raw parse HTML is shared by the renderer and the structured-fact
 // extractor, so the infobox is available before the page is flattened to prose.
-export async function fetchParseHtml(url: string): Promise<string> {
+export async function fetchParseHtml(url: string, signal?: AbortSignal): Promise<string> {
   const title = extractTitle(url);
   const params = new URLSearchParams({
     action: "parse",
@@ -57,7 +57,7 @@ export async function fetchParseHtml(url: string): Promise<string> {
     origin: "*",
   });
 
-  const resp = await infobrokerFetch(`${WIKI_API}?${params.toString()}`, { providerSlug: "wikipedia" });
+  const resp = await infobrokerFetch(`${WIKI_API}?${params.toString()}`, { providerSlug: "wikipedia", signal });
 
   if (!resp.ok) {
     throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);
@@ -70,8 +70,8 @@ export async function fetchParseHtml(url: string): Promise<string> {
   return data.parse?.text?.["*"] ?? "";
 }
 
-async function fetchPage(url: string): Promise<string> {
-  const html = await fetchParseHtml(url);
+async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
+  const html = await fetchParseHtml(url, signal);
   if (!html) return "(no content)";
 
   // REQ-021i: keep the infobox as key/value lines ahead of the article text so

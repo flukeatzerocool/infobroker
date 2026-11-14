@@ -70,6 +70,22 @@ export function classifyStatus(status: number): FetchFailureKind {
   return "unknown";
 }
 
+/**
+ * REQ-021: a hedged renderer cancelled after the race settled is not a
+ * provider failure — it makes no further call and must not be recorded,
+ * cooled down, or classified. The abort can surface as an `AbortError` from
+ * `fetch`, as the signal's `reason`, or as a plain message.
+ */
+export function isCancellation(error: unknown): boolean {
+  if (error === null || error === undefined) return false;
+  if (typeof error === "object") {
+    const candidate = error as { name?: unknown; code?: unknown };
+    if (candidate.name === "AbortError" || candidate.code === "ABORT_ERR") return true;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /\babort(?:ed)?\b|operation was aborted/i.test(message);
+}
+
 export function classifyFailure(error: unknown, renderer: string): FetchFailure {
   if (error instanceof BotChallengeError) {
     return { renderer, kind: "anti_bot", message: error.message };

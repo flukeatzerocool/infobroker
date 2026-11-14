@@ -174,7 +174,7 @@ export function assertHttpUrlProtocol(url: string): void {
 
 export type FetchLike = (
   url: string,
-  init?: { redirect?: "manual"; headers?: Record<string, string> },
+  init?: { redirect?: "manual"; headers?: Record<string, string>; signal?: AbortSignal },
 ) => Promise<{
   status: number;
   ok: boolean;

@@ -5,6 +5,7 @@ import {
   classifyStatus,
   extractDoi,
   failureTaxonomy,
+  isCancellation,
   resolveFetchFallback,
 } from "./fetch-fallback.js";
 import { HttpStatusError, UnsupportedProtocolError } from "./lib/url-guard.js";
@@ -247,5 +248,25 @@ describe("fetch fallback order (REQ-021h)", () => {
     lookupDoi.mockResolvedValue(null);
     const result = await resolveFetchFallback("https://example.com/gone", async () => null);
     expect(result).toBeNull();
+  });
+});
+
+// @implements REQ-021 cancellation
+describe("hedge cancellation classification (REQ-021)", () => {
+  it("recognizes the AbortError a cancelled fetch raises", () => {
+    const err = new Error("The operation was aborted");
+    err.name = "AbortError";
+    expect(isCancellation(err)).toBe(true);
+  });
+
+  it("recognizes a DOMException-style abort by name", () => {
+    expect(isCancellation({ name: "AbortError" })).toBe(true);
+    expect(isCancellation({ code: "ABORT_ERR" })).toBe(true);
+  });
+
+  it("does not treat an ordinary provider failure as a cancellation", () => {
+    expect(isCancellation(new Error("Provider jina timed out after 30000ms"))).toBe(false);
+    expect(isCancellation(new HttpStatusError("HTTP 503", 503))).toBe(false);
+    expect(isCancellation(undefined)).toBe(false);
   });
 });

@@ -63,7 +63,7 @@ import { advertisedSchemaBytes, medianOfWindow, type RegisteredTool } from "./to
 import { withTimeout } from "./lib/timeout.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
-import { classifyFailure, failureTaxonomy, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
+import { classifyFailure, failureTaxonomy, isCancellation, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
 import { collectNotices, computeStateHealth, injectNotices } from "./state-health.js";
 import { configureUpdateCheck } from "./update-check.js";
 
@@ -933,7 +933,10 @@ async function fetchPageContentInner(
   onFailure?: (failure: FetchFailure) => void,
 ): Promise<{ slug: string; content: string; truncated: ReturnType<typeof maybeTruncate>; elapsed: number } | null> {
   const config = getConfig();
-  const attempt = async (slug: string) => {
+  const attempt = async (slug: string, signal?: AbortSignal) => {
+    // REQ-021: a renderer cancelled before it starts records nothing — not even
+    // a cooldown attempt.
+    if (signal?.aborted) return null;
     // REQ-038: a throttled renderer in cooldown is skipped without a new call.
     if (inCooldown(slug)) {
       sessionStats.recordAttempt(slug, "cooldown");
@@ -945,13 +948,16 @@ async function fetchPageContentInner(
       const doCall = async (): Promise<string> => {
         if (slug === "native_fetch") {
           // REQ-021a: follow redirects hop-by-hop, re-applying the SSRF guard.
-          return fetchFollowRedirects(url, allowPrivate, fetch as unknown as FetchLike, config.output.max_redirect_hops);
+          // REQ-021: the cancellation signal rides on every hop, so a losing
+          // renderer stops at the next request instead of finishing its walk.
+          const boundFetch: FetchLike = (target, init) => fetch(target, { ...init, signal });
+          return fetchFollowRedirects(url, allowPrivate, boundFetch, config.output.max_redirect_hops);
         }
         const provider = resolveProvider(slug);
         if (!provider?.fetchPage) {
           throw new Error(`Provider ${slug} has no fetchPage function`);
         }
-        return await provider.fetchPage(url);
+        return await provider.fetchPage(url, signal);
       };
 
       const timeoutMs = config.providers[slug]?.timeout;
@@ -959,11 +965,17 @@ async function fetchPageContentInner(
       // timeout race so a minimum interval cannot manufacture a timeout.
       const timedCall = async (): Promise<string> => {
         await throttle(slug);
+        // REQ-021: a renderer cancelled while waiting for its throttle slot
+        // never dispatches.
+        signal?.throwIfAborted();
         start = Date.now();
         return withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
       };
       // REQ-032: retry backoff and count are configurable per provider.
       const raw = await retryWithBackoff(timedCall, config.providers[slug]);
+      // REQ-021: a call that lost the race while its body was being read is
+      // discarded without spending quota or recording a serving attempt.
+      if (signal?.aborted) return null;
 
       // REQ-021f: a renderer that returns an anti-bot challenge rather than the
       // target page is treated as failed, so the chain falls through to the
@@ -992,6 +1004,9 @@ async function fetchPageContentInner(
       // REQ-021a: a safety refusal must surface with its distinct code, not
       // as a generic provider failure.
       if (e instanceof SsrRefusalError) throw e;
+      // REQ-021: a cancelled renderer is not a provider failure — no cooldown,
+      // no error record, no failure classification.
+      if (signal?.aborted || isCancellation(e)) return null;
       // REQ-021h: keep each renderer's failure reason so the caller can
       // distinguish a paywall from an anti-bot gate from a network failure.
       const failure = classifyFailure(e, slug);
@@ -1020,7 +1035,12 @@ async function fetchPageContentInner(
     const hedgeGraceMs = hedgeConf.hedge_grace_ms ?? 300;
     const hedgeDelay = computeHedgeDelay(latency.avg(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
 
-    const primaryPromise = attempt(primarySlug);
+    // REQ-021: one cancellation handle per renderer, so the race can abort the
+    // losers the moment it settles.
+    const controllers = new Map(renderers.map((slug) => [slug, new AbortController()]));
+    const signalFor = (slug: string): AbortSignal => controllers.get(slug)!.signal;
+
+    const primaryPromise = attempt(primarySlug, signalFor(primarySlug));
     const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), hedgeDelay));
     const primaryResult = await Promise.race([primaryPromise, deadline]);
 
@@ -1031,8 +1051,12 @@ async function fetchPageContentInner(
     try {
       const winner = await raceFirstSuccess([
         { slug: primarySlug, run: () => primaryPromise },
-        ...renderers.slice(1).map((slug) => ({ slug, run: () => attempt(slug) })),
-      ], { prefer: primarySlug, graceMs: hedgeGraceMs });
+        ...renderers.slice(1).map((slug) => ({ slug, run: () => attempt(slug, signalFor(slug)) })),
+      ], {
+        prefer: primarySlug,
+        graceMs: hedgeGraceMs,
+        signals: renderers.map((slug) => ({ slug, controller: controllers.get(slug)! })),
+      });
       return winner.value;
     } catch {
       return null;

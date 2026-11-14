@@ -537,7 +537,7 @@ export interface Provider {
   capabilities: string[];
   health(): Promise<{ status: string; avgLatencyMs: number }>;
   search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
-  fetchPage?(url: string): Promise<string>;
+  fetchPage?(url: string, signal?: AbortSignal): Promise<string>;
   suggest?(query: string): Promise<string[]>;
   lookupDoi?(doi: string): Promise<DoiRecord | null>;
 }
