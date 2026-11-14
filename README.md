@@ -268,8 +268,10 @@ counts outbound attempts, so a page full of dead links cannot multiply
 requests.
 Built-in web fetchers return raw HTML; Infobroker gives you clean, readable
 content from any source — ready for summarization or analysis. Fetch also
-reports the page's last-updated date when it can determine one, so you know
-how current your source is. When a page is paywalled, access-restricted, or
+reports the page's date when it can determine one, on plain fetches, crawls,
+and structured extraction alike, so you know how current your source is; on a
+crawl or an extract the date comes from document metadata, so a page dated only
+by a response header reports none there. When a page is paywalled, access-restricted, or
 bot-blocked, `fetch_page` reports `access_blocked` and falls back to Crossref
 metadata or an open-access copy for a DOI, and to an Internet Archive
 snapshot when no metadata record exists.

@@ -3,10 +3,22 @@
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 
 - The full-review register's disposition census is re-derived from the file
-  rather than adjusted by delta: 276 rows / 276 distinct IDs, 170 `Resolved`,
-  93 `Closed-P3`, 13 `Scheduled-roadmap`. Every surviving row names a live
+  rather than adjusted by delta: 276 rows / 276 distinct IDs, 176 `Resolved`,
+  93 `Closed-P3`, 7 `Scheduled-roadmap`. Every surviving row names a live
   `ROADMAP.md` section, and the two stale M1 census cells plus `F-M1-2`'s
   "deferred" note now agree with the tree.
+- Fetch and extraction fidelity (REQ-021c, REQ-021g, REQ-021j, REQ-021i,
+  REQ-021e): `detect_date` now reaches the crawl and extract paths, which read
+  the date from raw HTML already fetched and add no outbound request — header
+  evidence is unavailable there and is recorded as D-121; a redirected page
+  still yields document-metadata evidence because the metadata read follows the
+  chain through the guarded redirect walk; a `question` is served from a fresh
+  knowledge-base copy with passages ranked from the cached text; a stringified
+  URL array is refused in raw mode instead of running as a batch; a nested
+  microdata item's properties are no longer attributed to its parent; and a
+  wikipedia fact reports `source_representation` (`infobox` or `table`). Rows
+  `F-R4-C-4`, `C-5`, `C-6`, `C-11`, `D-4`, and `E-2` are resolved; the roadmap
+  section is retired.
 - Three rows closed with proof: `F-R4-A-2` (every renderer path resolves the
   target through `withGuardedTarget`), `F-R5-B-6` (the calibration tool reads
   `calibration.enabled` and `secondary_only_cap` instead of hardcoding them),

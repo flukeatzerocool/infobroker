@@ -2,6 +2,22 @@
 
 ## Active Decisions
 
+### D-121: Crawl and Extract Dates Come From Document Metadata, Not Headers (2026.11.14)
+
+`fetch_page`'s crawl and extract paths honour `detect_date` from the raw HTML
+they already hold, so date detection there costs **no** extra request
+(`src/index.ts`). They cannot report header evidence: `fetchPageContent`
+returns `{slug, content, truncated, elapsed}` with no response headers, and
+threading headers out of that seam would touch every renderer plus the hedge
+and fallback consumers for one field. The alternative — a `detectPageDate`
+call per crawled page — triples crawl egress, which is the cost F-R4-C-7
+already accepted once per *single* fetch, multiplied by `crawl_max_pages`.
+So on these two paths a page dated only by `Last-Modified` reports no date,
+and document metadata is the accepted evidence. Stated in `README.md`, in the
+REQ-021c scope sentences, in the release note, and in the worklist's
+F-R4-C-4 row. The plain fetch path still reads header evidence first and
+follows redirects (`fetchFollowRedirects`) when a HEAD yields none.
+
 ### D-120: Clause-Tag Binding Is Reported, Not Gated (2026.11.14)
 
 The G3 clause-tag count cannot tell a tag on a driving test from a tag on an

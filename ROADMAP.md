@@ -14,20 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Fetch and extraction fidelity
-
-- Make `detect_date` reach the crawl and extract paths, and consult document
-  metadata when HEAD redirects (`F-R4-C-4`, `F-R4-C-6`).
-- Serve the cached copy for a repeated `question` request and reject a
-  JSON-string array before raw mode runs it as a batch (`F-R4-C-5`,
-  `F-R4-D-4`).
-- Keep nested microdata items distinct and name an infobox-derived fact
-  differently from a table-derived one (`F-R4-C-11`, `F-R4-E-2`).
-
-**Trigger:** start with the next change to the `fetch_page` response envelope
-or `src/extract.ts`; close when each named row is fixed with a driving test or
-re-dispositioned as a standing limitation.
-
 ## Corroboration, citation, and benchmark fidelity
 
 - Make `priority:"privacy"` respect a caller's provider allowlist and give
