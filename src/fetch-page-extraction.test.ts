@@ -1,6 +1,8 @@
 // @implements REQ-004 REQ-021b content-mode REQ-021b full-content-mode REQ-021c date-determinable REQ-021j REQ-021k REQ-021d attempt-cap
 // @implements REQ-021a redirect-hop-cap
 // @implements REQ-021d depth-cap
+// @implements REQ-021d per-hop-guard
+// @implements REQ-021f renderer-fallthrough
 // fetch_page extraction is asserted through the spawned server against a
 // loopback page stub, so the no-match metadata, the plain/raw envelope, the
 // publication/modification split, and the crawl/extract truncation are measured
@@ -9,8 +11,9 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { createInterface } from "node:readline";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { isBotChallenge } from "./lib/bot-challenge.js";
 import {
   startStubProvider,
   writeHermeticConfig,
@@ -82,6 +85,7 @@ function payload(result: unknown): Record<string, unknown> {
 
 let server: Server;
 let root: string;
+let auditLogPath: string | undefined;
 const stubs: StubProvider[] = [];
 
 afterAll(() => {
@@ -100,8 +104,12 @@ beforeAll(async () => {
     // configured value reaches the redirect guard instead of a literal.
     output: { max_redirect_hops: 2 },
     kb: { auto_index: true },
+    // REQ-098/REQ-021d: a file sink so the crawl's refusal audit trail can be
+    // asserted, not just its response shape.
+    fileLogs: true,
   });
   root = cfg.root;
+  auditLogPath = cfg.auditLogPath;
   server = startServer(cfg.env);
   const init = await server.call("initialize", {
     protocolVersion: "2024-11-05",
@@ -421,6 +429,145 @@ describe("redirect-hop cap (F-R4-A-3 / REQ-021a redirect-hop-cap)", () => {
       expect(text.toLowerCase()).toContain("redirect");
     } finally {
       await chain.close();
+    }
+  });
+});
+
+describe("renderer fall-through on an anti-bot challenge (REQ-021f renderer-fallthrough)", () => {
+  // The reader answers with a verification page instead of the target. The
+  // "Just a moment..." title is a decisive marker (src/lib/bot-challenge.ts:11),
+  // and the case asserts the fixture is a challenge so it cannot rot.
+  const CHALLENGE = `Title: Just a moment...
+
+URL Source: http://127.0.0.1/page/1
+
+Markdown Content:
+
+Checking your browser before accessing the target page.
+`;
+
+  test("a challenge from the primary renderer falls through to the native renderer", async () => {
+    expect(isBotChallenge(CHALLENGE)).toBe(true);
+
+    const readerPaths: string[] = [];
+    const http = createServer((req, res) => {
+      const path = req.url ?? "/";
+      // The reader calls `<base><target>`, so its request path embeds the
+      // target URL and is distinguishable from the page request itself.
+      if (path.startsWith("/http://")) {
+        readerPaths.push(path);
+        res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+        res.end(CHALLENGE);
+        return;
+      }
+      if (path === "/page/1") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end("<html><body><p>real page body from the native renderer</p></body></html>");
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+    const address = http.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const base = `http://127.0.0.1:${port}`;
+
+    const cfg = writeHermeticConfig("http://127.0.0.1:1", {
+      // HEDGING OFF is the point: with hedging on, a hedge win satisfies the
+      // provider assertion without the challenge ever being classified
+      // (src/hedge.ts:118-123), which would make this case vacuous.
+      output: { hedge_enabled: false },
+      enable: ["jina"],
+      chains: { content_fetch: ["jina", "native_fetch"] },
+      fetch: {
+        allow_private_urls: true,
+        cache: { kb_read: false, kb_max_age_hours: 24 },
+        detect_date: false,
+      },
+      kb: { auto_index: false },
+    });
+    cfg.env.INFOBROKER_JINA_URL = `${base}/`;
+    const caseServer = startServer(cfg.env);
+    try {
+      const init = await caseServer.call("initialize", {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "jina-fallthrough-test", version: "1.0.0" },
+      });
+      expect(init.error).toBeUndefined();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const response = await caseServer.call("tools/call", {
+        name: "infobroker_fetch_page",
+        arguments: { url: `${base}/page/1`, detect_date: false },
+      });
+      expect(response.error).toBeUndefined();
+      const envelope = payload(response.result as ToolResult);
+
+      expect(envelope.status).toBe("ok");
+      expect(envelope.provider).toBe("native_fetch");
+      const results = JSON.stringify(envelope.results ?? envelope.result ?? envelope);
+      expect(results).toContain("real page body from the native renderer");
+      expect(results).not.toContain("Just a moment");
+      expect(readerPaths).toHaveLength(1);
+    } finally {
+      caseServer.close();
+      await new Promise<void>((resolve) => http.close(() => resolve()));
+    }
+  });
+});
+
+describe("crawl per-hop refusal (REQ-021d per-hop-guard)", () => {
+  test("a hop refused at its redirect is skipped, audited, and the crawl continues", async () => {
+    const http = createServer((req, res) => {
+      const path = req.url ?? "/";
+      if (path === "/start") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(
+          '<html><body><a href="/hop1">refused hop</a><a href="/hop2">good hop</a><p>crawl root page</p></body></html>'
+        );
+        return;
+      }
+      // A redirect out of HTTP is refused by the safety guard even though the
+      // config permits private targets, because the protocol test does not
+      // consult that flag (src/lib/url-guard.ts:94-96).
+      if (path === "/hop1") {
+        res.writeHead(302, { location: "ftp://example.com/x" });
+        res.end();
+        return;
+      }
+      if (path === "/hop2") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end("<html><body><p>good hop page</p></body></html>");
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+    const address = http.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const base = `http://127.0.0.1:${port}`;
+
+    try {
+      const { envelope } = await fetchPage({ url: `${base}/start`, crawl: true, detect_date: false });
+      const results = envelope.results as Array<Record<string, unknown>>;
+      expect(results.map((page) => page.url)).toEqual([`${base}/start`, `${base}/hop2`]);
+
+      const meta = envelope.meta as Record<string, unknown>;
+      // The refused hop consumed a page-cap attempt and returned no page.
+      expect(meta.attempts).toBe(3);
+      expect(meta.pages).toBe(2);
+
+      // REQ-098: the refusal is recorded against the hop the crawl asked for.
+      expect(auditLogPath).toBeTruthy();
+      expect(existsSync(auditLogPath!)).toBe(true);
+      const audit = readFileSync(auditLogPath!, "utf-8");
+      expect(audit).toContain("network_target_refused");
+      expect(audit).toContain(`${base}/hop1`);
+    } finally {
+      await new Promise<void>((resolve) => http.close(() => resolve()));
     }
   });
 });

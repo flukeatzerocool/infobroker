@@ -170,6 +170,12 @@ export interface HermeticConfigOptions {
   preservation?: Record<string, unknown>;
   /** Overrides merged into the shipped `source_quality` block (e.g. a blocklist). */
   source_quality?: Record<string, unknown>;
+  /**
+   * Shipped providers to re-enable after the isolation loop disables every
+   * provider but `searxng`/`native_fetch` (e.g. a content renderer under test).
+   * An unknown slug is rejected rather than silently ignored.
+   */
+  enable?: string[];
   /** Write the call log and audit log into the temp root. */
   fileLogs?: boolean;
 }
@@ -183,6 +189,7 @@ const HERMETIC_OPTION_KEYS: ReadonlySet<string> = new Set([
   "kb",
   "preservation",
   "source_quality",
+  "enable",
   "fileLogs",
 ]);
 
@@ -233,6 +240,11 @@ export function writeHermeticConfig(
   config.providers.searxng.enabled = extra.length === 0;
   for (const [slug, provider] of Object.entries(config.providers)) {
     if (slug !== "searxng" && slug !== "native_fetch") provider.enabled = false;
+  }
+  for (const slug of options.enable ?? []) {
+    const entry = config.providers[slug];
+    if (!entry) throw new Error(`writeHermeticConfig: unknown provider "${slug}"`);
+    entry.enabled = true;
   }
   for (const provider of extra) {
     config.providers[provider.slug] = {
