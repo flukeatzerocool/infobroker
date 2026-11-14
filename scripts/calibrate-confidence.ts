@@ -1,16 +1,25 @@
 #!/usr/bin/env npx tsx
 // calibrate-confidence.ts — build tool: run the deterministic calibration gold
-// set through the REQ-123 correction and report Brier score and reliability.
-// No network, no clock-dependent output.
+// set through the REQ-123 cap and the REQ-026a authority adjustment, and report
+// Brier score, reliability, and one row per entry.
+//
+// Determinism: the only inputs are the gold file and the shipped `config.json`
+// beside this script's parent. No network, no clock-dependent output, and no
+// environment or user config layer — a user-layer run is out of scope by
+// design, so the report measures the shipped ladder.
 //
 // Exit codes: 0 = report produced; 1 = invalid input; 2 = fatal.
 
-// @implements REQ-123
+// @implements REQ-123 REQ-026a
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
-import { brierScore, capConfidence, reliabilityCurve, type CalibrationSource } from "../src/calibration.js";
+import {
+  buildCalibrationReport,
+  type CalibrationEntry,
+  type CalibrationOptions,
+} from "../src/calibration.js";
 
 const USAGE = `calibrate-confidence — report calibration for the gold set (REQ-123)
 
@@ -25,15 +34,28 @@ Options:
 Exit codes: 0 = report produced; 1 = invalid input; 2 = fatal.
 `;
 
-interface GoldEntry {
-  id: string;
-  confidence: number;
-  correct: boolean;
-  sources: string[];
+interface ShippedConfig {
+  corroboration?: {
+    authority_weights?: Record<string, number>;
+    calibration?: { enabled?: boolean; secondary_only_cap?: number };
+  };
 }
 
-function loadGold(path: string): GoldEntry[] {
-  const raw = JSON.parse(readFileSync(path, "utf-8")) as { entries?: GoldEntry[] };
+function loadShippedSettings(): { weights: Record<string, number>; options: CalibrationOptions } {
+  const path = join(import.meta.dirname, "..", "config.json");
+  const config = JSON.parse(readFileSync(path, "utf-8")) as ShippedConfig;
+  const corroboration = config.corroboration ?? {};
+  return {
+    weights: corroboration.authority_weights ?? {},
+    options: {
+      enabled: corroboration.calibration?.enabled !== false,
+      secondaryOnlyCap: corroboration.calibration?.secondary_only_cap ?? 0.7,
+    },
+  };
+}
+
+function loadGold(path: string): CalibrationEntry[] {
+  const raw = JSON.parse(readFileSync(path, "utf-8")) as { entries?: CalibrationEntry[] };
   if (!Array.isArray(raw.entries) || raw.entries.length === 0) {
     throw new Error("gold set must contain a non-empty 'entries' array");
   }
@@ -67,18 +89,13 @@ function main(): void {
   }
   try {
     const entries = loadGold(gold);
-    const predictions = entries.map((entry) => ({
-      confidence: capConfidence(
-        entry.confidence,
-        entry.sources.map((source_type): CalibrationSource => ({ source_type })),
-        { enabled: true },
-      ),
-      correct: entry.correct,
-    }));
+    const { weights, options } = loadShippedSettings();
+    const built = buildCalibrationReport(entries, weights, options);
     const report = {
-      entries: entries.length,
-      brier_score: Number(brierScore(predictions).toFixed(4)),
-      reliability: reliabilityCurve(predictions),
+      entries: built.entries,
+      brier_score: Number(built.brier_score.toFixed(4)),
+      reliability: built.reliability,
+      rows: built.rows,
     };
     if (json) console.log(JSON.stringify(report, null, 2));
     else {
@@ -86,6 +103,9 @@ function main(): void {
       console.log(`brier_score: ${report.brier_score}`);
       for (const bucket of report.reliability) {
         console.log(`${bucket.band} count=${bucket.count} mean=${bucket.meanConfidence.toFixed(2)} observed=${bucket.observedRate.toFixed(2)}`);
+      }
+      for (const row of report.rows) {
+        console.log(`${row.id} raw=${row.raw} adjusted=${Number(row.adjusted.toFixed(4))}`);
       }
     }
   } catch (error) {
