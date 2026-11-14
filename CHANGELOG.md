@@ -11,6 +11,14 @@
 - A sealed artifact is never mistaken for a benchmark corpus seed: the seed
   selector skips `*.enc` migration archives, so the plaintext benchmark lane
   cannot migrate ciphertext and measure an empty store (REQ-108).
+- Knowledge-base search results are ranked by freshness-adjusted score again;
+  the bounded ranker introduced in 2026.11.14 inverted the comparator and
+  returned the weakest match first (REQ-075). The full-review evidence pass
+  also added driving tests for the crawl caps, the fetch redirect-hop cap, the
+  `fetch_page` parameter contract, the agreement map, KB recall bounds,
+  calibration disableability, retrieval baseline binding, and confidence decay
+  (REQ-021a/d/e/f/g/i, REQ-026, REQ-027a, REQ-075, REQ-121, REQ-122, REQ-123,
+  REQ-130).
 
 ## 2026.11.11 — Fetch and KB resource bounds
 
