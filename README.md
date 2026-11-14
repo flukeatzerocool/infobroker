@@ -262,7 +262,10 @@ scored and ranked, instead of the whole document. Fetch several URLs at once
 and each result keeps its own renderer, ranked passages, and top score. Pass
 `raw: true` to get the page text directly, without the JSON wrapper. Long
 pages are truncated to 50,000 characters by default; set `max_length` to
-change the cap.
+change the cap. Set `crawl` to walk same-origin links from a page: a crawl is
+bounded by configurable page-count and depth caps, and the page-count cap
+counts outbound attempts, so a page full of dead links cannot multiply
+requests.
 Built-in web fetchers return raw HTML; Infobroker gives you clean, readable
 content from any source — ready for summarization or analysis. Fetch also
 reports the page's last-updated date when it can determine one, so you know
@@ -799,7 +802,9 @@ marginally slow `jina` is not displaced by a lower-quality `native_fetch`.
 A renderer whose content is an anti-bot challenge page (a CAPTCHA or
 verification interstitial rather than the target page) is treated as a
 failed render, so `fetch_page` falls through to the next renderer instead
-of serving the challenge as content.
+of serving the challenge as content. When a `fetch_page` renderer race
+settles, the losing renderer is cancelled, so it makes no further request
+and spends no quota.
 Tune the window with `output.hedge_enabled`, `hedge_min_delay_ms`,
 `hedge_max_delay_ms`, and `hedge_grace_ms`; set `hedge_enabled` to
 `false` for the sequential chain. A provider that returns a rate-limit
