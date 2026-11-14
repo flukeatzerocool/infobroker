@@ -52,6 +52,12 @@ sentence, and the register census re-derived to 176 `Resolved` / 93
   commit-count contradiction), both caught only by a reviewer, not by the self
   pass. The self pass leaned on the finding text instead of re-reading the
   guard condition.
+- **The first `session:close` failed on an environment condition, not a code
+  one**: `/tmp` had 419 inodes free of 1,048,576, consumed by ~14 000 stale
+  test fixtures (`ib-cfg-*`, `infobroker-health-*`, `adv-*`, …) from earlier
+  sessions, so `test-push-pipeline` could not create its run directory and
+  reported 6 case failures. Clearing the stale fixture directories restored
+  1.03 M inodes and the re-run passed (29.8 s). No source change was needed.
 - **Premise drift risk on the E-2 `source` value**: D6 kept `source:
   "wikipedia"` deliberately, so REQ-021i's "source representation" rides on a
   new field rather than the existing one. Correct, but it means a consumer that
@@ -63,6 +69,7 @@ sentence, and the register census re-derived to 176 `Resolved` / 93
 |---|---|---|---|
 | E1 | `src/index.ts` and the fetch test file carry two slices, so the planned six commits became five | P3 | Recorded; no scope change |
 | E2 | `source_representation` is additive, so `source`-only consumers cannot distinguish representations | P3 | Closed as informational — REQ-021i reports representation, and the field is present on every wikipedia fact |
+| E4 | `/tmp` inode exhaustion (stale harness fixtures) made `test-push-pipeline` fail once; cleared, re-ran green | P3 | Closed — environment condition, no code change; fixture dirs are recreated per run and never committed |
 | E3 | Deep-read (`search_web`) inherits one extra metadata GET on a redirected page | P3 | Closed as informational — recorded under D2/C-13, suite pins the contract via a stubbed `detectDate` |
 
 ## Verification
