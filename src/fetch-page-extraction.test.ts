@@ -1,4 +1,4 @@
-// @implements REQ-004 REQ-021b content-mode REQ-021b full-content-mode REQ-021c date-determinable REQ-021j REQ-021k
+// @implements REQ-004 REQ-021b content-mode REQ-021b full-content-mode REQ-021c date-determinable REQ-021j REQ-021k REQ-021d attempt-cap
 // fetch_page extraction is asserted through the spawned server against a
 // loopback page stub, so the no-match metadata, the plain/raw envelope, the
 // publication/modification split, and the crawl/extract truncation are measured
@@ -87,7 +87,7 @@ afterAll(() => {
 
 beforeAll(async () => {
   const cfg = writeHermeticConfig("http://127.0.0.1:1", {
-    fetch: { allow_private_urls: true, cache: { kb_read: false, kb_max_age_hours: 24 } },
+    fetch: { allow_private_urls: true, cache: { kb_read: false, kb_max_age_hours: 24 }, crawl_max_pages: 4 },
     kb: { auto_index: true },
   });
   root = cfg.root;
@@ -273,5 +273,42 @@ describe("crawl and extract truncation (F-R4-C-9)", () => {
     const outputPath = String(envelope.output_path);
     expect(statSync(outputPath).mode & 0o777).toBe(0o600);
     expect(truncationFiles().length - before).toBe(1);
+  });
+});
+
+describe("crawl attempt cap (F-R4-C-8 / REQ-021d attempt-cap)", () => {
+  test("counts outbound attempts, not returned pages", async () => {
+    // The root links to eight paths the stub answers with 404, then to eight
+    // real pages. The page cap is 4 (extended into the file's fetch config), so
+    // the crawl must stop after four outbound requests and return ONE page —
+    // the start page — instead of walking every dead link first and returning
+    // four pages after twelve requests.
+    const dead = Array.from(
+      { length: 8 },
+      (_, i) => `<a href="/dead/${i + 1}">dead ${i + 1}</a>`,
+    ).join("");
+    const good = Array.from(
+      { length: 8 },
+      (_, i) => `<a href="/page/${i + 2}">page ${i + 2}</a>`,
+    ).join("");
+    const stub = await startStubProvider({
+      // `missing` 404s every path that is not `/page/N`, which is exactly the
+      // dead-link shape this test needs.
+      mode: "missing",
+      pageBody: `<html><body>${dead}${good}<p>crawl root</p></body></html>`,
+    });
+    stubs.push(stub);
+
+    const { envelope } = await fetchPage({
+      url: `${stub.url}/page/1`,
+      crawl: true,
+      detect_date: false,
+    });
+    const results = envelope.results as Array<Record<string, unknown>>;
+    const meta = envelope.meta as Record<string, unknown>;
+
+    expect(meta.attempts).toBe(4);
+    expect(results).toHaveLength(1);
+    expect(stub.requests).toBe(4);
   });
 });

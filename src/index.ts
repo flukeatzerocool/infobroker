@@ -1220,10 +1220,15 @@ async function doFetchPage(
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url, depth: 0 }];
     let policyFlags = 0;
-    while (queue.length > 0 && pages.length < maxPages) {
+    // REQ-021d: the page cap bounds outbound attempts, not returned pages. A
+    // refused hop, a 404, or a policy refusal consumes budget, so a page full
+    // of dead links cannot multiply requests.
+    let attempts = 0;
+    while (queue.length > 0 && attempts < maxPages) {
       const cur = queue.shift()!;
       if (visited.has(cur.url) || cur.depth > maxDepth) continue;
       visited.add(cur.url);
+      attempts++;
       let fetched;
       try {
         // REQ-004: the renderer layer is left uncapped so the stripped page text
@@ -1281,6 +1286,7 @@ async function doFetchPage(
         query_time_ms: 0,
         fallback_used: false,
         pages: pages.length,
+        attempts,
         max_pages: maxPages,
         max_depth: maxDepth,
         ...(truncatedPages > 0 ? { truncated_pages: truncatedPages } : {}),
