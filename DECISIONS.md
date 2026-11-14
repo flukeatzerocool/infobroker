@@ -2,6 +2,31 @@
 
 ## Active Decisions
 
+### D-117: The Review Cap Is a Plan Declaration, Not an Agent Judgement (2026.11.13)
+
+The cold-pass cap lived only in the `independent-review` skill, which is user
+configuration outside this repository, so the bound on a review was applied by
+an agent that was also the author of the plan under review, and the record of
+how many passes ran was optional prose. The increment contract now requires a
+`**Review cap:**` line in `plan.md` and a recording of the passes used on the
+same marker in `aar.md` for every increment dated on or after
+`CAP_CONTRACT_FROM` (2026-11-14). Earlier increments — 54 of them, 12 already
+stating a cap in prose and 3 already recording one — are grandfathered, so no
+closed plan is edited to satisfy a rule that did not exist when it was written.
+
+The rejected alternatives were to leave the cap to the skill (unversioned and
+unrecorded) and to gate on a pass count the repository cannot observe. The
+findings are errors rather than the `**Done bar:**` warning on purpose: the bar
+is a planning-quality signal, while the cap is contract substance of the same
+class as the terminal `LOOP PAUSED` token.
+
+Three limits are accepted. The narrowing rule — narrow the increment at the
+first blocker whose cause is confined to one finding's evidence — is
+documentary, with no mechanical check. A false AAR record is possible, because
+the gate reads a declaration rather than watching the reviewers. And the parser
+reads the first line-initial marker only, so a second declaration or an amended
+value is not detected.
+
 ### D-115: The TDQS Report Is Gate-Side, and Its Deterministic Proxies Fail the Gate (2026.11.13)
 
 REQ-106 said "the server" reports each tool's parameter counts, description

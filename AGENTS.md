@@ -424,12 +424,20 @@ clean when its AAR returns `LOOP PAUSED` with zero new action items.
   than 24 hours — not after every edit. A trigger that has not fired needs no
   review.
 - **Increment record.** The durable record is `docs/plans/<YYYY-MM-DD>-<slug>/`
-  with `plan.md` (carrying a `**Done bar:**`), `tasks.md`, and `aar.md` ending
+  with `plan.md` (carrying a `**Done bar:**` and a `**Review cap:**`),
+  `tasks.md`, and `aar.md` ending
   in `LOOP PAUSED` or `LOOP OPEN`. `npm run check-loop-artifacts` gates the
   contract; `npm run session:close` validates it, runs `check:fast`, records the
   run, and prints the push cadence. It does not commit — the split-commit series
   owns commits (D-089, D-091). `.opencode/session.md` stays available as
   scratch and is deleted at close.
+- **Review cap.** Every increment dated 2026-11-14 or later declares its cap
+  in `plan.md` and records the passes used in `aar.md`; the cap is the plan's
+  declaration, not an agent judgement. A dispatch past it requires a user
+  authorization recorded in the AAR, otherwise stop and escalate (D-117).
+- **Narrowing rule.** When the first blocker's cause is confined to one
+  finding's evidence, narrow the increment to that finding and move the rest
+  to a follow-on increment; do not revise the combined scope again.
 - **Finding triage (P0–P3).** P0 = demonstrated wrong output or gate
   failure — fix in-session. P1 = normative gap unscheduled — schedule on
   `ROADMAP.md`. P2 = improvement preventing a demonstrated failure —
