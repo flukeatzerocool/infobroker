@@ -1,4 +1,7 @@
 // @implements REQ-021i wikidata-claim wikipedia-infobox wikipedia-table not-found
+// @implements REQ-021i resolved
+// @implements REQ-021i ambiguous
+// @implements REQ-021i unavailable
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   applyFactsToEnvelope,

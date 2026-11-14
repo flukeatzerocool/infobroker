@@ -388,3 +388,50 @@ test("every tool definition discloses its behavioral consequences", async () => 
     }
   }
 }, 30000);
+
+// @implements REQ-021 parameter-contract
+// @implements REQ-021 array-cap
+test("fetch_page advertises the REQ-021 parameter contract, defaults, and array cap", async () => {
+  const { tools } = await listTools();
+  const tool = tools.find((t) => t.name === "infobroker_fetch_page");
+  expect(tool, "fetch_page is not registered").toBeDefined();
+
+  const props = (tool!.inputSchema?.properties ?? {}) as Record<
+    string,
+    { default?: unknown; enum?: unknown[]; anyOf?: Array<Record<string, unknown>>; oneOf?: Array<Record<string, unknown>> }
+  >;
+
+  // REQ-021: `url` is required and accepts one value or an array of up to five.
+  expect(tool!.inputSchema?.required).toContain("url");
+  const urlBranches = [...(props.url?.anyOf ?? []), ...(props.url?.oneOf ?? [])];
+  const arrayBranch = urlBranches.find((branch) => branch.type === "array");
+  expect(arrayBranch, "fetch_page.url advertises no array form").toBeDefined();
+  expect(arrayBranch?.maxItems, "fetch_page.url array cap drifted from REQ-021").toBe(5);
+
+  // REQ-021: the renderer enumeration is the external contract.
+  expect(props.renderer?.enum).toEqual([
+    "jina",
+    "native_fetch",
+    "wikipedia",
+    "internet_archive",
+    "arxiv",
+    "stack_exchange",
+  ]);
+
+  // REQ-021: parameters whose declared default is part of the contract.
+  const declaredDefaults: Record<string, unknown> = {
+    max_length: 50000,
+    crawl: false,
+    extract: false,
+    raw: false,
+  };
+  for (const [param, expected] of Object.entries(declaredDefaults)) {
+    expect(props[param], `fetch_page.${param} is missing from the advertised schema`).toBeDefined();
+    expect(props[param]?.default, `fetch_page.${param} default drifted from REQ-021`).toBe(expected);
+  }
+
+  // REQ-021: optional parameters that carry no declared default.
+  for (const param of ["question", "passage_size", "max_passages", "detect_date"]) {
+    expect(props[param], `fetch_page.${param} is missing from the advertised schema`).toBeDefined();
+  }
+}, 30000);
