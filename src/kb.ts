@@ -577,11 +577,11 @@ function sqliteSearch(
   const actualMax = Math.min(maxResults, kbConfig?.max_results ?? maxResults);
   // F-R6-E-4: retain only the best `actualMax` matches as the scan runs, so a
   // broad query over an oversize store cannot accumulate one result per match.
-  // The comparator is the same expression the final sort used, and equal
-  // adjusted scores keep insertion order, so the output is unchanged.
+  // `BoundedRank` takes an ascending comparator (the `Array.sort` convention),
+  // so the freshness-adjusted score sorts greatest-first.
   const ranker = new BoundedRank<KbSearchResult>(
     actualMax,
-    (a, b) => b.score * b.freshness_score - a.score * a.freshness_score,
+    (a, b) => a.score * a.freshness_score - b.score * b.freshness_score,
   );
   const now = Date.now();
   const collect = (chunk: KbChunk): void => {

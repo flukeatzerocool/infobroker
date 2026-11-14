@@ -469,3 +469,61 @@ describe("freshness classification (REQ-074)", () => {
     expect(list.find((e) => e.source_url === "https://example.com/def")?.freshness_tier).toBe("stable");
   });
 });
+
+// @implements REQ-075 decay-reduction
+// @implements REQ-075 zero-decay-exemption
+// @implements REQ-075 freshness-ordering
+describe("confidence decay (F-R6-C-3 / REQ-075)", () => {
+  it("reduces the score as an ephemeral chunk ages, and keeps an evergreen one unchanged", () => {
+    const start = new Date("2026-02-01T00:00:00Z").getTime();
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(start);
+      kbIngest(
+        "aurora borealis forecasts depend on solar wind particle density",
+        "Aged page",
+        "https://example.com/aged",
+        "test",
+        "decay",
+        undefined,
+        "ephemeral",
+      );
+      kbIngest(
+        "aurora borealis forecasts depend on solar wind particle density",
+        "Evergreen page",
+        "https://example.com/evergreen",
+        "test",
+        "decay",
+        undefined,
+        "evergreen",
+      );
+
+      const freshAged = kbSearch("aurora borealis forecasts", 10, "decay").find((r) => r.source_url === "https://example.com/aged")!;
+      const freshEvergreen = kbSearch("aurora borealis forecasts", 10, "decay").find((r) => r.source_url === "https://example.com/evergreen")!;
+      expect(freshAged.freshness_score).toBeCloseTo(1);
+      expect(freshEvergreen.freshness_score).toBeCloseTo(1);
+
+      // Half of the ephemeral tier's 24-hour decay window has elapsed.
+      vi.setSystemTime(start + 12 * 60 * 60 * 1000);
+      const aged = kbSearch("aurora borealis forecasts", 10, "decay").find((r) => r.source_url === "https://example.com/aged")!;
+      const evergreen = kbSearch("aurora borealis forecasts", 10, "decay").find((r) => r.source_url === "https://example.com/evergreen")!;
+
+      // Decay: the aged score falls while relevance stays; zero-decay exempt.
+      expect(aged.freshness_score).toBeCloseTo(0.5);
+      // REQ-075: the freshness-adjusted score is relevance x freshness; the
+      // raw relevance is untouched by age.
+      expect(aged.score).toBeCloseTo(freshAged.score);
+      expect(aged.score * aged.freshness_score).toBeLessThan(freshAged.score * freshAged.freshness_score);
+      expect(evergreen.freshness_score).toBeCloseTo(1);
+      expect(evergreen.score * evergreen.freshness_score).toBeCloseTo(
+        freshEvergreen.score * freshEvergreen.freshness_score,
+      );
+
+      // Ordering: the unchanged evergreen copy now outranks the aged one.
+      const ranked = kbSearch("aurora borealis forecasts", 10, "decay").map((r) => r.source_url);
+      expect(ranked.indexOf("https://example.com/evergreen")).toBeLessThan(ranked.indexOf("https://example.com/aged"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

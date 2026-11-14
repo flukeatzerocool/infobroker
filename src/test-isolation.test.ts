@@ -1,4 +1,4 @@
-// @implements REQ-055 REQ-108
+// @implements REQ-055
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, statSync, writeFileSync, rmSync } from "node:fs";

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   initKb,
+  kbStats,
   kbIngest,
   flushKbWrites,
   getKbLockError,
@@ -241,5 +242,20 @@ describe("trunc-file TTL sweep", () => {
     if (previousTmp === undefined) delete process.env["TMPDIR"];
     else process.env["TMPDIR"] = previousTmp;
     rmSync(tmpRoot, { recursive: true, force: true });
+  });
+});
+
+// @implements REQ-084 stats-encryption
+describe("KB stats report the at-rest encryption state (F-R6-D-3)", () => {
+  it("surfaces the encryption state on stats and tracks it across a lock", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ibk-tools-stats-"));
+    try {
+      process.env["INFOBROKER_KB_KEY"] = KEY_B64;
+      initKb(makeConfig(dir, { enabled: true }));
+      expect(kbStats().encryption).toBe("enabled");
+    } finally {
+      delete process.env["INFOBROKER_KB_KEY"];
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
