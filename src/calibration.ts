@@ -113,11 +113,140 @@ export function reliabilityCurve(
   });
 }
 
+export type GoldLabelBasis = "documented" | "constructed" | "observed";
+
 export interface CalibrationEntry {
   id: string;
   confidence: number;
   correct: boolean;
   sources: string[];
+  claim?: string;
+  label_basis?: GoldLabelBasis;
+  truth_sources?: string[];
+  truth_note?: string;
+}
+
+/**
+ * A gold-set entry after `parseGoldSet` has validated it. `claim` and
+ * `label_basis` are present on every committed row; `truth_sources` is present
+ * on `documented`/`observed` rows and `truth_note` on `constructed` rows.
+ */
+export interface ValidatedGoldEntry extends CalibrationEntry {
+  claim: string;
+  label_basis: GoldLabelBasis;
+}
+
+const LADDER_RUNG_FOR_FAMILIES = (count: number): number => {
+  if (count >= 5) return 1.0;
+  if (count >= 3) return 0.9;
+  if (count === 2) return 0.7;
+  if (count === 1) return 0.3;
+  return 0.0;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/**
+ * REQ-123: validate a committed gold set and return its entries.
+ *
+ * The label is the truth of the stated `claim`, settled by `truth_sources`;
+ * `confidence` must be the ladder rung implied by the family count, and every
+ * source type must be a configured authority key. `weights` is the shipped
+ * `corroboration.authority_weights` map, so an unknown (typically misspelled)
+ * type fails here instead of silently taking the `?? 1.0` fallback and moving
+ * the row's reliability band.
+ */
+export function parseGoldSet(
+  raw: unknown,
+  weights: Record<string, number>,
+): ValidatedGoldEntry[] {
+  if (!isRecord(raw)) throw new Error("gold set must be a JSON object");
+  if (raw["version"] !== 2) throw new Error("gold set version must be 2");
+  const entries = raw["entries"];
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error("gold set must contain a non-empty 'entries' array");
+  }
+  const seen = new Set<string>();
+  const weightKeys = new Set(Object.keys(weights));
+  return entries.map((entry: unknown): ValidatedGoldEntry => {
+    if (!isRecord(entry)) throw new Error("invalid gold entry: not an object");
+    const id = entry["id"];
+    if (typeof id !== "string" || id.length === 0) {
+      throw new Error("invalid gold entry: missing non-empty 'id'");
+    }
+    if (seen.has(id)) throw new Error(`invalid gold entry ${id}: duplicate id`);
+    seen.add(id);
+    const claim = entry["claim"];
+    if (typeof claim !== "string" || claim.length === 0) {
+      throw new Error(`invalid gold entry ${id}: missing non-empty 'claim'`);
+    }
+    const basis = entry["label_basis"];
+    if (basis !== "documented" && basis !== "constructed" && basis !== "observed") {
+      throw new Error(`invalid gold entry ${id}: unknown label_basis`);
+    }
+    const confidence = entry["confidence"];
+    const correct = entry["correct"];
+    const sources = entry["sources"];
+    if (typeof correct !== "boolean") {
+      throw new Error(`invalid gold entry ${id}: 'correct' must be a boolean`);
+    }
+    if (!Array.isArray(sources) || sources.length === 0) {
+      throw new Error(`invalid gold entry ${id}: 'sources' must be a non-empty array`);
+    }
+    for (const source of sources) {
+      if (typeof source !== "string") {
+        throw new Error(`invalid gold entry ${id}: source type must be a string`);
+      }
+      if (!weightKeys.has(source)) {
+        throw new Error(`invalid gold entry ${id}: unknown source type '${source}'`);
+      }
+    }
+    if (new Set(sources).size !== sources.length) {
+      throw new Error(
+        `invalid gold entry ${id}: repeated source type breaks the one-label-per-family premise`,
+      );
+    }
+    const rung = LADDER_RUNG_FOR_FAMILIES(sources.length);
+    if (typeof confidence !== "number" || confidence !== rung) {
+      throw new Error(
+        `invalid gold entry ${id}: confidence ${String(confidence)} is not the rung ${rung} for ${sources.length} source families`,
+      );
+    }
+    const truthSources = entry["truth_sources"];
+    const truthNote = entry["truth_note"];
+    if (basis === "constructed") {
+      if (truthSources !== undefined) {
+        throw new Error(`invalid gold entry ${id}: constructed rows carry no truth_sources`);
+      }
+      if (typeof truthNote !== "string" || truthNote.length === 0) {
+        throw new Error(`invalid gold entry ${id}: constructed rows require a truth_note`);
+      }
+    } else {
+      if (!Array.isArray(truthSources) || truthSources.length === 0) {
+        throw new Error(`invalid gold entry ${id}: ${basis} rows require truth_sources`);
+      }
+      for (const url of truthSources) {
+        if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+          throw new Error(`invalid gold entry ${id}: truth_sources must be http(s) URLs`);
+        }
+      }
+    }
+    if (truthNote !== undefined && typeof truthNote !== "string") {
+      throw new Error(`invalid gold entry ${id}: 'truth_note' must be a string`);
+    }
+    return {
+      id,
+      claim,
+      confidence,
+      correct,
+      sources,
+      label_basis: basis,
+      ...(truthSources === undefined ? {} : { truth_sources: truthSources as string[] }),
+      ...(truthNote === undefined ? {} : { truth_note: truthNote }),
+    };
+  });
 }
 
 export interface CalibrationRow {

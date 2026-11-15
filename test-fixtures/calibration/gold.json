@@ -1,18 +1,168 @@
 {
-  "version": 1,
-  "note": "Deterministic calibration set for REQ-123. Each entry states the raw confidence, whether the finding was correct, and the source types used. No network.",
+  "version": 2,
+  "note": "Deterministic calibration set for REQ-123. Each entry states a claim, its truth (settled by truth_sources), the raw confidence rung, and the source types behind the finding. A label is the truth of the claim, not a function of the reported score. All rows are label_basis 'documented'; 'observed' is reserved for a finding whose outcome came from a recorded verification run, and is the precondition for treating the Brier score as a quality metric.",
   "entries": [
-    { "id": "c01", "confidence": 0.9, "correct": true, "sources": ["academic", "encyclopedia", "news"] },
-    { "id": "c02", "confidence": 0.7, "correct": true, "sources": ["web_search", "news"] },
-    { "id": "c03", "confidence": 0.3, "correct": false, "sources": ["web_search"] },
-    { "id": "c04", "confidence": 0.9, "correct": true, "sources": ["encyclopedia", "structured_fact", "academic"] },
-    { "id": "c05", "confidence": 0.7, "correct": false, "sources": ["web_search", "semantic"] },
-    { "id": "c06", "confidence": 0.3, "correct": true, "sources": ["news"] },
-    { "id": "c07", "confidence": 1.0, "correct": true, "sources": ["academic", "encyclopedia", "archive", "structured_fact", "news"] },
-    { "id": "c08", "confidence": 0.9, "correct": false, "sources": ["academic", "news", "web_search"] },
-    { "id": "c09", "confidence": 0.7, "correct": true, "sources": ["news", "semantic", "web_search"] },
-    { "id": "c10", "confidence": 0.3, "correct": false, "sources": ["semantic"] },
-    { "id": "c11", "confidence": 0.9, "correct": true, "sources": ["encyclopedia", "archive", "code"] },
-    { "id": "c12", "confidence": 0.7, "correct": true, "sources": ["web_search", "news", "synthesis"] }
+    {
+      "id": "c01",
+      "claim": "The Great Wall of China is a series of fortifications built across the historical northern borders of China.",
+      "confidence": 0.9,
+      "correct": true,
+      "sources": ["academic", "encyclopedia", "news"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Great_Wall_of_China"]
+    },
+    {
+      "id": "c02",
+      "claim": "Water boils at 100 degrees Celsius at standard atmospheric pressure.",
+      "confidence": 0.7,
+      "correct": true,
+      "sources": ["web_search", "news"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Boiling_point"]
+    },
+    {
+      "id": "c03",
+      "claim": "Lightning never strikes the same place twice.",
+      "confidence": 0.3,
+      "correct": false,
+      "sources": ["web_search"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Lightning"]
+    },
+    {
+      "id": "c04",
+      "claim": "Mount Everest is the highest mountain on Earth above sea level.",
+      "confidence": 0.9,
+      "correct": true,
+      "sources": ["encyclopedia", "structured_fact", "academic"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Mount_Everest"]
+    },
+    {
+      "id": "c05",
+      "claim": "Goldfish have a memory span of three seconds.",
+      "confidence": 0.7,
+      "correct": false,
+      "sources": ["web_search", "semantic"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Goldfish"]
+    },
+    {
+      "id": "c06",
+      "claim": "The Pacific Ocean is the largest and deepest of Earth's oceans.",
+      "confidence": 0.3,
+      "correct": true,
+      "sources": ["news"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Pacific_Ocean"]
+    },
+    {
+      "id": "c07",
+      "claim": "Photosynthesis converts light energy into chemical energy in plants, algae, and some bacteria.",
+      "confidence": 1.0,
+      "correct": true,
+      "sources": ["academic", "encyclopedia", "archive", "structured_fact", "news"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Photosynthesis"]
+    },
+    {
+      "id": "c08",
+      "claim": "The Great Wall of China is visible from the Moon with the naked eye.",
+      "confidence": 0.9,
+      "correct": false,
+      "sources": ["academic", "news", "web_search"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Great_Wall_of_China"]
+    },
+    {
+      "id": "c09",
+      "claim": "Antibiotics are ineffective against viruses.",
+      "confidence": 0.9,
+      "correct": true,
+      "sources": ["news", "semantic", "web_search"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Antibiotic"]
+    },
+    {
+      "id": "c10",
+      "claim": "Humans use only ten percent of their brains.",
+      "confidence": 0.3,
+      "correct": false,
+      "sources": ["semantic"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Ten_percent_of_the_brain_myth"]
+    },
+    {
+      "id": "c11",
+      "claim": "An octopus has three hearts.",
+      "confidence": 0.9,
+      "correct": true,
+      "sources": ["encyclopedia", "archive", "code"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Octopus"]
+    },
+    {
+      "id": "c12",
+      "claim": "A banana is botanically a berry.",
+      "confidence": 0.9,
+      "correct": true,
+      "sources": ["web_search", "news", "synthesis"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Banana"]
+    },
+    {
+      "id": "n0",
+      "claim": "The Amazon River is the largest river in the world by discharge volume.",
+      "confidence": 0.9,
+      "correct": true,
+      "sources": ["academic", "encyclopedia", "archive"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Amazon_River"]
+    },
+    {
+      "id": "n1",
+      "claim": "The MMR vaccine causes autism.",
+      "confidence": 0.9,
+      "correct": false,
+      "sources": ["academic", "encyclopedia", "archive"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/MMR_vaccine_and_autism"]
+    },
+    {
+      "id": "n2",
+      "claim": "Diamonds are formed from coal.",
+      "confidence": 0.7,
+      "correct": false,
+      "sources": ["web_search", "news"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Diamond"]
+    },
+    {
+      "id": "n3",
+      "claim": "Venus is the hottest planet in the Solar System.",
+      "confidence": 0.3,
+      "correct": true,
+      "sources": ["web_search"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Venus"]
+    },
+    {
+      "id": "n4",
+      "claim": "Sound travels faster in water than in air.",
+      "confidence": 0.3,
+      "correct": true,
+      "sources": ["academic"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Speed_of_sound"]
+    },
+    {
+      "id": "n5",
+      "claim": "The Sun is a planet.",
+      "confidence": 0.3,
+      "correct": false,
+      "sources": ["structured_fact"],
+      "label_basis": "documented",
+      "truth_sources": ["https://en.wikipedia.org/wiki/Sun"]
+    }
   ]
 }

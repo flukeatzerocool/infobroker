@@ -17,8 +17,9 @@ import { join } from "node:path";
 import { handleHelp } from "./lib/args.js";
 import {
   buildCalibrationReport,
-  type CalibrationEntry,
+  parseGoldSet,
   type CalibrationOptions,
+  type ValidatedGoldEntry,
 } from "../src/calibration.js";
 
 const USAGE = `calibrate-confidence — report calibration for the gold set (REQ-123)
@@ -54,17 +55,9 @@ function loadShippedSettings(): { weights: Record<string, number>; options: Cali
   };
 }
 
-function loadGold(path: string): CalibrationEntry[] {
-  const raw = JSON.parse(readFileSync(path, "utf-8")) as { entries?: CalibrationEntry[] };
-  if (!Array.isArray(raw.entries) || raw.entries.length === 0) {
-    throw new Error("gold set must contain a non-empty 'entries' array");
-  }
-  for (const entry of raw.entries) {
-    if (typeof entry.confidence !== "number" || typeof entry.correct !== "boolean" || !Array.isArray(entry.sources)) {
-      throw new Error(`invalid gold entry: ${JSON.stringify(entry)}`);
-    }
-  }
-  return raw.entries;
+function loadGold(path: string, weights: Record<string, number>): ValidatedGoldEntry[] {
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
+  return parseGoldSet(parsed, weights);
 }
 
 function main(): void {
@@ -88,8 +81,8 @@ function main(): void {
     process.exit(1);
   }
   try {
-    const entries = loadGold(gold);
     const { weights, options } = loadShippedSettings();
+    const entries = loadGold(gold, weights);
     const built = buildCalibrationReport(entries, weights, options);
     const report = {
       entries: built.entries,
