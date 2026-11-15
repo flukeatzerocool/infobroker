@@ -51,6 +51,12 @@ API key; one connection is one configuration; API keys never appear in tool
 output, logs or errors; and every tool input is validated server-side before any
 outbound request (SR-001–SR-010).
 
+The five-function model follows the intelligence cycle formalized in 1948 by
+Davidson and Glass at the US Army Command and General Staff College —
+requirements, collection, processing, analysis and production, dissemination —
+closed by feedback and revised requirements. The model is an idealization, which
+is why the functions above are stated as re-entrant contracts rather than phases.
+
 ### North Star
 
 This subsection is framing, not contract; the normative statements live in §4.

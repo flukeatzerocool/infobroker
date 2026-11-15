@@ -2,6 +2,14 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- §1 names the model's origin: the intelligence cycle formalized in 1948 by
+  Davidson and Glass at the US Army Command and General Staff College, closed by
+  feedback and revised requirements, and stated as an idealization — which is why
+  the five functions are re-entrant contracts rather than phases. Aligning
+  REQ-115/REQ-118 with ICD 203 and ICD 206 is on `ROADMAP.md` rather than in this
+  change: the DNI-hosted PDF could not be read (binary payload), so no provision
+  is cited and nothing was paraphrased.
+
 - The evaluation harness now speaks the same vocabulary as the spec.
   `debate-club/personas.json` replaces its free-text `audience` field — which
   held *intents* ("literature review", "fact-check") under an audience name —
