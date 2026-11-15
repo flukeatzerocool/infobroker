@@ -70,6 +70,8 @@ export interface ServerOptions {
    * `{ kb: null }` starts a server with no knowledge base.
    */
   configLayer?: (tmpDir: string) => Record<string, unknown>;
+  /** Raw bytes for config.local.json; overrides configLayer (invalid-layer cases). */
+  configLocalRaw?: string;
 }
 
 export async function startServer(options: ServerOptions = {}): Promise<DebateServer> {
@@ -88,7 +90,8 @@ export async function startServer(options: ServerOptions = {}): Promise<DebateSe
   };
   writeFileSync(
     cfgLocal,
-    JSON.stringify({ ...defaultLayer, ...options.configLayer?.(tmpDir) }, null, 2)
+    options.configLocalRaw ??
+      JSON.stringify({ ...defaultLayer, ...options.configLayer?.(tmpDir) }, null, 2)
   );
 
   const child = spawn(

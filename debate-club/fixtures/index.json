@@ -18,6 +18,18 @@
       "host": "en.wikipedia.org",
       "method": "GET",
       "path_regex": "^/w/api\\.php",
+      "query_regex": "[?&]srsearch=CooldownProbe",
+      "status": 429,
+      "headers": {
+        "content-type": "application/json",
+        "retry-after": "30"
+      },
+      "body": "{\"error\":\"rate limited\"}"
+    },
+    {
+      "host": "en.wikipedia.org",
+      "method": "GET",
+      "path_regex": "^/w/api\\.php",
       "query_regex": "[?&]srsearch=Survivor\\+Series\\+1997",
       "status": 200,
       "headers": {
