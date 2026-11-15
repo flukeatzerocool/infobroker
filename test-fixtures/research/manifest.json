@@ -375,7 +375,7 @@
     "followups": [],
     "tokens": ["analysis-loop complete."],
     "absent": [],
-    "sections": ["Uncertainty Register", "gap", "zero usable", "no source"],
+    "sections": ["Uncertainty Register", "gap", "zero usable|no usable|nonexistent", "no source"],
     "tool_audit": { "verify_claims": true, "uses_infobroker": true },
     "citation_sample": 2,
     "rubric": [

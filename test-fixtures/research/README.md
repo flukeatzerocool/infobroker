@@ -34,7 +34,10 @@ entry declares:
   and a "Close it here and accept the remaining gaps." turn to reach their
   final completion token.
 - `tokens` (order-sensitive), `absent` (must not appear), `sections`
-  (case-insensitive substring needles, `|` = OR).
+  (case-insensitive substring needles, `|` = OR). A `sections` needle must
+  list the acceptable synonyms for one finding, not one literal: when a
+  correct run fails on a single wording, widen the needle set rather than pin
+  the wording in skill prose (a shape's block cannot bind a model's phrasing).
 
 ## Evaluation semantics
 
