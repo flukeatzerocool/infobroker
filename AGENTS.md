@@ -294,6 +294,7 @@ the table.
 | `npm run check-script-discipline` | Script discipline: shebang + header, exit-code contract, import.meta.dirname, no empty catch; `bash -n` syntax and removed-flag (`--attach`) checks over shell entry points and `scripts/**/*.mjs` |
 | `npm run check-tdqs` | Deterministic TDQS 1.2 structural conformance over the live tool surface (REQ-106) |
 | `npm run check-intent-citations` | Routing citations resolve against the live tool schema; every registered tool and declared operation is cited (REQ-107) |
+| `npm run check-user-surface` | Persona↔§D group and persona↔scenario coverage, defaults register↔config agreement, §1 goal↔evidence matrix (REQ-055, REQ-078) |
 | `npm run check-harness-expectations` | Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators |
 | `npm run check-gate-coverage` | Every G1 REQ is backed by a test citation or a recorded exemption (REQ-055) |
 | `npm run check-skill-harness` | Skill-check and event-stream evaluators: advisory exclusion, gating, intermediate-message tokens |

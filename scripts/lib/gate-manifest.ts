@@ -81,6 +81,12 @@ export const GATES: readonly Gate[] = [
     fast: true,
   },
   {
+    name: "check-user-surface",
+    description:
+      "Persona↔§D group and persona↔scenario coverage, defaults register↔config agreement, §1 goal↔evidence matrix (REQ-055, REQ-078)",
+    fast: true,
+  },
+  {
     name: "check-harness-expectations",
     description:
       "Harness `tool_audit` keys are registered with their encoded behavior and recognized by their evaluators",

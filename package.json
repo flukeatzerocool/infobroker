@@ -60,6 +60,7 @@
     "check-script-discipline": "npx tsx scripts/check-script-discipline.ts",
     "check-tdqs": "npx tsx scripts/check-tdqs.ts",
     "check-intent-citations": "npx tsx scripts/check-intent-citations.ts",
+    "check-user-surface": "npx tsx scripts/check-user-surface.ts",
     "check-harness-expectations": "npx tsx scripts/check-harness-expectations.ts",
     "check-gate-coverage": "npx tsx scripts/check-gate-coverage.ts",
     "check-pack": "npx tsx scripts/check-pack.ts",

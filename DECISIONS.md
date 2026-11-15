@@ -2,6 +2,22 @@
 
 ## Active Decisions
 
+### D-125: Audience and Defaults Evidence Is Static Where It Can Be, Agentic Where It Must Be (2026.11.15)
+
+The post-EGM tree changed 260 files, but the harness still mapped five
+personas to four scenarios and proved only that the server starts with no
+config. Two failure classes were invisible: a new REQ could be fully cited
+without any user-shaped request exercising it, and a Lab result could not be
+attributed to shipped defaults because `lab.sh` injected the operator's real
+`config.local.json`. Decision: `check-user-surface` gates the static surface
+(persona↔§D group, persona↔scenario, defaults register↔config, §1 goal↔matrix);
+Arena carries the behavioral default-path contracts; the Lab is advisory and
+must run under a named config profile (`fresh`, `solo-override`, `constrained`,
+`power`) with the profile and layer hash recorded in `run-meta.json`. The Lab
+is never a `npm run check` gate because model output is nondeterministic. The
+defaults register and goal matrix live in `docs/` because they change with the
+config and the spec, not with a single decision.
+
 ### D-124: One Commit per Increment Is the Pipeline Default (2026.11.14)
 
 The split-commit series produced 263 commits for 63 increments in five days;

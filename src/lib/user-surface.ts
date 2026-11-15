@@ -1,0 +1,216 @@
+// @implements REQ-055 REQ-078
+// user-surface.ts — pure checks that bind the shipped user surface to the
+// evidence that is supposed to cover it: personas to §D feature groups,
+// personas to harness scenarios, the defaults register to the live config, and
+// the §1 goals to the goal-evidence matrix.
+//
+// The functions take parsed inputs so the gate and its unit tests share one
+// implementation and no check depends on the repository being present.
+
+import { parseFeatureTaxonomy } from "./feature-taxonomy.js";
+
+export interface Persona {
+  id: string;
+  label?: string;
+  feature_groups?: number[];
+}
+
+export interface Scenario {
+  id: string;
+  persona?: string;
+}
+
+export interface UserSurfaceInput {
+  specText: string;
+  config: Record<string, unknown>;
+  personas: Persona[];
+  labScenarios: Scenario[];
+  researchScenarios: Scenario[];
+  defaultsRegister: string;
+  goalMatrix: string;
+}
+
+export interface Finding {
+  code: string;
+  message: string;
+}
+
+/** Feature groups an audience persona is expected to cover. */
+export const AUDIENCE_GROUPS = [1, 2, 3, 4, 5, 7] as const;
+
+/** Groups that are cross-cutting rather than a single audience. */
+export const CROSS_CUTTING_GROUPS = [6, 8, 9] as const;
+
+/** Config sections whose second-level keys the defaults register must cover. */
+export const REGISTER_SECTIONS = [
+  "fetch",
+  "expand",
+  "research",
+  "deep",
+  "analysis",
+  "corroboration",
+  "output",
+  "source_quality",
+  "content_policy",
+  "state",
+  "kb",
+  "preservation",
+] as const;
+
+const DOTTED_TOKEN = /`([a-z_]+(?:\.[a-z0-9_]+)+)`/g;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Resolve a dotted path in the config object; undefined when absent. */
+export function configPath(config: Record<string, unknown>, path: string): unknown {
+  let node: unknown = config;
+  for (const part of path.split(".")) {
+    if (!isPlainObject(node) || !(part in node)) return undefined;
+    node = node[part];
+  }
+  return node;
+}
+
+/** Dotted config paths named in the register (config sections only). */
+export function registerPaths(text: string): string[] {
+  const sections = new Set<string>(REGISTER_SECTIONS);
+  return [...text.matchAll(DOTTED_TOKEN)]
+    .map((m) => m[1]!)
+    .filter((token) => sections.has(token.split(".")[0]!))
+    .sort();
+}
+
+/** §1 goal titles, in order, without the trailing period. */
+export function specGoals(specText: string): string[] {
+  const start = specText.indexOf("## §1 Mission and Capability Model");
+  if (start === -1) return [];
+  const rest = specText.slice(start);
+  const next = /^## /m.exec(rest.slice(4));
+  const section = next ? rest.slice(0, 4 + next.index) : rest;
+  return [...section.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map((m) =>
+    m[1]!.replace(/\.$/, ""),
+  );
+}
+
+/** Every second-level key under the declared register sections. */
+export function registerableConfigPaths(config: Record<string, unknown>): string[] {
+  const paths: string[] = [];
+  for (const section of REGISTER_SECTIONS) {
+    const value = config[section];
+    if (!isPlainObject(value)) continue;
+    paths.push(section);
+    for (const key of Object.keys(value)) paths.push(`${section}.${key}`);
+  }
+  return paths;
+}
+
+/**
+ * A register token covers a path when it names the path, one of its
+ * ancestors, or one of its descendants. `kb.freshness` covers
+ * `kb.freshness.tiers.ephemeral.decay_hours`, and a row for a section's child
+ * (for example `fetch.crawl_max_pages`) covers the section row itself.
+ */
+function covers(tokens: string[], path: string): boolean {
+  return tokens.some(
+    (token) => path === token || path.startsWith(`${token}.`) || token.startsWith(`${path}.`),
+  );
+}
+
+export function checkUserSurface(input: UserSurfaceInput): Finding[] {
+  const findings: Finding[] = [];
+  const taxonomy = parseFeatureTaxonomy(input.specText);
+  const groupNumbers = new Set(taxonomy.map((row) => row.group));
+  const goals = specGoals(input.specText);
+  const tokens = registerPaths(input.defaultsRegister);
+
+  if (taxonomy.length === 0) {
+    findings.push({ code: "taxonomy-missing", message: "§D feature taxonomy could not be parsed" });
+  }
+  if (goals.length !== 6) {
+    findings.push({
+      code: "goals-unparsed",
+      message: `§1 yielded ${goals.length} goals; expected 6`,
+    });
+  }
+
+  const personaIds = new Set<string>();
+  for (const persona of input.personas) {
+    if (!persona.id) {
+      findings.push({ code: "persona-id-missing", message: "a persona has no id" });
+      continue;
+    }
+    if (personaIds.has(persona.id)) {
+      findings.push({ code: "persona-duplicate", message: `persona \`${persona.id}\` is declared twice` });
+    }
+    personaIds.add(persona.id);
+    for (const group of persona.feature_groups ?? []) {
+      if (!groupNumbers.has(group)) {
+        findings.push({
+          code: "persona-group-unknown",
+          message: `persona \`${persona.id}\` names §D group ${group}, which does not exist`,
+        });
+      }
+    }
+  }
+
+  for (const group of AUDIENCE_GROUPS) {
+    if (!input.personas.some((persona) => (persona.feature_groups ?? []).includes(group))) {
+      findings.push({
+        code: "group-uncovered",
+        message: `audience-facing §D group ${group} has no persona`,
+      });
+    }
+  }
+
+  const scenarioPersonas = new Set(
+    [...input.labScenarios, ...input.researchScenarios]
+      .map((scenario) => scenario.persona)
+      .filter((persona): persona is string => typeof persona === "string"),
+  );
+  for (const persona of input.personas) {
+    if (!scenarioPersonas.has(persona.id)) {
+      findings.push({
+        code: "persona-without-scenario",
+        message: `persona \`${persona.id}\` has no scenario in either harness`,
+      });
+    }
+  }
+  for (const scenario of input.labScenarios) {
+    if (scenario.persona && !personaIds.has(scenario.persona)) {
+      findings.push({
+        code: "scenario-persona-unknown",
+        message: `scenario \`${scenario.id}\` names persona \`${scenario.persona}\`, which is not declared`,
+      });
+    }
+  }
+
+  for (const path of registerableConfigPaths(input.config)) {
+    if (!covers(tokens, path)) {
+      findings.push({
+        code: "register-missing-path",
+        message: `config path \`${path}\` is not described in the defaults register`,
+      });
+    }
+  }
+  for (const token of tokens) {
+    if (configPath(input.config, token) === undefined) {
+      findings.push({
+        code: "register-unknown-path",
+        message: `defaults register names \`${token}\`, which is not in config.json`,
+      });
+    }
+  }
+
+  for (const goal of goals) {
+    if (!input.goalMatrix.includes(goal)) {
+      findings.push({
+        code: "goal-missing",
+        message: `goal "${goal}" has no row in the goal-evidence matrix`,
+      });
+    }
+  }
+
+  return findings;
+}
