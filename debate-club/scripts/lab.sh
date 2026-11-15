@@ -22,6 +22,7 @@ REPO="$(cd "$DEBATE/.." && pwd)"
 MANIFEST="$DEBATE/lab-scenarios.json"
 EVALUATOR="$SCRIPT_DIR/evaluate-lab.mjs"
 PROFILE_SCRIPT="$SCRIPT_DIR/profile.mjs"
+TSX="$REPO/node_modules/.bin/tsx"
 RUNS_DIR="${DEBATE_RUNS_DIR:-$HOME/.local/share/infobroker/debate-club-runs}"
 KEEP_RUNS="${DEBATE_KEEP_RUNS:-20}"
 REQUIRE_REPO_MCP="${DEBATE_REQUIRE_REPO_MCP:-0}"
@@ -56,6 +57,9 @@ fi
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RUN_DIR="$DEBATE/.runs/lab-$TIMESTAMP"
+# One run-scoped KB root: a re-run cannot recall an earlier run's store or its
+# report:// artifacts.
+KB_ROOT="$RUN_DIR/kb"
 mkdir -p "$RUN_DIR/scenarios" "$RUN_DIR/profiles"
 
 export ONLY FROM
@@ -104,20 +108,35 @@ if [[ "$MCP_MODE" == "repo" ]]; then
     const path = require("path");
     const [dir, script] = process.argv.slice(1);
     const groups = JSON.parse(fs.readFileSync(dir + "/groups.json", "utf8"));
-    const out = {};
     for (const g of groups) {
       const { spawnSync } = require("child_process");
       const r = spawnSync(process.execPath, [script, "--print", g.profile], { encoding: "utf8" });
       if (r.status !== 0) { console.error(r.stderr || "profile resolution failed"); process.exit(1); }
-      const file = path.join(dir, "profiles", g.profile + ".json");
-      fs.writeFileSync(file, r.stdout);
+      fs.writeFileSync(path.join(dir, "profiles", g.profile + ".json"), r.stdout);
+    }
+  ' "$RUN_DIR" "$PROFILE_SCRIPT"
+  # Pin the run-scoped KB on every profile that keeps one, then hash the
+  # isolated bytes: the layer that runs is the layer recorded.
+  for profile_file in "$RUN_DIR"/profiles/*.json; do
+    "$TSX" "$REPO/scripts/lib/repo-mode.ts" isolate-kb "$KB_ROOT" "$profile_file" "$profile_file" \
+      || die "Repo mode failed: could not isolate the KB in $profile_file"
+  done
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const dir = process.argv[1];
+    const groups = JSON.parse(fs.readFileSync(dir + "/groups.json", "utf8"));
+    const out = {};
+    for (const g of groups) {
+      const bytes = fs.readFileSync(path.join(dir, "profiles", g.profile + ".json"));
       out[g.profile] = {
-        layer_sha256: require("crypto").createHash("sha256").update(r.stdout).digest("hex").slice(0, 12),
+        layer_sha256: crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 12),
         scenarios: g.ids,
       };
     }
     fs.writeFileSync(dir + "/profiles.json", JSON.stringify(out, null, 2) + "\n");
-  ' "$RUN_DIR" "$PROFILE_SCRIPT"
+  ' "$RUN_DIR"
 else
   node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ ambient: { layer_sha256: null, scenarios: JSON.parse(require("fs").readFileSync(process.argv[2],"utf8")).flatMap((g)=>g.ids) } }, null, 2) + "\n")' "$RUN_DIR/profiles.json" "$RUN_DIR/groups.json"
 fi
@@ -131,31 +150,10 @@ start_profile_server() {
   local project="$RUN_DIR/mcp-project-$profile"
   local layer="$RUN_DIR/profiles/$profile.json"
   mkdir -p "$project"
-  node -e '
-    const fs = require("fs");
-    const path = require("path");
-    const [repo, out, layer] = process.argv.slice(1);
-    const cfg = {
-      "$schema": "https://opencode.ai/config.json",
-      // Repo mode must exercise the working tree skills, not whatever the ambient
-      // client config names. Without this the MCP is repo-scoped but the skill
-      // layer is not, so a skill change could pass without being loaded.
-      skills: [path.join(repo, "skills")],
-      mcp: {
-        infobroker: {
-          type: "local",
-          command: [path.join(repo, "node_modules", ".bin", "tsx"), path.join(repo, "src", "index.ts")],
-          environment: {
-            INFOBROKER_CONFIG: path.join(repo, "config.json"),
-            INFOBROKER_CONFIG_LOCAL: layer,
-          },
-        },
-      },
-    };
-    fs.writeFileSync(path.join(out, "opencode.json"), JSON.stringify(cfg, null, 2) + "\n");
-  ' "$REPO" "$project" "$layer"
   # The cwd is what makes the project MCP config authoritative. Each profile
   # group gets its own server so the layer is fixed for the whole group.
+  "$TSX" "$REPO/scripts/lib/repo-mode.ts" project "$REPO" "$layer" "$project/opencode.json" \
+    || die "Repo mode failed: could not write the project MCP config for $profile"
   ensure_opencode_serve_at "$RUN_DIR" "opencode-serve-$profile.log" "$(find_free_port)" "$project"
   ( cd "$project" && opencode debug config ) > "$RUN_DIR/debug-config-$profile.json" 2>> "$RUN_DIR/openruns.log" \
     || die "opencode debug config failed for profile $profile (see $RUN_DIR/openruns.log)"
@@ -183,6 +181,11 @@ cleanup() { cleanup_serve; }
 trap cleanup EXIT SIGINT SIGTERM
 
 : > "$RUN_DIR/mcp-target.txt"
+if [[ "$MCP_MODE" == "repo" ]]; then
+  # The run-scoped store the profile layers pin (profile `constrained` keeps
+  # `kb: null` by design and therefore reads none of it).
+  "$TSX" "$REPO/scripts/lib/repo-mode.ts" paths "$KB_ROOT" >> "$RUN_DIR/mcp-target.txt"
+fi
 : > "$RUN_DIR/results.ndjson"
 
 run_scenario() {

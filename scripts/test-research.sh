@@ -9,7 +9,7 @@
 #   ./scripts/test-research.sh [--only=<id>[,<id>...]] [--from=<id>] [--mcp=repo|ambient] [--help]
 #   --only=<ids>   Run only the named scenario ids (comma-separated).
 #   --from=<id>    Skip scenarios before <id> (in manifest order).
-#   --mcp=repo     Exercise this working tree (run-local empty config layer).
+#   --mcp=repo     Exercise this working tree (run-local layer, isolated KB).
 #   --mcp=ambient  Exercise the configured deployment (default).
 #   --help (-h)    Show this message.
 
@@ -78,35 +78,18 @@ fi
 
 # ── Start backend ──
 if [[ "$MCP_MODE" == "repo" ]]; then
-  # Repo-scoped: point the MCP at this working tree with a run-local empty
-  # user layer, so the operator's config.local.json cannot change the result.
+  # Repo-scoped: point the MCP at this working tree with a run-local layer, so
+  # neither the operator's config.local.json nor a populated KB can change the
+  # result. The KB root is run-scoped: a re-run cannot recall an earlier run's
+  # store or its report:// artifacts.
+  TSX="$PROJECT_DIR/node_modules/.bin/tsx"
   MCP_PROJECT="$RUN_DIR/mcp-project"
+  KB_ROOT="$RUN_DIR/kb"
   mkdir -p "$MCP_PROJECT"
-  printf '{}\n' > "$RUN_DIR/config.local.json"
-  node -e '
-    const fs = require("fs");
-    const path = require("path");
-    const [repo, out, layer] = process.argv.slice(1);
-    const cfg = {
-      "$schema": "https://opencode.ai/config.json",
-      // The MCP override alone is not enough: the client also supplies skills,
-      // and the ambient list points wherever Infobroker was installed.
-      // Declaring the working-tree skills is what makes a repo-mode run prove
-      // this checkout, not an installed copy.
-      skills: [path.join(repo, "skills")],
-      mcp: {
-        infobroker: {
-          type: "local",
-          command: [path.join(repo, "node_modules", ".bin", "tsx"), path.join(repo, "src", "index.ts")],
-          environment: {
-            INFOBROKER_CONFIG: path.join(repo, "config.json"),
-            INFOBROKER_CONFIG_LOCAL: layer,
-          },
-        },
-      },
-    };
-    fs.writeFileSync(path.join(out, "opencode.json"), JSON.stringify(cfg, null, 2) + "\n");
-  ' "$PROJECT_DIR" "$MCP_PROJECT" "$RUN_DIR/config.local.json"
+  "$TSX" "$SCRIPT_DIR/lib/repo-mode.ts" isolate-kb "$KB_ROOT" "$RUN_DIR/config.local.json" "$RUN_DIR/config.local.json" \
+    || die "Repo mode failed: could not build the run-local config layer"
+  "$TSX" "$SCRIPT_DIR/lib/repo-mode.ts" project "$PROJECT_DIR" "$RUN_DIR/config.local.json" "$MCP_PROJECT/opencode.json" \
+    || die "Repo mode failed: could not write the project MCP config"
   ensure_opencode_serve_at "$RUN_DIR" "opencode-serve.log" "" "$MCP_PROJECT"
   ( cd "$MCP_PROJECT" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" \
     || die "opencode debug config failed in $MCP_PROJECT (see $RUN_DIR/openruns.log)"
@@ -114,8 +97,11 @@ if [[ "$MCP_MODE" == "repo" ]]; then
     "$RUN_DIR/debug-config.json" "$MCP_PROJECT/opencode.json" "$PROJECT_DIR/skills") \
     || die "Repo mode refused: the run project does not load this tree's skills (see $RUN_DIR/debug-config.json)"
   info "$skills_detail"
-  printf 'repo:%s\n' "$MCP_PROJECT" > "$RUN_DIR/mcp-target.txt"
-  printf 'skills:%s\n' "$PROJECT_DIR/skills" >> "$RUN_DIR/mcp-target.txt"
+  {
+    printf 'repo:%s\n' "$MCP_PROJECT"
+    printf 'skills:%s\n' "$PROJECT_DIR/skills"
+    "$TSX" "$SCRIPT_DIR/lib/repo-mode.ts" paths "$KB_ROOT"
+  } > "$RUN_DIR/mcp-target.txt"
 else
   ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
   ( cd "$PWD" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true
