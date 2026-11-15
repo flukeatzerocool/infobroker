@@ -2,6 +2,20 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- A repo-mode Lab run now loads this working tree's skills. The run project
+  declares `<repo>/skills` and the profile is refused when its captured
+  `opencode debug config` does not list that directory, using the same
+  `assert-skills.ts` gate as the research suite; `mcp-target.txt` records
+  `skills:<repo>/skills` beside the MCP command. Previously the MCP was
+  repo-scoped while the skill layer stayed ambient, so an installed copy could
+  answer for this tree (D-130).
+
+- A research-suite turn that times out is that scenario's failure, not the
+  suite's. The turn's exit status is captured; `timeout` (124) or another
+  non-zero exit becomes a complete failure record and the next scenario runs.
+  Previously the 124 exit hit `set -e` and ended the run, so every later
+  scenario was silently never evaluated.
+
 - The routed shape now owns the completion token. Phase 0 lists every shape's
   token once, and the Research & Write and Fact-Check pipelines no longer print
   their own literal. A repo-mode S6 run had produced vetting content —

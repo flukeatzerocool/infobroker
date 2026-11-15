@@ -9,7 +9,20 @@
   Standing facts are not roadmap items: accepted dependency advisories and
   by-design limitations are recorded in DECISIONS.md, and a review cites the
   decision rather than filing a roadmap entry. `npm run check-roadmap`
-  enforces this rule; `## Non-goals` is exempt from it because
+  enforces this rule; `## Repo mode does not isolate the knowledge base
+
+- A `--mcp=repo` N4 run on 2026-11-15 read the operator's populated KB and
+  recalled earlier `report://nebulagrid-*` artifacts as evidence, reporting 16
+  "sources" for an unannounced service; the empty run-local layer changes the
+  MCP and skills but not `kb.storage_path`.
+- Point the run-local layer at a run-scan `storage_path` (or an empty temp
+  store) so a repo-mode result is reproducible and cannot be corroborated by a
+  prior run of the same question.
+
+**Trigger:** start with the next research-suite change; close when a repo-mode
+run records an isolated KB path in its run artifacts.
+
+## Non-goals` is exempt from it because
   `npm run check-non-goals` verifies that section as a pointer to the
   `## Scope Non-goals` block in DECISIONS.md.
 -->
@@ -25,17 +38,6 @@
 **Trigger:** start with the next research-suite change; close when a repo-mode N4
 run that reports a zero-source conclusion passes its section gate.
 
-## Lab repo mode inherits the deployed skills too
-
-- `debate-club/scripts/lab.sh:125–145` builds the same run project as the
-  research suite but declares no `skills`, so a repo-mode Lab run can exercise
-  an installed copy; the same inline layer parsing sits at `:150–164`.
-- Reuse `scripts/test-research/assert-skills.ts` and the run-project `skills`
-  key rather than adding a second parser; refuse to run on a mismatch.
-
-**Trigger:** start with the next Lab change; close when a repo-mode Lab run
-records the working tree's skills target, or refuses to run without it.
-
 ## Research-suite token set assumes a single-turn answer
 
 - The gated-analysis scenario asserts four phase tokens, but a multi-turn run
@@ -48,16 +50,18 @@ records the working tree's skills target, or refuses to run without it.
 multi-turn gated run and a single-turn gated run both satisfy the same stated
 contract.
 
-## Research-suite per-turn timeout aborts remaining scenarios
+## Repo mode does not isolate the knowledge base
 
-- One gated scenario (A1a, 40 tool calls / 35 page fetches) exceeded the
-  script's 1800 s `timeout`; `set -e` then ended the run and the remaining
-  scenario never executed (2026-11-15).
-- Record a timeout as that scenario's failure and continue, or raise the
-  default with a documented ceiling.
+- A `--mcp=repo` N4 run on 2026-11-15 read the operator's populated KB and
+  recalled earlier `report://nebulagrid-*` artifacts as evidence, reporting 16
+  "sources" for an unannounced service; the empty run-local layer changes the
+  MCP and skills but not `kb.storage_path`.
+- Point the run-local layer at a run-scan `storage_path` (or an empty temp
+  store) so a repo-mode result is reproducible and cannot be corroborated by a
+  prior run of the same question.
 
-**Trigger:** start with the next research-suite change; close when a run
-containing one timeout still evaluates every selected scenario.
+**Trigger:** start with the next research-suite change; close when a repo-mode
+run records an isolated KB path in its run artifacts.
 
 ## Non-goals
 

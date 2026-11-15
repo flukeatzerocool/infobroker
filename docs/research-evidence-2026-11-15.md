@@ -147,3 +147,16 @@ Both roadmap sections close on this result: the token the S6 route emits is its
 own shape's, and N4 (above) already emits `analysis-loop complete.` with an
 Uncertainty Register, which is the pair its trigger names. The remaining N4
 `zero usable` needle is a separate, still-open item.
+
+## Harness closeout (2026-11-15, later)
+
+Two harness defects recorded at the top of this document are fixed: the suite
+no longer aborts after a timed-out turn (`7813ef2`), and repo-mode Lab runs now
+assert the working tree's skills (`b97b3b2`, D-130). The remaining N4
+`zero usable` needle was widened to accept synonyms (`f11e22a`), but the
+re-run failed for a different, newly recorded reason: repo mode does not
+isolate `kb.storage_path`, so the run recalled this question's own earlier
+reports as sources and never reached a zero-source conclusion. That item stays
+open and is scheduled on `ROADMAP.md` as KB isolation; the token-scope contract
+it shares with S9 is stated in `test-fixtures/research/README.md` and S9 passes
+under it (`a92f13a`).
