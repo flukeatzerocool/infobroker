@@ -55,7 +55,7 @@ Both failures are shape-selection divergences, not execution or evidence defects
 
 Everything else passed: every scenario engaged the MCP, `verify_claims` ran on the contested cases, and sampled citations were reachable apart from site-side blocks and one transient error. Two harness defects were fixed before the batches could produce usable rows (`7de2192`, `6bf4aed`).
 
-The shape divergence is filed on `ROADMAP.md` rather than treated as run noise: it repeated across two independent personas.
+The shape divergence was filed on `ROADMAP.md` rather than treated as run noise: it repeated across two independent personas.
 
 ## Repo-mode skills target (2026-11-15)
 
@@ -78,3 +78,39 @@ Recorded run: `./scripts/test-research.sh --mcp=repo --only=S2`
 
 The assertion proves configuration, not cross-layer precedence when two roots
 define the same skill name (D-129).
+
+## Shape-selection re-run (2026-11-15, repo mode)
+
+The precedence rule from `77c3759` was re-run against S6 and N4 with the working
+tree's own skills, one scenario per invocation so a timeout cannot abort the
+next. Increment `2026-11-15-shape-selection-closeout`.
+
+```
+./scripts/test-research.sh --mcp=repo --only=S6   # run-20261115-135734
+./scripts/test-research.sh --mcp=repo --only=N4   # run-20261115-141647
+```
+
+Both runs reported `project layer declares /home/fluke/Infobroker/skills` and
+`skills:/home/fluke/Infobroker/skills` in `mcp-target.txt`.
+
+| ID | Suite | Close criterion (shape token) | Attribution |
+|---|---|---|---|
+| S6 | fail — no `vetting complete.`, no `checklist` section | **not met** | content is vetting ("I ran this as a vetting/due-diligence job", red-flag register, per-source grades, `verify_claims`), so the route held and the **token carrier** failed; no `Methodology` section and no `## Checklist`, so the Vetting block in `report-template.md` was never applied |
+| N4 | fail — `zero usable` section only | **met** | `## Uncertainty Register` present (`:9648`), zero-source conclusion stated as "nonexistent", three gaps named; only the manifest's literal `zero usable` phrasing is absent |
+
+Tokens emitted, verbatim:
+
+- S6 — `research complete. 25 sources | 14 findings | 5 gaps noted` (the default
+  shape's literal, from `skills/infobroker/SKILL.md:145`, not the vetting token
+  at `references/workflows.md:244`).
+- N4 — `analysis-loop complete. 5 findings | Confidence: 1/4/0 | 10 sources | 3
+  gaps accepted`, as the final content of the reply.
+
+N4's outcome differs from the 2026-11-15 batch, where it answered as a
+fact-check and emitted that shape's token: the gated route now holds. S6's
+outcome also differs — earlier it escalated to `analysis-loop`, now it runs
+vetting content but signs off with the default shape's token.
+
+The roadmap section therefore stays open: its close condition is the token, and
+S6 does not emit it. Two follow-on items are filed — the token literal sitting
+inside the default pipeline, and N4's prose-literal needle.

@@ -28,6 +28,32 @@
 S6 and N4 emits the manifest's shape token, or when a deliberate divergence is
 recorded in `DECISIONS.md`.
 
+## Shape token defaults to the Research & Write literal
+
+- A repo-mode S6 run (2026-11-15) ran the vetting pipeline — self-described, with
+  a red-flag register and per-source grades — and still signed off
+  `research complete.`: the default pipeline in `skills/infobroker/SKILL.md:143–146`
+  prints its token inline, while the cross-shape imperative sits 65 lines later
+  at `:210–214` (`docs/research-evidence-2026-11-15.md` §"Shape-selection re-run").
+- The same run produced no `Methodology` section and no `## Checklist`, so the
+  shape's block in `references/report-template.md` was never opened either.
+- Move each shape's token beside the block or pipeline it completes, or drop the
+  literal from the default pipeline's example.
+
+**Trigger:** start with the next skill change; close when a repo-mode S6 run
+emits `vetting complete.` and carries the Vetting block.
+
+## Manifest needles test literal prose, not the finding
+
+- N4's `sections` needle `zero usable` failed a run that reported the zero-source
+  conclusion as "nonexistent", named three gaps, and carried an Uncertainty
+  Register (2026-11-15) — the wording differed, the finding did not.
+- Either widen the needle set or have the shape's block state the phrase the
+  manifest asserts.
+
+**Trigger:** start with the next research-suite change; close when a repo-mode N4
+run that reports a zero-source conclusion passes its section gate.
+
 ## Lab repo mode inherits the deployed skills too
 
 - `debate-club/scripts/lab.sh:125–145` builds the same run project as the
