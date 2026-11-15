@@ -6,16 +6,26 @@
     "mode": "positive",
     "utterance": "Fact-check this claim for my article: retrieval-augmented generation eliminates hallucination in large language models. Give a verdict and a confidence score.",
     "followups": [],
-    "tokens": ["fact-check complete."],
+    "tokens": [
+      "fact-check complete."
+    ],
     "absent": [],
-    "sections": ["verdict", "confidence"],
-    "tool_audit": { "verify_claims": true, "uses_infobroker": true },
+    "sections": [
+      "verdict",
+      "confidence"
+    ],
+    "tool_audit": {
+      "verify_claims": true,
+      "uses_infobroker": true
+    },
     "rubric": [
       "A verdict is given for the claim",
       "A 0.0-1.0 confidence score is stated",
       "Contradicting evidence is reported, not smoothed over",
       "Sources are cited with URLs"
-    ]
+    ],
+    "profile": "fresh",
+    "rubric_lens": "fact-checker"
   },
   {
     "id": "L2",
@@ -23,17 +33,29 @@
     "shape": "literature-review",
     "mode": "positive",
     "utterance": "Give me a state-of-the-art literature review on retrieval-augmented generation, with explicit inclusion criteria, a thematic synthesis, and a gap analysis.",
-    "followups": ["Proceed with reasonable defaults."],
-    "tokens": ["lit-review complete."],
+    "followups": [
+      "Proceed with reasonable defaults."
+    ],
+    "tokens": [
+      "lit-review complete."
+    ],
     "absent": [],
-    "sections": ["inclusion", "gap"],
-    "tool_audit": { "verify_claims": false, "uses_infobroker": true },
+    "sections": [
+      "inclusion",
+      "gap"
+    ],
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
     "rubric": [
       "Inclusion/exclusion criteria are stated explicitly",
       "Findings are synthesized into themes",
       "A gap analysis names what is absent",
       "Academic citations are provided"
-    ]
+    ],
+    "profile": "fresh",
+    "rubric_lens": "scholar"
   },
   {
     "id": "L3",
@@ -44,13 +66,20 @@
     "followups": [],
     "tokens": [],
     "absent": [],
-    "sections": ["provider"],
-    "tool_audit": { "verify_claims": false, "uses_infobroker": true },
+    "sections": [
+      "provider"
+    ],
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
     "rubric": [
       "Provider list includes tier/status",
       "Build/spec identity is reported",
       "No fabricated provider names"
-    ]
+    ],
+    "profile": "fresh",
+    "rubric_lens": "ops"
   },
   {
     "id": "L4",
@@ -61,12 +90,150 @@
     "followups": [],
     "tokens": [],
     "absent": [],
-    "sections": ["phoenix"],
-    "tool_audit": { "verify_claims": false, "uses_infobroker": true },
+    "sections": [
+      "phoenix"
+    ],
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
     "rubric": [
       "The note is ingested",
       "A search recalls the note",
       "The agent reports the recall honestly"
+    ],
+    "profile": "fresh",
+    "rubric_lens": "archivist"
+  },
+  {
+    "id": "L5",
+    "persona": "developer",
+    "shape": "implementation-lookup",
+    "mode": "positive",
+    "profile": "fresh",
+    "rubric_lens": "developer",
+    "utterance": "I need to add retry-with-backoff to a TypeScript HTTP client. Find the current best-practice implementations and show me the code pattern with a source I can read.",
+    "followups": [],
+    "tokens": [],
+    "absent": [],
+    "sections": [
+      "retry",
+      "backoff"
+    ],
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
+    "rubric": [
+      "Concrete code sources are cited",
+      "The retry/backoff pattern is explained mechanically",
+      "The provider chain used for the lookup is visible",
+      "No fabricated library or API is named"
+    ]
+  },
+  {
+    "id": "L6",
+    "persona": "ops",
+    "shape": "provider-ops",
+    "mode": "positive",
+    "profile": "solo-override",
+    "rubric_lens": "ops",
+    "utterance": "Check which search providers are active, tell me the state of the server, then reload the configuration and confirm the change took effect without restarting.",
+    "followups": [],
+    "tokens": [],
+    "absent": [],
+    "sections": [
+      "provider",
+      "reload"
+    ],
+    "expect_notices_max": 3,
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
+    "rubric": [
+      "Provider status is reported accurately",
+      "reload_config is called and its effect is confirmed",
+      "Any notice is bounded and names the affected provider or key",
+      "No fabricated provider or version is named"
+    ]
+  },
+  {
+    "id": "L7",
+    "persona": "scholar",
+    "shape": "literature-review",
+    "mode": "positive",
+    "profile": "fresh",
+    "rubric_lens": "scholar",
+    "utterance": "Find three recent papers on retrieval-augmented generation and give me a citation list with URLs. I have not configured anything.",
+    "followups": [],
+    "tokens": [],
+    "absent": [],
+    "sections": [
+      "citation"
+    ],
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
+    "rubric": [
+      "At least three academic sources are cited",
+      "Each citation carries a URL",
+      "The answer does not ask for an API key to proceed",
+      "No fabricated paper or DOI is named"
+    ]
+  },
+  {
+    "id": "L8",
+    "persona": "fact-checker",
+    "shape": "fact-check",
+    "mode": "positive",
+    "profile": "constrained",
+    "rubric_lens": "fact-checker",
+    "utterance": "Fact-check this claim with a verdict and confidence: intermittent fasting is more effective than daily caloric restriction for long-term weight loss in adults.",
+    "followups": [],
+    "tokens": [],
+    "absent": [],
+    "sections": [
+      "verdict",
+      "confidence"
+    ],
+    "tool_audit": {
+      "verify_claims": true,
+      "uses_infobroker": true
+    },
+    "rubric": [
+      "A verdict is given for the claim",
+      "A 0.0-1.0 confidence score is stated",
+      "Contradicting evidence is reported",
+      "The degraded configuration is handled without a fabricated result"
+    ]
+  },
+  {
+    "id": "L9",
+    "persona": "skills-user",
+    "shape": "research-write",
+    "mode": "positive",
+    "profile": "fresh",
+    "rubric_lens": "skills-user",
+    "utterance": "Research the current state of the WebAssembly component model and write me a short brief with a citation for every factual claim.",
+    "followups": [],
+    "tokens": [
+      "research complete."
+    ],
+    "absent": [],
+    "sections": [
+      "source"
+    ],
+    "tool_audit": {
+      "verify_claims": false,
+      "uses_infobroker": true
+    },
+    "rubric": [
+      "The research phase completes before writing",
+      "Every factual claim carries a URL",
+      "The brief is structured for a technical reader",
+      "Contested points are flagged rather than smoothed over"
     ]
   }
 ]

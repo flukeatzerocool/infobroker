@@ -19,8 +19,8 @@ function makeScenario() {
   };
 }
 
-function makeTranscript() {
-  return [
+function makeTranscript(withNotice = false) {
+  const lines = [
     JSON.stringify({
       type: "text",
       part: { type: "text", role: "assistant", text: "Verdict: false. Confidence 0.9. fact-check complete." },
@@ -41,17 +41,41 @@ function makeTranscript() {
         state: { input: { query: "q" }, output: "results" },
       },
     }),
-  ].join("\n");
+  ];
+  if (withNotice) {
+    lines.push(
+      JSON.stringify({
+        type: "tool_use",
+        part: {
+          type: "tool",
+          tool: "infobroker_infobroker_search_web",
+          state: {
+            input: { query: "q" },
+            output: JSON.stringify({
+              status: "ok",
+              provider: "wikipedia",
+              results: [],
+              notices: [{ code: "provider_cooldown", severity: "informational" }],
+            }),
+          },
+        },
+      })
+    );
+  }
+  return lines.join("\n");
 }
 
-function run(criticText: string | undefined) {
+function run(criticText: string | undefined, scenarioOverrides: Record<string, unknown> = {}, env: NodeJS.ProcessEnv = {}, withNotice = false) {
   const dir = mkdtempSync(join(tmpdir(), "eval-lab-"));
   const scenarioPath = join(dir, "scenario.json");
   const transcriptPath = join(dir, "turn0.txt");
-  writeFileSync(scenarioPath, JSON.stringify(makeScenario()));
-  writeFileSync(transcriptPath, makeTranscript());
+  writeFileSync(scenarioPath, JSON.stringify({ ...makeScenario(), ...scenarioOverrides }));
+  writeFileSync(transcriptPath, makeTranscript(withNotice));
   if (criticText !== undefined) writeFileSync(join(dir, "critic.txt"), criticText);
-  const out = execFileSync(process.execPath, [EVALUATOR, scenarioPath, transcriptPath, dir], { encoding: "utf8" });
+  const out = execFileSync(process.execPath, [EVALUATOR, scenarioPath, transcriptPath, dir], {
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
   return JSON.parse(out.trim());
 }
 
@@ -105,5 +129,18 @@ describe("evaluate-lab", () => {
     const r = JSON.parse(out.trim());
     expect(r.critic_status).toBe("not-run");
     expect(r.critic_error).toContain("non-zero");
+  });
+
+  it("records the scenario profile and audience lens", () => {
+    const r = run(VERDICT, { profile: "fresh", rubric_lens: "scholar" });
+    expect(r.profile).toBe("fresh");
+    expect(r.rubric_lens).toBe("scholar");
+    expect(r.first_tool_turn).toBe(1);
+  });
+
+  it("fails an exceeded notice cap and records the count", () => {
+    const r = run(VERDICT, { expect_notices_max: 0 }, {}, true);
+    expect(r.status).toBe("fail");
+    expect(r.notices_max).toBe(1);
   });
 });

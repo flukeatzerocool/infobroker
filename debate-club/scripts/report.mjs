@@ -30,20 +30,58 @@ if (!existsSync(telemetryPath) && existsSync(resultsPath)) {
   const results = JSON.parse(readFileSync(resultsPath, "utf8"));
   const scenarios = {};
   const coveredSet = new Set();
+  const personas = {};
+  const profiles = {};
+  const byShape = {};
   for (const [id, s] of Object.entries(results.scenarios ?? {})) {
     const failed = s.status === "fail";
     const tools = s.tools ?? [];
     for (const t of tools) coveredSet.add(t);
+    const persona = s.persona ?? "unknown";
+    const profile = s.profile ?? "unknown";
+    for (const [bucket, key] of [[personas, persona], [profiles, profile]]) {
+      bucket[key] ??= { total: 0, pass: 0, fail: 0, first_tool_turn: [] };
+      bucket[key].total += 1;
+      bucket[key][failed ? "fail" : "pass"] += 1;
+      if (typeof s.first_tool_turn === "number") bucket[key].first_tool_turn.push(s.first_tool_turn);
+    }
+    byShape[s.shape ?? "unknown"] ??= {};
+    byShape[s.shape ?? "unknown"][profile] = failed ? 0 : 1;
     scenarios[id] = {
       status: s.status,
+      persona,
+      profile,
+      shape: s.shape ?? null,
+      rubric_lens: s.rubric_lens ?? null,
       calls: s.toolsCalled ?? 0,
       error: failed ? 1 : 0,
       unexpected: failed ? 1 : 0,
       audit_fails: s.auditFails ?? [],
       tools,
+      notices_max: s.notices_max ?? 0,
+      first_tool_turn: s.first_tool_turn ?? null,
       critic_status: s.critic_status ?? "not-run",
       critic_verdict: s.critic_verdict?.verdict ?? null,
     };
+  }
+  for (const bucket of [personas, profiles]) {
+    for (const entry of Object.values(bucket)) {
+      entry.avg_first_tool_turn = entry.first_tool_turn.length
+        ? Number((entry.first_tool_turn.reduce((a, b) => a + b, 0) / entry.first_tool_turn.length).toFixed(2))
+        : null;
+      delete entry.first_tool_turn;
+    }
+  }
+  const profileDelta = [];
+  for (const [shape, rates] of Object.entries(byShape)) {
+    const names = Object.keys(rates);
+    if (names.length < 2) continue;
+    const values = names.map((name) => rates[name]);
+    profileDelta.push({
+      shape,
+      profiles: Object.fromEntries(names.map((name) => [name, rates[name] === 1 ? "pass" : "fail"])),
+      delta: Math.max(...values) - Math.min(...values),
+    });
   }
   const covered = [...coveredSet].sort();
   const summary = results.summary ?? { total: 0, pass: 0, fail: 0 };
@@ -55,6 +93,9 @@ if (!existsSync(telemetryPath) && existsSync(resultsPath)) {
     error_codes: {},
     tools: {},
     scenarios,
+    personas,
+    profiles,
+    profile_delta: profileDelta,
     coverage: { expected_tools: EXPECTED_TOOLS, covered_tools: covered, missing_tools: EXPECTED_TOOLS.filter((t) => !covered.includes(t)) },
     unmatched: [],
   };

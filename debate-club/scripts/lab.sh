@@ -2,12 +2,11 @@
 # lab.sh — debate-club Lab entry point (agentic, live). Runs each persona
 # scenario through headless opencode against the configured Infobroker MCP and
 # evaluates the transcript mechanically. An evidence-aware critic/rubric pass is
-# advisory. Records run provenance, persists runs to a durable directory, and
-# fails when feedback is incomplete — so a missing critic cannot vanish silently.
+# advisory. Profiles group scenarios onto a generated config layer so a result
+# is attributable to the configuration it exercised.
 #
 # Usage: lab.sh [--only=<id>[,<id>...]] [--from=<id>] [--help]
 # Env: DEBATE_MCP_MODE  repo (default, exercise this working tree) | ambient
-#      DEBATE_LAB_PORT  repo-scoped serve port (default 4097)
 #      DEBATE_RUNS_DIR   durable retention root (default ~/.local/share/infobroker/debate-club-runs)
 #      DEBATE_KEEP_RUNS  retained run count (default 20)
 #      DEBATE_REQUIRE_REPO_MCP=1  fail when the MCP target is not this repo
@@ -22,9 +21,12 @@ DEBATE="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO="$(cd "$DEBATE/.." && pwd)"
 MANIFEST="$DEBATE/lab-scenarios.json"
 EVALUATOR="$SCRIPT_DIR/evaluate-lab.mjs"
+PROFILE_SCRIPT="$SCRIPT_DIR/profile.mjs"
 RUNS_DIR="${DEBATE_RUNS_DIR:-$HOME/.local/share/infobroker/debate-club-runs}"
 KEEP_RUNS="${DEBATE_KEEP_RUNS:-20}"
 REQUIRE_REPO_MCP="${DEBATE_REQUIRE_REPO_MCP:-0}"
+MCP_MODE="${DEBATE_MCP_MODE:-repo}"
+export MCP_MODE
 
 # shellcheck source=scripts/lib/opencode-utils.sh
 source "$REPO/scripts/lib/opencode-utils.sh"
@@ -48,7 +50,7 @@ fi
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RUN_DIR="$DEBATE/.runs/lab-$TIMESTAMP"
-mkdir -p "$RUN_DIR/scenarios"
+mkdir -p "$RUN_DIR/scenarios" "$RUN_DIR/profiles"
 
 export ONLY FROM
 node -e '
@@ -71,18 +73,62 @@ node -e '
 IDS=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).join(" "))' "$RUN_DIR/order.json")
 if [[ -z "$IDS" ]]; then die "No scenarios selected (check --only/--from)."; fi
 
-# MCP target: by default the Lab runs against THIS repo's working tree via a
-# dedicated opencode serve whose project config overrides the `infobroker` MCP
-# server. DEBATE_MCP_MODE=ambient reverts to the configured deployment.
-MCP_MODE="${DEBATE_MCP_MODE:-repo}"
-MCP_PROBE_DIR="$PWD"
+# Group selected scenarios by config profile. Ambient mode has one group: the
+# deployment's own configuration, so a profile cannot be attributed to it.
+node -e '
+  const fs = require("fs");
+  const dir = process.argv[1];
+  const repo = process.env.MCP_MODE === "repo";
+  const ids = JSON.parse(fs.readFileSync(dir + "/order.json", "utf8"));
+  const groups = [];
+  for (const id of ids) {
+    const s = JSON.parse(fs.readFileSync(dir + "/scenarios/" + id + ".json", "utf8"));
+    const profile = repo ? (s.profile || "fresh") : "ambient";
+    let g = groups.find((x) => x.profile === profile);
+    if (!g) { g = { profile, ids: [] }; groups.push(g); }
+    g.ids.push(id);
+  }
+  fs.writeFileSync(dir + "/groups.json", JSON.stringify(groups, null, 2) + "\n");
+' "$RUN_DIR"
+
+# Generate the layers and their hashes once, so run-meta is self-describing.
 if [[ "$MCP_MODE" == "repo" ]]; then
-  MCP_PROJECT="$RUN_DIR/mcp-project"
-  mkdir -p "$MCP_PROJECT"
   node -e '
     const fs = require("fs");
     const path = require("path");
-    const [repo, out] = process.argv.slice(1);
+    const [dir, script] = process.argv.slice(1);
+    const groups = JSON.parse(fs.readFileSync(dir + "/groups.json", "utf8"));
+    const out = {};
+    for (const g of groups) {
+      const { spawnSync } = require("child_process");
+      const r = spawnSync(process.execPath, [script, "--print", g.profile], { encoding: "utf8" });
+      if (r.status !== 0) { console.error(r.stderr || "profile resolution failed"); process.exit(1); }
+      const file = path.join(dir, "profiles", g.profile + ".json");
+      fs.writeFileSync(file, r.stdout);
+      out[g.profile] = {
+        layer_sha256: require("crypto").createHash("sha256").update(r.stdout).digest("hex").slice(0, 12),
+        scenarios: g.ids,
+      };
+    }
+    fs.writeFileSync(dir + "/profiles.json", JSON.stringify(out, null, 2) + "\n");
+  ' "$RUN_DIR" "$PROFILE_SCRIPT"
+else
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ ambient: { layer_sha256: null, scenarios: JSON.parse(require("fs").readFileSync(process.argv[2],"utf8")).flatMap((g)=>g.ids) } }, null, 2) + "\n")' "$RUN_DIR/profiles.json" "$RUN_DIR/groups.json"
+fi
+
+start_profile_server() {
+  local profile="$1"
+  if [[ "$MCP_MODE" != "repo" ]]; then
+    ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
+    return
+  fi
+  local project="$RUN_DIR/mcp-project-$profile"
+  local layer="$RUN_DIR/profiles/$profile.json"
+  mkdir -p "$project"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const [repo, out, layer] = process.argv.slice(1);
     const cfg = {
       "$schema": "https://opencode.ai/config.json",
       mcp: {
@@ -91,55 +137,90 @@ if [[ "$MCP_MODE" == "repo" ]]; then
           command: [path.join(repo, "node_modules", ".bin", "tsx"), path.join(repo, "src", "index.ts")],
           environment: {
             INFOBROKER_CONFIG: path.join(repo, "config.json"),
-            INFOBROKER_CONFIG_LOCAL: process.env.HOME + "/.config/infobroker/config.local.json",
+            INFOBROKER_CONFIG_LOCAL: layer,
           },
         },
       },
     };
     fs.writeFileSync(path.join(out, "opencode.json"), JSON.stringify(cfg, null, 2) + "\n");
-  ' "$REPO" "$MCP_PROJECT"
-  MCP_PROBE_DIR="$MCP_PROJECT"
-  LAB_PORT="${DEBATE_LAB_PORT:-4097}"
-  # Repo-scoped server: the cwd is what makes the MCP config in MCP_PROJECT
-  # authoritative. Password handling is shared with the other harnesses.
-  ensure_opencode_serve_at "$RUN_DIR" "opencode-serve.log" "$LAB_PORT" "$MCP_PROJECT"
-else
-  ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
-fi
-cleanup() { cleanup_serve; }
-trap cleanup EXIT SIGINT SIGTERM
-
-# Record which MCP target the Lab actually exposes, so a run's feedback is
-# interpretable — repo mode points at this working tree, ambient mode at the
-# configured deployment.
-#
-# `opencode mcp list` is not usable here: it is daemon-backed and reports
-# "No MCP servers configured" even for a directory whose runs do receive the
-# server's tools. `opencode debug config` reads the config chain from the cwd
-# deterministically, so repo mode parses the layer the Lab generated.
-if [[ "$MCP_MODE" == "repo" ]]; then
-  ( cd "$MCP_PROBE_DIR" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" || true
+  ' "$REPO" "$project" "$layer"
+  # The cwd is what makes the project MCP config authoritative. Each profile
+  # group gets its own server so the layer is fixed for the whole group.
+  ensure_opencode_serve_at "$RUN_DIR" "opencode-serve-$profile.log" "$(find_free_port)" "$project"
+  ( cd "$project" && opencode debug config ) > "$RUN_DIR/debug-config-$profile.json" 2>> "$RUN_DIR/openruns.log" || true
   node -e '
     const fs = require("fs");
-    const [file, want] = process.argv.slice(1);
+    const [file, want, profile] = process.argv.slice(1);
     let layers = [];
     try { layers = JSON.parse(fs.readFileSync(file, "utf8")); } catch { layers = []; }
     const lines = [];
     for (const layer of Array.isArray(layers) ? layers : []) {
       if (layer.type !== "document" || (layer.path ?? layer.source) !== want) continue;
       for (const [name, server] of Object.entries(layer.info?.mcp?.servers ?? {})) {
-        lines.push(`repo:${name}: ${(server.command ?? []).join(" ")}`.trimEnd());
+        lines.push(`repo:${profile}:${name}: ${(server.command ?? []).join(" ")}`.trimEnd());
       }
     }
-    console.log(lines.length ? lines.join("\n") : "no project MCP config resolved");
-  ' "$RUN_DIR/debug-config.json" "$MCP_PROJECT/opencode.json" > "$RUN_DIR/mcp-target.txt" 2>> "$RUN_DIR/openruns.log" || true
-else
-  ( cd "$MCP_PROBE_DIR" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true
-fi
-info "Lab MCP target(s) recorded in $RUN_DIR/mcp-target.txt"
+    console.log(lines.length ? lines.join("\n") : `repo:${profile}: no project MCP config resolved`);
+  ' "$RUN_DIR/debug-config-$profile.json" "$project/opencode.json" "$profile" >> "$RUN_DIR/mcp-target.txt" 2>> "$RUN_DIR/openruns.log" || true
+}
 
-# Provenance: a run is self-describing — repo version/HEAD and the MCP target
-# path it actually exercised (so stale-deployment feedback is detectable).
+cleanup() { cleanup_serve; }
+trap cleanup EXIT SIGINT SIGTERM
+
+: > "$RUN_DIR/mcp-target.txt"
+: > "$RUN_DIR/results.ndjson"
+
+run_scenario() {
+  local id="$1" profile="$2"
+  local sc="$RUN_DIR/scenarios/$id.json"
+  local work="$RUN_DIR/$id"
+  mkdir -p "$work"
+  info "════ Running lab scenario $id (profile $profile) ════"
+  node -e 'console.log(require(process.argv[1]).utterance)' "$sc" > "$work/prompt.md"
+  opencode run --server "$SERVER_URL" --agent build --auto --format json \
+    "$(cat "$work/prompt.md")" > "$work/turn0.txt" 2>> "$RUN_DIR/openruns.log" </dev/null || true
+  node -e 'import(process.argv[1]).then(m=>{const fs=require("fs");const t=m.extractAssistantText(fs.readFileSync(process.argv[2],"utf8"));fs.writeFileSync(process.argv[3],t.trim().slice(-4000))})' \
+    "$REPO/scripts/lib/event-stream.mjs" "$work/turn0.txt" "$work/final.txt" 2>> "$RUN_DIR/openruns.log" || true
+
+  # Advisory, evidence-aware critic pass (critic.md) over the final answer, with
+  # the scenario rubric, its audience lens, and a bounded tool-call digest so
+  # UNSOURCED means "uncited", not "the critic could not see the evidence".
+  node -e 'import(process.argv[1]).then(m=>{const fs=require("fs");process.stdout.write(m.extractToolEvidence(fs.readFileSync(process.argv[2],"utf8")))})' \
+    "$REPO/scripts/lib/event-stream.mjs" "$work/turn0.txt" > "$work/evidence.txt" 2>> "$RUN_DIR/openruns.log" || true
+  node -e 'const s=require(process.argv[1]);process.stdout.write((s.rubric||[]).map(r=>"- "+r).join("\n"))' \
+    "$sc" > "$work/rubric.md" 2>> "$RUN_DIR/openruns.log" || true
+  node -e 'const s=require(process.argv[1]);process.stdout.write(String(s.rubric_lens||s.persona||"general"))' \
+    "$sc" > "$work/lens.txt" 2>> "$RUN_DIR/openruns.log" || true
+  {
+    cat "$SCRIPT_DIR/critic.md"
+    printf '\n\n--- AUDIENCE LENS ---\n\n%s\n' "$(cat "$work/lens.txt")"
+    printf '\n--- SCENARIO RUBRIC ---\n\n%s\n' "$(cat "$work/rubric.md")"
+    printf '\n--- TOOL EVIDENCE (ordered tool calls, truncated) ---\n\n%s\n' "$(cat "$work/evidence.txt")"
+    printf '\n--- FINAL ANSWER ---\n\n%s\n' "$(cat "$work/final.txt")"
+  } > "$work/critic-input.md"
+  : > "$work/critic.err"
+  if ! opencode run --server "$SERVER_URL" --agent plan --auto \
+        "$(cat "$work/critic-input.md")" \
+        > "$work/critic.txt" 2>> "$RUN_DIR/openruns.log" </dev/null; then
+    echo "critic command exited non-zero" >> "$work/critic.err"
+  fi
+
+  DEBATE_PROFILE="$profile" node "$EVALUATOR" "$sc" "$work/turn0.txt" "$work" >> "$RUN_DIR/results.ndjson"
+}
+
+GROUPS_RAW=$(node -e 'const g=require(process.argv[1]);for(const x of g)console.log(x.profile+" "+x.ids.join(" "))' "$RUN_DIR/groups.json")
+while IFS= read -r group; do
+  [[ -n "$group" ]] || continue
+  read -r GROUP_PROFILE GROUP_IDS <<< "$group"
+  start_profile_server "$GROUP_PROFILE"
+  for id in $GROUP_IDS; do run_scenario "$id" "$GROUP_PROFILE"; done
+  cleanup_serve
+  started=false
+done <<< "$GROUPS_RAW"
+
+# Provenance: a run is self-describing — repo version/HEAD, the MCP target
+# path, and each profile's layer hash so a result is attributable to the
+# configuration it exercised.
 node -e '
   const fs = require("fs");
   const path = require("path");
@@ -150,6 +231,7 @@ node -e '
   const target = fs.existsSync(path.join(runDir, "mcp-target.txt")) ? fs.readFileSync(path.join(runDir, "mcp-target.txt"), "utf8") : "";
   const m = target.match(/\/(?:[\w.-]+\/)+src\/index\.ts/);
   const targetPath = m ? m[0] : null;
+  const profiles = fs.existsSync(path.join(runDir, "profiles.json")) ? JSON.parse(fs.readFileSync(path.join(runDir, "profiles.json"), "utf8")) : {};
   const meta = {
     run_id: "lab:" + path.basename(runDir),
     created_at: new Date().toISOString(),
@@ -157,6 +239,7 @@ node -e '
     repo_head: head,
     mcp_target_path: targetPath,
     mcp_target_is_repo: targetPath ? targetPath.startsWith(repo + "/") : false,
+    profiles,
   };
   fs.writeFileSync(path.join(runDir, "run-meta.json"), JSON.stringify(meta, null, 2) + "\n");
   process.stdout.write(String(meta.mcp_target_is_repo));
@@ -169,41 +252,7 @@ if [[ "$TARGET_IS_REPO" != "true" ]]; then
     exit 1
   fi
 fi
-
-: > "$RUN_DIR/results.ndjson"
-for id in $IDS; do
-  sc="$RUN_DIR/scenarios/$id.json"
-  work="$RUN_DIR/$id"
-  mkdir -p "$work"
-  info "════ Running lab scenario $id ════"
-  node -e 'console.log(require(process.argv[1]).utterance)' "$sc" > "$work/prompt.md"
-  opencode run --server "$SERVER_URL" --agent build --auto --format json \
-    "$(cat "$work/prompt.md")" > "$work/turn0.txt" 2>> "$RUN_DIR/openruns.log" || true
-  node -e 'import(process.argv[1]).then(m=>{const fs=require("fs");const t=m.extractAssistantText(fs.readFileSync(process.argv[2],"utf8"));fs.writeFileSync(process.argv[3],t.trim().slice(-4000))})' \
-    "$REPO/scripts/lib/event-stream.mjs" "$work/turn0.txt" "$work/final.txt" 2>> "$RUN_DIR/openruns.log" || true
-
-  # Advisory, evidence-aware critic pass (critic.md) over the final answer, with
-  # the scenario rubric and a bounded tool-call digest so UNSOURCED means
-  # "uncited", not "the critic could not see the evidence".
-  node -e 'import(process.argv[1]).then(m=>{const fs=require("fs");process.stdout.write(m.extractToolEvidence(fs.readFileSync(process.argv[2],"utf8")))})' \
-    "$REPO/scripts/lib/event-stream.mjs" "$work/turn0.txt" > "$work/evidence.txt" 2>> "$RUN_DIR/openruns.log" || true
-  node -e 'const s=require(process.argv[1]);process.stdout.write((s.rubric||[]).map(r=>"- "+r).join("\n"))' \
-    "$sc" > "$work/rubric.md" 2>> "$RUN_DIR/openruns.log" || true
-  {
-    cat "$SCRIPT_DIR/critic.md"
-    printf '\n\n--- SCENARIO RUBRIC ---\n\n%s\n' "$(cat "$work/rubric.md")"
-    printf '\n--- TOOL EVIDENCE (ordered tool calls, truncated) ---\n\n%s\n' "$(cat "$work/evidence.txt")"
-    printf '\n--- FINAL ANSWER ---\n\n%s\n' "$(cat "$work/final.txt")"
-  } > "$work/critic-input.md"
-  : > "$work/critic.err"
-  if ! opencode run --server "$SERVER_URL" --agent plan --auto \
-        "$(cat "$work/critic-input.md")" \
-        > "$work/critic.txt" 2>> "$RUN_DIR/openruns.log"; then
-    echo "critic command exited non-zero" >> "$work/critic.err"
-  fi
-
-  node "$EVALUATOR" "$sc" "$work/turn0.txt" "$work" >> "$RUN_DIR/results.ndjson"
-done
+info "Lab MCP target(s) recorded in $RUN_DIR/mcp-target.txt"
 
 # Infrastructure guard: in repo mode the run is only meaningful if the agent
 # actually reached this working tree's MCP. A zero-call run means the server

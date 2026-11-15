@@ -56,6 +56,21 @@ for (const [scenario, s] of Object.entries(report.scenarios)) {
   }
 }
 
+// P1: a shape passes under one config profile and fails under another. This is
+// the default-vs-tuned regression signal; triage it as a defaults/config defect
+// or as model noise before changing a shipped value.
+for (const delta of report.profile_delta ?? []) {
+  if (!(delta.delta > 0)) continue;
+  const failing = Object.entries(delta.profiles ?? {})
+    .filter(([, status]) => status === "fail")
+    .map(([profile]) => profile);
+  add("P1", `profile/${delta.shape}`,
+    `Shape \`${delta.shape}\` passes under one profile and fails under ${failing.join(", ") || "another"}.`,
+    delta,
+    "Compare the failing profile's config layer and the transcript; fix the default or record the profile as intentionally constrained.",
+    "open");
+}
+
 // P2: coverage and performance. Tool coverage is a hard gap for the Arena
 // (which intends full tool coverage) but informational for the Lab, whose
 // scenario set is deliberately partial.

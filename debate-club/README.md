@@ -42,11 +42,30 @@ Lab environment knobs:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DEBATE_MCP_MODE` | `repo` | `repo` exercises this working tree; `ambient` uses the configured deployment |
-| `DEBATE_LAB_PORT` | `4097` | repo-scoped serve port |
 | `DEBATE_RUNS_DIR` | `~/.local/share/infobroker/debate-club-runs` | durable retention root (outside the repo) |
 | `DEBATE_KEEP_RUNS` | `20` | retained run count |
 | `DEBATE_REQUIRE_REPO_MCP` | `0` | `1` fails the run when the MCP target is not this repo |
 | `DEBATE_ALLOW_INCOMPLETE` | `0` | `1` accepts a run with missing critic/coverage |
+
+## Config profiles
+
+Each scenario declares a `profile`; `lab.sh` groups the selected scenarios by
+profile and starts one repo-scoped serve per group with that profile's
+generated `config.local.json`. A result is attributable to the configuration
+it exercised: `run-meta.json` records the profile name, its layer hash, and the
+scenarios in the group.
+
+| Profile | Layer | Purpose |
+|---|---|---|
+| `fresh` | `{}` | Shipped defaults, no user layer — the new-user path |
+| `solo-override` | `output.fallback_depth: 2` | The smallest realistic one-knob override |
+| `constrained` | `kb: null`, `kb_recall: false`, `fallback_depth: 1` | Degraded but usable |
+| `power` | archive + KB auto-index on | Every optional local capability |
+
+`report.mjs` rolls results up by persona and profile and emits `profile_delta`
+for a shape that ran under more than one profile; `recommend.mjs` raises a P1
+when the shape passes under one profile and fails under another.
+
 
 `arena` and the report/recommend steps use the repo's `node_modules`.
 From the repo root: `npm run test-debate-club` runs the typecheck + Arena and

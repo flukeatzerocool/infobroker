@@ -15,6 +15,9 @@ Evidence rules:
 4. State the single weakest link in the answer.
 5. Do not soften findings. Do not add new research.
 6. Judge against the supplied scenario rubric where one is given.
+7. When an AUDIENCE LENS is supplied, also judge whether the answer would
+   satisfy that audience's stated need (for example a citation trail for a
+   scholar, or remediation specificity for an operator).
 
 Output format (for machine scoring):
 

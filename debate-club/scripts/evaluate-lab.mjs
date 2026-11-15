@@ -30,6 +30,47 @@ writeFileSync(join(outDir, "final.txt"), text.trim().slice(-4000), "utf8");
 // direct-tool naming match alone would report zero calls for a run that used
 // the server heavily. extractMcpToolCalls reads both shapes.
 const tools = extractMcpToolCalls(raw, "infobroker");
+const profile = process.env.DEBATE_PROFILE || scenario.profile || null;
+const rubricLens = scenario.rubric_lens ?? null;
+
+// Tool-result envelopes carry the bounded notices and error codes. Scan the
+// result text (direct tool output or an execute wrapper) for a JSON body; a
+// parse failure is ignored because non-JSON tool output is not an envelope.
+function toolBodies(stream) {
+  const bodies = [];
+  for (const line of stream.split("\n")) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    const part = ev?.part ?? ev;
+    const out = part?.state?.output ?? part?.output ?? ev?.output;
+    if (typeof out !== "string") continue;
+    const text = out.startsWith("[OK] ") || out.startsWith("[ERROR] ")
+      ? out.slice(out.indexOf("] ") + 2)
+      : out;
+    try { bodies.push(JSON.parse(text)); } catch { /* not an envelope */ }
+  }
+  return bodies;
+}
+const bodies = toolBodies(raw);
+const noticeCounts = bodies
+  .map((body) => (Array.isArray(body?.notices) ? body.notices.length : 0))
+  .filter((n) => n > 0);
+const maxNotices = noticeCounts.length ? Math.max(...noticeCounts) : 0;
+const errorCodes = bodies
+  .map((body) => body?.error?.code)
+  .filter((code) => typeof code === "string");
+
+// Onboarding friction: how many assistant text blocks arrived before the
+// first tool call. Zero means the agent reached for a tool immediately.
+let firstToolTurn = 0;
+for (const line of raw.split("\n")) {
+  let ev;
+  try { ev = JSON.parse(line); } catch { continue; }
+  const part = ev?.part;
+  if (part?.type === "text" && (part.role === undefined || part.role === "assistant")) firstToolTurn++;
+  else if (ev?.type === "tool_use" || part?.type === "tool") break;
+}
+
 
 const missing = [];
 let lastIdx = -1;
@@ -60,6 +101,12 @@ const hardFailures = [
   ...missingSections.map((s) => `section:${s}`),
   ...auditFails.map((k) => `audit:${k}`),
 ];
+if (typeof scenario.expect_notices_max === "number" && maxNotices > scenario.expect_notices_max) {
+  hardFailures.push(`notices:${maxNotices}>${scenario.expect_notices_max}`);
+}
+if (typeof scenario.expect_error_code === "string" && !errorCodes.includes(scenario.expect_error_code)) {
+  hardFailures.push(`error-code:${scenario.expect_error_code}`);
+}
 const status = hardFailures.length === 0 ? "pass" : "fail";
 
 // Advisory critic. The machine-scorable verdict block is the LAST part of a
@@ -104,12 +151,17 @@ process.stdout.write(
     id: scenario.id,
     persona: scenario.persona,
     shape: scenario.shape,
+    profile,
+    rubric_lens: rubricLens,
     status,
     missing,
     absentFound,
     missingSections,
     audit,
     auditFails,
+    notices_max: maxNotices,
+    error_codes: errorCodes,
+    first_tool_turn: firstToolTurn,
     toolsCalled: toolOrder.length,
     tools,
     critic,

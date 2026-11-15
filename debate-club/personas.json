@@ -5,7 +5,8 @@
     "audience": "literature review",
     "feature_groups": [1, 3, 4],
     "tools": ["infobroker_get_citations", "infobroker_search_web", "infobroker_manage_kb"],
-    "success_criteria": ["academic sources returned", "citations formatted", "gaps stated"]
+    "success_criteria": ["academic sources returned", "citations formatted", "gaps stated"],
+    "rubric_lens": "Judge the citation trail, methodology, and gap analysis an academic reader needs."
   },
   {
     "id": "fact-checker",
@@ -13,7 +14,8 @@
     "audience": "fact-check",
     "feature_groups": [1, 3],
     "tools": ["infobroker_verify_claims", "infobroker_fetch_page"],
-    "success_criteria": ["verdict per claim", "confidence stated", "both sides reported"]
+    "success_criteria": ["verdict per claim", "confidence stated", "both sides reported"],
+    "rubric_lens": "Judge whether a verdict is supported, contradiction is reported, and confidence is justified."
   },
   {
     "id": "developer",
@@ -21,7 +23,8 @@
     "audience": "implementation lookup",
     "feature_groups": [1, 2],
     "tools": ["infobroker_search_web", "infobroker_inspect_providers"],
-    "success_criteria": ["code sources returned", "provider chain selected"]
+    "success_criteria": ["code sources returned", "provider chain selected"],
+    "rubric_lens": "Judge technical specificity, code-source quality, and whether the provider chain is explained."
   },
   {
     "id": "ops",
@@ -29,7 +32,8 @@
     "audience": "provider operations",
     "feature_groups": [2, 5],
     "tools": ["infobroker_inspect_providers", "infobroker_reload_config"],
-    "success_criteria": ["health accurate", "reload non-destructive"]
+    "success_criteria": ["health accurate", "reload non-destructive"],
+    "rubric_lens": "Judge operational accuracy, remediation specificity, and whether a reload is explained as non-destructive."
   },
   {
     "id": "archivist",
@@ -37,6 +41,16 @@
     "audience": "personal KB",
     "feature_groups": [4],
     "tools": ["infobroker_manage_kb"],
-    "success_criteria": ["ingest then recall", "dedup", "delete scoped"]
+    "success_criteria": ["ingest then recall", "dedup", "delete scoped"],
+    "rubric_lens": "Judge whether the KB round trip is honest: ingest, recall, dedup, and scoped delete."
+  },
+  {
+    "id": "skills-user",
+    "label": "Research writer",
+    "audience": "research writing and skills",
+    "feature_groups": [7],
+    "tools": ["infobroker_search_web", "infobroker_fetch_page"],
+    "success_criteria": ["workflow token emitted", "claims cited", "audience-appropriate structure"],
+    "rubric_lens": "Judge whether the writing skill produced a structured, cited deliverable for its stated audience."
   }
 ]
