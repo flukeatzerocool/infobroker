@@ -3,13 +3,12 @@
 // full sort would: the bounded selection may not drop or reorder a result that
 // belongs in the top slice.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { initKb, kbIngest, kbSearch } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-bound-search-"));
+const dir = testTmpDir("kb-bound-search-");
 
 function makeConfig(): KbConfig {
   return {

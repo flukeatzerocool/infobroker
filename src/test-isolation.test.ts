@@ -33,7 +33,9 @@ describe("gate isolation (REQ-055)", () => {
 
       execFileSync("npx", ["tsx", "scripts/check-intent-citations.ts"], {
         cwd: REPO_ROOT,
-        env: iso.env,
+        // Keep the gate's own temp roots so the assertion below can see what it
+        // wrote; they live inside iso.root and go away with it.
+        env: { ...iso.env, INFOBROKER_TEST_KEEP_TMP: "1" },
         timeout: 120_000,
         stdio: "pipe",
       });

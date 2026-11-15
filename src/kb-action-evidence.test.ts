@@ -4,14 +4,13 @@
 // ingest timestamps can be controlled and one document never leaks into another
 // test's view.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { testTmpDir } from "./lib/test-tmp.js";
 
 import { initKb, kbIngest, kbStats, kbList, kbGet, kbDelete, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-evidence-"));
+const dir = testTmpDir("kb-evidence-");
 
 function config(): KbConfig {
   return {

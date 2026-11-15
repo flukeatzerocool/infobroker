@@ -1,6 +1,7 @@
 // @implements REQ-010 REQ-042 REQ-043 REQ-037 REQ-015 REQ-040 REQ-067 REQ-105 REQ-113
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./types.js";
@@ -48,7 +49,7 @@ const BASE: Config = {
 };
 
 async function loadWithOverlay(base: Config, overlay: unknown): Promise<Config> {
-  const dir = mkdtempSync(join(tmpdir(), "ib-cfg-"));
+  const dir = testTmpDir("ib-cfg-");
   const basePath = join(dir, "config.json");
   const overlayPath = join(dir, "config.local.json");
   writeFileSync(basePath, JSON.stringify(base));
@@ -56,10 +57,13 @@ async function loadWithOverlay(base: Config, overlay: unknown): Promise<Config> 
   process.env["INFOBROKER_CONFIG"] = basePath;
   process.env["INFOBROKER_CONFIG_LOCAL"] = overlayPath;
   vi.resetModules();
-  const mod = await import("./config.js");
-  const cfg = mod.reloadConfig();
-  rmSync(dir, { recursive: true, force: true });
-  return cfg;
+  // The finally block is the point: `reloadConfig()` throws for the rejection
+  // cases, and an inline removal after the call leaked a root per throw.
+  try {
+    return (await import("./config.js")).reloadConfig();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 describe("configuration overlay", () => {
@@ -130,7 +134,7 @@ describe("configuration overlay", () => {
   });
 
   it("operates on shipped defaults alone when no user layer present", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ib-cfg-"));
+    const dir = testTmpDir("ib-cfg-");
     const basePath = join(dir, "config.json");
     writeFileSync(basePath, JSON.stringify(BASE));
     process.env["INFOBROKER_CONFIG"] = basePath;
@@ -527,7 +531,7 @@ describe("configuration overlay", () => {
   });
 
   it("migrates an outdated user layer to the current schema with a recoverable backup", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ib-cfg-"));
+    const dir = testTmpDir("ib-cfg-");
     const basePath = join(dir, "config.json");
     const overlayPath = join(dir, "config.local.json");
     writeFileSync(basePath, JSON.stringify({ ...BASE, config_version: 2 }));

@@ -3,10 +3,11 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { mkdtempSync, rmSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { initKb, kbIngest, kbSearch, kbStats, kbList, kbGet, kbDelete, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-test-"));
+const dir = testTmpDir("kb-test-");
 
 function makeConfig(overrides: Record<string, unknown> = {}): KbConfig {
   return {

@@ -1,15 +1,15 @@
 // @implements REQ-060c REQ-066 REQ-083 REQ-100 REQ-067 REQ-085 REQ-108
 import { describe, it, expect, afterAll, vi } from "vitest";
-import { closeSync, existsSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { DatabaseSync } from "node:sqlite";
 import { SqliteStore } from "./kb-sqlite.js";
 import { initKb, kbIngest, kbSearch, kbStats, kbGet, chunkText, flushKbWrites, getKbLockError } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const base = mkdtempSync(join(tmpdir(), "infobroker-kb-hardening-"));
+const base = testTmpDir("kb-hardening-");
 
 function makeConfig(storagePath: string, overrides: Partial<KbConfig> = {}): KbConfig {
   return {

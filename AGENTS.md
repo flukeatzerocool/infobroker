@@ -312,6 +312,13 @@ A gate recorded as advisory in `scripts/gate-ledger.json` still runs and is
 timed, but its failure does not fail `check`; restore it with
 `npm run gate-cost -- --restore <gate>`.
 
+Test and gate temp roots live under `$TMPDIR` and are removed by the harness: a
+per-run root removed in vitest teardown, a per-file hook, and a process-exit
+handler for gate scripts. `npm run clean:tmp -- --dry-run --all` lists what a
+killed run left behind; `npm run clean:tmp -- --all` reaps it (60-minute age
+bound by default), and the gate runner warns on stderr above 80% inodes
+without failing the run.
+
 All must pass. `npm run validate-spec` exits non-zero on errors (uncited
 REQs with no waiver in the `## Spec Waivers` section of DECISIONS.md,
 undocumented source files, Appendix B mechanical-limit violations, REQ

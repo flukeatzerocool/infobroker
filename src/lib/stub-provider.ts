@@ -6,9 +6,9 @@
 // the startup check can never reach an external host.
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { RUN_ROOT_ENV, testTmpDir } from "./test-tmp.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 
@@ -201,12 +201,18 @@ function assertKnownOptions(options: HermeticConfigOptions): void {
   }
 }
 
-/** Drop every credential variable so a spawned server cannot inherit one. */
+/**
+ * Drop every credential variable so a spawned server cannot inherit one, and
+ * the vitest run-root markers: a spawned server is its own process and must
+ * create its temp roots under the hermetic TMPDIR, not inside this run.
+ */
 function scrubCredentials(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base };
   for (const key of Object.keys(env)) {
     if (/^INFOBROKER_[A-Z0-9_]+_API_KEYS?$/.test(key)) delete env[key];
   }
+  delete env["VITEST"];
+  delete env[RUN_ROOT_ENV];
   return env;
 }
 
@@ -221,7 +227,7 @@ export function writeHermeticConfig(
   options: HermeticConfigOptions = {},
 ): HermeticConfig {
   assertKnownOptions(options);
-  const root = mkdtempSync(join(tmpdir(), "infobroker-health-"));
+  const root = testTmpDir("hermetic-");
   const storage = join(root, "knowledge-base");
   mkdirSync(storage, { recursive: true, mode: 0o700 });
 

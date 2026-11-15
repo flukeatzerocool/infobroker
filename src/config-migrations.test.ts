@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { testTmpDir } from "./lib/test-tmp.js";
 import {
   detectConfigDrift,
   applyConfigMigrations,
@@ -106,7 +107,7 @@ describe("config migration application (REQ-105)", () => {
 
 describe("atomic write and backup (REQ-105)", () => {
   it("writes atomically and creates a 0600 backup copy", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ib-mig-"));
+    const dir = testTmpDir("ib-mig-");
     const target = join(dir, "config.local.json");
     writeFileSync(target, "original");
 
@@ -121,7 +122,7 @@ describe("atomic write and backup (REQ-105)", () => {
   });
 
   it("returns null when there is nothing to back up", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ib-mig-"));
+    const dir = testTmpDir("ib-mig-");
     expect(backupFile(join(dir, "absent.json"))).toBeNull();
   });
 });

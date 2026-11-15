@@ -4,14 +4,14 @@
 // the swallowed failure path. The Arena file `debate-club/src/kb-auto-index.test.ts`
 // covers the three tool hook sites; this file covers the seam itself.
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { testTmpDir } from "./lib/test-tmp.js";
 
 import { autoIndex, flushKbWrites, initKb, kbList, kbStats } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const root = mkdtempSync(join(tmpdir(), "infobroker-kb-auto-index-"));
+const root = testTmpDir("kb-auto-index-");
 
 function makeConfig(storage: string, overrides: Partial<KbConfig> = {}): KbConfig {
   return {

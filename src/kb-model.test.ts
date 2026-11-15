@@ -1,13 +1,13 @@
 // @implements REQ-082 REQ-103
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { DatabaseSync } from "node:sqlite";
 import { initKb, kbIngest, kbStats, flushKbWrites } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const base = mkdtempSync(join(tmpdir(), "infobroker-kb-model-"));
+const base = testTmpDir("kb-model-");
 
 function makeConfig(storagePath: string, model: string): KbConfig {
   return {

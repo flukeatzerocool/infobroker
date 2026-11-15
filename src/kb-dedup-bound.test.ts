@@ -13,13 +13,12 @@
  * rates are reproducible without seeding a random source.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { initKb, kbIngest, kbList, kbGet, kbStats } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-bound-test-"));
+const dir = testTmpDir("kb-bound-test-");
 
 function makeConfig(): KbConfig {
   return {

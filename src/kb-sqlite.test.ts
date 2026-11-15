@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync, readFileSy
 import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testTmpDir } from "./lib/test-tmp.js";
 import { DatabaseSync } from "node:sqlite";
 import { KbStoreFormatError, SQLITE_FORMAT_VERSION, SqliteStore, probeStoreFile } from "./kb-sqlite.js";
 import type { KbChunk } from "./types.js";
@@ -20,7 +21,7 @@ import {
 import type { KbConfig } from "./types.js";
 import { isKbArchiveArtifact, isKbStoreArtifact } from "./kb-store.js";
 
-const dir = mkdtempSync(join(tmpdir(), "infobroker-kb-sqlite-"));
+const dir = testTmpDir("kb-sqlite-");
 
 const cfg: KbConfig = {
   storage_path: dir,

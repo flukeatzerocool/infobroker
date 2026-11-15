@@ -37,6 +37,7 @@ import {
   readLedger,
 } from "./lib/gate-retirement.js";
 import { recordedMode, timingPath, writeGateRun } from "./lib/gate-run-manifest.js";
+import { inodeWarningLine } from "./lib/tmp-inode.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const TIMING_CAP = 4000;
@@ -297,6 +298,10 @@ async function main(): Promise<number> {
   }
 
   const mode: Mode = full ? "full" : "fast";
+  // Advisory only: temp-filesystem pressure explains a load-sensitive failure
+  // but never fails the run (2026-11-14 session:close).
+  const pressure = inodeWarningLine();
+  if (pressure) process.stderr.write(`${pressure}\n`);
   const { ledger, warnings } = readLedger(ROOT);
   for (const warning of warnings) process.stderr.write(`gates: ${warning}\n`);
   const advisory = advisoryGates(ledger);

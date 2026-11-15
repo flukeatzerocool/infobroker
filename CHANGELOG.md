@@ -38,6 +38,15 @@
   the first mention, so an AAR that quotes the token in its findings table is
   no longer reported open. `AGENTS.md` carries the record contract and a
   trimmed push-pipeline reference.
+- Test and gate temp roots have a lifecycle: a full `npm run test` leaves no
+  new root in `$TMPDIR`, including the error-path suites whose inline cleanup
+  a throwing assertion skipped and the gate scripts that call the isolation
+  helpers outside vitest. `npm run clean:tmp` reaps roots a killed run left
+  behind (60-minute bound by default, `--all` to ignore it, `--dry-run` to
+  list), and the gate runner warns when the temp filesystem passes 80% inodes
+  without failing the run. The roadmap's temp-directory item is retired: the
+  run that closes it reaps 2,328 roots (1.4 GB) and returns `/tmp` from 18% to
+  2% inodes.
 
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 

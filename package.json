@@ -1,7 +1,7 @@
 {
   "name": "infobroker",
   "version": "2026.11.14",
-  "description": "Infobroker MCP Server — multi-provider research & writing backend",
+  "description": "Infobroker MCP Server \u2014 multi-provider research & writing backend",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -40,6 +40,7 @@
     "lint:md": "markdownlint infobroker.md",
     "lint:sh": "npx tsx scripts/lint-shell.ts",
     "test": "vitest run",
+    "clean:tmp": "npx tsx scripts/clean-test-tmp.ts",
     "test-push-pipeline": "npx tsx scripts/test-push-pipeline.ts",
     "test-skills": "bash scripts/test-skills.sh",
     "test-research": "bash scripts/test-research.sh",

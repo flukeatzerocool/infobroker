@@ -14,17 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Temporary-directory lifecycle for the test harness
-
-- Reap the `mkdtemp` roots created by `makeIsolatedConfig` and the stub
-  providers (216 call sites, 108 explicit removals) and add a `--dry-run`
-  cleanup script with an age bound.
-- Warn in the gate runner when the temp filesystem is above 80% inodes — the
-  condition that turned a green `session:close` red on 2026-11-14.
-
-**Trigger:** start after the process-efficiency increment closes; close when a
-full `npm run test` leaves no new `infobroker-*` / `ib-cfg-*` roots behind.
-
 ## `search_web` hedge cancellation
 
 - Give the search-side hedged dispatch the same per-provider `AbortController`
