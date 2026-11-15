@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
-# push-pipeline.sh — Full rebuild, audit, and push pipeline: spec read-through,
-# server sync, provider auth sync, dead-code scan (project folder + git repo +
-# MCP server source), README/refs update, commit, push.
+# push-pipeline.sh — Release pipeline: spec read-through, server sync, provider
+# auth sync, dead-code scan (project folder + git repo + MCP server source),
+# README/refs update, an independent code review of the sync diff, one commit,
+# tag, and push.
 #
 # Role: entry point — orchestrates the release pipeline. Exit 0 on success
 # (including "committed locally, not pushed"), 1 on a gate failure or when
 # human approval is required (`die`), 2 on fatal/unexpected errors.
 #
-# This is the deep-clean — full from-scratch server rebuild against the
-# current spec, dead-code audit, and documentation refresh.
+# The default run commits the prepared tree once; --split-commits opts into the
+# convention series. This is the deep-clean — full from-scratch server rebuild
+# against the current spec, dead-code audit, and documentation refresh.
 #
 # Usage:
 #   ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
-#                              [--resume] [--run-id=<id>]
-#                              [--from=<step>] [--to=<step>]
-#                              [--scan-ai]
-#                              [--force-push] [--no-mirror] [--allow-secrets]
-#                              [--commit] [--help]
+#                              [--split-commits] [--single-commit] [--no-ai]
+#                              [--deep-review] [--resume] [--run-id=<id>]
+#                              [--from=<step>] [--to=<step>] [--parallel]
+#                              [--scan-ai] [--force-push] [--no-mirror]
+#                              [--allow-secrets] [--commit] [--help]
 #   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
 #                    steps, no commit, no run-log pruning. The working tree
 #                    stays clean; run logs still land under TMPDIR.
@@ -28,6 +30,11 @@
 #                    tests / pipeline / docs / release). The default is one
 #                    commit for the whole change set.
 #   --single-commit  Deprecated alias for the default (one commit).
+#   --no-ai          Deterministic release only: skip the read-through, sync,
+#                    changelog, and README steps (and the AI scan). Requires an
+#                    already-prepared tree; see `npm run prep`.
+#   --deep-review    Read infobroker.md end to end in one pass instead of the
+#                    change set plus one rotating shard. Resets the shard cursor.
 #   --commit         Allow commit and push with --from=<step>; a step range is a
 #                    testing run without it. Never combines with --to.
 #   --resume         Continue the newest recorded run for this repo/branch.
@@ -69,9 +76,10 @@ usage() {
 Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
                                   [--resume] [--run-id=<id>]
                                   [--from=<step>] [--to=<step>]
-                                  [--scan-ai] [--force-push]
-                                  [--no-mirror] [--allow-secrets] [--commit]
-                                  [--help]
+                                  [--split-commits] [--single-commit] [--no-ai]
+                                  [--deep-review] [--parallel] [--scan-ai]
+                                  [--force-push] [--no-mirror] [--allow-secrets]
+                                  [--commit] [--help]
 
   --dry-run        Non-mutating: spec audit + deterministic scans only; no AI
                    steps, no commit, no run-log pruning. Working tree stays
@@ -85,7 +93,7 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --single-commit  Deprecated alias for the default single commit.
   --no-ai          Deterministic release only: skip the read-through, sync,
                    changelog, and README steps (and the AI scan). Requires an
-                   already-prepared tree; see `npm run prepare`.
+                   already-prepared tree; see `npm run prep`.
   --deep-review    Read infobroker.md end to end in one pass instead of the
                    change set plus one rotating shard. Resets the shard cursor.
   --commit         Allow commit and push with --from=<step>; a step range is a
@@ -253,6 +261,15 @@ PIPELINE_LIGHT_AGENT="${PIPELINE_LIGHT_AGENT:-pipeline-fast}"
 PIPELINE_REPAIR_AGENT="${PIPELINE_REPAIR_AGENT:-$PIPELINE_LIGHT_AGENT}"
 # Dead-code scan directories (space-separated, relative to repo root)
 SCAN_DIRS="${SCAN_DIRS:-src scripts skills instructions}"
+# Config-derived references, paired by index with their generators. They are
+# regenerated before the spec audit and staged, because validate-spec compares
+# the worktree to the index and would otherwise fail on an unstaged refresh.
+GENERATED_REFS=(
+  skills/infobroker/references/provider-auth.md
+  skills/infobroker/references/provider-map.md
+  skills/infobroker/references/provider-privacy.md
+)
+GENERATED_GENS=(generate-auth generate-provider-map generate-privacy)
 # Display-only snapshot, taken before any step runs. The sync step bumps the
 # version mid-run, so this value must never decide a release action; the tag
 # and push blocks re-derive RELEASE_VERSION after the commit.
@@ -437,7 +454,7 @@ else
   git -C "$PROJECT_DIR" diff --exit-code --quiet 2>/dev/null || {
     error "Working tree has unstaged changes. Commit or stash before running."
     if $NO_AI; then
-      error "For a deterministic release, run 'npm run prepare' and commit the result first."
+      error "For a deterministic release, run 'npm run prep' and commit the result first."
     fi
     git -C "$PROJECT_DIR" status --short
     exit 1
@@ -450,15 +467,15 @@ else
   info "Working tree: clean"
 fi
 
-# --no-ai publishes a tree that prepare already reviewed and committed. The
-# version bump and the CHANGELOG entry belong to prepare, so a release that
+# --no-ai publishes a tree that prep already reviewed and committed. The
+# version bump and the CHANGELOG entry belong to prep, so a release that
 # would ship a stale version fails here rather than after the full gate suite.
 if $NO_AI; then
   if pipeline_stub_active; then
     info "Release precheck: STUBBED (hermetic harness)."
   elif ! ( cd "$PROJECT_DIR" && npm run version-sync >/dev/null 2>&1 ); then
     error "--no-ai needs a prepared tree: version and CHANGELOG are out of sync."
-    error "Run 'npm run prepare', review and commit the result, then 'npm run release'."
+    error "Run 'npm run prep', review and commit the result, then 'npm run release'."
     exit 1
   else
     info "Release precheck: version and CHANGELOG are in sync (prepared tree)."
@@ -468,6 +485,28 @@ fi
 # A dry run must not delete prior run logs; it may still write its own.
 if ! $DRY_RUN && ! $RESUMED; then
   prune_runs "$PIPELINE_LOG_DIR" "${PIPELINE_KEEP_RUNS:-10}"
+fi
+echo ""
+
+# ── deterministic reference sync ────────────────────────────────────────────
+# validate-spec regenerates each config-derived reference and diffs it against
+# the index, so a refresh left unstaged fails the step-1 audit it is meant to
+# satisfy. Generate here, stage the result, and snapshot it so step 4 can
+# report an AI edit made later. A dry run stays non-mutating, --no-ai keeps its
+# prepared-tree premise, and the hermetic stub has no config.json.
+if ! $DRY_RUN && ! $NO_AI && ! pipeline_stub_active && [[ -f "$PROJECT_DIR/config.json" ]]; then
+  REF_SNAPSHOT_DIR="$PIPELINE_RUN_DIR/generated-refs.pre-readthrough"
+  mkdir -p "$REF_SNAPSHOT_DIR"
+  i=0
+  while (( i < ${#GENERATED_REFS[@]} )); do
+    ref="${GENERATED_REFS[$i]}"
+    gen="${GENERATED_GENS[$i]}"
+    warn "Generating ${ref##*/} from config.json..."
+    ( cd "$PROJECT_DIR" && npm run "$gen" ) >/dev/null 2>&1 || die "${gen} FAILED."
+    cp "$PROJECT_DIR/$ref" "$REF_SNAPSHOT_DIR/${ref##*/}" || die "cannot snapshot $ref"
+    git -C "$PROJECT_DIR" add -- "$ref" || die "cannot stage $ref"
+    i=$((i + 1))
+  done
 fi
 echo ""
 
@@ -627,16 +666,10 @@ else
       -e "s|<SUMMARY_JSON>|$PIPELINE_RUN_DIR/readthrough.json|g" \
       "$PROMPT_DIR/readthrough.md" > "$PIPELINE_RUN_DIR/readthrough.prompt.md"
 
-  # generate-auth mutates a tracked file; run it deterministically before the
-  # AI steps instead of racing an AI edit on the same working tree. The output
-  # is snapshotted so step 4 can report drift introduced by later steps.
-  if ! step_skip auth; then
-    warn "Generating provider-auth.md from config.json (before read-through)..."
-    npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
-    PROVIDER_AUTH_FILE="skills/infobroker/references/provider-auth.md"
-    cp "$PROJECT_DIR/$PROVIDER_AUTH_FILE" "$PIPELINE_RUN_DIR/provider-auth.pre-readthrough.md" 2>/dev/null || true
-  fi
-
+  # Config-derived references were generated and snapshotted before step 1
+  # (see the deterministic reference sync block). That block is the only
+  # generation site; regenerating before the read-through would race an AI edit
+  # and would re-dirty a tree the audit just accepted.
   warn "Launching read-through session..."
   run_readthrough_pass "$PIPELINE_RUN_DIR/readthrough.prompt.md"
   echo ""
@@ -810,23 +843,29 @@ info "Step 4: Provider auth sync"
 info "═══════════════════════════════════════════════"
 echo ""
 
-if $DRY_RUN || step_skip auth || pipeline_stub_active; then
-  info "Provider auth sync: SKIPPED (dry run / state journal / harness stub)"
+if $DRY_RUN || $NO_AI || step_skip auth || pipeline_stub_active; then
+  info "Provider auth sync: SKIPPED (dry run / --no-ai / state journal / harness stub)"
   status_set auth "skipped"
 else
-  # Generation already ran before the read-through. Regenerating here would
-  # only ever report "no drift"; diffing against the pre-read-through snapshot
-  # makes the branch meaningful: it fires when a later AI step edited the file.
-  PROVIDER_AUTH_FILE="skills/infobroker/references/provider-auth.md"
-  PROVIDER_AUTH_SNAPSHOT="$PIPELINE_RUN_DIR/provider-auth.pre-readthrough.md"
-  warn "Regenerating provider-auth.md to verify it still matches config.json..."
-  npm run generate-auth >/dev/null 2>&1 || die "generate-auth FAILED."
-  if [[ -f "$PROVIDER_AUTH_SNAPSHOT" ]] \
-      && diff -q "$PROVIDER_AUTH_SNAPSHOT" "$PROJECT_DIR/$PROVIDER_AUTH_FILE" >/dev/null 2>&1; then
-    info "Provider-auth.md: no drift from config.json"
-  else
-    warn "Provider-auth.md changed after the pre-read-through generation — will be included in commit."
-  fi
+  REF_SNAPSHOT_DIR="$PIPELINE_RUN_DIR/generated-refs.pre-readthrough"
+  [[ -d "$REF_SNAPSHOT_DIR" ]] \
+    || die "generated-ref snapshot missing — generation block did not run."
+  i=0
+  while (( i < ${#GENERATED_REFS[@]} )); do
+    ref="${GENERATED_REFS[$i]}"
+    gen="${GENERATED_GENS[$i]}"
+    # Report an AI edit before the regenerate below converges it away.
+    if [[ -n "$(ref_drift "$REF_SNAPSHOT_DIR/${ref##*/}" "$PROJECT_DIR/$ref")" ]]; then
+      warn "${ref##*/}: differs from the generation snapshot — an AI step edited a generated reference."
+    fi
+    warn "Regenerating ${ref##*/} to verify it still matches config.json..."
+    ( cd "$PROJECT_DIR" && npm run "$gen" ) >/dev/null 2>&1 || die "${gen} FAILED."
+    if ! git -C "$PROJECT_DIR" diff --quiet -- "$ref" 2>/dev/null; then
+      warn "${ref##*/}: regenerated from config — staged for the commit."
+      git -C "$PROJECT_DIR" add -- "$ref"
+    fi
+    i=$((i + 1))
+  done
   state_mark auth
   status_set auth "passed"
 fi

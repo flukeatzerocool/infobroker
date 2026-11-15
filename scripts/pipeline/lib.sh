@@ -188,6 +188,16 @@ state_init() {
 }
 
 # ── Findings parsing ─────────────────────────────────────────────────────────
+# ref_drift <snapshot-file> <work-file> → drifted | (empty)
+# Byte compare so a generated reference edited after its snapshot is reported
+# before the regeneration step converges the edit away implicitly.
+ref_drift() {
+  if cmp -s "$1" "$2" 2>/dev/null; then
+    return 0
+  fi
+  printf 'drifted\n'
+}
+
 # findings_count <path> → prints the finding count when the summary parses and
 # `findings` is an integer or an array; exits 1 otherwise. A malformed AI
 # summary must fail the step rather than silently degrade to "?".
@@ -510,6 +520,19 @@ tag_release() {
     die "Cannot verify remote tag ${tag}: git ls-remote origin failed. Retry with network access."
   fi
   [[ -n "$remote_tags" ]] && remote_exists=1
+  # The mirror is where CI publishes, and it receives its own atomic push. A tag
+  # already there is just as published as one on origin, so probe it before the
+  # origin push rather than discovering the collision after the branch shipped.
+  # --no-mirror opts out: a user who is not publishing to the mirror must not be
+  # refused over mirror state. The config lookup sits in the condition so `set -e`
+  # does not fire when the remote is absent.
+  if git -C "$PROJECT_DIR" config --get remote.github.url >/dev/null 2>&1 \
+      && [[ "${NO_MIRROR:-false}" != "true" ]]; then
+    if ! mirror_tags=$(git -C "$PROJECT_DIR" ls-remote --tags github "refs/tags/${tag}" 2>/dev/null); then
+      die "Cannot verify mirror tag ${tag}: git ls-remote github failed. Retry with network access."
+    fi
+    [[ -n "$mirror_tags" ]] && remote_exists=1
+  fi
   decision=$(npx tsx "$policy" tag-action \
     --current "$version" --exists "$exists" --remote-exists "$remote_exists" \
     --tag-version "$tag_version" --ancestor "$ancestor") \
@@ -634,6 +657,23 @@ classify_gate_failure() {
   fi
 }
 
+# repair_permitted <no_ai> <dry_run> → repair | no-ai | dry-run
+# A mode with no model backend cannot drive a repair turn, so it fails closed on
+# the first gate failure instead of looping into "backend not initialized".
+# `no-ai` wins when both are set: the release path is the operator's choice and
+# carries the more specific message. Pure, so the pipeline test harness can pin
+# the decision without starting a server.
+repair_permitted() {
+  local no_ai="${1:-false}" dry_run="${2:-false}"
+  if [[ "$no_ai" == "true" ]]; then
+    printf 'no-ai\n'
+  elif [[ "$dry_run" == "true" ]]; then
+    printf 'dry-run\n'
+  else
+    printf 'repair\n'
+  fi
+}
+
 # review_required <porcelain-status-output> → true | false
 # The independent code review reads source and configuration only. A docs-only
 # change set has nothing for it to review, so it is skipped rather than spending
@@ -687,11 +727,16 @@ repair_loop() {
     set -e
     [[ -n "$saved" ]] && eval "$saved"
     decision=$(classify_gate_failure "$rc" "$attempt" "$max")
-    # --no-ai has no backend to drive a repair turn, so it fails closed on the
-    # first failure instead of looping into "backend not initialized".
-    if [[ "$decision" != "pass" ]] && ${NO_AI:-false}; then
+    # A mode without a backend fails closed on the first failure instead of
+    # looping into "backend not initialized".
+    local mode
+    mode=$(repair_permitted "${NO_AI:-false}" "${DRY_RUN:-false}")
+    if [[ "$decision" != "pass" && "$mode" != "repair" ]]; then
       REPAIR_ATTEMPTS["$label"]="$attempt"
-      error "$label: FAILED (exit ${rc}) — --no-ai does not repair; human attention required."
+      case "$mode" in
+        no-ai)   error "$label: FAILED (exit ${rc}) — --no-ai does not repair; human attention required." ;;
+        dry-run) error "$label: FAILED (exit ${rc}) — dry run does not repair; human attention required." ;;
+      esac
       tail -20 "$log" 2>/dev/null || true
       return "$rc"
     fi

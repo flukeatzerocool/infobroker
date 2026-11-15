@@ -277,7 +277,7 @@ function main(argv: string[]): number {
     );
     return 0;
   }
-  process.stderr.write("usage: release-policy <tag-action|run-mode> [flags]\n");
+  process.stderr.write("usage: release-policy <commit-plan|run-mode|tag-action> [flags]\n");
   return 1;
 }
 

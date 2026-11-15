@@ -725,3 +725,51 @@ describe("split_commit_series", () => {
     expect(treeSnapshot(repo)).toEqual(before);
   });
 });
+
+describe("repair_permitted", () => {
+  it("returns repair when a backend is available", () => {
+    expect(runLib("repair_permitted false false").trim()).toBe("repair");
+  });
+
+  it("returns no-ai for a deterministic release", () => {
+    expect(runLib("repair_permitted true false").trim()).toBe("no-ai");
+  });
+
+  it("returns dry-run for a dry run", () => {
+    expect(runLib("repair_permitted false true").trim()).toBe("dry-run");
+  });
+
+  it("prefers no-ai when both modes are set", () => {
+    expect(runLib("repair_permitted true true").trim()).toBe("no-ai");
+  });
+});
+
+describe("repair_loop mode guard", () => {
+  it("fails closed under --dry-run without driving a repair turn", () => {
+    const dir = tempDir("pipeline-dry-");
+    const result = runLibStatus(
+      'declare -A REPAIR_ATTEMPTS; PROJECT_DIR="$1"; PIPELINE_RUN_DIR="$2"; DRY_RUN=true; NO_AI=false; repair_loop dry false /dev/null 2 "$2/log" "$2/out"',
+      [ROOT, dir],
+      { INFOBROKER_PIPELINE_STUB: "", INFOBROKER_PIPELINE_TEST_ROOT: "" },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("dry run does not repair");
+    expect(result.stdout).not.toContain("repair attempt");
+  });
+});
+
+describe("ref_drift", () => {
+  it("reports nothing for identical files", () => {
+    const dir = tempDir("pipeline-ref-");
+    writeFileSync(join(dir, "snapshot.md"), "same\n");
+    writeFileSync(join(dir, "work.md"), "same\n");
+    expect(runLib('ref_drift "$1" "$2"', [join(dir, "snapshot.md"), join(dir, "work.md")]).trim()).toBe("");
+  });
+
+  it("reports drift for an edited copy", () => {
+    const dir = tempDir("pipeline-ref-");
+    writeFileSync(join(dir, "snapshot.md"), "before\n");
+    writeFileSync(join(dir, "work.md"), "after\n");
+    expect(runLib('ref_drift "$1" "$2"', [join(dir, "snapshot.md"), join(dir, "work.md")]).trim()).toBe("drifted");
+  });
+});

@@ -2,6 +2,14 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The release pipeline regenerates all three config-derived references
+  (provider auth, provider map, provider privacy) before its spec audit and
+  stages them, so a stale generated file no longer costs an AI repair turn.
+  A dry run now fails closed with a clear message instead of trying to launch
+  a repair with no backend, and tag publication also probes the GitHub mirror,
+  refusing a mirror-only published tag before anything reaches origin. The
+  recovery hints name `npm run prep`, and both help synopses list every flag.
+
 - The `verify_claims` `priority` parameter now routes within the caller's
   provider list instead of replacing it: `privacy` restricts the pool to
   providers that do not forward queries, `quality` orders it by configured

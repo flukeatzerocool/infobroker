@@ -29,7 +29,7 @@ tests → pipeline → docs → release, from the pure `planCommits` classifier 
 `scripts/lib/release-policy.ts`), where each earlier commit is `typecheck`-
 verified and the version stamps plus the new CHANGELOG entry are snapshotted,
 rewound to the pre-run version, and restored before the final release commit.
-Both paths print a readiness report and ask for push approval — It then prints a readiness report and asks for push approval —
+Both paths print a readiness report and ask for push approval —
 `--yes` pre-approves, `--no-push` commits locally and exits 0, and a
 non-interactive run without `--yes` exits 1 rather than publishing. Per-step
 wall times are recorded under the run directory (`timings/`, one file per step,

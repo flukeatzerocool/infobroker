@@ -257,6 +257,39 @@ withRepo("dry-run", (repo) => {
   check("--dry-run creates no tag", tryGit(repo.work, ["rev-parse", "-q", "--verify", `refs/tags/${TAG}`]) === null);
 });
 
+// ── case 10: a mirror-only published tag is refused ────────────────────────
+withRepo("mirror-tag", (repo) => {
+  const base = git(repo.work, ["rev-parse", "HEAD"]);
+  const mirror = join(repo.root, "github.git");
+  execFileSync("git", ["init", "-q", "--bare", mirror]);
+  git(repo.work, ["remote", "add", "github", mirror]);
+  git(repo.work, ["tag", TAG, base]);
+  git(repo.work, ["push", "-q", "github", `refs/tags/${TAG}`]);
+  git(repo.work, ["tag", "-d", TAG]);
+  prepareChange(repo);
+  const result = runPipeline(repo, ["--no-ai", "--yes"]);
+  check("a mirror-only published tag is refused", result.status === 1, tail(result.output));
+  check("the mirror refusal names the immutable rule", /already published/.test(result.output));
+  check("the mirror refusal published nothing to origin", hasRef(repo.origin, `refs/tags/${TAG}`) === null);
+});
+
+// ── case 11: --no-mirror ignores mirror tag state ──────────────────────────
+withRepo("mirror-tag-optout", (repo) => {
+  const base = git(repo.work, ["rev-parse", "HEAD"]);
+  const mirror = join(repo.root, "github.git");
+  execFileSync("git", ["init", "-q", "--bare", mirror]);
+  git(repo.work, ["remote", "add", "github", mirror]);
+  git(repo.work, ["tag", TAG, base]);
+  git(repo.work, ["push", "-q", "github", `refs/tags/${TAG}`]);
+  git(repo.work, ["tag", "-d", TAG]);
+  prepareChange(repo);
+  const result = runPipeline(repo, ["--no-ai", "--yes", "--no-mirror"]);
+  check("--no-mirror ignores mirror tag state", result.status === 0, tail(result.output));
+  check("--no-mirror does not claim a mirror failure", !result.output.includes("Cannot verify mirror tag"));
+  const head = git(repo.work, ["rev-parse", "HEAD"]);
+  check("--no-mirror publishes the tag to origin", hasRef(repo.origin, `refs/tags/${TAG}`) === head);
+});
+
 if (failures > 0) {
   console.error(`\ntest-push-pipeline: FAIL (${failures} case failure(s))`);
   process.exit(1);
