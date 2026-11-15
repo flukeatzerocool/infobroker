@@ -1262,8 +1262,9 @@ verdict is preserved (REQ-026f).
 - The spec carries a `**Spec version:**` stamp equal to the package version, and
   the README cites that same version (parity enforced)
 - Every skill reference file required by REQ-053 is present and the pipeline map
-  carries a Mermaid diagram; the orchestrator references the four pipeline skills
-  and states its completion token imperatively (REQ-051, REQ-052)
+  carries a Mermaid diagram; the orchestrator references the four pipeline skills,
+  states its completion token imperatively, and states each shape's token once in
+  Phase 0 in agreement with `references/workflows.md` (REQ-051, REQ-052)
 - The client-artifact content checks fail, rather than warn, on a missing
   instruction file or skill and on a missing clause: knowledge-base-first
   recall, external fallback, and the reserved `manage_kb` search (REQ-050);

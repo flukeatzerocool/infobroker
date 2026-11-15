@@ -114,3 +114,36 @@ vetting content but signs off with the default shape's token.
 The roadmap section therefore stays open: its close condition is the token, and
 S6 does not emit it. Two follow-on items are filed — the token literal sitting
 inside the default pipeline, and N4's prose-literal needle.
+
+## Token-carrier re-run (2026-11-15, repo mode)
+
+The carrier fix from increment `2026-11-15-shape-token-authority` moved every
+shape token into one Phase 0 list and deleted the two in-pipeline literals. The
+same S6 scenario was re-run against the working tree's own skills.
+
+```
+./scripts/test-research.sh --mcp=repo --only=S6   # run-20261115-151159
+```
+
+The suite reported `project layer declares /home/fluke/Infobroker/skills`, and
+`mcp-target.txt` carries `skills:/home/fluke/Infobroker/skills`.
+
+| ID | Suite | Close criterion | Attribution |
+|---|---|---|---|
+| S6 | **pass** — `1/1 scenarios passed`, `missingSections: []` | **met** | `vetting complete.` as the reply's final line, with the Vetting block applied |
+
+Token emitted, verbatim (final line of the reply):
+
+- S6 — `vetting complete. 14 items | 10 verified | 11 red flags`
+
+Sections carried: `## Methodology & Scope`, `## Checklist`, and
+`## Red-Flag Register` are all present in the transcript
+(`run-20261115-151159/S6/turn0.txt`), so the block that the previous run never
+opened is now applied. The suite's section needles (`checklist`, `red flag`,
+`verified`) all matched; 21 source URLs, `verify_claims` and Infobroker
+engagement both recorded.
+
+Both roadmap sections close on this result: the token the S6 route emits is its
+own shape's, and N4 (above) already emits `analysis-loop complete.` with an
+Uncertainty Register, which is the pair its trigger names. The remaining N4
+`zero usable` needle is a separate, still-open item.

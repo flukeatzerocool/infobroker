@@ -2,6 +2,17 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The routed shape now owns the completion token. Phase 0 lists every shape's
+  token once, and the Research & Write and Fact-Check pipelines no longer print
+  their own literal. A repo-mode S6 run had produced vetting content —
+  self-described, red-flag register, per-source grades — and still signed off
+  `research complete.`, because the default pipeline's literal sat inline at
+  the point of sign-off while the cross-shape imperative sat 65 lines below.
+  Phase 0 also names the report block each shape writes, qualified for Gated
+  Analysis, whose contract lives in `analysis-loop`. `validate-spec` fails when
+  a Phase 0 line is missing or a token literal appears twice, so the list
+  cannot drift from `references/workflows.md`.
+
 - Phase 0 now ranks the three signals that were silently competing for the
   route: the shape a request names, what its content resembles once read, and
   the escalation rubric. A named shape decides; the content read and the rubric

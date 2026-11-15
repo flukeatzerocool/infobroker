@@ -682,6 +682,27 @@ function checkArtifactContent(): void {
     if (!/End your reply with[\s\S]{0,160}token/i.test(content)) {
       error("skills/infobroker/SKILL.md: completion token is not stated as an imperative emit instruction (REQ-051/REQ-052, §9.4)");
     }
+    // One token authority. Every shape token defined in workflows.md is stated
+    // in Phase 0 and nowhere else. A repo-mode S6 run produced vetting content
+    // and still signed off with the default pipeline's literal, because that
+    // literal sat inline in the pipeline it ran while the cross-shape
+    // imperative sat 65 lines later (docs/research-evidence-2026-11-15.md).
+    const shapeTokenPath = join(ROOT, "skills/infobroker/references/workflows.md");
+    const workflowsText = existsSync(shapeTokenPath) ? readFileSync(shapeTokenPath, "utf-8") : "";
+    const shapeTokens = [...workflowsText.matchAll(/\*\*Token:\*\*\s*`([^`]+)`/g)].map((match) => match[1]!);
+    if (shapeTokens.length < 9) {
+      error(`skills/infobroker/references/workflows.md: defines ${shapeTokens.length} shape token(s), expected at least 9 (REQ-051)`);
+    }
+    for (const literal of shapeTokens) {
+      if (phase0 === null || !phase0.includes(literal)) {
+        error(`skills/infobroker/SKILL.md: Phase 0 does not state the completion token '${literal}' defined in references/workflows.md (REQ-051)`);
+        continue;
+      }
+      const occurrences = content.split(literal).length - 1;
+      if (occurrences > 1) {
+        error(`skills/infobroker/SKILL.md: completion token '${literal}' is stated ${occurrences} times; its one authority is the Phase 0 list (REQ-051)`);
+      }
+    }
 
     const canonicalOrder = ["RECALL", "SEARCH", "EXTRACT", "VERIFY", "SUMMARIZE", "WRITE", "REDRAFT-CHECK", "VALIDATE", "POLISH", "TRANSLATE", "REVALIDATE", "ARCHIVE", "CITE"];
     let cursor = 0;

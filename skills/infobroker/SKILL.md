@@ -78,6 +78,24 @@ question is high-stakes and requires source-reliability grading and
 structured analytic techniques — score it with the rubric in
 `references/decision-tree.md` §3 rather than judging by feel.
 
+**Completion token and report block.** The routed shape selects both. End every
+reply with this shape's token, verbatim, as the final line — the token follows
+the route, never the pipeline you happened to run:
+
+- `Research & Write` → `research complete. <N> sources | <K> findings | <gap> gaps noted`
+- `Fact-Check` → `fact-check complete. <N> claims | <T/M/H/MF/F/U> verdicts`
+- `Deep-Dive` → `deep-dive complete. <N> subtopics | <K> themes | <C> contradictions`
+- `Gated Analysis` → `analysis-loop complete.`
+- `Competitive Evaluation` → `evaluation complete. <N> options | <M> criteria | winner: <x>`
+- `Literature Review` → `lit-review complete. <N> works screened | <M> included | <G> gaps`
+- `Monitoring / Delta` → `monitor complete. <N> new | <M> changed | <K> removed since <date>`
+- `Adversarial / Red-Team` → `red-team complete. <N> assumptions | <M> weaknesses | <K> unbroken`
+- `Vetting / Due-Diligence` → `vetting complete. <N> items | <V> verified | <R> red flags`
+
+A non-default shape that defines a block in `references/report-template.md`
+writes that block — open it before drafting. Gated Analysis defines none there
+and follows `analysis-loop`'s report contract.
+
 ## Pipeline: Research & Write
 
 Default shape for reports, articles, documentation, and analysis.
@@ -139,11 +157,9 @@ Run every pipeline step that applies to the request, in order, and complete
 the tail steps (WRITE, POLISH, TRANSLATE, CITE) before emitting the token.
 The completion token is the final line of your reply, emitted only after the
 TRANSLATE step has produced the non-English output the user asked for — do
-not emit the token and drop the translation:
-
-```
-research complete. <N> sources | <K> findings | <gap> gaps noted
-```
+not emit the token and drop the translation. End your reply with the routed
+shape's completion token from the Phase 0 list — never this pipeline's own —
+verbatim, as the final line.
 
 If ARCHIVE could not run because knowledge-base storage is unavailable, append
 `| archive unavailable: <reason>` to the token line instead of claiming a
@@ -185,12 +201,8 @@ CITE         source URLs with every verdict
 ```
 
 Run every pipeline step that applies to the request before emitting the
-token. End your reply with the shape's completion token, verbatim, as the
-final line:
-
-```
-fact-check complete. <N> claims | <T/M/H/MF/F/U> verdicts
-```
+token. End your reply with the routed shape's completion token from the
+Phase 0 list — never this pipeline's own — verbatim, as the final line.
 
 If ARCHIVE could not run because knowledge-base storage is unavailable, append
 `| archive unavailable: <reason>` to the token line instead of claiming a
@@ -207,11 +219,11 @@ revalidate → archive → cite) into its own sequence and ends with its own
 output block in `references/report-template.md`. To add a shape of
 your own, follow `references/skill-authoring.md`.
 
-Always end your reply with the chosen shape's `Token:` line from
-`references/workflows.md`, verbatim, as the final line. The token is a
-required part of the deliverable, not an optional summary. Run every
-pipeline step the shape defines before emitting the token — do not stop
-early.
+Always end your reply with the routed shape's completion token from the
+Phase 0 list — the same literal `references/workflows.md` defines — verbatim,
+as the final line. The token is a required part of the deliverable, not an
+optional summary. Run every pipeline step the shape defines before emitting
+the token — do not stop early.
 
 ## Tool Selection Quick Guide
 
