@@ -14,19 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Calibration gold-set refresh
-
-- Re-derive the gold set's `correct` labels against the post-adjustment curve:
-  the entries were judged against the pre-damping ladder, and the `0.9-1.0`
-  band now holds two entries instead of five.
-- Measure the truncated-excerpt family case (§8.2, D2 trade): a genuinely
-  republished article seen through a short snippet may no longer collapse into
-  one family, which raises confidence.
-
-**Trigger:** start with the next change to `test-fixtures/calibration/gold.json`
-or `src/source-family.ts`; close when the labels and the curve are re-derived
-and the excerpt case has a recorded measurement.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`

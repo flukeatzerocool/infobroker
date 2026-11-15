@@ -18,6 +18,19 @@
   sources are attributable rather than one global tally (REQ-026d).
 - `F-R5-A-3`, `F-R5-C-4`, and `F-R5-C-6` move to `Resolved`; the register
   census is re-derived at 179 resolved / 4 scheduled.
+- The calibration gold set is re-derived to `version: 2`: 18 rows, each
+  stating a claim whose truth a cited source settles, so a label no longer
+  depends on the score it measures (REQ-123). Two rows whose rung disagreed
+  with their family count are corrected, six rows are added, and every
+  reliability band now holds at least two entries with both outcomes in the
+  `0.9-1.0` band. `parseGoldSet` validates the format, and the calibration
+  test locks the re-derived Brier score and reconciles the hardcoded weights
+  against `config.json`.
+- §8.2 records the measured cost of the truncated-republication trade: a
+  43-word article and a 14-word excerpt of it, same headline, score `0.3721`
+  and split into two families, raising a two-result `web_search` finding from
+  `0.2775` to `0.6475`. Both roadmap limbs of the calibration gold-set refresh
+  are met and the roadmap section is retired.
 
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 
