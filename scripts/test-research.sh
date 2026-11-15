@@ -141,7 +141,16 @@ for id in $SCENARIO_IDS; do
   printf '%s\n' "$utterance" > "$workdir/prompt.md"
   base_out="$workdir/turn0.txt"
   run_turn "$id" "research-$id" "$workdir" "$workdir/prompt.md" "$base_out" ""
-  session_id=$(grep -oE '"sessionID":"ses_[^"]+"' "$base_out" | head -1 | sed -E 's/.*(ses_[^"]+)"$/\1/')
+  # Read the session id without a `grep … | head -1` pipeline: under
+  # `set -o pipefail` a grep that keeps writing after `head` exits takes
+  # SIGPIPE, the pipeline returns 141, and `set -e` ends the run silently —
+  # which is exactly how the first two batch attempts died after one turn.
+  session_id=$(node -e '
+    const fs = require("fs");
+    const text = fs.readFileSync(process.argv[1], "utf8");
+    const match = text.match(/"sessionID":"(ses_[^"]+)"/);
+    if (match) process.stdout.write(match[1]);
+  ' "$base_out")
 
   # Follow-up turns continue the session.
   if [[ "$fu_count" -gt 0 && -n "$session_id" ]]; then

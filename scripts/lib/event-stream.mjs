@@ -112,6 +112,11 @@ export function extractToolOrder(raw) {
 // assistant text, so merely naming a tool in prose cannot satisfy an audit.
 export function extractMcpToolCalls(raw, server) {
   if (!server) throw new Error("extractMcpToolCalls requires a server name");
+  // Tool names arrive in two shapes: `infobroker_infobroker_search_web` (the
+  // legacy client-qualified form) and `infobroker.infobroker_search_web` (the
+  // dotted form current headless opencode emits). Strip the dotted server
+  // prefix before matching so both resolve to the same slug.
+  const dotted = new RegExp(`^${server}\\.`);
   const direct = new RegExp(`^${server}_([A-Za-z0-9_]+)$`);
   const embedded = new RegExp(`tools\\.${server}\\.([A-Za-z0-9_]+)`, "g");
   const found = new Set();
@@ -121,8 +126,10 @@ export function extractMcpToolCalls(raw, server) {
     const part = ev?.part ?? ev;
     const tool = part?.tool ?? ev?.tool;
     if (typeof tool !== "string") continue;
-    const m = tool.match(direct);
-    if (m) found.add(m[1]);
+    const m = tool.replace(dotted, "").match(direct);
+    // The client-qualified form leaves a redundant `infobroker_` in the
+    // capture; return the bare tool slug so both namings agree.
+    if (m) found.add(m[1].replace(/^infobroker_/, ""));
     if (tool !== "execute") continue;
     const input = JSON.stringify(part?.state?.input ?? "");
     for (const hit of input.matchAll(embedded)) found.add(hit[1]);

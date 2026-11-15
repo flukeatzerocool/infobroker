@@ -96,7 +96,7 @@ describe("evaluate-lab", () => {
     const r = run(VERDICT);
     expect(r.status).toBe("pass");
     expect(r.auditFails).toEqual([]);
-    expect(r.tools).toEqual(["infobroker_search_web", "infobroker_verify_claims"]);
+    expect(r.tools).toEqual(["search_web", "verify_claims"]);
   });
 
   it("parses the critic verdict block that sits at the tail of the text", () => {

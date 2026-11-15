@@ -63,7 +63,11 @@ if (ta.uses_infobroker) {
   // Routing signal: the run engaged Infobroker tools at all. Built-in
   // websearch/webfetch are legitimately used as fallback on error and are
   // not a routing failure.
-  audit.uses_infobroker = toolOrder.some((t) => t.startsWith("infobroker_infobroker_"));
+  // Two client namings exist: `infobroker_infobroker_*` and, as current
+  // headless opencode emits, `infobroker.infobroker_*`. Either engages the MCP.
+  audit.uses_infobroker = toolOrder.some(
+    (t) => t.startsWith("infobroker_infobroker_") || t.startsWith("infobroker.infobroker_"),
+  );
 }
 // Hard audit gates are structural (Infobroker engagement).
 // verify_claims is a "when contested" guidance, not a shape requirement — advisory.

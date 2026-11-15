@@ -89,7 +89,7 @@ const missingSections = (scenario.sections ?? []).filter(
 
 const ta = scenario.tool_audit ?? {};
 const audit = {};
-if (ta.verify_claims) audit.verify_claims = tools.includes("infobroker_verify_claims") || toolOrder.some((t) => t.includes("verify_claims"));
+if (ta.verify_claims) audit.verify_claims = tools.includes("verify_claims") || toolOrder.some((t) => t.includes("verify_claims"));
 if (ta.uses_infobroker) audit.uses_infobroker = tools.length > 0;
 const hardAudit = ["uses_infobroker"];
 const auditFails = Object.entries(audit).filter(([k, v]) => v === false && hardAudit.includes(k)).map(([k]) => k);

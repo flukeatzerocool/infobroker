@@ -2,6 +2,20 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- `npm run test-research` no longer ends its run after the first scenario, and
+  its routing audit no longer misfires. Two harness defects surfaced when the
+  repo-mode matrix was first run in batches. The session id was read with
+  `grep … | head -1`; under `set -o pipefail`, a `grep` that keeps writing after
+  `head` exits takes SIGPIPE, the pipeline returns 141, and `set -e` ends the
+  run silently — with the transcript written but no evaluation row. It now
+  reads the id with `node`, so no pipeline can take SIGPIPE. Separately, the
+  `uses_infobroker` audit accepted only the client-qualified
+  `infobroker_infobroker_*` tool name while current headless opencode emits
+  `infobroker.infobroker_*`, so a run that called `search_web` and `fetch_page`
+  throughout was still scored as never engaging the MCP. Both namings now
+  resolve to the same slug in `scripts/lib/event-stream.mjs`, and the Lab
+  evaluator reads the normalized slug too.
+
 - The confidence and sourcing vocabulary now cites the directives it was
   written against. `even chance` becomes `roughly even chance`, the term ICD 203
   §D.5.e.(2)(a) uses for the 45–55% band — a bare "even chance" is in neither of
