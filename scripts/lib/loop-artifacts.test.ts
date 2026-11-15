@@ -1,14 +1,14 @@
 // loop-artifacts.test — unit tests for the increment artifact contract. Role: test.
 //
-// Each case builds a throwaway docs/plans tree, so the contract is tested
+// Each case builds a throwaway record tree, so the contract is tested
 // without depending on the repository's own increments.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  INCREMENTS_DIR,
+  DEFAULT_INCREMENTS_DIR,
   listIncrements,
   nameProblem,
   newestIncrement,
@@ -28,7 +28,7 @@ function writeIncrement(
   name: string,
   files: Partial<Record<"plan" | "tasks" | "aar", string>>,
 ): void {
-  const dir = join(root, INCREMENTS_DIR, name);
+  const dir = join(root, DEFAULT_INCREMENTS_DIR, name);
   mkdirSync(dir, { recursive: true });
   for (const [key, content] of Object.entries(files)) {
     if (content === undefined) continue;
@@ -39,6 +39,10 @@ function writeIncrement(
 const PLAN = "# Plan\n\n**Done bar:** the gate is green.\n";
 const TASKS = "# Tasks\n\n1. [x] done\n";
 const AAR = "# AAR\n\nLOOP PAUSED\n";
+
+beforeEach(() => {
+  delete process.env.INFOBROKER_PLANS_DIR;
+});
 
 afterEach(() => {
   for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -97,6 +101,55 @@ describe("increment artifacts", () => {
     });
     expect(validateIncrements(root)).toEqual([]);
     expect(listIncrements(root)[0]?.loopToken).toBe("LOOP OPEN");
+  });
+
+  it("ignores an earlier prose mention of the other token", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-14-mention", {
+      plan: PLAN,
+      tasks: TASKS,
+      aar: [
+        "# AAR",
+        "",
+        "| Finding | Disposition |",
+        "|---|---|",
+        "| The gate fails before `aar.md` exists | Seeded `LOOP OPEN` before commit 1 |",
+        "",
+        "LOOP PAUSED",
+        "",
+      ].join("\n"),
+    });
+    expect(listIncrements(root)[0]?.loopToken).toBe("LOOP PAUSED");
+  });
+
+  it("accepts a terminal token whose sentence wraps", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-wrapped", {
+      plan: PLAN,
+      tasks: TASKS,
+      aar: "# AAR\n\nLOOP PAUSED — gates green, the roadmap item is closed, and\nno new action item is open.\n",
+    });
+    expect(listIncrements(root)[0]?.loopToken).toBe("LOOP PAUSED");
+  });
+
+  it("accepts a backticked terminal token", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-backtick", {
+      plan: PLAN,
+      tasks: TASKS,
+      aar: "# AAR\n\n`LOOP PAUSED` — gates green.\n",
+    });
+    expect(listIncrements(root)[0]?.loopToken).toBe("LOOP PAUSED");
+  });
+
+  it("takes the last token when both appear", () => {
+    const root = makeRoot();
+    writeIncrement(root, "2026-11-07-both", {
+      plan: PLAN,
+      tasks: TASKS,
+      aar: "# AAR\n\nHistorically this was LOOP OPEN.\n\nLOOP PAUSED\n",
+    });
+    expect(listIncrements(root)[0]?.loopToken).toBe("LOOP PAUSED");
   });
 
   it("errors on LOOP OPEN when that increment is being closed", () => {

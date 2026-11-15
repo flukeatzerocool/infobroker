@@ -223,7 +223,31 @@ withRepo("resume", (repo) => {
   check("resume publishes the tag", hasRef(repo.origin, `refs/tags/${TAG}`) !== null);
 });
 
-// ── case 7: --dry-run is non-mutating ───────────────────────────────────────
+// ── case 7: the default run commits once ────────────────────────────────────
+withRepo("one-commit", (repo) => {
+  prepareChange(repo);
+  const base = git(repo.work, ["rev-parse", "HEAD"]);
+  const result = runPipeline(repo, ["--no-ai", "--yes", "--no-push", "--no-mirror"]);
+  check("default run exits 0", result.status === 0, tail(result.output));
+  const count = Number(git(repo.work, ["rev-list", "--count", `${base}..HEAD`]));
+  check("default run creates exactly one commit", count === 1, `count=${count}`);
+  const subject = git(repo.work, ["log", "-1", "--format=%s"]);
+  check("the single commit is a pipeline commit", /^Push pipeline /.test(subject), subject);
+});
+
+// ── case 8: --split-commits opts into the convention series ─────────────────
+withRepo("split-commits", (repo) => {
+  prepareChange(repo);
+  write(repo.work, "source.txt", "source\n");
+  write(repo.work, "scripts/extra-split.ts", "export const extra = 1;\n");
+  const base = git(repo.work, ["rev-parse", "HEAD"]);
+  const result = runPipeline(repo, ["--no-ai", "--yes", "--no-push", "--no-mirror", "--split-commits"]);
+  check("--split-commits exits 0", result.status === 0, tail(result.output));
+  const count = Number(git(repo.work, ["rev-list", "--count", `${base}..HEAD`]));
+  check("--split-commits creates more than one commit", count > 1, `count=${count}`);
+});
+
+// ── case 9: --dry-run is non-mutating ───────────────────────────────────────
 withRepo("dry-run", (repo) => {
   const base = git(repo.work, ["rev-parse", "HEAD"]);
   const result = runPipeline(repo, ["--no-ai", "--dry-run", "--yes", "--no-mirror"]);

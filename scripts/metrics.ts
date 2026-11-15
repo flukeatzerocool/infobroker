@@ -8,10 +8,10 @@
 // Role: informational (reports; always exits 0).
 // Exit codes: 0 = report printed, including when the reflog is unavailable.
 //
-// Usage: npx tsx scripts/metrics.ts [--help]
+// Usage: npx tsx scripts/metrics.ts [--json] [--help]
 
 import { join } from "node:path";
-import { handleHelp } from "./lib/args.js";
+import { handleHelp, parseFlag } from "./lib/args.js";
 import {
   commitTimes,
   deliveryReport,
@@ -20,16 +20,18 @@ import {
   pushTimestamps,
 } from "./lib/delivery.js";
 
-const USAGE = `Usage: npx tsx scripts/metrics.ts
+const USAGE = `Usage: npx tsx scripts/metrics.ts [--json]
 
 Prints deployment frequency, commit-to-push lead time, commits per push, and
 the pipeline-fix-within-48h proxy for the recorded push window.
 
+  --json   Emit one JSON payload instead of the formatted report.
   --help   Show this message.
 `;
 
 handleHelp(process.argv, USAGE);
-const unknown = process.argv.slice(2);
+const asJson = parseFlag(process.argv.slice(2), "--json");
+const unknown = process.argv.slice(2).filter((arg) => arg !== "--json");
 if (unknown.length > 0) {
   console.error(`Unknown flag: ${unknown[0]}`);
   console.error(USAGE);
@@ -38,13 +40,22 @@ if (unknown.length > 0) {
 
 const ROOT = join(import.meta.dirname, "..");
 
-console.log("Delivery metrics (origin reflog window)");
-
 const report = deliveryReport(pushTimestamps(ROOT), commitTimes(ROOT), pipelineCommitTimes(ROOT));
 if (!report) {
-  console.log("  push history: unavailable (no origin/main reflog entries)");
+  if (asJson) console.log(JSON.stringify({ available: false }));
+  else {
+    console.log("Delivery metrics (origin reflog window)");
+    console.log("  push history: unavailable (no origin/main reflog entries)");
+  }
   process.exit(0);
 }
+
+if (asJson) {
+  console.log(JSON.stringify({ available: true, ...report }));
+  process.exit(0);
+}
+
+console.log("Delivery metrics (origin reflog window)");
 
 console.log(`  window:              ${report.windowDays.toFixed(0)} days (${report.pushes} pushes)`);
 console.log(`  deployment frequency: ${report.deploymentFrequency.toFixed(2)} pushes/day`);

@@ -31,6 +31,13 @@
   and split into two families, raising a two-result `web_search` finding from
   `0.2775` to `0.6475`. Both roadmap limbs of the calibration gold-set refresh
   are met and the roadmap section is retired.
+- Process cost: increment records now live in a git-ignored `.opencode/plans/`
+  instead of the repository, and the push pipeline commits once per increment
+  by default (`--split-commits` keeps the convention series). The loop-state
+  reader now takes the terminal `LOOP PAUSED` / `LOOP OPEN` line rather than
+  the first mention, so an AAR that quotes the token in its findings table is
+  no longer reported open. `AGENTS.md` carries the record contract and a
+  trimmed push-pipeline reference.
 
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 

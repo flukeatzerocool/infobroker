@@ -6,7 +6,7 @@
  * increment's artifacts, runs the fast gate suite, records the run for this
  * tree, and prints the readiness report and the exact next commands.
  *
- * It does not commit. Infobroker's split-commit series (D-089) owns commits;
+ * It does not commit. The increment's single commit follows the seal (D-124);
  * Holonovel derives a subject from a dated CHANGELOG heading, but this
  * repository's headings carry the CalVer version, which repeats across several
  * entries, so there is no unique subject to derive. Documented in
@@ -18,11 +18,11 @@
  * failure, 2 = fatal error.
  */
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { handleHelp, parseFlag, parseValueFlag, rejectUnknown } from "./lib/args.js";
 import { writeGateRun } from "./lib/gate-run-manifest.js";
 import {
-  INCREMENTS_DIR,
+  incrementsDir,
   listIncrements,
   nameProblem,
   newestIncrement,
@@ -30,6 +30,7 @@ import {
 } from "./lib/loop-artifacts.js";
 
 const ROOT = join(import.meta.dirname, "..");
+const DIR = relative(ROOT, incrementsDir(ROOT));
 
 const USAGE = `Usage: npx tsx scripts/session-close.ts [--date YYYY-MM-DD]
        [--increment <name>] [--dry-run]
@@ -65,7 +66,7 @@ function main(): number {
   const increments = listIncrements(ROOT);
   if (increments.length === 0) {
     process.stderr.write(
-      `session-close: no increment under ${INCREMENTS_DIR}. Write plan.md, tasks.md, and aar.md first.\n`,
+      `session-close: no increment under ${DIR}. Write plan.md, tasks.md, and aar.md first.\n`,
     );
     return 1;
   }
@@ -128,9 +129,9 @@ function main(): number {
   process.stdout.write(
     [
       "",
-      "Session sealed. Commit cadence (split-commit series, D-089):",
-      "  1. Stage one concern at a time and commit it.",
-      `  2. When the tree is ready to publish: npm run prep (AI steps), review the diff, commit.`,
+      "Session sealed. Commit cadence (one commit per increment, D-124):",
+      "  1. Stage the whole increment and commit it once with a conventional subject.",
+      "  2. When the tree is ready to publish: npm run prep (AI steps), review the diff, commit.",
       "  3. npm run release (deterministic: gates, commit, tag, push).",
       warnings.length > 0 ? `  Note: ${warnings.length} warning(s) above.` : "",
       "",

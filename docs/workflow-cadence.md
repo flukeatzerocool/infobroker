@@ -6,12 +6,12 @@ anything that is not routine belongs in a plan with a tracked action.
 ## Per session
 
 ```
-questions → research → plan → execute → AAR → fix if necessary → split commits → close
+questions → research → plan → execute → AAR → fix if necessary → one commit → close
 ```
 
-1. Create `docs/plans/<YYYY-MM-DD>-<slug>/` with `plan.md`, `tasks.md`, and
-   `aar.md`. The directory is the durable record; `.opencode/session.md` is
-   scratch (D-091).
+1. Create `.opencode/plans/<YYYY-MM-DD>-<slug>/` with `plan.md`, `tasks.md`,
+   and `aar.md`. The directory is the local record; `.opencode/session.md` is
+   scratch (D-091, superseded by D-123).
 2. Execute the plan. A deviation is an amendment to `plan.md`, re-stamped,
    not a silent improvise.
 3. Every AAR finding ends as a dated `ROADMAP.md` entry, a `DECISIONS.md`
@@ -19,7 +19,8 @@ questions → research → plan → execute → AAR → fix if necessary → spl
    owner is not a finding.
 4. Close with `npm run session:close`. It validates the increment's artifacts,
    runs `check:fast`, records the run for this tree, and prints the push
-   cadence. It does not commit: the split-commit series owns commits (D-089).
+   cadence. It does not commit: the increment's single commit follows the
+   seal (D-124).
 
 **Push on demand, not on a schedule.** The obligation is a cost bound: a push
 must be resumable (`--resume`, `--run-id`, `--from`/`--to`) so an on-demand
@@ -60,6 +61,9 @@ scheduled are explicitly parked, not "in progress".
   so an unbounded ready column silently sets the delivery latency.
 - **Push cost:** if a push costs more than the batch it would join, fix the
   push, not the cadence.
+- **Gate cadence:** `npm run check:fast` and targeted suites between edits; one
+  full `npm run check` per increment, at close. `test-debate-club` runs only
+  when the tool surface, the skills, or the debate fixtures change.
 - **Fast suite:** `npm run check:fast` excludes only `audit` (registry),
   `check-pack` (packed tarball), and `test-debate-club` (build + Arena). A green
   fast suite never satisfies the pre-push gate; only a full run records one.
@@ -68,7 +72,7 @@ scheduled are explicitly parked, not "in progress".
 
 | Loop | Signal | Surface |
 |---|---|---|
-| Session | plans, AARs, loop tokens | `docs/plans/` (gated by `check-loop-artifacts`) |
+| Session | plans, AARs, loop tokens | `.opencode/plans/` (local, gated by `check-loop-artifacts`) |
 | Session | increment health, date drift, hook invocations | `npm run loop-audit` |
 | Publication | step outcomes, resume state | `$TMPDIR/infobroker/pipeline-logs/run-*` |
 | Gates | duration, failure rate | `$TMPDIR/infobroker/gate-timing-*.json` |

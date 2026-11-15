@@ -2,7 +2,7 @@
 /**
  * check-loop-artifacts.ts — gate the increment artifact contract. [gate]
  *
- * Purpose: an increment under docs/plans/ must carry plan.md, tasks.md, and an
+ * Purpose: an increment in the local record store must carry plan.md, tasks.md, and an
  * aar.md ending in a LOOP PAUSED / LOOP OPEN token. Without this the plan and
  * the AAR are voluntary, and the loop cannot tell whether it completed. A
  * missing Done bar is a warning, not an error: the bar is a planning quality
@@ -15,11 +15,17 @@
  * Exit codes: 0 = contract satisfied (warnings allowed), 1 = errors found,
  * 2 = fatal error.
  */
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { handleHelp, parseFlag, rejectUnknown } from "./lib/args.js";
-import { INCREMENTS_DIR, listIncrements, nameProblem, validateIncrements } from "./lib/loop-artifacts.js";
+import {
+  incrementsDir,
+  listIncrements,
+  nameProblem,
+  validateIncrements,
+} from "./lib/loop-artifacts.js";
 
 const ROOT = join(import.meta.dirname, "..");
+const DIR = relative(ROOT, incrementsDir(ROOT));
 
 const USAGE = `Usage: npx tsx scripts/check-loop-artifacts.ts [--json]
 
@@ -41,7 +47,7 @@ function main(): number {
     .filter((problem): problem is string => problem !== null);
 
   if (json) {
-    console.log(JSON.stringify({ directory: INCREMENTS_DIR, findings, naming }, null, 2));
+    console.log(JSON.stringify({ directory: DIR, findings, naming }, null, 2));
   } else {
     for (const finding of findings) {
       const prefix = finding.level === "error" ? "ERROR" : "WARNING";
@@ -50,7 +56,7 @@ function main(): number {
     for (const problem of naming) console.error(`ERROR ${problem}`);
     if (errors.length === 0 && warnings.length === 0 && naming.length === 0) {
       const count = listIncrements(ROOT).length;
-      console.log(`PASS: ${count} increment(s) under ${INCREMENTS_DIR} satisfy the contract`);
+      console.log(`PASS: ${count} increment(s) under ${DIR} satisfy the contract`);
     } else {
       console.log(`loop artifacts: ${errors.length} error(s), ${warnings.length} warning(s)`);
     }

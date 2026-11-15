@@ -2,6 +2,32 @@
 
 ## Active Decisions
 
+### D-124: One Commit per Increment Is the Pipeline Default (2026.11.14)
+
+The split-commit series produced 263 commits for 63 increments in five days;
+120 were bookkeeping, and the series' benefits (bisectable buckets, per-commit
+typecheck) do not pay for themselves in a solo repository whose tree is gated
+end to end. Decision: `scripts/push-pipeline.sh` commits once by default and
+`--split-commits` opts into the series; `--single-commit` remains a deprecated
+alias. The subject stays `Push pipeline <date><review suffix>`, so the
+rotating-shard cursor (`last_review_shard`) keeps rotating. The session routine
+matches: one conventional commit per increment, split only above ~300 lines or
+for release, credentials, or schema migration. Amends D-089, which still
+governs the opt-in split path.
+
+### D-123: Increment Records Are Local, and the Contract Is Gated Where They Live (2026.11.14)
+
+The in-repo increment record was 321 tracked files (3.5 MB) and 63% of the
+insertions in a five-day window; 40 commits were docs-only. Decision: records
+live in the git-ignored `.opencode/plans/<YYYY-MM-DD>-<slug>/`
+(`INFOBROKER_PLANS_DIR` overrides), and `check-loop-artifacts` reads that store.
+A fresh checkout has no records and passes with zero increments, so the
+contract is a session control, not a publication artifact. The durable why is
+the commit body, `CHANGELOG.md`, and this file; the increment directory is
+local detail. The terminal token is the last `LOOP PAUSED` / `LOOP OPEN`
+occurrence in `aar.md` — a prose mention earlier in the file is not terminal.
+Supersedes D-091, which chose the in-repo directory as the durable record.
+
 ### D-122: Preservation Is Bounded and Concurrent, and the Archive Reference Is Reported When It Lands (2026.11.14)
 
 REQ-026c promised preservation was *non-blocking* **and** that
@@ -609,7 +635,7 @@ that proves identity must be the first date on or after 2026-11-08; closure is
 `npm view infobroker version` equal to `package.json` and
 `npm view infobroker@<version> gitHead` equal to the tag. Supersedes D-086.
 
-
+### D-091: The Increment Record Is a Gated In-Repo Artifact (2026.11.07)
 
 The session loop's plan, findings, and disposition lived in
 `.opencode/session.md`, which is git-ignored and deleted at close, so the only

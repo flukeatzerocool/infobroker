@@ -28,7 +28,7 @@ function timingRows(count: number): TimingRow[] {
 function increment(name: string, token: "LOOP PAUSED" | "LOOP OPEN" | null): Increment {
   return {
     name,
-    dir: `docs/plans/${name}`,
+    dir: `.opencode/plans/${name}`,
     hasPlan: true,
     hasTasks: true,
     hasAar: token !== null,

@@ -30,3 +30,6 @@ vector-store.corrupt-*
 vector-store.pre-rollback-*
 # Per-session working notes: local state, never shipped.
 .opencode/session.md
+# Increment records are local; the durable why is the commit body, CHANGELOG, and DECISIONS.
+.opencode/plans/
+docs/plans/

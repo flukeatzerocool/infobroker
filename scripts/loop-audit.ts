@@ -4,7 +4,7 @@
  *
  * Purpose: the delivery metrics answer "how fast are we shipping"; this answers
  * "is the loop's memory intact". It reports the increment artifacts under
- * docs/plans/ (count, terminal token, done bar) and compares each commit that
+ * the record store (count, terminal token, done bar) and compares each commit that
  * rewrote a CHANGELOG heading with the date it was committed. Delivery numbers
  * are not recomputed here — `npm run metrics` owns them.
  *
@@ -14,7 +14,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { handleHelp, parseFlag, rejectUnknown } from "./lib/args.js";
 import {
   commitTimes,
@@ -27,9 +27,10 @@ import {
 import { timingPath } from "./lib/gate-run-manifest.js";
 import { readHookEvents, summarizeHooks } from "./lib/hook-events.js";
 import { driftRows, type DriftRow } from "./lib/loop-audit.js";
-import { INCREMENTS_DIR, listIncrements, validateIncrements } from "./lib/loop-artifacts.js";
+import { incrementsDir, listIncrements, validateIncrements } from "./lib/loop-artifacts.js";
 
 const ROOT = join(import.meta.dirname, "..");
+const DIR = relative(ROOT, incrementsDir(ROOT));
 const MAX_HEADING_COMMITS = 20;
 
 const USAGE = `Usage: npx tsx scripts/loop-audit.ts [--json]
@@ -139,7 +140,7 @@ function main(): number {
   const gates = gateRows();
 
   const report = {
-    increments_dir: INCREMENTS_DIR,
+    increments_dir: DIR,
     increments: increments.map((increment) => ({
       name: increment.name,
       token: increment.loopToken,
@@ -160,7 +161,7 @@ function main(): number {
   }
 
   console.log("\nSession loop audit\n");
-  console.log(`Increments under ${INCREMENTS_DIR}: ${increments.length}`);
+  console.log(`Increments under ${DIR}: ${increments.length}`);
   for (const increment of increments) {
     const doneBar = increment.doneBar !== null ? "done bar" : "NO done bar";
     console.log(`  ${increment.name} — ${increment.loopToken ?? "no token"}, ${doneBar}`);

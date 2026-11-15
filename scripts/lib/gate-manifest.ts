@@ -138,7 +138,7 @@ export const GATES: readonly Gate[] = [
   },
   {
     name: "check-loop-artifacts",
-    description: "Increment artifacts under `docs/plans/` carry plan, tasks, and a terminal LOOP token",
+    description: "Increment artifacts under `.opencode/plans/` carry plan, tasks, and a terminal LOOP token",
     fast: true,
   },
   {

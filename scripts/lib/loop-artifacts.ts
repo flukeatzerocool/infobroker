@@ -5,9 +5,23 @@
 // reads; no git, no writes.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
-export const INCREMENTS_DIR = "docs/plans";
+const REPO_ROOT = join(import.meta.dirname, "..", "..");
+
+/** The default record store: local state beside the session scratch file. */
+export const DEFAULT_INCREMENTS_DIR = ".opencode/plans";
+
+/**
+ * incrementsDir — the record store. `INFOBROKER_PLANS_DIR` overrides it; a
+ * relative value resolves against the root passed in (the repository root by
+ * default), so a test can point at a throwaway tree.
+ */
+export function incrementsDir(root: string = REPO_ROOT): string {
+  const configured = process.env.INFOBROKER_PLANS_DIR?.trim();
+  const target = configured && configured.length > 0 ? configured : DEFAULT_INCREMENTS_DIR;
+  return isAbsolute(target) ? target : resolve(root, target);
+}
 
 /**
  * CAP_CONTRACT_FROM — the first increment date that must declare and record a
@@ -16,10 +30,22 @@ export const INCREMENTS_DIR = "docs/plans";
  */
 export const CAP_CONTRACT_FROM = "2026-11-14";
 
+/** Length budgets apply to increments from this date; earlier ones are grandfathered. */
+export const LENGTH_BUDGET_FROM = "2026-11-15";
+export const PLAN_MAX_LINES = 200;
+export const AAR_MAX_LINES = 120;
+
 /** The marker must begin a line; a quotation inside prose is not a declaration. */
 const CAP_LINE = /^\*\*Review cap:\*\*[ \t]*(.*)$/m;
 const CAP_PLAN_VALUE = /^\d+/;
 const CAP_AAR_VALUE = /;\s*used\s+\d+\s+pass(?:es)?\b/i;
+
+/**
+ * The terminal token is the LAST occurrence in the file. An AAR that mentions
+ * `LOOP OPEN` in a findings table and ends `LOOP PAUSED` is paused; four
+ * historical records also wrap the token sentence or backtick the token.
+ */
+const LOOP_TOKEN = /`?LOOP (PAUSED|OPEN)\b/g;
 
 /** The Done bar must also begin a line, for the same reason as the cap marker. */
 const DONE_BAR = /^\*\*Done bar:?\*\*[ \t]*(.+)$/m;
@@ -42,11 +68,13 @@ export interface Increment {
   doneBar: string | null;
   planReviewCap: string | null;
   aarReviewCap: string | null;
+  planLines?: number;
+  aarLines?: number;
 }
 
-/** listIncrements — every directory under docs/plans, oldest first. */
+/** listIncrements — every directory in the record store, oldest first. */
 export function listIncrements(root: string): Increment[] {
-  const base = join(root, INCREMENTS_DIR);
+  const base = incrementsDir(root);
   if (!existsSync(base)) return [];
   const dirs = readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory());
   const increments: Increment[] = [];
@@ -57,7 +85,6 @@ export function listIncrements(root: string): Increment[] {
     const hasAar = existsSync(join(path, "aar.md"));
     const aar = hasAar ? readFileSync(join(path, "aar.md"), "utf-8") : "";
     const plan = hasPlan ? readFileSync(join(path, "plan.md"), "utf-8") : "";
-    const token = aar.match(/LOOP PAUSED|LOOP OPEN/);
     const doneBar = plan.match(DONE_BAR);
     const planCap = plan.match(CAP_LINE);
     const aarCap = aar.match(CAP_LINE);
@@ -67,13 +94,23 @@ export function listIncrements(root: string): Increment[] {
       hasPlan,
       hasTasks,
       hasAar,
-      loopToken: (token?.[0] as Increment["loopToken"]) ?? null,
+      loopToken: terminalToken(aar),
       doneBar: doneBar?.[1]?.trim() ?? null,
       planReviewCap: planCap?.[1]?.trim() ?? null,
       aarReviewCap: aarCap?.[1]?.trim() ?? null,
+      planLines: hasPlan ? plan.split("\n").length : undefined,
+      aarLines: hasAar ? aar.split("\n").length : undefined,
     });
   }
   return increments.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** terminalToken — the last LOOP marker in the file; an earlier mention is prose. */
+function terminalToken(aar: string): Increment["loopToken"] {
+  const matches = [...aar.matchAll(LOOP_TOKEN)];
+  const last = matches.at(-1);
+  if (!last) return null;
+  return last[1] === "PAUSED" ? "LOOP PAUSED" : "LOOP OPEN";
 }
 
 /** validateIncrements — the contract findings for every increment. */
@@ -147,6 +184,22 @@ export function validateIncrements(
         level: "warning",
         message: "plan.md has no **Done bar:** line",
       });
+    }
+    if (increment.name.slice(0, 10) >= LENGTH_BUDGET_FROM) {
+      if ((increment.planLines ?? 0) > PLAN_MAX_LINES) {
+        findings.push({
+          increment: increment.name,
+          level: "warning",
+          message: `plan.md is ${increment.planLines} lines (budget ${PLAN_MAX_LINES}); a plan is a decision record, not an essay`,
+        });
+      }
+      if ((increment.aarLines ?? 0) > AAR_MAX_LINES) {
+        findings.push({
+          increment: increment.name,
+          level: "warning",
+          message: `aar.md is ${increment.aarLines} lines (budget ${AAR_MAX_LINES}); generate the evidence block instead of narrating it`,
+        });
+      }
     }
   }
   return findings;

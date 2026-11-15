@@ -14,6 +14,34 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
+## Temporary-directory lifecycle for the test harness
+
+- Reap the `mkdtemp` roots created by `makeIsolatedConfig` and the stub
+  providers (216 call sites, 108 explicit removals) and add a `--dry-run`
+  cleanup script with an age bound.
+- Warn in the gate runner when the temp filesystem is above 80% inodes — the
+  condition that turned a green `session:close` red on 2026-11-14.
+
+**Trigger:** start after the process-efficiency increment closes; close when a
+full `npm run test` leaves no new `infobroker-*` / `ib-cfg-*` roots behind.
+
+## `search_web` hedge cancellation
+
+- Give the search-side hedged dispatch the same per-provider `AbortController`
+  the fetch renderers got for F-R4-B-1 (`src/index.ts:795-810` against
+  `:1040-1075`), so a losing provider stops spending quota and recording stats.
+
+**Trigger:** start after the process-efficiency increment closes; close when a
+test proves the loser aborts on a win and on exhaustion.
+
+## Shared spawned-server harness
+
+- Extract the `withServer` helper duplicated in ten suites into
+  `src/lib/mcp-stdio.ts`, and add a check that no suite redefines it.
+
+**Trigger:** start with the next suite that needs a spawned server; close when
+the ten copies are one module and the suites still pass.
+
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`

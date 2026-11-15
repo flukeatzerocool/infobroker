@@ -24,8 +24,10 @@
 #   --no-push        Commit but skip push, tag, and mirror sync.
 #   --no-commit      Run all steps (including AI edits) but stop before staging;
 #                    leaves the working tree dirty for inspection.
-#   --single-commit  One commit for the whole change set. The default is a split
-#                    series (one commit per AGENTS.md concern bucket).
+#   --split-commits  Commit one bucket per AGENTS.md concern (spec / source /
+#                    tests / pipeline / docs / release). The default is one
+#                    commit for the whole change set.
+#   --single-commit  Deprecated alias for the default (one commit).
 #   --commit         Allow commit and push with --from=<step>; a step range is a
 #                    testing run without it. Never combines with --to.
 #   --resume         Continue the newest recorded run for this repo/branch.
@@ -77,9 +79,10 @@ Usage: ./scripts/push-pipeline.sh [--dry-run] [--yes] [--no-push] [--no-commit]
   --yes (-y)       Approve the final push without prompting (unattended/CI).
   --no-push        Commit but skip push, tag, and mirror sync.
   --no-commit      Run all steps (including AI edits) but stop before staging.
-  --single-commit  Commit everything as one commit instead of the default
-                   convention split (spec / source / tests / pipeline / docs /
-                   release). Use only when the change is genuinely atomic.
+  --split-commits  Commit one bucket per convention (spec / source / tests /
+                   pipeline / docs / release) instead of the default single
+                   commit. Use only when the change needs a bisectable series.
+  --single-commit  Deprecated alias for the default single commit.
   --no-ai          Deterministic release only: skip the read-through, sync,
                    changelog, and README steps (and the AI scan). Requires an
                    already-prepared tree; see `npm run prepare`.
@@ -104,7 +107,7 @@ EOF
 DRY_RUN=false; FORCE=false; RESUME=false; PARALLEL=false
 FORCE_PUSH=false; ALLOW_SECRETS=false
 NO_PUSH=false; SCAN_AI=false; NO_COMMIT=false; NO_MIRROR=false; COMMIT=false; NO_AI=false
-SINGLE_COMMIT=false
+SPLIT_COMMITS=false
 DEEP_REVIEW=false; REVIEW_SCOPE=""; REVIEW_SHARD=""; REVIEW_SHARD_COUNT=0
 START_STEP=""; END_STEP=""; RUN_ID=""
 
@@ -121,7 +124,8 @@ for arg in "$@"; do
     --no-push) NO_PUSH=true ;;
     --no-mirror) NO_MIRROR=true ;;
     --no-commit) NO_COMMIT=true ;;
-    --single-commit) SINGLE_COMMIT=true ;;
+    --split-commits) SPLIT_COMMITS=true ;;
+    --single-commit) SPLIT_COMMITS=false ;;
     --no-ai) NO_AI=true ;;
     --deep-review) DEEP_REVIEW=true ;;
     --commit) COMMIT=true ;;
@@ -1197,16 +1201,17 @@ else
 
 ${COMMIT_SUMMARY}"
 
-  if $SINGLE_COMMIT; then
-    # Explicit exception (AGENTS.md): one atomic change, one commit.
-    warn "Committing changes as a single commit (--single-commit)..."
+  if ! $SPLIT_COMMITS; then
+    # Default (AGENTS.md): one commit per increment. The subject keeps the
+    # rotating-shard marker, which is the cursor last_review_shard reads.
+    warn "Committing changes as a single commit..."
     git -C "$PROJECT_DIR" commit -m "Push pipeline ${COMMIT_DATE}${REVIEW_SUFFIX}
 
 ${COMMIT_SUMMARY}"
     COMMITTED=true
     info "Commit: DONE"
   else
-    # Split by concern (AGENTS.md default). PREV_VERSION comes from HEAD, not
+    # Split by concern (--split-commits opt-in). PREV_VERSION comes from HEAD, not
     # the startup snapshot: a resumed run may already carry a bumped tree.
     PREV_VERSION=$(git -C "$PROJECT_DIR" show HEAD:package.json 2>/dev/null \
       | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).version' 2>/dev/null || true)
