@@ -64,7 +64,7 @@
     "check-harness-expectations": "npx tsx scripts/check-harness-expectations.ts",
     "check-gate-coverage": "npx tsx scripts/check-gate-coverage.ts",
     "check-pack": "npx tsx scripts/check-pack.ts",
-    "check-skill-harness": "node --test scripts/test-skills/checks.test.mjs scripts/test-skills/event-stream.test.mjs",
+    "check-skill-harness": "node --test scripts/test-skills/checks.test.mjs scripts/test-skills/event-stream.test.mjs scripts/test-research/evaluate-research.test.mjs",
     "check-fixtures": "npx tsx scripts/check-fixture-freshness.ts",
     "generate-auth": "npx tsx scripts/generate-provider-auth.ts",
     "generate-privacy": "npx tsx scripts/generate-provider-privacy.ts",

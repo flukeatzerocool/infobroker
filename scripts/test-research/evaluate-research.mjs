@@ -6,7 +6,7 @@
 // text excerpt to <dir>/final.txt and emits one JSON result line to stdout.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { extractAssistantText, extractMcpToolCalls, extractToolOrder } from "../lib/event-stream.mjs";
+import { extractAllAssistantText, extractFinalAssistantText, extractMcpToolCalls, extractToolOrder } from "../lib/event-stream.mjs";
 
 const [scenarioJsonPath, transcriptPath, outDir] = process.argv.slice(2);
 const scenario = JSON.parse(readFileSync(scenarioJsonPath, "utf8"));
@@ -22,7 +22,14 @@ function extractUrls(text) {
 }
 
 const raw = readFileSync(transcriptPath, "utf8");
-const text = extractAssistantText(raw);
+// Token scope is the scenario's stated contract. "session" (default) reads
+// every assistant text block in the run, in order — a phase gate for a
+// multi-turn gated analysis emits its tokens across turns. "final" reads only
+// the last assistant message, the sign-off contract for a single-shot shape.
+// Neither scope can be satisfied by user, system, or tool text: the stream
+// helpers return assistant blocks only.
+const tokenScope = scenario.token_scope === "final" ? "final" : "session";
+const text = tokenScope === "final" ? extractFinalAssistantText(raw) : extractAllAssistantText(raw);
 const toolOrder = extractToolOrder(raw);
 // Code Mode routes MCP calls through the `execute` tool, so the names live in
 // the embedded `tools.infobroker.<tool>` code rather than in direct tool
@@ -112,6 +119,7 @@ process.stdout.write(JSON.stringify({
   shape: scenario.shape,
   mode: scenario.mode,
   status,
+  token_scope: tokenScope,
   missing,
   absentFound,
   missingSections,

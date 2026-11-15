@@ -38,12 +38,28 @@ entry declares:
   list the acceptable synonyms for one finding, not one literal: when a
   correct run fails on a single wording, widen the needle set rather than pin
   the wording in skill prose (a shape's block cannot bind a model's phrasing).
+- `token_scope` (`session` default, `final`): the text the `tokens`, `absent`,
+  and `sections` gates read. See "Token scope" below.
 
 ## Evaluation semantics
 
+**Token scope** is the scenario's stated contract:
+
+- `session` (default) — every assistant text block in the run, in order. This
+  is the contract for gated analysis, whose phase tokens are emitted across
+  turns (`S9`, `A1a`, `A1b`, `M1`, `M2`, `N4` state it explicitly).
+- `final` — only the last assistant message, the sign-off contract for a
+  single-shot shape.
+
+Neither scope can be satisfied by user, system, or tool text: both helpers
+return assistant blocks only, so a completion token the user typed — or one
+echoed from loaded skill content — cannot pass a gate. `S9` therefore needs
+two passing runs to prove the contract: a multi-turn run and a single-turn
+gated run (`N4`).
+
 **Hard gates** (a failing one fails the scenario):
 
-- `tokens` appear in order in the assistant's text.
+- `tokens` appear in order in the scoped assistant text.
 - `absent` tokens do not appear.
 - `sections` are present (case-insensitive OR-match).
 - `tool_audit.uses_infobroker`: at least one `infobroker_infobroker_*` tool

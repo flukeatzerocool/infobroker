@@ -177,6 +177,7 @@
     "persona": "decision-maker (CTO)",
     "shape": "gated-analysis",
     "mode": "positive",
+    "token_scope": "session",
     "utterance": "I need to decide whether to move our production workloads from on-premises to a multi-region public cloud. This is a high-stakes decision driving our 2027 budget — I need rigorous, confidence-scored findings with source-reliability grades and your analytic discipline, not a quick summary.",
     "followups": ["Proceed with reasonable defaults.", "Close it here and accept the remaining gaps."],
     "tokens": [
@@ -226,6 +227,7 @@
     "persona": "CISO",
     "shape": "gated-analysis",
     "mode": "positive",
+    "token_scope": "session",
     "utterance": "What are the current regulatory requirements for an AI safety policy governing an LLM-powered internal assistant at a US healthcare-adjacent enterprise? I'm the CISO and I need this to decide whether to adopt a policy; give me confidence-scored findings with source grades.",
     "followups": ["Proceed with reasonable defaults.", "Close it here and accept the remaining gaps."],
     "tokens": ["analysis-loop complete."],
@@ -246,6 +248,7 @@
     "persona": "platform engineer",
     "shape": "gated-analysis",
     "mode": "positive",
+    "token_scope": "session",
     "utterance": "What are the current regulatory requirements for an AI safety policy governing an LLM-powered internal assistant at a US healthcare-adjacent enterprise? I'm the engineer who will implement the guardrails, so give me the confidence-scored findings, source-reliability grades, and technical depth on the specific controls I must build — this is a high-stakes decision I have to get right.",
     "followups": ["Proceed with reasonable defaults.", "Close it here and accept the remaining gaps."],
     "tokens": ["analysis-loop complete."],
@@ -266,6 +269,7 @@
     "persona": "decision-maker (CTO)",
     "shape": "gated-analysis",
     "mode": "multiturn",
+    "token_scope": "session",
     "utterance": "For a high-stakes decision I need confident, source-graded findings: is it currently more cost-effective for a mid-size enterprise to run three years of LLM inference on on-premises GPUs or on a managed cloud AI service? No quick answer — run the rigorous gates.",
     "followups": [
       "Proceed with reasonable defaults.",
@@ -290,6 +294,7 @@
     "persona": "decision-maker (CTO)",
     "shape": "gated-analysis",
     "mode": "multiturn",
+    "token_scope": "session",
     "utterance": "Scope a rigorous, source-graded analysis for me: what are the security risks of adopting a Kubernetes-based platform? Start with the control-plane attack surface.",
     "followups": [
       "Proceed with reasonable defaults.",
@@ -371,6 +376,7 @@
     "persona": "researcher",
     "shape": "gated-analysis",
     "mode": "negative",
+    "token_scope": "session",
     "utterance": "Run your rigorous gated research: what is the exact pricing, feature set, and launch date of the still-unannounced 'NebulaGrid quantum colocation' service?",
     "followups": [],
     "tokens": ["analysis-loop complete."],
