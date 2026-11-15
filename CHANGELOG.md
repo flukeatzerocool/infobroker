@@ -2,6 +2,16 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The Arena's config-behavior matrix covers the two settings the Lab profiles
+  already relied on but never observed. `output.fallback_depth` is proved
+  against a two-provider chain: depth 1 stops at the first provider's empty
+  answer, depth 2 advances and serves from the second. `preservation.archive`
+  is proved through `verify_claims`: corroborated sources carry `archived_url`
+  when archiving is on and carry none when it is off. Both cases are
+  mutation-proved — they fail when the setting stops being honored — and the
+  matrix (case, config path, asserted observable) is documented in
+  `debate-club/README.md`.
+
 - A losing hedged `search_web` provider is now cancelled instead of being left
   to finish. The fetch renderers already aborted their losers; the search
   dispatch passed neither a per-provider `AbortController` nor its `signals` to

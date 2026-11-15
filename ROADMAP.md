@@ -30,9 +30,6 @@ when REQ-115/REQ-118 cite them or record a deliberate divergence.
 - Run the remaining research-suite scenarios with `--mcp=repo` and record
   per-persona results; current evidence is the A1a/A1b audience pair plus S3
   and N1.
-- Extend the Arena config-behavior matrix to `preservation.archive` and
-  `output.fallback_depth` once the fetch and verify fixtures cover both
-  branches.
 
 **Trigger:** start after the audience/defaults increment closes; close when
 every §1 goal row names a recorded repo-mode run.

@@ -62,6 +62,20 @@ scenarios in the group.
 | `constrained` | `kb: null`, `kb_recall: false`, `fallback_depth: 1` | Degraded but usable |
 | `power` | archive + KB auto-index on | Every optional local capability |
 
+## Config behavior matrix
+
+`src/user-defaults.test.ts` proves that declared configuration actually changes
+what a caller observes, on the shipped default path and under a named profile.
+Each row is a case that fails when the setting stops being honored.
+
+| Case | Config path | Asserted observable |
+|---|---|---|
+| Crawl bound | `fetch.crawl_max_pages: 2` | `fetch_page` with `crawl` returns exactly two results |
+| Compact results | `output.verbose: false` | each search result carries only `title`/`url`/`snippet`; meta is minimal |
+| Cooldown notice | default | a 429 fixture produces `rate_limited` and an active cooldown row in `inspect_providers` |
+| Chain depth | `output.fallback_depth: 1` vs `2` (with `hedge_enabled: false`) | depth 1 stops at the first provider's empty answer (`no_results`); depth 2 advances to the second and serves from it |
+| Archive copies | `preservation.archive: true` vs `false` | `verify_claims` sources carry `archived_url` only when archiving is on |
+
 `report.mjs` rolls results up by persona and profile and emits `profile_delta`
 for a shape that ran under more than one profile; `recommend.mjs` raises a P1
 when the shape passes under one profile and fails under another.

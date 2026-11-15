@@ -23,6 +23,17 @@ afterAll(() => {
   for (const server of servers) server.stop();
 });
 
+/** Every `archived_url` recorded on a finding's sources. */
+function sourceArchiveUrls(body: Record<string, unknown>): string[] {
+  const urls: string[] = [];
+  for (const finding of (body.findings ?? []) as Array<Record<string, unknown>>) {
+    for (const source of (finding.sources ?? []) as Array<Record<string, unknown>>) {
+      if (typeof source.archived_url === "string" && source.archived_url.length > 0) urls.push(source.archived_url);
+    }
+  }
+  return urls;
+}
+
 describe("shipped default path", () => {
   it("exposes all seven tools and answers a search with no keys or setup", async () => {
     const server = await boot({ configLayer: () => ({}) });
@@ -94,6 +105,69 @@ describe("config behavior", () => {
     }
     const meta = (body.meta ?? {}) as Record<string, unknown>;
     expect(Object.keys(meta).every((key) => ["per_query", "fact_status", "language_unsupported"].includes(key))).toBe(true);
+  }, 60000);
+
+  // REQ-031: `output.fallback_depth` bounds how much of the chain a search may
+  // walk. The academic chain's first provider answers with an empty fixture and
+  // the second answers with a paper, so a depth of 1 stops at an empty success
+  // and a depth of 2 advances — no network, no timing dependence.
+  it("bounds the dispatch chain at output.fallback_depth", async () => {
+    const shallow = await boot({ configLayer: () => ({ output: { hedge_enabled: false, fallback_depth: 1 } }) });
+    const shallowBody = expectOk(
+      (
+        await shallow.call("infobroker_search_web", {
+          query: "retrieval augmented generation",
+          task_type: "academic",
+          max_results: 2,
+        })
+      ).text
+    );
+    expect(shallowBody.results).toEqual([]);
+    expect((shallowBody.meta ?? {}) as Record<string, unknown>).toMatchObject({ no_results: true });
+
+    const deeper = await boot({ configLayer: () => ({ output: { hedge_enabled: false, fallback_depth: 2 } }) });
+    const deeperBody = expectOk(
+      (
+        await deeper.call("infobroker_search_web", {
+          query: "retrieval augmented generation",
+          task_type: "academic",
+          max_results: 2,
+        })
+      ).text
+    );
+    expect(String(deeperBody.provider)).toBe("arxiv");
+    expect((deeperBody.results as unknown[]).length).toBeGreaterThan(0);
+  }, 60000);
+
+  // REQ-122: `preservation.archive` decides whether a corroborated source gets a
+  // durable archive copy. The response is the observable: `archived_url` appears
+  // on a source only after the save call returns.
+  it("honours preservation.archive for corroborated sources", async () => {
+    const on = await boot({ configLayer: () => ({}) });
+    const archived = expectOk(
+      (
+        await on.call("infobroker_verify_claims", {
+          query: "Does retrieval augmented generation reduce hallucination?",
+          providers: ["wikipedia"],
+          max_iterations: 1,
+        })
+      ).text
+    );
+    const archivedUrls = sourceArchiveUrls(archived);
+    expect(archivedUrls.length).toBeGreaterThan(0);
+    expect(archivedUrls.every((url) => url.startsWith("https://web.archive.org/"))).toBe(true);
+
+    const off = await boot({ configLayer: () => ({ preservation: { archive: false } }) });
+    const unarchived = expectOk(
+      (
+        await off.call("infobroker_verify_claims", {
+          query: "Does retrieval augmented generation reduce hallucination?",
+          providers: ["wikipedia"],
+          max_iterations: 1,
+        })
+      ).text
+    );
+    expect(sourceArchiveUrls(unarchived)).toEqual([]);
   }, 60000);
 
   it("marks a rate-limited provider as cooling down (REQ-038)", async () => {
