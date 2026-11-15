@@ -61,6 +61,7 @@ import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { advertisedSchemaBytes, medianOfWindow, type RegisteredTool } from "./tool-footprint.js";
 import { withTimeout } from "./lib/timeout.js";
+import { buildDirection, REPORT_AUDIENCES } from "./lib/direction.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
 import { classifyFailure, failureTaxonomy, isCancellation, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
@@ -258,7 +259,8 @@ async function doWebSearch(
   analyze = false,
   deepBudget?: { remaining: number },
   taskTypeOverride?: string,
-  collection?: string
+  collection?: string,
+  audience?: string
 ): Promise<string> {
   // REQ-020: a union-typed input can arrive as a JSON-encoded array string.
   // Coerce before dispatch so a stringified batch is searched as a batch
@@ -378,6 +380,11 @@ async function doWebSearch(
     return `[ERROR] ${json(err("none", "invalid_input", resolvedTaskType.error.message, resolvedTaskType.error.remediation))}`;
   }
   const taskType = resolvedTaskType.taskType;
+  // REQ-131: the direction block reports the requirement this call executes.
+  // The provider pool is filled per return path, because the chain is resolved
+  // after the knowledge-base recall step.
+  const direction = (providers: string[]) =>
+    buildDirection({ taskType, taskTypeOverride, audience, language, maxResults, deep, research, providers });
   const parsedQuery = parseQuery(Array.isArray(query) ? query[0] ?? "" : String(query));
 
   // REQ-076a: blend keeps the KB rows as a seed for the external response
@@ -435,6 +442,7 @@ async function doWebSearch(
                 query_time_ms: 0,
                 fallback_used: false,
                 task_type: taskType,
+                direction: direction(getDispatchChain(taskType)),
                 quota_remaining: undefined,
                 kb_recall: kbRecall,
                 kb_results: kbOrdered.length,
@@ -766,6 +774,7 @@ async function doWebSearch(
         ignored_operators: ignoredOperators(slug, parsedQuery),
         ...(languageUnsupported.length > 0 ? { language_unsupported: languageUnsupported } : {}),
         deep: true,
+        direction: direction(chain),
         pages_read: deepMeta.pages_read,
         ...kbMeta,
         ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
@@ -788,6 +797,7 @@ async function doWebSearch(
       ...kbMeta,
       ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
       ...(analyze && finalResults.length > 0 ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
+      direction: direction(chain),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -855,6 +865,7 @@ async function doWebSearch(
         kb_recall: "blended",
         kb_results: cachedOrdered.length,
         kb_duplicates: 0,
+        direction: direction(chain),
       }))}`;
     }
 
@@ -869,7 +880,7 @@ async function doWebSearch(
       })
     )}`;
   }
-  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, task_type: taskType, ignored_params: [], no_results: true }))}`;
+  return `[OK] ${json(ok("none", [], { query_time_ms: 0, fallback_used: true, task_type: taskType, direction: direction(chain), ignored_params: [], no_results: true }))}`;
 }
 
 // REQ-021c: best-effort last-updated detection. Reads the last-modified header
@@ -1986,7 +1997,7 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, area, elevation, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. `audience` records who will read the result and is echoed in `meta.direction` with the executed task type, reading depth, result bound and provider pool. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, area, elevation, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5); a failed element is reported per input without failing the batch")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -2006,6 +2017,7 @@ instrumentTool(
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
       language: z.string().optional().describe("Preferred result language (ISO 639-1, e.g. 'de'). Providers that cannot honor it report it in meta.ignored_params"),
+      audience: z.enum(REPORT_AUDIENCES).optional().describe("Who will read the result: executive, analyst, engineer, policy, legal, journalist, or investor. Recorded in the direction block and carried into a report manifest; it calibrates depth and emphasis, never facts"),
     },
     annotations: {
       readOnlyHint: true,
@@ -2035,7 +2047,8 @@ instrumentTool(
       Boolean(params.analyze),
       undefined,
       params.task_type as string | undefined,
-      params.collection as string | undefined
+      params.collection as string | undefined,
+      params.audience as string | undefined
     );
     // REQ-021i: a structured-fact query gets a sourced fact before prose.
     const text = await withStructuredFacts(content, params.query);

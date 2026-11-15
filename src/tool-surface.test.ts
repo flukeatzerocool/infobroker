@@ -210,7 +210,7 @@ test("search_web advertises the REQ-020 parameter contract and defaults", async 
   }
 
   // REQ-020: optional parameters that carry no declared default.
-  const noDefault = ["provider", "task_type", "time_range", "priority", "region", "language", "collection"];
+  const noDefault = ["provider", "task_type", "time_range", "priority", "region", "language", "collection", "audience"];
   for (const param of noDefault) {
     expect(props[param], `search_web.${param} is missing from the advertised schema`).toBeDefined();
   }

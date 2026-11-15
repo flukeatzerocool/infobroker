@@ -2,6 +2,16 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- `search_web` now discloses the requirement it executed. A `direction` block in
+  every successful response — including knowledge-base recall and empty results —
+  reports the task type and whether it was supplied or inferred, the reading
+  depth, the result bound, the providers considered, and the audience and
+  language when supplied. A new `audience` parameter accepts only the report
+  quality standard's seven values and rejects anything else at the edge, so the
+  server stops maintaining a second audience vocabulary (REQ-131, REQ-131a).
+  Previously the response named only the task type and serving provider, so a
+  caller could not tell which part of the requirement the server had chosen.
+
 - §1 now describes the server by **intelligence-process function** — direction,
   collection, processing and exploitation, analysis and production,
   dissemination — instead of six mixed-kind design goals, with an Evidence
