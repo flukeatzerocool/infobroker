@@ -55,6 +55,14 @@ generated `config.local.json`. A result is attributable to the configuration
 it exercised: `run-meta.json` records the profile name, its layer hash, and the
 scenarios in the group.
 
+In repo mode the run project also declares this working tree's `skills/`, and
+`lab.sh` refuses to start a profile whose `opencode debug config` does not list
+that directory (the assertion is `scripts/test-research/assert-skills.ts`,
+shared with the research suite). Without it, the MCP would be repo-scoped while
+the skill layer stayed ambient — on a machine with an installed copy, a skill
+change could pass or fail without ever being loaded. `mcp-target.txt` records
+both the MCP command and `skills:<repo>/skills` (D-130).
+
 | Profile | Layer | Purpose |
 |---|---|---|
 | `fresh` | `{}` | Shipped defaults, no user layer — the new-user path |

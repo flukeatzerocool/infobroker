@@ -2590,6 +2590,27 @@ contract changes. `package.json` `files` ships `dist`, `bin`, `config.json`,
 `skills`, `instructions` and `check-pack` denies `scripts/`, so this has no
 npm-user surface and does not affect a single installed copy.
 
+### D-130: Lab Repo Mode Asserts the Skills Layer (2026-11-15)
+
+`debate-club/scripts/lab.sh` repo mode scoped the MCP to this working tree but
+left the client's `skills` list ambient, so a repo-mode Lab run could exercise
+an installed copy of the skills — the same defect D-129 fixed for the research
+suite. The run project now declares `<repo>/skills`, and the profile's captured
+`opencode debug config` is checked by `scripts/test-research/assert-skills.ts`;
+a profile that does not list the working tree is refused rather than run.
+`mcp-target.txt` records `skills:<repo>/skills` beside the MCP command, so a
+run is self-describing about both layers.
+
+This is an extension of D-129, not a second mechanism: the same gate script and
+the same assertion are reused, and D-129's caveat applies unchanged — the check
+asserts configuration, not resolution, so a collision between an ambient skill
+and a bundled one remains invisible to it. Rejected: a second skills parser
+inside `lab.sh` (two parsers drift), and asserting only the MCP target (the
+defect was the unasserted skill layer).
+
+Scope: developer harness only (`scripts/` and `debate-club/` are not in
+`package.json` `files`), no server or npm-user surface.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a

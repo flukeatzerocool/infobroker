@@ -48,6 +48,12 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 0
 fi
 
+if [[ "$MCP_MODE" == "repo" ]]; then
+  # The skills assertion runs from the working tree, not from PATH.
+  [[ -x "$REPO/node_modules/.bin/tsx" ]] \
+    || die "Pre-flight failed: missing $REPO/node_modules/.bin/tsx (run npm install)"
+fi
+
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RUN_DIR="$DEBATE/.runs/lab-$TIMESTAMP"
 mkdir -p "$RUN_DIR/scenarios" "$RUN_DIR/profiles"
@@ -131,6 +137,10 @@ start_profile_server() {
     const [repo, out, layer] = process.argv.slice(1);
     const cfg = {
       "$schema": "https://opencode.ai/config.json",
+      // Repo mode must exercise the working tree skills, not whatever the ambient
+      // client config names. Without this the MCP is repo-scoped but the skill
+      // layer is not, so a skill change could pass without being loaded.
+      skills: [path.join(repo, "skills")],
       mcp: {
         infobroker: {
           type: "local",
@@ -147,7 +157,12 @@ start_profile_server() {
   # The cwd is what makes the project MCP config authoritative. Each profile
   # group gets its own server so the layer is fixed for the whole group.
   ensure_opencode_serve_at "$RUN_DIR" "opencode-serve-$profile.log" "$(find_free_port)" "$project"
-  ( cd "$project" && opencode debug config ) > "$RUN_DIR/debug-config-$profile.json" 2>> "$RUN_DIR/openruns.log" || true
+  ( cd "$project" && opencode debug config ) > "$RUN_DIR/debug-config-$profile.json" 2>> "$RUN_DIR/openruns.log" \
+    || die "opencode debug config failed for profile $profile (see $RUN_DIR/openruns.log)"
+  "$REPO/node_modules/.bin/tsx" "$REPO/scripts/test-research/assert-skills.ts" \
+    "$RUN_DIR/debug-config-$profile.json" "$project/opencode.json" "$REPO/skills" \
+    || die "Repo mode refused: profile $profile does not load this tree's skills (see $RUN_DIR/debug-config-$profile.json)"
+  printf 'skills:%s\n' "$REPO/skills" >> "$RUN_DIR/mcp-target.txt"
   node -e '
     const fs = require("fs");
     const [file, want, profile] = process.argv.slice(1);
