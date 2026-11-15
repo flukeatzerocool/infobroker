@@ -63,6 +63,13 @@ the skill layer stayed ambient — on a machine with an installed copy, a skill
 change could pass or fail without ever being loaded. `mcp-target.txt` records
 both the MCP command and `skills:<repo>/skills` (D-130).
 
+Every profile that keeps a knowledge base also pins a run-scoped
+`kb.storage_path` and `kb.reports_dir` (`$RUN_DIR/kb`), and `mcp-target.txt`
+records both paths. A run therefore cannot be corroborated by the operator's
+populated store or by an earlier run's `report://` artifacts; the profile layer
+hash covers the isolated bytes. The `constrained` profile keeps its explicit
+`kb: null` — it reads no store at all (D-131).
+
 | Profile | Layer | Purpose |
 |---|---|---|
 | `fresh` | `{}` | Shipped defaults, no user layer — the new-user path |

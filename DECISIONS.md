@@ -2611,6 +2611,29 @@ defect was the unasserted skill layer).
 Scope: developer harness only (`scripts/` and `debate-club/` are not in
 `package.json` `files`), no server or npm-user surface.
 
+### D-131: Repo Mode Pins a Run-Scoped Knowledge Base (2026-11-15)
+
+A repo-mode N4 run recalled the operator's populated KB and earlier
+`report://nebulagrid-*` artifacts as evidence for an unannounced service —
+the run-local layer isolated the MCP and skills but not `kb.storage_path` or
+`kb.reports_dir`. Both repo-mode entry points now build their layer through
+`scripts/lib/repo-mode.ts`, which pins `<run>/kb/knowledge-base` and
+`<run>/kb/reports`; `mcp-target.txt` records both paths. The run is the
+isolation unit: a re-run has a new timestamped root, while scenarios inside
+one run may share a store.
+
+The `constrained` profile keeps its explicit `kb: null` — pinning a store
+would silently enable what the profile disables — so it reads no KB at all.
+Its reports, if it saves any, still fall back to the default reports
+directory; that write does not corroborate a recall and is accepted rather
+than fixing the profile's intent.
+
+Rejected: per-scenario stores (a run is what must not be corroborated; the
+extra roots add cleanup without changing a result), and an env-var override
+of the reports fallback (new server surface for a harness concern).
+
+Scope: developer harness only, no server or npm-user surface.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a

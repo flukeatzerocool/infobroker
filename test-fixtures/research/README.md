@@ -8,9 +8,14 @@ request actually routes to the right skill and produces the deliverable
 contract end to end.
 
 By default it runs against the configured deployment (`--mcp=ambient`). Pass
-`--mcp=repo` to point the MCP at this working tree with a run-local empty
-config layer, which is the mode to use when the question is "did the current
-tree change this?" rather than "is the installed server healthy?".
+`--mcp=repo` to point the MCP at this working tree with a run-local config
+layer, which is the mode to use when the question is "did the current tree
+change this?" rather than "is the installed server healthy?".
+
+The run-local layer also pins a run-scoped `kb.storage_path` and
+`kb.reports_dir` (`$RUN_DIR/kb`), recorded in `mcp-target.txt` beside the
+skills target. A run therefore cannot be corroborated by the operator's
+populated store or by an earlier run's `report://` artifacts (D-131).
 
 Repo mode also declares this working tree's `skills/` in the run project and
 refuses to start when `opencode debug config` does not report that entry. That

@@ -2,6 +2,14 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Repo-mode runs can no longer be corroborated by the operator's knowledge
+  base. Both repo-mode entry points build their run layer through
+  `scripts/lib/repo-mode.ts`, which pins a run-scoped `kb.storage_path` and
+  `kb.reports_dir`; `mcp-target.txt` records both. A repo-mode N4 run had
+  recalled the operator's populated store and earlier `report://nebulagrid-*`
+  artifacts as evidence for an unannounced service (D-131). The `constrained`
+  Lab profile keeps its `kb: null` and reads no store at all.
+
 - A repo-mode Lab run now loads this working tree's skills. The run project
   declares `<repo>/skills` and the profile is refused when its captured
   `opencode debug config` does not list that directory, using the same
