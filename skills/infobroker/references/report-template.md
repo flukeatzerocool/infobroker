@@ -43,7 +43,7 @@ machine-readable summary of the report and the receipt payload. Only `shape`,
       "claim": "the exact proposition the report asserts",
       "verdict": "Unverifiable",
       "confidence": "Low",
-      "likelihood": "even chance",
+      "likelihood": "roughly even chance",
       "sources": ["S3"],
       "modality": "reported",
       "attribution": "reportedly"
@@ -88,7 +88,7 @@ why it fit; what this report does not cover.]
 ### <Finding 1>
 **Finding:** [1–2 sentences, with [S#] markers]
 **Confidence:** High / Medium / Low
-**Likelihood:** almost certain / very likely / likely / even chance /
+**Likelihood:** almost certain / very likely / likely / roughly even chance /
 unlikely / very unlikely / remote — omit when the claim is not probabilistic
 **Sources:** [Admiralty pairs, e.g. A1 + B2 independent]
 **Contradictions:** [both sides with grades, or "none found"]

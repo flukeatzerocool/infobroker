@@ -14,17 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Align REQ-115 and REQ-118 with ICD 203/206
-
-- Read ICD 203 (Analytic Standards) and ICD 206 (Sourcing Requirements) from
-  primary text and align the confidence, likelihood and source-grading
-  vocabulary only where the text supports it. The 2026-11-15 attempt could not
-  read the DNI-hosted PDF (`422` from the reader, binary payload), so no
-  provision is cited and nothing was paraphrased.
-
-**Trigger:** start when a readable copy of both directives is available; close
-when REQ-115/REQ-118 cite them or record a deliberate divergence.
-
 ## Research-suite matrix in repo mode
 
 - Run the remaining research-suite scenarios with `--mcp=repo` and record

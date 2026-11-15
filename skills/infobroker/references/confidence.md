@@ -11,6 +11,9 @@ invent a second scale or leave a claim ungraded.
 | Medium | 0.50–0.79 | Evidence points one way but is incomplete, indirect, or partly contested. |
 | Low | 0.00–0.49 | Thin, single-source, or conflicting evidence; treat as provisional. |
 
+ICD 203 §D.5.e.(2) names the levels low, moderate and high; this project's
+labels are Low, Medium and High, so Medium is the directive's moderate.
+
 `verify_claims` reports numeric confidence in this range; map it to the label
 for a report and never round up. When every supporting source is secondary or
 aggregated, the configured calibration cap applies before the label is
@@ -22,18 +25,33 @@ number of URLs.
 Confidence says how sure you are of the judgment; likelihood says how probable
 the judged event is. You can hold High confidence that an event is unlikely.
 
-| Term | Approximate band |
-|------|------------------|
+The terms and bands are the analytic standards of ICD 203 §D.5.e.(2)(a). Use
+this row of the directive's scale, verbatim:
+
+| Term | Band |
+|------|------|
 | almost certain | 95–99% |
 | very likely | 80–95% |
 | likely | 55–80% |
-| even chance | 45–55% |
+| roughly even chance | 45–55% |
 | unlikely | 20–45% |
 | very unlikely | 5–20% |
 | remote | 0–5% |
 
-Use these terms verbatim; do not substitute "probably", "possibly", or
-"maybe". A report claim may carry both `confidence` and `likelihood`.
+Do not substitute "probably", "possibly", or "maybe", and do not mix terms
+from different rows of the directive's table: it accepts a second synonym row
+(`remote`, `highly improbable`, `improbable`, `roughly even odds`, `probable`,
+`highly probable`, `nearly certain`), and a product that mixes rows must carry
+a disclaimer saying the terms express the same probability. One row, one
+report, is simpler and needs no disclaimer.
+
+Do not put a confidence level and a likelihood in the same sentence
+(§D.5.e.(2)(b)): "high confidence that the launch is likely" forces the reader
+to hold two scales at once. Split it: "we assess with high confidence that a
+launch will occur; likelihood: likely."
+
+A report claim may carry both `confidence` and `likelihood` as separate fields
+— the constraint is on prose, not on the manifest.
 
 ## Modality (how a source states its claim)
 

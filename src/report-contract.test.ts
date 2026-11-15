@@ -127,6 +127,16 @@ describe("report contract (REQ-116)", () => {
     expect(result.findings.some((finding) => finding.code === "manifest-verdict")).toBe(true);
   });
 
+  // @implements REQ-115 likelihood-vocabulary
+  it("uses the ICD 203 likelihood terms, not the retired 'even chance'", () => {
+    const good = fixture("good-report.md");
+    expect(good).toContain("likelihood");
+    const retired = good.replace(/"likelihood": "[^"]+"/, '"likelihood": "even chance"');
+    const result = validateReport(retired);
+    expect(result.ok).toBe(false);
+    expect(result.findings.some((finding) => finding.code === "manifest-likelihood")).toBe(true);
+  });
+
   it("requires an as-of date", () => {
     const result = validateReport(fixture("missing-as-of.md"));
     expect(result.ok).toBe(false);

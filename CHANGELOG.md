@@ -2,6 +2,21 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The confidence and sourcing vocabulary now cites the directives it was
+  written against. `even chance` becomes `roughly even chance`, the term ICD 203
+  §D.5.e.(2)(a) uses for the 45–55% band — a bare "even chance" is in neither of
+  its rows — in the manifest schema, the tool description, the report template
+  and `confidence.md`. The bands were already the directive's. REQ-115 now
+  carries the §D.5.e.(2)(b) separation rule (no sentence combines a confidence
+  level with a likelihood of the judged event), and REQ-118 cites ICD 206
+  §D.3.a.(6) for the Source Register elements it already carried, naming the
+  originator explicitly. `docs/icd-alignment-notes.md` records each provision
+  with the copy read and a short quotation; the Admiralty `A–F`/`1–6` pair is
+  recorded as a deliberate divergence, since ICD 206 defines no such scale.
+  ICD 203 was read from the DNI-hosted PDF extracted locally, which is what the
+  earlier attempt could not do; ICD 206's DNI PDF is malformed, so the FAS-hosted
+  copy of the same directive was used (D-127).
+
 - The Arena's config-behavior matrix covers the two settings the Lab profiles
   already relied on but never observed. `output.fallback_depth` is proved
   against a two-provider chain: depth 1 stops at the first provider's empty

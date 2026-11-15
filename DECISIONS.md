@@ -2495,6 +2495,41 @@ are replaced wholesale — before validation and reload. The knowledge base
 preserved across updates. API keys remain environment-variable-only
 (REQ-011) and are therefore update-safe.
 
+### D-127: ICD 203/206 Alignment Basis (2026-11-15)
+REQ-115 and REQ-118 now cite the analytic standards they were written against.
+The likelihood lexicon adopts the row-1 terms of ICD 203 §D.5.e.(2)(a) —
+`even chance` becomes `roughly even chance`, because the directive's term for
+the 45–55% band is "roughly even chance / roughly even odds" and a bare "even
+chance" is in neither of its rows. The bands were already the directive's. The
+confidence/likelihood separation in §D.5.e.(2)(b) is stated as a rule: no
+sentence combines a confidence level with a likelihood of the judged event.
+REQ-118 cites ICD 206 §D.3.a.(6) for the Source Register elements it already
+carried — originator (the register's source name), an unambiguous durable
+identifier, and the publication/access dates — and names the originator
+explicitly.
+
+Basis for the text: `docs/icd-alignment-notes.md` records, per provision, the
+copy read and the quoted excerpt. ICD 203 was read from the DNI-hosted PDF
+(signed 2015-01-02, carrying a 2022-01-21 technical amendment) extracted
+locally; the DNI-hosted ICD 206 PDF is malformed and the FAS-hosted copy of the
+same directive was used instead, which departs from the roadmap's "primary
+text" wording and is recorded here rather than glossed. Its signature date is
+not legible in the extraction and is not attributed.
+
+Two ICD 206 elements are deliberately not adopted: portion marking and overall
+document classification, which are classification-system machinery with no
+meaning outside a classified product. The Admiralty `A–F` / `1–6` grade pair is
+also a deliberate divergence: ICD 206 defines no such scale, and ICD 203
+§D.5.e.(1) only asks that a product describe factors affecting source quality
+and credibility. The pair satisfies that without being mandated by it.
+
+The likelihood lexicon change is forward-only: a manifest archived with `even
+chance` keeps its stored term (nothing re-validates an archived report on
+read), while new reports must use the directive's term. A report exported from
+an old archive after this change will fail validation at the likelihood field
+and must be re-authored — accepted because the alternative is shipping a
+reference that disagrees with the schema it documents.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a

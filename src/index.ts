@@ -2317,7 +2317,7 @@ instrumentTool(
                 grade: z.string().optional(),
                 verdict: z.string().optional().describe("Fact-check verdict for this claim (for example True, Mostly True, Half True, Mostly False, False, Misleading, Unverifiable)"),
                 confidence: z.enum(["High", "Medium", "Low"]).optional().describe("Report-level confidence for this claim"),
-                likelihood: z.string().optional().describe("Calibrated likelihood term (for example almost certain, likely, even chance, unlikely)"),
+                likelihood: z.string().optional().describe("Calibrated likelihood term (for example almost certain, likely, roughly even chance, unlikely)"),
                 sources: z
                   .array(
                     z.object({

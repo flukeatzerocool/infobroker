@@ -83,11 +83,14 @@ export const REQUIRED_SECTIONS = [
 
 export const CONFIDENCE_VALUES = ["High", "Medium", "Low"] as const;
 
+// REQ-115: the row-1 terms of ICD 203 §D.5.e.(2)(a), low band first. The
+// directive's "roughly even chance" is the term for the 45–55% band; "even
+// chance" alone is not one of its terms.
 export const LIKELIHOOD_VALUES = [
   "almost certain",
   "very likely",
   "likely",
-  "even chance",
+  "roughly even chance",
   "unlikely",
   "very unlikely",
   "remote",
