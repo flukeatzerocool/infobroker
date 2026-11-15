@@ -116,6 +116,30 @@ describe("source-family (REQ-121)", () => {
     ]);
     expect(families[0]).not.toBe(families[1]);
   });
+
+  // §8.2, the truncated-republication trade. A 43-word article and a 14-word
+  // excerpt of it, sharing a headline, on different registrable domains score
+  // 16/43 four-gram shingles (0.3721) and split into two families. That is the
+  // conservative direction for family counting, at the cost of inflated
+  // confidence: one family reports 0.2775, two report 0.6475.
+  it("splits a genuine republication seen through a short excerpt", () => {
+    const title = "Procurement inquiry finds competitive bidding bypassed";
+    const article =
+      "The committee released its findings on Tuesday after a year-long inquiry into procurement practices across three agencies and two contractors, concluding that competitive bidding had been routinely circumvented and that senior officials had approved at least four contracts without a documented tender process.";
+    const excerpt =
+      "The committee released its findings on Tuesday after a year-long inquiry into procurement practices.";
+
+    expect(textSimilarity(`${title} ${article}`, `${title} ${excerpt}`)).toBeCloseTo(0.3721, 4);
+
+    const families = assignSourceFamilies(
+      [
+        { url: "https://outlet-a.example/story", title, snippet: article },
+        { url: "https://syndicator-b.example/wire", title, snippet: excerpt },
+      ],
+      0.9,
+    );
+    expect(familyCount(families)).toBe(2);
+  });
 });
 
 // @implements REQ-121 threshold-configurable
