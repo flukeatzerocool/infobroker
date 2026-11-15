@@ -10,35 +10,17 @@
 // spawned server too: a configured key file wins over the environment, and an
 // unreadable key file does not fall back to it.
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createInterface } from "node:readline";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startMcpServer, type McpServer } from "./lib/mcp-stdio.js";
 import { makeIsolatedConfig, type IsolatedConfig } from "./lib/test-isolation.js";
 import { flushKbWrites, initKb, kbIngest } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const STORE_FILE = "vector-store.sqlite";
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
-
-interface ToolResult {
-  content: Array<{ type: string; text: string }>;
-  structuredContent?: Record<string, unknown>;
-}
-
-interface SpawnedServer {
-  call(method: string, params: unknown): Promise<RpcMessage>;
-  close(): void;
-}
 
 const dirs: string[] = [];
 
@@ -48,53 +30,13 @@ function newDir(prefix: string): string {
   return dir;
 }
 
-/** Spawn the server with a caller-supplied environment. */
-async function startServer(env: NodeJS.ProcessEnv): Promise<SpawnedServer> {
-  const child: ChildProcessWithoutNullStreams = spawn(
-    join(REPO_ROOT, "node_modules", ".bin", "tsx"),
-    [join(REPO_ROOT, "src", "index.ts")],
-    { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"], env }
-  );
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  createInterface({ input: child.stdout }).on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line is not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
-    });
-  };
-  const init = await call("initialize", {
-    protocolVersion: "2024-11-05",
-    capabilities: {},
-    clientInfo: { name: "kb-handler-lock-test", version: "1.0.0" },
-  });
-  expect(init.error).toBeUndefined();
-  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
-  // The KB initializes after the MCP handshake.
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return { call, close: () => child.kill() };
+interface ToolResult {
+  content: Array<{ type: string; text: string }>;
+  structuredContent?: Record<string, unknown>;
 }
 
 /** Call a tool and return its raw text, requiring the given envelope prefix. */
-async function toolText(server: SpawnedServer, name: string, args: Record<string, unknown>, prefix: "[OK] " | "[ERROR] "): Promise<string> {
+async function toolText(server: McpServer, name: string, args: Record<string, unknown>, prefix: "[OK] " | "[ERROR] "): Promise<string> {
   const response = await server.call("tools/call", { name, arguments: args });
   expect(response.error).toBeUndefined();
   const text = (response.result as ToolResult).content[0]?.text ?? "";
@@ -195,7 +137,7 @@ describe("manage_kb handler lock refusal (REQ-084, REQ-060h, REQ-086)", () => {
     const iso = makeIsolatedConfig();
     dirs.push(iso.root);
     const env = { ...envWithoutKeys(iso.env), INFOBROKER_CONFIG: configPath };
-    const server = await startServer(env);
+    const server = await startMcpServer({ env, clientName: "kb-handler-lock-test", initDelayMs: 500 });
     try {
       const claims = JSON.parse(await toolText(server, "infobroker_manage_kb", { action: "claims" }, "[ERROR] ")) as {
         error: { code: string; message: string; remediation: string };
@@ -218,7 +160,7 @@ describe("manage_kb handler lock refusal (REQ-084, REQ-060h, REQ-086)", () => {
       expect(encryption.key_resolvable).toBe(false);
       expect(encryption.lock).not.toBeNull();
     } finally {
-      server.close();
+      await server.stop();
     }
 
     // REQ-085: the locked server left the store byte-identical.
@@ -234,7 +176,7 @@ describe("manage_kb handler lock refusal (REQ-084, REQ-060h, REQ-086)", () => {
     dirs.push(iso.root);
     const configWithKey = writeConfig(iso.root, storagePath, { enabled: true, key_file: validKeyFile });
     const env = { ...envWithoutKeys(iso.env), INFOBROKER_CONFIG: configWithKey };
-    const server = await startServer(env);
+    const server = await startMcpServer({ env, clientName: "kb-handler-lock-test", initDelayMs: 500 });
     try {
       const status = JSON.parse(
         await toolText(server, "infobroker_manage_kb", { action: "encryption", operation: "status" }, "[OK] ")
@@ -248,7 +190,7 @@ describe("manage_kb handler lock refusal (REQ-084, REQ-060h, REQ-086)", () => {
       ) as Record<string, unknown>;
       expect(claims.status).toBe("ok");
     } finally {
-      server.close();
+      await server.stop();
     }
   }, 60_000);
 
@@ -258,7 +200,7 @@ describe("manage_kb handler lock refusal (REQ-084, REQ-060h, REQ-086)", () => {
     const missingKeyFile = join(iso.root, "missing.key");
     const configWithBogusKey = writeConfig(iso.root, storagePath, { enabled: true, key_file: missingKeyFile });
     const env = { ...envWithoutKeys(iso.env), INFOBROKER_CONFIG: configWithBogusKey, INFOBROKER_KB_KEY: secret };
-    const server = await startServer(env);
+    const server = await startMcpServer({ env, clientName: "kb-handler-lock-test", initDelayMs: 500 });
     try {
       const status = JSON.parse(
         await toolText(server, "infobroker_manage_kb", { action: "encryption", operation: "status" }, "[OK] ")
@@ -272,7 +214,7 @@ describe("manage_kb handler lock refusal (REQ-084, REQ-060h, REQ-086)", () => {
       };
       expect(claims.error.code).toBe("config_error");
     } finally {
-      server.close();
+      await server.stop();
     }
   }, 60_000);
 });

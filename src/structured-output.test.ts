@@ -6,19 +6,14 @@
 // text with metadata in the structured object. Unit tests cover the pure
 // helpers; one stdio test proves the live SDK accepts the registered schema.
 import { test, expect } from "vitest";
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { isolatedConfigEnv } from "./lib/test-isolation.js";
+import { withServer } from "./lib/mcp-stdio.js";
 import {
   finalizeToolResult,
   parseEnvelopeObject,
   rawRequestError,
   rawTextFromEnvelope,
 } from "./structured-output.js";
-
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -221,63 +216,8 @@ test("rawTextFromEnvelope returns the error message and remediation", () => {
   expect(text.length).toBeGreaterThan(0);
 });
 
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
-
-async function withServer<T>(fn: (call: (method: string, params: unknown) => Promise<RpcMessage>) => Promise<T>): Promise<T> {
-  const child = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: isolatedConfigEnv(),
-  });
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line — not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const send = (obj: unknown) => child.stdin!.write(JSON.stringify(obj) + "\n");
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-  };
-  try {
-    const init = await call("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "structured-output-test", version: "1.0.0" },
-    });
-    expect(init.error).toBeUndefined();
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    return await fn(call);
-  } finally {
-    child.kill();
-  }
-}
-
 test("live tools expose structuredContent and reject an invalid raw combination", async () => {
-  await withServer(async (call) => {
+  await withServer({ env: isolatedConfigEnv() }, async (call) => {
     const listed = await call("tools/list", {});
     expect(listed.error).toBeUndefined();
     const tools = (listed.result as { tools?: Array<{ name: string; outputSchema?: Record<string, unknown> }> }).tools ?? [];
@@ -309,7 +249,7 @@ test("live tools expose structuredContent and reject an invalid raw combination"
 // CR-10: a failed fetch in raw mode returns the error text, not an empty
 // string, while the structured object keeps the full error envelope.
 test("raw mode returns the error text for a failed fetch", async () => {
-  await withServer(async (call) => {
+  await withServer({ env: isolatedConfigEnv() }, async (call) => {
     const response = await call("tools/call", {
       name: "infobroker_fetch_page",
       arguments: { url: "file:///tmp/notes.md", raw: true },

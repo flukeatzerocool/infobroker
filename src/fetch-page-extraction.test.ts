@@ -8,9 +8,7 @@
 // publication/modification split, and the crawl/extract truncation are measured
 // on the real handler rather than on a copy of it.
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { createInterface } from "node:readline";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { isBotChallenge } from "./lib/bot-challenge.js";
@@ -19,60 +17,11 @@ import {
   writeHermeticConfig,
   type StubProvider,
 } from "./lib/stub-provider.js";
-
-const REPO_ROOT = join(import.meta.dirname, "..");
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
+import { startMcpServer, type McpServer } from "./lib/mcp-stdio.js";
 
 interface ToolResult {
   content: Array<{ type: string; text: string }>;
   structuredContent?: Record<string, unknown>;
-}
-
-interface Server {
-  call(method: string, params: unknown): Promise<RpcMessage>;
-  close(): void;
-}
-
-function startServer(env: NodeJS.ProcessEnv): Server {
-  const child = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env,
-  });
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line is not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      child.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
-    });
-  };
-  return { call, close: () => child.kill() };
 }
 
 /** Parse an `[OK]` envelope; a non-OK prefix fails the assertion with the body. */
@@ -83,13 +32,13 @@ function payload(result: unknown): Record<string, unknown> {
   return JSON.parse(text.slice("[OK] ".length)) as Record<string, unknown>;
 }
 
-let server: Server;
+let server: McpServer;
 let root: string;
 let auditLogPath: string | undefined;
 const stubs: StubProvider[] = [];
 
-afterAll(() => {
-  server?.close();
+afterAll(async () => {
+  await server?.stop();
 });
 
 beforeAll(async () => {
@@ -110,18 +59,11 @@ beforeAll(async () => {
   });
   root = cfg.root;
   auditLogPath = cfg.auditLogPath;
-  server = startServer(cfg.env);
-  const init = await server.call("initialize", {
-    protocolVersion: "2024-11-05",
-    capabilities: {},
-    clientInfo: { name: "fetch-page-extraction-test", version: "1.0.0" },
-  });
-  expect(init.error).toBeUndefined();
-  // The KB initializes after the MCP handshake.
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  server = await startMcpServer({ env: cfg.env, clientName: "fetch-page-extraction-test", initDelayMs: 500 });
 });
 
 afterAll(async () => {
+  await server?.stop();
   for (const stub of stubs.splice(0)) await stub.close();
 });
 
@@ -145,7 +87,7 @@ async function fetchPage(args: Record<string, unknown>): Promise<{ result: ToolR
 }
 
 /** Poll `manage_kb get` until the deferred auto-index has stored the URL. */
-async function waitForStoredOn(srv: Server, url: string): Promise<Record<string, unknown>> {
+async function waitForStoredOn(srv: McpServer, url: string): Promise<Record<string, unknown>> {
   for (let attempt = 0; attempt < 60; attempt++) {
     const response = await srv.call("tools/call", {
       name: "infobroker_manage_kb",
@@ -337,7 +279,7 @@ describe("metadata date after a HEAD redirect (F-R4-C-6 / REQ-021c date-determin
 
 describe("knowledge-base cache parity for a question (F-R4-C-5 / REQ-021g cache-hit)", () => {
   /** A second spawned server whose cache read is on (the shared one sets it off). */
-  async function startCacheServer(): Promise<Server> {
+  async function startCacheServer(): Promise<McpServer> {
     const cfg = writeHermeticConfig("http://127.0.0.1:1", {
       fetch: {
         allow_private_urls: true,
@@ -346,19 +288,11 @@ describe("knowledge-base cache parity for a question (F-R4-C-5 / REQ-021g cache-
       },
       kb: { auto_index: true },
     });
-    const srv = startServer(cfg.env);
-    const init = await srv.call("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "fetch-cache-parity-test", version: "1.0.0" },
-    });
-    expect(init.error).toBeUndefined();
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return srv;
+    return startMcpServer({ env: cfg.env, clientName: "fetch-cache-parity-test", initDelayMs: 500 });
   }
 
   async function callFetch(
-    srv: Server,
+    srv: McpServer,
     args: Record<string, unknown>,
   ): Promise<{ result: ToolResult; envelope: Record<string, unknown> }> {
     const response = await srv.call("tools/call", {
@@ -370,7 +304,7 @@ describe("knowledge-base cache parity for a question (F-R4-C-5 / REQ-021g cache-
     return { result, envelope: payload(result) };
   }
 
-  async function storedPage(body: string): Promise<{ srv: Server; stub: StubProvider; url: string }> {
+  async function storedPage(body: string): Promise<{ srv: McpServer; stub: StubProvider; url: string }> {
     const srv = await startCacheServer();
     const stub = await startStubProvider({ pageBody: body });
     stubs.push(stub);
@@ -397,7 +331,7 @@ describe("knowledge-base cache parity for a question (F-R4-C-5 / REQ-021g cache-
       expect(meta.match_quality).not.toBe("none");
       expect(stub.requests).toBe(before);
     } finally {
-      srv.close();
+      await srv.stop();
     }
   });
 
@@ -420,7 +354,7 @@ describe("knowledge-base cache parity for a question (F-R4-C-5 / REQ-021g cache-
       expect(meta.passages_returned).toBe(0);
       expect(meta.match_quality).toBe("none");
     } finally {
-      srv.close();
+      await srv.stop();
     }
   });
 
@@ -669,16 +603,8 @@ Checking your browser before accessing the target page.
       kb: { auto_index: false },
     });
     cfg.env.INFOBROKER_JINA_URL = `${base}/`;
-    const caseServer = startServer(cfg.env);
+    const caseServer = await startMcpServer({ env: cfg.env, clientName: "jina-fallthrough-test", initDelayMs: 500 });
     try {
-      const init = await caseServer.call("initialize", {
-        protocolVersion: "2024-11-05",
-        capabilities: {},
-        clientInfo: { name: "jina-fallthrough-test", version: "1.0.0" },
-      });
-      expect(init.error).toBeUndefined();
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
       const response = await caseServer.call("tools/call", {
         name: "infobroker_fetch_page",
         arguments: { url: `${base}/page/1`, detect_date: false },
@@ -693,7 +619,7 @@ Checking your browser before accessing the target page.
       expect(results).not.toContain("Just a moment");
       expect(readerPaths).toHaveLength(1);
     } finally {
-      caseServer.close();
+      await caseServer.stop();
       await new Promise<void>((resolve) => http.close(() => resolve()));
     }
   });

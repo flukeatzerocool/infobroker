@@ -2,6 +2,16 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Every suite that drives the real server over stdio now shares one client,
+  `src/lib/mcp-stdio.ts`. Eleven suites carried their own copy of the same
+  spawn / JSON-RPC / timeout block, and they had drifted: 20 s vs 30 s per-call
+  timeouts, one initialized in `beforeAll`, one needed a heap flag and a
+  `SIGKILL`, one drove the handshake by hand. The module exposes
+  `withServer({ env }, fn)` for the scoped case and `startMcpServer()` for suites
+  that keep several servers, restart one, or signal one and wait for it. A new
+  check (`src/lib/mcp-stdio-callers.test.ts`) fails when a suite reintroduces a
+  local client, so the extraction cannot silently regress.
+
 - §1 names the model's origin: the intelligence cycle formalized in 1948 by
   Davidson and Glass at the US Army Command and General Staff College, closed by
   feedback and revised requirements, and stated as an idealization — which is why

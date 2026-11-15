@@ -7,70 +7,8 @@
 // Every case runs against a hermetic config and a loopback SearXNG stub, so no
 // external request is possible (src/lib/stub-provider.ts).
 import { afterAll, afterEach, expect, test } from "vitest";
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-import { join } from "node:path";
 import { closedPortUrl, startStubProvider, writeHermeticConfig, type StubProvider } from "./lib/stub-provider.js";
-
-const REPO_ROOT = join(import.meta.dirname, "..");
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
-
-async function withServer<T>(
-  env: NodeJS.ProcessEnv,
-  fn: (call: (method: string, params: unknown) => Promise<RpcMessage>) => Promise<T>
-): Promise<T> {
-  const child = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env,
-  });
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line — not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const send = (obj: unknown) => child.stdin!.write(JSON.stringify(obj) + "\n");
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 30000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-  };
-  try {
-    const init = await call("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "provider-health-action-test", version: "1.0.0" },
-    });
-    expect(init.error).toBeUndefined();
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    return await fn(call);
-  } finally {
-    child.kill();
-  }
-}
+import { withServer, type RpcMessage } from "./lib/mcp-stdio.js";
 
 interface ToolPayload {
   status: string;
@@ -110,7 +48,7 @@ test("REQ-024b: a config-disabled provider is reported inactive with its reason 
   stub = await startStubProvider("ok");
   const { env } = writeHermeticConfig(stub.url);
 
-  await withServer(env, async (call) => {
+  await withServer({ env: env }, async (call) => {
     // wikipedia is disabled by the hermetic config.
     const row = await health(call, "wikipedia");
     expect(row.status).toBe("inactive");
@@ -129,7 +67,7 @@ test("REQ-024b: a config-disabled provider is reported inactive with its reason 
 test("REQ-024b: recorded success and failure timestamps appear on the health report", async () => {
   stub = await startStubProvider("ok");
   const okConfig = writeHermeticConfig(stub.url);
-  await withServer(okConfig.env, async (call) => {
+  await withServer({ env: okConfig.env }, async (call) => {
     const search = await call("tools/call", {
       name: "infobroker_search_web",
       arguments: { query: "stub query", provider: "searxng", task_type: "general_web" },
@@ -147,7 +85,7 @@ test("REQ-024b: recorded success and failure timestamps appear on the health rep
   await stub.close();
   stub = await startStubProvider("missing");
   const missingConfig = writeHermeticConfig(stub.url);
-  await withServer(missingConfig.env, async (call) => {
+  await withServer({ env: missingConfig.env }, async (call) => {
     const search = await call("tools/call", {
       name: "infobroker_search_web",
       arguments: { query: "stub query", provider: "searxng", task_type: "general_web" },
@@ -164,7 +102,7 @@ test("REQ-024c: total_requests_served counts tool requests, not provider samples
   stub = await startStubProvider("ok");
   const { env } = writeHermeticConfig(stub.url);
 
-  await withServer(env, async (call) => {
+  await withServer({ env: env }, async (call) => {
     await call("tools/call", { name: "infobroker_inspect_providers", arguments: { action: "list" } });
     await call("tools/call", { name: "infobroker_inspect_providers", arguments: { action: "list" } });
     const phaseA = parseOk(await call("tools/call", { name: "infobroker_inspect_providers", arguments: { action: "spec" } }))
@@ -190,7 +128,7 @@ test("REQ-024c: total_requests_served counts tool requests, not provider samples
 test("REQ-013: the health action drives the probe into the shared assessment", async () => {
   stub = await startStubProvider("ok");
   const healthy = writeHermeticConfig(stub.url);
-  await withServer(healthy.env, async (call) => {
+  await withServer({ env: healthy.env }, async (call) => {
     const row = await health(call, "searxng");
     expect(row.status).toBe("active");
     expect(row.inactive_reason).toBeUndefined();
@@ -199,7 +137,7 @@ test("REQ-013: the health action drives the probe into the shared assessment", a
 
   stub = await startStubProvider("missing");
   const degraded = writeHermeticConfig(stub.url);
-  await withServer(degraded.env, async (call) => {
+  await withServer({ env: degraded.env }, async (call) => {
     const row = await health(call, "searxng");
     expect(row.status).toBe("degraded");
     expect(row.inactive_reason).toBeUndefined();
@@ -208,7 +146,7 @@ test("REQ-013: the health action drives the probe into the shared assessment", a
 
   const closed = await closedPortUrl();
   const unreachable = writeHermeticConfig(closed);
-  await withServer(unreachable.env, async (call) => {
+  await withServer({ env: unreachable.env }, async (call) => {
     const row = await health(call, "searxng");
     expect(row.status).toBe("inactive");
     expect(row.inactive_reason).toBeUndefined();

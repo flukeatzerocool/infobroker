@@ -23,14 +23,6 @@
 **Trigger:** start after the process-efficiency increment closes; close when a
 test proves the loser aborts on a win and on exhaustion.
 
-## Shared spawned-server harness
-
-- Extract the `withServer` helper duplicated in ten suites into
-  `src/lib/mcp-stdio.ts`, and add a check that no suite redefines it.
-
-**Trigger:** start with the next suite that needs a spawned server; close when
-the ten copies are one module and the suites still pass.
-
 ## Align REQ-115 and REQ-118 with ICD 203/206
 
 - Read ICD 203 (Analytic Standards) and ICD 206 (Sourcing Requirements) from

@@ -1,14 +1,11 @@
 // @implements REQ-033 REQ-034 REQ-100
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { writeFileSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadQuotaState, getOrCreateCounter, checkQuota } from "./quota.js";
 import { startStubProvider, writeHermeticConfig } from "./lib/stub-provider.js";
-
-const REPO_ROOT = join(import.meta.dirname, "..");
+import { startMcpServer } from "./lib/mcp-stdio.js";
 
 // Quota state is resolved lazily, so the test seam can be set before the first
 // load. Each run gets its own directory: the suite never reads or writes the
@@ -174,74 +171,6 @@ describe("quota warning and exhaustion boundaries (REQ-034)", () => {
 // REQ-033: a debounced write must not be lost when the process is stopped with
 // a signal. The test drives the real server so the ordinary stop path is what
 // is measured.
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
-
-async function withSpawnedServer<T>(
-  env: NodeJS.ProcessEnv,
-  fn: (call: (method: string, params: unknown) => Promise<RpcMessage>, child: ReturnType<typeof spawn>) => Promise<T>,
-): Promise<T> {
-  const child = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env,
-  });
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line is not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const send = (obj: unknown) => child.stdin!.write(JSON.stringify(obj) + "\n");
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-  };
-  try {
-    const init = await call("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "quota-signal-test", version: "1.0.0" },
-    });
-    expect(init.error).toBeUndefined();
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    return await fn(call, child);
-  } finally {
-    child.kill();
-  }
-}
-
-async function waitForExit(child: ReturnType<typeof spawn>): Promise<void> {
-  if (child.exitCode !== null) return;
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("server did not exit after the signal")), 10_000);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
-}
 
 describe.each(["SIGTERM", "SIGINT"] as const)("quota flush on %s (REQ-033)", (signal) => {
   it("persists a pending increment before the process stops", async () => {
@@ -249,23 +178,25 @@ describe.each(["SIGTERM", "SIGINT"] as const)("quota flush on %s (REQ-033)", (si
     const cfg = writeHermeticConfig(stub.url);
     const quotaPath = join(cfg.root, "quota.json");
     try {
-      await withSpawnedServer(cfg.env, async (call, child) => {
-        const response = await call("tools/call", {
+      const server = await startMcpServer({ env: cfg.env, clientName: "quota-signal-test" });
+      try {
+        const response = await server.call("tools/call", {
           name: "infobroker_search_web",
           arguments: { query: "signal-flush probe" },
         });
         const text = (response.result as { content?: Array<{ text?: string }> } | undefined)?.content?.[0]?.text ?? "";
         expect(text.startsWith("[OK] ")).toBe(true);
 
-        child.kill(signal);
-        await waitForExit(child);
+        await server.kill(signal);
 
         const persisted = JSON.parse(readFileSync(quotaPath, "utf-8")) as {
           providers?: Record<string, { daily?: { count?: number } }>;
         };
         const searxng = persisted.providers?.["searxng"];
         expect(searxng?.daily?.count ?? 0).toBeGreaterThan(0);
-      });
+      } finally {
+        await server.stop();
+      }
     } finally {
       await stub.close();
       rmSync(cfg.root, { recursive: true, force: true });

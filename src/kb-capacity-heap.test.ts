@@ -15,18 +15,14 @@
 // prefilter cannot degenerate into a silent full scan
 // (src/kb-prefilter.ts:141).
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createInterface } from "node:readline";
-import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { makeIsolatedConfig, type IsolatedConfig } from "./lib/test-isolation.js";
+import { withServer } from "./lib/mcp-stdio.js";
 import { SqliteStore } from "./kb-sqlite.js";
 import { createModel } from "./embed.js";
 import type { KbChunk } from "./types.js";
-
-const REPO_ROOT = join(import.meta.dirname, "..");
 
 /** The heap the server runs under: the measured 48 MB boot floor plus margin. */
 const HEAP_MB = 64;
@@ -43,13 +39,6 @@ const SMALL_CANDIDATE_DOCUMENTS = SMALL_DOCUMENTS / 2;
 const DOCUMENT_COUNT = SMALL_DOCUMENTS + 1;
 const CHUNK_COUNT = HUGE_CHUNKS + SMALL_DOCUMENTS * SMALL_CHUNKS_PER_DOCUMENT;
 const TARGET_URL = "https://example.com/small/0";
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: { content?: Array<{ text?: string }> };
-  error?: { code: number; message: string };
-}
 
 interface SeededPayload {
   iso: IsolatedConfig;
@@ -181,66 +170,25 @@ afterAll(() => {
 });
 
 /** Spawn the real server at a bounded heap and run one or more tool calls. */
-async function withHeapedServer<T>(fn: (call: (arguments_: Record<string, unknown>) => Promise<Record<string, unknown>>) => Promise<T>): Promise<T> {
-  const child: ChildProcessWithoutNullStreams = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: { ...payload.iso.env, NODE_OPTIONS: `--max-old-space-size=${HEAP_MB}` },
-  });
-  const exit = once(child, "exit");
-  let stderr = "";
-  child.stderr.on("data", (chunk) => (stderr += String(chunk)));
-  const pending = new Map<number, (message: RpcMessage) => void>();
-  const lines = createInterface({ input: child.stdout });
-  lines.on("line", (line) => {
-    let message: RpcMessage;
-    try {
-      message = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line is not an RPC reply
-    }
-    if (typeof message.id === "number" && pending.has(message.id)) {
-      const resolve = pending.get(message.id)!;
-      pending.delete(message.id);
-      resolve(message);
-    }
-  });
-  let nextId = 1;
-  const send = (message: unknown) => child.stdin.write(JSON.stringify(message) + "\n");
-  const rpc = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out under ${HEAP_MB} MB${stderr ? `: ${stderr}` : ""}`)), 20_000);
-      pending.set(id, (message) => {
-        clearTimeout(timer);
-        resolve(message);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-  };
-  try {
-    const initialized = await rpc("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "kb-capacity-heap", version: "1.0.0" },
-    });
-    if (initialized.error) throw new Error(`initialize failed: ${initialized.error.message}`);
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    const call = async (arguments_: Record<string, unknown>): Promise<Record<string, unknown>> => {
-      const reply = await rpc("tools/call", { name: "infobroker_manage_kb", arguments: arguments_ });
-      if (reply.error) throw new Error(`tools/call failed: ${reply.error.message}${stderr ? ` | ${stderr}` : ""}`);
-      const text = reply.result?.content?.[0]?.text ?? "";
-      expect(text.startsWith("[OK] "), `expected [OK], got: ${text.slice(0, 200)}${stderr ? ` | ${stderr}` : ""}`).toBe(true);
-      return JSON.parse(text.slice("[OK] ".length)) as Record<string, unknown>;
-    };
-    return await fn(call);
-  } finally {
-    child.kill("SIGKILL");
-    if (child.exitCode === null && child.signalCode === null) {
-      await Promise.race([exit, new Promise((resolve) => setTimeout(resolve, 5_000))]);
-    }
-    lines.close();
-  }
+/** The KB tool, driven against a server capped at HEAP_MB of old space. */
+async function withHeapBoundedKb<T>(fn: (call: (arguments_: Record<string, unknown>) => Promise<Record<string, unknown>>) => Promise<T>): Promise<T> {
+  return withServer(
+    {
+      env: { ...payload.iso.env, NODE_OPTIONS: `--max-old-space-size=${HEAP_MB}` },
+      clientName: "kb-capacity-heap",
+      killSignal: "SIGKILL",
+    },
+    async (rpc) => {
+      const call = async (arguments_: Record<string, unknown>): Promise<Record<string, unknown>> => {
+        const reply = await rpc("tools/call", { name: "infobroker_manage_kb", arguments: arguments_ });
+        if (reply.error) throw new Error(`tools/call failed: ${reply.error.message}`);
+        const text = (reply.result as { content?: Array<{ text?: string }> } | undefined)?.content?.[0]?.text ?? "";
+        expect(text.startsWith("[OK] "), `expected [OK], got: ${text.slice(0, 200)}`).toBe(true);
+        return JSON.parse(text.slice("[OK] ".length)) as Record<string, unknown>;
+      };
+      return fn(call);
+    },
+  );
 }
 
 describe("REQ-108 clause (a): complete retrieval under a heap smaller than the store", () => {
@@ -251,7 +199,7 @@ describe("REQ-108 clause (a): complete retrieval under a heap smaller than the s
   });
 
   test("search returns the hit on a cold build scan and again on the bounded by-id read", async () => {
-    await withHeapedServer(async (call) => {
+    await withHeapBoundedKb(async (call) => {
       for (const pass of ["cold", "candidates"]) {
         const body = await call({ action: "search", query: payload.query, max_results: 10 });
         const results = body["results"] as Array<Record<string, unknown>>;
@@ -264,7 +212,7 @@ describe("REQ-108 clause (a): complete retrieval under a heap smaller than the s
   });
 
   test("list returns every stored document with its complete chunk count", async () => {
-    await withHeapedServer(async (call) => {
+    await withHeapBoundedKb(async (call) => {
       const body = await call({ action: "list" });
       const entries = body["results"] as Array<Record<string, unknown>>;
       expect(entries).toHaveLength(DOCUMENT_COUNT);
@@ -278,7 +226,7 @@ describe("REQ-108 clause (a): complete retrieval under a heap smaller than the s
   });
 
   test("get returns the whole document body", async () => {
-    await withHeapedServer(async (call) => {
+    await withHeapBoundedKb(async (call) => {
       const body = await call({ action: "get", source_url: TARGET_URL });
       const document = (body["results"] as Array<Record<string, unknown>>)[0]!;
       // `sqliteGet` orders by chunk_index and joins the chunk texts with "\n".
@@ -287,7 +235,7 @@ describe("REQ-108 clause (a): complete retrieval under a heap smaller than the s
   });
 
   test("stats counts the whole store and reports its size", async () => {
-    await withHeapedServer(async (call) => {
+    await withHeapBoundedKb(async (call) => {
       const body = await call({ action: "stats" });
       const stats = (body["results"] as Array<Record<string, unknown>>)[0]!;
       expect(stats["chunk_count"]).toBe(CHUNK_COUNT);
@@ -296,7 +244,7 @@ describe("REQ-108 clause (a): complete retrieval under a heap smaller than the s
   });
 
   test("one process answers all four inspection actions in sequence", async () => {
-    await withHeapedServer(async (call) => {
+    await withHeapBoundedKb(async (call) => {
       expect(((await call({ action: "stats" }))["results"] as unknown[]).length).toBe(1);
       expect(((await call({ action: "list" }))["results"] as unknown[]).length).toBe(DOCUMENT_COUNT);
       const search = await call({ action: "search", query: payload.query, max_results: 10 });

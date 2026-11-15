@@ -5,13 +5,8 @@
 // REQ-090 (verb_noun naming), and the REQ-092 quality bar.
 
 import { test, expect } from "vitest";
-import { spawn } from "node:child_process";
-import { createInterface, type Interface } from "node:readline";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { isolatedConfigEnv } from "./lib/test-isolation.js";
-
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+import { startMcpServer, withServer, type ToolDef } from "./lib/mcp-stdio.js";
 
 interface ToolAnnotations {
   readOnlyHint?: boolean;
@@ -20,83 +15,16 @@ interface ToolAnnotations {
   openWorldHint?: boolean;
 }
 
-interface ToolDef {
-  name: string;
-  description?: string;
-  inputSchema?: {
-    type?: string;
-    properties?: Record<string, { description?: string; default?: unknown; enum?: string[]; minimum?: number; maximum?: number }>;
-    required?: string[];
-  };
-  annotations?: ToolAnnotations;
-  outputSchema?: Record<string, unknown>;
+/** The advertised tool surface, from one freshly spawned server. */
+async function listTools(): Promise<{ tools: ToolDef[] }> {
+  const tools = await withServer({ env: isolatedConfigEnv() }, (call) => callToolsList(call));
+  return { tools };
 }
 
-interface ListToolsResult {
-  tools: ToolDef[];
-}
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
-
-async function listTools(): Promise<ListToolsResult> {
-  const child = spawn(
-    join(REPO_ROOT, "node_modules", ".bin", "tsx"),
-    [join(REPO_ROOT, "src", "index.ts")],
-    { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"], env: isolatedConfigEnv() }
-  );
-
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl: Interface = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return;
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-
-  const send = (obj: unknown) => child.stdin!.write(JSON.stringify(obj) + "\n");
-  const call = (method: string, params: unknown, id: number): Promise<RpcMessage> =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-
-  try {
-    const init = await call(
-      "initialize",
-      {
-        protocolVersion: "2024-11-05",
-        capabilities: {},
-        clientInfo: { name: "tool-surface-test", version: "1.0.0" },
-      },
-      1
-    );
-    expect(init.error).toBeUndefined();
-
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-
-    const listed = await call("tools/list", {}, 2);
-    expect(listed.error).toBeUndefined();
-    return listed.result as ListToolsResult;
-  } finally {
-    child.kill();
-  }
+async function callToolsList(call: Awaited<ReturnType<typeof startMcpServer>>["call"]): Promise<ToolDef[]> {
+  const listed = await call("tools/list", {});
+  if (listed.error) throw new Error(`tools/list failed: ${listed.error.message}`);
+  return ((listed.result as { tools?: ToolDef[] } | undefined)?.tools ?? []) as ToolDef[];
 }
 
 test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
@@ -164,7 +92,7 @@ test("tool surface satisfies REQ-089, REQ-090, and REQ-092", async () => {
 
     // REQ-089/092: annotations declare all four behavioral hints.
     expect(tool.annotations, `${tool.name} missing annotations`).toBeDefined();
-    const a = tool.annotations!;
+    const a = tool.annotations as ToolAnnotations;
     expect(a.readOnlyHint, `${tool.name} missing readOnlyHint`).toBeDefined();
     expect(a.destructiveHint, `${tool.name} missing destructiveHint`).toBeDefined();
     expect(a.idempotentHint, `${tool.name} missing idempotentHint`).toBeDefined();

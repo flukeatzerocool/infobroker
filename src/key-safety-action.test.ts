@@ -8,74 +8,13 @@
 // Every case runs against an isolated config and a loopback generic_http
 // provider, so no external request is possible (src/lib/stub-provider.ts).
 import { afterAll, afterEach, expect, test } from "vitest";
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { startStubProvider, writeHermeticConfig, type HermeticConfig, type StubProvider } from "./lib/stub-provider.js";
-
-const REPO_ROOT = join(import.meta.dirname, "..");
+import { withServer, type RpcMessage } from "./lib/mcp-stdio.js";
 
 const SENTINEL_ONE = "sk-r2biii-SENTINEL-7f3a9c1d";
 const SENTINEL_TWO = "sk-r2biii-SENTINEL-2b8e4f60";
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
-
-async function withServer<T>(
-  env: NodeJS.ProcessEnv,
-  fn: (call: (method: string, params: unknown) => Promise<RpcMessage>) => Promise<T>
-): Promise<T> {
-  const child = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env,
-  });
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line — not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const send = (obj: unknown) => child.stdin!.write(JSON.stringify(obj) + "\n");
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 30000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-  };
-  try {
-    const init = await call("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "key-safety-action-test", version: "1.0.0" },
-    });
-    expect(init.error).toBeUndefined();
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    return await fn(call);
-  } finally {
-    child.kill();
-  }
-}
 
 interface ToolPayload {
   status: string;
@@ -158,7 +97,7 @@ test("REQ-011 missing-key: a required credential absent marks the provider inact
   expect(config.env["INFOBROKER_KEYOPT_API_KEY"]).toBeUndefined();
   expect(config.env["INFOBROKER_CORE_API_KEY"]).toBeUndefined();
 
-  await withServer(config.env, async (call) => {
+  await withServer({ env: config.env }, async (call) => {
     const required = await providerRow(call, "keyreq", "list");
     expect(required.status).toBe("inactive");
     expect(required.inactive_reason).toBe("no_api_key");
@@ -177,7 +116,7 @@ test("REQ-011 optional-key: an optional credential absent leaves the provider op
   });
   expect(config.env["INFOBROKER_KEYOPT_API_KEY"]).toBeUndefined();
 
-  await withServer(config.env, async (call) => {
+  await withServer({ env: config.env }, async (call) => {
     const row = await providerRow(call, "keyopt", "list");
     expect(row.status).toBe("active");
     expect(row.inactive_reason).toBeUndefined();
@@ -191,7 +130,7 @@ test("REQ-104 pool-state: a rejected pool is reported without key material", asy
   });
   config.env["INFOBROKER_KEYSTUB_API_KEYS"] = `${SENTINEL_ONE},${SENTINEL_TWO}`;
 
-  await withServer(config.env, async (call) => {
+  await withServer({ env: config.env }, async (call) => {
     // One call per key: each 401 rejects the presented credential for the session.
     const first = await callTool(call, "infobroker_search_web", {
       query: "stub query",
@@ -230,7 +169,7 @@ test("REQ-011 no-leak: credentials never reach output, logs, config, or state", 
   okConfig.env["INFOBROKER_KEYSTUB_API_KEY"] = SENTINEL_ONE;
 
   const output: string[] = [];
-  await withServer(okConfig.env, async (call) => {
+  await withServer({ env: okConfig.env }, async (call) => {
     output.push(toolText(await callTool(call, "infobroker_search_web", {
       query: "stub query",
       provider: "keystub",
@@ -258,7 +197,7 @@ test("REQ-011 no-leak: credentials never reach output, logs, config, or state", 
   failConfig.env["INFOBROKER_KEYSTUB_API_KEY"] = SENTINEL_TWO;
 
   const failOutput: string[] = [];
-  await withServer(failConfig.env, async (call) => {
+  await withServer({ env: failConfig.env }, async (call) => {
     failOutput.push(toolText(await callTool(call, "infobroker_search_web", {
       query: "stub query",
       provider: "keystub",
