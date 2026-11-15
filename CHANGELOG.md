@@ -2,6 +2,19 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The research-suite matrix has been run in repo mode: 13 scenarios across
+  every workflow shape, 11 pass, 2 shape-selection divergences recorded rather
+  than chased green. `docs/research-evidence-2026-11-15.md` carries the method
+  and one row per scenario (persona, shape, verdict, what the answer actually
+  did), and `docs/goal-evidence-matrix.md` now names a recorded repo-mode run
+  in every §1 function row. Running it surfaced and fixed two harness defects
+  first — the suite aborted silently after one scenario, and the engagement
+  audit missed Code Mode calls — which is why the matrix had never been
+  completed. Both failures are the same class: a vetting request that
+  escalated to gated analysis, and a gated request over a false premise that
+  answered as a fact-check. That class is filed as the `ROADMAP.md` item
+  "Shape selection under conflicting signals".
+
 - `npm run test-research` no longer ends its run after the first scenario, and
   its routing audit no longer misfires. Two harness defects surfaced when the
   repo-mode matrix was first run in batches. The session id was read with

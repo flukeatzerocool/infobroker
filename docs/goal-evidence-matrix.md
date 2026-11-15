@@ -14,11 +14,11 @@ each function is *evidenced*, not a sequence to be enforced.
 
 | Function | §D group | Requirement family | Gate | Scenario | Signal |
 |---|---|---|---|---|---|
-| Direction | 1, 2 | REQ-020a–e, REQ-124, REQ-127, REQ-128 | `check-tdqs`, Arena | Lab L6; S2, N3 | Task type chosen; inferred values disclosed; no key required |
-| Collection | 1, 2 | REQ-020h, REQ-031, REQ-031a, REQ-129 | `check-tdqs`, Arena | Lab L5, L7; S3 | Cold-start tool success; fallback advances on provider failure |
-| Processing and exploitation | 1, 5 | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122 | Arena, `validate-spec` | Lab L6; S2 | Normalized result; source identity and date preserved |
-| Analysis and production | 3 | REQ-026a–i, REQ-115, REQ-123 | Arena, `check-gate-coverage` | Lab L1, L8; S2, N3 | Verdict and confidence; contradiction reported |
-| Dissemination | 7 | REQ-114–REQ-120a, REQ-126, REQ-110 | `check-report-fixtures`, G3 | Lab L9; S9, A1a/A1b | Manifest, grade and receipt; audience-shaped answer |
+| Direction | 1, 2 | REQ-020a–e, REQ-124, REQ-127, REQ-128 | `check-tdqs`, Arena | Lab L6; S2 (repo, 2026-11-15), N3 (repo, 2026-11-15) | Task type chosen; inferred values disclosed; no key required |
+| Collection | 1, 2 | REQ-020h, REQ-031, REQ-031a, REQ-129 | `check-tdqs`, Arena | Lab L5, L7; S3 (repo, 2026-11-15, predecessor record) | Cold-start tool success; fallback advances on provider failure |
+| Processing and exploitation | 1, 5 | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122 | Arena, `validate-spec` | Lab L6; S2 (repo, 2026-11-15) | Normalized result; source identity and date preserved |
+| Analysis and production | 3 | REQ-026a–i, REQ-115, REQ-123 | Arena, `check-gate-coverage` | Lab L1, L8; S2 (repo, 2026-11-15), N3 (repo, 2026-11-15) | Verdict and confidence; contradiction reported |
+| Dissemination | 7 | REQ-114–REQ-120a, REQ-126, REQ-110 | `check-report-fixtures`, G3 | Lab L9; S9 (repo, 2026-11-15), A1a/A1b (repo, 2026-11-15, predecessor record) | Manifest, grade and receipt; audience-shaped answer |
 
 The loop closes through the knowledge base: a disseminated product is stored
 with its claims and source hashes and recalled at the next direction step
@@ -62,3 +62,4 @@ or the increment record. The checklist is a review gate, not a new REQ.
 | Arena | `npm run test-debate-club` | all seven tools, negative paths | yes |
 | Lab | `./run.sh lab --only=L5,L6,L7,L8` | four personas across four profiles | advisory |
 | Research pair | `npm run test-research -- --only=A1a,A1b,S3,N1 --mcp=repo` | audience pair + negative cases | advisory |
+| Research matrix | `npm run test-research -- --mcp=repo` (batches: S1–S7, S8–M2, N2–N4) | 13 scenarios across every workflow shape; per-scenario rows in `docs/research-evidence-2026-11-15.md` | advisory |

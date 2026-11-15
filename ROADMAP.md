@@ -14,14 +14,19 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Research-suite matrix in repo mode
+## Shape selection under conflicting signals
 
-- Run the remaining research-suite scenarios with `--mcp=repo` and record
-  per-persona results; current evidence is the A1a/A1b audience pair plus S3
-  and N1.
+- Two repo-mode scenarios routed to a neighbouring shape: a vetting request
+  escalated to `analysis-loop` (S6), and a gated request over a false premise
+  answered as a fact-check (N4). Both answers were safe; both emitted the
+  wrong shape's completion token and block (`docs/research-evidence-2026-11-15.md`).
+- Start with Phase 0 classification in `skills/infobroker/SKILL.md`: name the
+  deciding signal when a request's phrasing ("rigorous gated research") and
+  its content (verify a claim that may be false) point at different shapes.
 
-**Trigger:** start after the audience/defaults increment closes; close when
-every §1 goal row names a recorded repo-mode run.
+**Trigger:** start with the next skill change; close when a repo-mode run of
+S6 and N4 emits the manifest's shape token, or when a deliberate divergence is
+recorded in `DECISIONS.md`.
 
 ## Non-goals
 
