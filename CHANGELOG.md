@@ -56,6 +56,32 @@
   run that closes it reaps 2,328 roots (1.4 GB) and returns `/tmp` from 18% to
   2% inodes.
 
+- Audience and default-path evidence is now a first-class surface.
+  `npm run check-user-surface` fails when a persona names a §D group that does
+  not exist, an audience-facing group has no persona, a persona has no
+  scenario, the defaults register and `config.json` disagree, or a §1 goal has
+  no row in the goal-evidence matrix. The register (`docs/defaults-register.md`)
+  documents every user-facing config path with its shipped value and the
+  condition that justifies changing it; the matrix
+  (`docs/goal-evidence-matrix.md`) carries the six §1 goals and the new-REQ
+  user-impact checklist.
+- The Arena now drives the shipped default path: a no-key server answers a
+  search and exposes all seven tools, an invalid `config.local.json` starts on
+  shipped defaults with one bounded `config_invalid_startup` notice and is left
+  byte-identical, `fetch.crawl_max_pages` caps a crawl, `output.verbose: false`
+  compacts results, and a 429 marks the provider as cooling down (REQ-038).
+- The Lab attributes every scenario to a config profile. `fresh`,
+  `solo-override`, `constrained`, and `power` layers are generated per profile
+  group, `run-meta.json` records the profile and layer hash, and scenarios
+  L5–L9 cover the developer, reload/state, fresh-scholar, constrained
+  fact-check, and skills-user audiences. `report.mjs` rolls results up by
+  persona and profile and emits `profile_delta`; `recommend.mjs` raises a P1
+  when a shape passes under one profile and fails under another. The critic
+  reads an audience lens supplied by the scenario.
+- `npm run test-research -- --mcp=repo` points the research suite at this
+  working tree with a run-local empty config layer; the default remains the
+  configured deployment.
+
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 
 - The full-review register's disposition census is re-derived from the file

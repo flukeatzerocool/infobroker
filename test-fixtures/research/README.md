@@ -7,6 +7,11 @@ its token when invoked by name), this suite checks that a researcher-shaped
 request actually routes to the right skill and produces the deliverable
 contract end to end.
 
+By default it runs against the configured deployment (`--mcp=ambient`). Pass
+`--mcp=repo` to point the MCP at this working tree with a run-local empty
+config layer, which is the mode to use when the question is "did the current
+tree change this?" rather than "is the installed server healthy?".
+
 ## Scenarios
 
 `manifest.json` is a single array of scenario objects, one per run. Each

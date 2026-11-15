@@ -31,6 +31,18 @@ test proves the loser aborts on a win and on exhaustion.
 **Trigger:** start with the next suite that needs a spawned server; close when
 the ten copies are one module and the suites still pass.
 
+## Research-suite matrix in repo mode
+
+- Run the remaining research-suite scenarios with `--mcp=repo` and record
+  per-persona results; current evidence is the A1a/A1b audience pair plus S3
+  and N1.
+- Extend the Arena config-behavior matrix to `preservation.archive` and
+  `output.fallback_depth` once the fetch and verify fixtures cover both
+  branches.
+
+**Trigger:** start after the audience/defaults increment closes; close when
+every §1 goal row names a recorded repo-mode run.
+
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`

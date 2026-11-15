@@ -6,9 +6,11 @@
 # test-fixtures/research/manifest.json for the scenarios.
 #
 # Usage:
-#   ./scripts/test-research.sh [--only=<id>[,<id>...]] [--from=<id>] [--help]
+#   ./scripts/test-research.sh [--only=<id>[,<id>...]] [--from=<id>] [--mcp=repo|ambient] [--help]
 #   --only=<ids>   Run only the named scenario ids (comma-separated).
 #   --from=<id>    Skip scenarios before <id> (in manifest order).
+#   --mcp=repo     Exercise this working tree (run-local empty config layer).
+#   --mcp=ambient  Exercise the configured deployment (default).
 #   --help (-h)    Show this message.
 
 set -euo pipefail
@@ -21,13 +23,15 @@ EVALUATOR="$SCRIPT_DIR/test-research/evaluate-research.mjs"
 # shellcheck source=scripts/lib/opencode-utils.sh
 source "$SCRIPT_DIR/lib/opencode-utils.sh"
 
-ONLY=""; FROM=""
+ONLY=""; FROM=""; MCP_MODE="ambient"
 for arg in "$@"; do
   case "$arg" in
     --only=*) ONLY="${arg#--only=}" ;;
     --from=*) FROM="${arg#--from=}" ;;
+    --mcp=repo) MCP_MODE="repo" ;;
+    --mcp=ambient) MCP_MODE="ambient" ;;
     --help|-h)
-      printf '%s\n' "Usage: ./scripts/test-research.sh [--only=<id>[,<id>...]] [--from=<id>]"
+      printf '%s\n' "Usage: ./scripts/test-research.sh [--only=<id>[,<id>...]] [--from=<id>] [--mcp=repo|ambient]"
       exit 0 ;;
     *) echo "Unknown flag: $arg"; exit 1 ;;
   esac
@@ -68,7 +72,38 @@ if [[ -z "$(node -e 'const fs=require("fs");const p=process.argv[1];console.log(
 fi
 
 # ── Start backend ──
-ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
+if [[ "$MCP_MODE" == "repo" ]]; then
+  # Repo-scoped: point the MCP at this working tree with a run-local empty
+  # user layer, so the operator's config.local.json cannot change the result.
+  MCP_PROJECT="$RUN_DIR/mcp-project"
+  mkdir -p "$MCP_PROJECT"
+  printf '{}\n' > "$RUN_DIR/config.local.json"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const [repo, out, layer] = process.argv.slice(1);
+    const cfg = {
+      "$schema": "https://opencode.ai/config.json",
+      mcp: {
+        infobroker: {
+          type: "local",
+          command: [path.join(repo, "node_modules", ".bin", "tsx"), path.join(repo, "src", "index.ts")],
+          environment: {
+            INFOBROKER_CONFIG: path.join(repo, "config.json"),
+            INFOBROKER_CONFIG_LOCAL: layer,
+          },
+        },
+      },
+    };
+    fs.writeFileSync(path.join(out, "opencode.json"), JSON.stringify(cfg, null, 2) + "\n");
+  ' "$PROJECT_DIR" "$MCP_PROJECT" "$RUN_DIR/config.local.json"
+  ensure_opencode_serve_at "$RUN_DIR" "opencode-serve.log" "" "$MCP_PROJECT"
+  ( cd "$MCP_PROJECT" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" || true
+  printf 'repo:%s\n' "$MCP_PROJECT" > "$RUN_DIR/mcp-target.txt"
+else
+  ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
+  ( cd "$PWD" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true
+fi
 
 cleanup() { cleanup_serve; }
 trap cleanup EXIT SIGINT SIGTERM
