@@ -645,6 +645,28 @@ function checkArtifactContent(): void {
     if (phase0 === null || !/Escalate to `analysis-loop` when/.test(phase0)) {
       error("skills/infobroker/SKILL.md: Phase 0 does not escalate high-stakes requests to analysis-loop (REQ-051)");
     }
+    // Phase 0 must rank the routing signals, not only escalate. Two repo-mode
+    // scenarios failed on an unranked conflict — a vetting request that
+    // escalated and a gated request that downshifted to a fact-check
+    // (docs/research-evidence-2026-11-15.md, S6 and N4). The rule is asserted
+    // on each surface that carries it, so deleting it fails the gate.
+    if (phase0 !== null) {
+      for (const token of ["Precedence when signals conflict", "decides the route"]) {
+        if (!phase0.includes(token)) {
+          error(`skills/infobroker/SKILL.md: Phase 0 does not state the routing precedence rule ('${token}') (REQ-051)`);
+        }
+      }
+    }
+    for (const [refFile, token] of [
+      ["skills/infobroker/references/decision-tree.md", "1.0 Precedence"],
+      ["skills/infobroker/references/journeys.md", "escalation signal"],
+    ] as const) {
+      const refPath = join(ROOT, refFile);
+      const refText = existsSync(refPath) ? readFileSync(refPath, "utf-8") : "";
+      if (!refText.includes(token)) {
+        error(`${refFile}: missing '${token}' — the routing surfaces must rank the escalation signal (REQ-051/REQ-053)`);
+      }
+    }
     // REQ-051: the skill, not each pipeline, owns these obligations.
     for (const [token, label] of [
       ["report-manifest", "the report manifest"],

@@ -92,7 +92,9 @@ writing.
 
 ## Fact-Check
 
-**Trigger:** verify specific claims from user input.
+**Trigger:** verify specific claims from user input. Not this shape when the
+request names gated or confidence-scored research: route to Gated Analysis and
+report the zero-source outcome there (`decision-tree.md` §1.0).
 
 **Pipeline:** RECALL → extract claims → SEARCH per claim → `verify_claims`
 cross-reference → verdict → `summarization` digest → WRITE (shared skeleton +
@@ -132,7 +134,9 @@ questions — plus the shared skeleton.
 
 ## Gated Analysis
 
-**Trigger:** high-stakes, decision-driving questions needing rigor.
+**Trigger:** high-stakes, decision-driving questions needing rigor. Also this
+shape when the user explicitly asks for gated or confidence-scored research,
+even if the underlying question is a single claim to verify.
 
 **Route:** escalate to the `analysis-loop` skill — graded sources,
 structured analytic techniques, refinement rounds. Do not run this shape
@@ -222,7 +226,9 @@ and an overall robustness verdict. No softening — the job is to find breaks.
 ## Vetting / Due-Diligence
 
 **Trigger:** verify a person, organization, or product ("vet X",
-"background check", "is this legit", "due diligence").
+"background check", "is this legit", "due diligence"). A high-stakes framing
+(a large contract, a partner decision) does not route away from this shape
+(`decision-tree.md` §1.0).
 
 **Pipeline:** define the checklist → RECALL → SEARCH per checklist item →
 `verify_claims` on contested items → grade each source for reliability →

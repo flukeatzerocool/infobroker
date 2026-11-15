@@ -2,6 +2,30 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Phase 0 now ranks the three signals that were silently competing for the
+  route: the shape a request names, what its content resembles once read, and
+  the escalation rubric. A named shape decides; the content read and the rubric
+  decide rigor only. The two repo-mode failures in the next bullet were exactly
+  this conflict pulling in opposite directions — a vetting request escalated to
+  gated analysis, and a gated request downshifted to a fact-check — so the
+  surfaces now agree instead of leaving the model to improvise. The rule lives
+  in `SKILL.md` Phase 0, `references/decision-tree.md` §1.0 (with three new
+  tie-breakers), the shape triggers in `references/workflows.md`, and the
+  intent table in `references/journeys.md`; `validate-spec` asserts it on all
+  four and fails when the rule is deleted. REQ-051's escalation clause is
+  narrowed to "requests that name no workflow shape" so the spec matches the
+  behavior — 790 of its 800 allowed characters, decided as D-128. No waiver:
+  the behavior ships.
+
+- The research suite cannot currently validate a skill change: `--mcp=repo`
+  overrides the MCP server but the run inherits the operator's global `skills`
+  list, which points at the deployed copy, so the working tree's skill text is
+  never loaded. The run that exposed this also filed two neighbouring suite
+  defects — a gated token set that assumes a single-turn answer, and a per-turn
+  timeout that aborts the remaining scenarios. All three are scheduled on
+  `ROADMAP.md`; none changed the conclusion that the routing fix is correct,
+  which a run with this tree's skills loaded confirmed.
+
 - The research-suite matrix has been run in repo mode: 13 scenarios across
   every workflow shape, 11 pass, 2 shape-selection divergences recorded rather
   than chased green. `docs/research-evidence-2026-11-15.md` carries the method

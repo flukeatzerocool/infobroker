@@ -59,7 +59,19 @@ defines the shared terminology these references use.
 | "what changed / monitor / track / brief me since" | Monitoring / Delta |
 | "red-team / stress-test / what could go wrong" | Adversarial / Red-Team |
 | "vet / background check / due diligence / is it legit" | Vetting |
-| high-stakes, decision-driving, needs rigor | Gated Analysis (escalate to `analysis-loop`) |
+| high-stakes, decision-driving, needs rigor | Gated Analysis (escalate to `analysis-loop`; the escalation signal, not a named shape) |
+
+**Precedence when signals conflict.** Phase 0 reads three signals: the shape
+the request names through its intent markers, what its content resembles once
+read, and — for a high-stakes request — the escalation rubric in
+`references/decision-tree.md` §3. A named shape decides the route; the content
+read and the rubric decide only when no shape is named, and they then add
+rigor to the chosen shape rather than switching it. Do not switch either way
+on a conflict: each shape already carries the property a switch would chase —
+Vetting grades each item's source reliability and states unverifiable items,
+and Gated Analysis carries an Uncertainty Register that reports zero usable
+sources as a finding. Record the shape, the rubric total, and the deciding
+signal in the report's methodology.
 
 The default is Research & Write. Escalate to `analysis-loop` when the
 question is high-stakes and requires source-reliability grading and

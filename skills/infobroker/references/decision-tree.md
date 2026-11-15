@@ -6,12 +6,24 @@ points to the choice. When nothing matches, use the default at the end of each
 section. Cross-reference `workflows.md` for each shape's pipeline and
 `journeys.md` for the per-intent routing.
 
+## 1.0 Precedence: named shape vs. content read vs. escalation rubric
+
+Three signals compete, and they are not equal. The shape the request names
+through its intent markers decides the route; what the content resembles once
+read and the §3 escalation score decide rigor only, and only when no shape is
+named. On a conflict, keep the named shape and carry the other signal's
+obligation as an explicit added step — never switch shapes, because each shape
+already carries the property a switch would chase (Vetting grades every item's
+source, Gated Analysis reports zero usable sources in its Uncertainty
+Register). When no shape is named, §3 still escalates at 3 or more.
+
 ## 1. Choose the workflow shape
 
 Ask, in order:
 
-1. Is this high-stakes or decision-driving, and does it need source-reliability
-   grading plus a structured analytic technique? → **Gated Analysis**
+1. Is this high-stakes or decision-driving, does it need source-reliability
+   grading plus a structured analytic technique, **and does the request not
+   name a shape of its own (§1.0)?** → **Gated Analysis**
    (escalate to `analysis-loop`). See §3 for the escalation rubric.
 2. Is the user asking you to verify specific claims they supplied ("is it
    true", "fact-check", "verify")? → **Fact-Check**.
@@ -40,6 +52,18 @@ Ask, in order:
   through-line, research & write.
 - Competitive Evaluation vs Deep-Dive — if the deliverable is a recommendation
   among named options, evaluation; if it is a survey without a decision, deep-dive.
+- Vetting vs Gated Analysis — if the object is a person, organization, or
+  product to be cleared or flagged, vetting — even when the framing is
+  high-stakes and the contract is large; vetting already grades sources per
+  item and states gaps.
+- Gated Analysis vs Fact-Check — an explicit request for gated or
+  confidence-scored research selects gated analysis even when the content is a
+  single claim to verify; the Uncertainty Register carries the zero-source
+  outcome, so the safe answer needs no downshift.
+- Gated Analysis vs Competitive Evaluation — a decision about what to do under
+  uncertainty ("should we move?", "is this worth it?") is gated analysis;
+  competitive evaluation is a recommendation among named options scored
+  against a matrix.
 
 ## 2. Choose the tool
 

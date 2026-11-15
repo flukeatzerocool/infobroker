@@ -2530,6 +2530,37 @@ an old archive after this change will fail validation at the likelihood field
 and must be re-authored — accepted because the alternative is shipping a
 reference that disagrees with the schema it documents.
 
+### D-128: Named Shape Outranks Content Read and Escalation Rubric (2026-11-15)
+Phase 0 now ranks three routing signals instead of treating two of them as
+peers: the shape a request names through its intent markers decides the route,
+while what its content resembles once read and the `decision-tree.md` §3
+escalation score decide rigor only, and only when no shape is named. Two
+repo-mode scenarios failed on the unranked conflict — a vetting request that
+escalated to gated analysis (S6) and a gated request that downshifted to a
+fact-check (N4) — recorded in `docs/research-evidence-2026-11-15.md`.
+
+Switching shape on a conflict is never how rigor is added or removed, because
+each shape already carries the property a switch would chase: Vetting grades
+every item's source reliability and states unverifiable items
+(`references/workflows.md` §Vetting), and Gated Analysis reports zero usable
+sources in its Uncertainty Register (`skills/analysis-loop/SKILL.md`
+§Uncertainty Register). A conflict therefore keeps the named shape and adds
+the other signal's obligation as an explicit step.
+
+REQ-051's escalation clause is narrowed to match — "escalate high-stakes
+requests that name no workflow shape" — because the previous wording was
+unconditional and the shipped skill would otherwise stop satisfying it. The
+body measures 790/800 characters under the gate's `_Check:`-stripped prose
+measure, 5 sentences, 6 SHALL clauses. No waiver is recorded: the behavior is
+implemented, so a waiver would be a false record.
+
+Rejected: reordering `decision-tree.md` §1 so named shapes are tested before
+the rubric (removes the only defense for an unnamed high-stakes request);
+adding the expected shape to the research-suite prompt (a prompt naming its
+own grading target cannot test classification); fixing only `decision-tree.md`
+(SKILL.md Phase 0 is what the agent reads first and what REQ-051 is checked
+against); and leaving REQ-051 unchanged under a `## Spec Waivers` row.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a
