@@ -14,7 +14,12 @@
   `infobroker.infobroker_*`, so a run that called `search_web` and `fetch_page`
   throughout was still scored as never engaging the MCP. Both namings now
   resolve to the same slug in `scripts/lib/event-stream.mjs`, and the Lab
-  evaluator reads the normalized slug too.
+  evaluator reads the normalized slug too. A third pass found the deeper
+  cause: Code Mode routes MCP calls through the `execute` tool, so the names
+  appear in the embedded `tools.infobroker.<tool>` code rather than in direct
+  tool events. The research evaluator now reads that signal
+  (`extractMcpToolCalls`) as well as direct calls; re-evaluating the captured
+  S1 transcript with the fix turns a routing failure into a pass.
 
 - The confidence and sourcing vocabulary now cites the directives it was
   written against. `even chance` becomes `roughly even chance`, the term ICD 203

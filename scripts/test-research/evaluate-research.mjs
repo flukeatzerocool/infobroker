@@ -6,7 +6,7 @@
 // text excerpt to <dir>/final.txt and emits one JSON result line to stdout.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { extractAssistantText, extractToolOrder } from "../lib/event-stream.mjs";
+import { extractAssistantText, extractMcpToolCalls, extractToolOrder } from "../lib/event-stream.mjs";
 
 const [scenarioJsonPath, transcriptPath, outDir] = process.argv.slice(2);
 const scenario = JSON.parse(readFileSync(scenarioJsonPath, "utf8"));
@@ -24,6 +24,10 @@ function extractUrls(text) {
 const raw = readFileSync(transcriptPath, "utf8");
 const text = extractAssistantText(raw);
 const toolOrder = extractToolOrder(raw);
+// Code Mode routes MCP calls through the `execute` tool, so the names live in
+// the embedded `tools.infobroker.<tool>` code rather than in direct tool
+// events. Both signals count as engagement.
+const mcpTools = extractMcpToolCalls(raw, "infobroker");
 
 writeFileSync(`${outDir}/final.txt`, text.trim().slice(-4000), "utf8");
 
@@ -57,7 +61,7 @@ for (const needle of scenario.sections ?? []) {
 const ta = scenario.tool_audit ?? {};
 const audit = {};
 if (ta.verify_claims) {
-  audit.verify_claims = toolOrder.some((t) => t.includes("verify_claims"));
+  audit.verify_claims = mcpTools.includes("verify_claims") || toolOrder.some((t) => t.includes("verify_claims"));
 }
 if (ta.uses_infobroker) {
   // Routing signal: the run engaged Infobroker tools at all. Built-in
@@ -65,9 +69,9 @@ if (ta.uses_infobroker) {
   // not a routing failure.
   // Two client namings exist: `infobroker_infobroker_*` and, as current
   // headless opencode emits, `infobroker.infobroker_*`. Either engages the MCP.
-  audit.uses_infobroker = toolOrder.some(
-    (t) => t.startsWith("infobroker_infobroker_") || t.startsWith("infobroker.infobroker_"),
-  );
+  audit.uses_infobroker =
+    mcpTools.length > 0 ||
+    toolOrder.some((t) => t.startsWith("infobroker_infobroker_") || t.startsWith("infobroker.infobroker_"));
 }
 // Hard audit gates are structural (Infobroker engagement).
 // verify_claims is a "when contested" guidance, not a shape requirement — advisory.

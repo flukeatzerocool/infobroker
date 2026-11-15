@@ -132,7 +132,13 @@ export function extractMcpToolCalls(raw, server) {
     if (m) found.add(m[1].replace(/^infobroker_/, ""));
     if (tool !== "execute") continue;
     const input = JSON.stringify(part?.state?.input ?? "");
-    for (const hit of input.matchAll(embedded)) found.add(hit[1]);
+    for (const hit of input.matchAll(embedded)) found.add(hit[1].replace(/^infobroker_/, ""));
+    // The executor reports the nested MCP calls it actually made in the tool
+    // result metadata (`toolCalls[].tool = "infobroker.<tool>"`), which is the
+    // reliable record when the code builds the call dynamically.
+    const reported = new RegExp(`"tool":"${server}\\.([A-Za-z0-9_]+)"`, "g");
+    const output = JSON.stringify(part?.state ?? "");
+    for (const hit of output.matchAll(reported)) found.add(hit[1].replace(/^infobroker_/, ""));
   }
   return [...found].sort();
 }
