@@ -1087,7 +1087,12 @@ wikipedia.org, or two subdomains of the same registrable domain, are not) are
 one family. Substantially-same-text comparison uses
 `corroboration.family_similarity_threshold`, and each finding reports its
 family count. The ladder above counts families, not hosts, so republished wire
-copy and mirrors do not raise a finding's tier. The similarity threshold at
+copy and mirrors do not raise a finding's tier. Because the comparison divides
+by the larger text, a genuine republication seen only through a short excerpt
+can split into two families; measured, a 43-word article and a 14-word excerpt
+of it with the same headline score `0.3721` and split, so two `web_search`
+results that split into two families report `0.6475` instead of `0.2775`. The
+similarity threshold at
 which claims are grouped into an agreement cluster
 is configurable via `corroboration.similarity_threshold`. Agreement grouping is
 semantic — paraphrased claims join the same cluster — while an explicit conflict
