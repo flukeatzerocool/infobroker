@@ -2,6 +2,29 @@
 
 ## Active Decisions
 
+### D-126: The Intelligence Process Is the Organizing Model; §D Is the Maintenance Index (2026.11.15)
+
+§1 listed six design goals that mixed three kinds of statement — constraints
+("free first, privacy always"), mechanisms ("provider intelligence", "upgrade
+path") and one outcome — and one of them, the "writing pipeline", described the
+pre-report-contract world: it said the server provides raw material and skills
+write. The report contract (REQ-114–126) has since given the server a manifest,
+a quality gate, provenance grading, monitoring deltas and artifact export, so
+the sentence misstated the product; it dated from 2026-09-14 and was never
+revised. The cycle the North Star narrated was also missing its analysis stage:
+direction → collection → processing → dissemination, where the standard model
+(direction → collection → processing → analysis and production → dissemination,
+closing on feedback) has five. Decision: §1 is organized by the five
+intelligence-process functions with an Evidence column; functions are declared
+re-entrant; the knowledge base is described as the loop's memory rather than a
+derivative cache; and the North Star is marked framing, not contract. §D remains
+the maintenance index — one home per REQ, gate column equal to the union of its
+members' manifest gates — because stage-partitioning is not MECE over REQs
+(throttling, outbound identification and audit serve every stage). Personas
+stay harness fixtures in `debate-club/`; the normative audience vocabulary is the
+report quality standard's enum. `check-user-surface` parses the §1 table and
+drops the hardcoded six-goal count in favour of a structural check. Amends D-125.
+
 ### D-125: Audience and Defaults Evidence Is Static Where It Can Be, Agentic Where It Must Be (2026.11.15)
 
 The post-EGM tree changed 260 files, but the harness still mapped five

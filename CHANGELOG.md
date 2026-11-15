@@ -2,6 +2,17 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- §1 now describes the server by **intelligence-process function** — direction,
+  collection, processing and exploitation, analysis and production,
+  dissemination — instead of six mixed-kind design goals, with an Evidence
+  column binding each function to its requirement family and the North Star
+  retold in the same terms. The former goal 5 ("the server provides raw research
+  materials") had been stale since the report contract landed: the server emits
+  manifest-bearing, quality-gated artifacts, and the cycle it narrated was
+  missing its analysis stage. `check-user-surface` parses the table and drops
+  the hardcoded six-goal count, replacing it with a structural check (a table
+  with an Evidence column and at least five rows). D-126.
+
 - The release pipeline regenerates all three config-derived references
   (provider auth, provider map, provider privacy) before its spec audit and
   stages them, so a stale generated file no longer costs an AI repair turn.

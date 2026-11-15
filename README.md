@@ -143,9 +143,11 @@ transform raw research into polished writing. Free first. Privacy always.
 
 Infobroker is the [Bothan Spynet](https://starwars.fandom.com/wiki/Bothan_Spynet/Legends) as a tool — a decentralized intelligence
 network that queries independent sources and routes results through a
-single, impartial interface. In intelligence-cycle terms, you supply the
-direction and get the dissemination; the server handles the collection and
-processing.
+single, impartial interface. It runs the intelligence cycle: **direction,
+collection, processing and exploitation, analysis and production,
+dissemination**. You supply the requirement and receive the report; the server
+does the work between, and the knowledge base carries the feedback that closes
+the loop.
 
 ## Quick Start
 

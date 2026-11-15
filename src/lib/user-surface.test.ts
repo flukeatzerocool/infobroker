@@ -8,19 +8,21 @@ import {
   configPath,
   registerPaths,
   registerableConfigPaths,
-  specGoals,
+  specFunctions,
   type UserSurfaceInput,
 } from "./user-surface.js";
 
 const SPEC = `## §1 Mission and Capability Model
 
-Goals:
-1. **Free first, privacy always.** Zero config.
-2. **Upgrade path.** Optional keys.
-3. **Provider intelligence.** Best provider.
-4. **Truth by iteration.** Verify.
-5. **Writing pipeline.** Skills.
-6. **Knowledge persistence.** Local KB.
+Mission.
+
+| Function | Obligation | Evidence |
+|---|---|---|
+| **Direction** | Derive the requirement. | §7 |
+| **Collection** | Reach the sources. | §A |
+| **Processing and exploitation** | Normalize into evidence. | REQ-003 |
+| **Analysis and production** | Corroborate and calibrate. | REQ-026 |
+| **Dissemination** | Deliver the report. | REQ-114 |
 
 ## §D Appendix: Feature Taxonomy
 
@@ -50,14 +52,13 @@ const REGISTER = [
 ].join("\n");
 
 const MATRIX = [
-  "| Goal | Group | Scenario |",
+  "| Function | Group | Scenario |",
   "|---|---|---|",
-  "| Free first, privacy always | 1 | L1 |",
-  "| Upgrade path | 2 | L6 |",
-  "| Provider intelligence | 2 | L6 |",
-  "| Truth by iteration | 3 | L1 |",
-  "| Writing pipeline | 7 | L9 |",
-  "| Knowledge persistence | 4 | L4 |",
+  "| Direction | 1 | L1 |",
+  "| Collection | 1 | L1 |",
+  "| Processing and exploitation | 1 | L1 |",
+  "| Analysis and production | 3 | L1 |",
+  "| Dissemination | 7 | L9 |",
 ].join("\n");
 
 function base(overrides: Partial<UserSurfaceInput> = {}): UserSurfaceInput {
@@ -104,10 +105,28 @@ describe("configPath / registerPaths", () => {
   });
 });
 
-describe("specGoals", () => {
-  it("returns the six §1 titles without trailing periods", () => {
-    expect(specGoals(SPEC)).toHaveLength(6);
-    expect(specGoals(SPEC)[0]).toBe("Free first, privacy always");
+describe("specFunctions", () => {
+  it("returns the §1 table rows in order and detects the Evidence column", () => {
+    const parsed = specFunctions(SPEC);
+    expect(parsed.functions).toEqual([
+      "Direction",
+      "Collection",
+      "Processing and exploitation",
+      "Analysis and production",
+      "Dissemination",
+    ]);
+    expect(parsed.hasEvidenceColumn).toBe(true);
+  });
+
+  it("reports an absent table rather than falling back to a list", () => {
+    expect(specFunctions("# nothing")).toEqual({ functions: [], hasEvidenceColumn: false });
+    expect(specFunctions("## §1 Mission and Capability Model\n\n1. **Direction.** No table."))
+      .toEqual({ functions: [], hasEvidenceColumn: false });
+  });
+
+  it("detects a table without an Evidence column", () => {
+    const noEvidence = SPEC.replace("| Function | Obligation | Evidence |", "| Function | Obligation | Gate |");
+    expect(specFunctions(noEvidence).hasEvidenceColumn).toBe(false);
   });
 });
 
@@ -144,13 +163,18 @@ describe("checkUserSurface", () => {
       .toContain("register-unknown-path");
   });
 
-  it("flags a goal missing from the matrix", () => {
-    expect(codes(base({ goalMatrix: "| Free first, privacy always |" }))).toContain("goal-missing");
+  it("flags a function missing from the matrix", () => {
+    expect(codes(base({ goalMatrix: "| Direction |" }))).toContain("function-missing");
   });
 
-  it("flags an unparseable taxonomy and goal set", () => {
+  it("flags a table with no Evidence column", () => {
+    const noEvidence = SPEC.replace("| Function | Obligation | Evidence |", "| Function | Obligation | Gate |");
+    expect(codes(base({ specText: noEvidence }))).toContain("functions-no-evidence");
+  });
+
+  it("flags an unparseable taxonomy and function set", () => {
     expect(codes(base({ specText: "# nothing" }))).toEqual(
-      expect.arrayContaining(["taxonomy-missing", "goals-unparsed"]),
+      expect.arrayContaining(["taxonomy-missing", "functions-unparsed"]),
     );
   });
 });

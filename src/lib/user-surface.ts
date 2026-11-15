@@ -2,7 +2,7 @@
 // user-surface.ts — pure checks that bind the shipped user surface to the
 // evidence that is supposed to cover it: personas to §D feature groups,
 // personas to harness scenarios, the defaults register to the live config, and
-// the §1 goals to the goal-evidence matrix.
+// the §1 intelligence-process functions to the goal-evidence matrix.
 //
 // The functions take parsed inputs so the gate and its unit tests share one
 // implementation and no check depends on the repository being present.
@@ -82,16 +82,37 @@ export function registerPaths(text: string): string[] {
     .sort();
 }
 
-/** §1 goal titles, in order, without the trailing period. */
-export function specGoals(specText: string): string[] {
+export interface SpecFunctions {
+  /** §1 function names, in table order, without markdown emphasis. */
+  functions: string[];
+  /** Whether the §1 table declares an Evidence column. */
+  hasEvidenceColumn: boolean;
+}
+
+/**
+ * Parse the §1 intelligence-process table: the first cell of every body row,
+ * plus whether the header declares an Evidence column. A table parser replaces
+ * the former numbered-list parser so §1 can be a decision table; the structural
+ * checks in `checkUserSurface` replace the row-count guard the list parser had.
+ */
+export function specFunctions(specText: string): SpecFunctions {
   const start = specText.indexOf("## §1 Mission and Capability Model");
-  if (start === -1) return [];
+  if (start === -1) return { functions: [], hasEvidenceColumn: false };
   const rest = specText.slice(start);
   const next = /^## /m.exec(rest.slice(4));
   const section = next ? rest.slice(0, 4 + next.index) : rest;
-  return [...section.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)].map((m) =>
-    m[1]!.replace(/\.$/, ""),
-  );
+  const lines = section.split("\n");
+  const headerIndex = lines.findIndex((line) => /^\|\s*Function\s*\|/i.test(line));
+  if (headerIndex === -1) return { functions: [], hasEvidenceColumn: false };
+  const header = lines[headerIndex]!.split("|").map((cell) => cell.trim());
+  const hasEvidenceColumn = header.some((cell) => /^evidence$/i.test(cell));
+  const functions: string[] = [];
+  for (const line of lines.slice(headerIndex + 2)) {
+    if (!line.trim().startsWith("|")) break;
+    const name = (line.split("|")[1] ?? "").replace(/\*\*/g, "").trim();
+    if (name) functions.push(name);
+  }
+  return { functions, hasEvidenceColumn };
 }
 
 /** Every second-level key under the declared register sections. */
@@ -122,16 +143,22 @@ export function checkUserSurface(input: UserSurfaceInput): Finding[] {
   const findings: Finding[] = [];
   const taxonomy = parseFeatureTaxonomy(input.specText);
   const groupNumbers = new Set(taxonomy.map((row) => row.group));
-  const goals = specGoals(input.specText);
+  const spec = specFunctions(input.specText);
   const tokens = registerPaths(input.defaultsRegister);
 
   if (taxonomy.length === 0) {
     findings.push({ code: "taxonomy-missing", message: "§D feature taxonomy could not be parsed" });
   }
-  if (goals.length !== 6) {
+  if (spec.functions.length < 5) {
     findings.push({
-      code: "goals-unparsed",
-      message: `§1 yielded ${goals.length} goals; expected 6`,
+      code: "functions-unparsed",
+      message: `§1 yielded ${spec.functions.length} functions; expected at least 5`,
+    });
+  }
+  if (spec.functions.length > 0 && !spec.hasEvidenceColumn) {
+    findings.push({
+      code: "functions-no-evidence",
+      message: "§1 function table has no Evidence column",
     });
   }
 
@@ -203,11 +230,11 @@ export function checkUserSurface(input: UserSurfaceInput): Finding[] {
     }
   }
 
-  for (const goal of goals) {
-    if (!input.goalMatrix.includes(goal)) {
+  for (const fn of spec.functions) {
+    if (!input.goalMatrix.includes(fn)) {
       findings.push({
-        code: "goal-missing",
-        message: `goal "${goal}" has no row in the goal-evidence matrix`,
+        code: "function-missing",
+        message: `§1 function "${fn}" has no row in the goal-evidence matrix`,
       });
     }
   }

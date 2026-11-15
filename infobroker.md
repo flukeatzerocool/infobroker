@@ -22,24 +22,38 @@
 
 ## §1 Mission and Capability Model
 
-Infobroker is a configurable, multi-provider MCP server that wraps public web
-search, structured knowledge, scholarly literature, and content-extraction
-APIs behind a unified tool surface. Its design goals:
+Infobroker implements the intelligence cycle as a tool: a configurable,
+multi-provider MCP server that wraps public web search, reference data,
+scholarly literature, code, question-and-answer, news, filings, and
+macroeconomic APIs behind a unified tool surface. Every request traverses five
+functions, and the knowledge base closes the circuit so a finished product
+becomes the starting requirement of the next task. The functions are
+re-entrant rather than sequential: a corroboration gap re-enters collection,
+and a failed fetch re-enters direction.
 
-1. **Free first, privacy always.** Zero-config default uses only free, no-auth-required providers that respect user privacy.
-2. **Upgrade path.** Optional API-keyed providers (Exa, Tavily, Yep) and a self-hosted instance (SearXNG) for higher throughput and specialized queries.
-3. **Provider intelligence.** The server recommends the best provider for a task, considering capability, quota, and latency.
-4. **Truth by iteration.** A `verify_claims` tool runs multi-pass cross-source verification to surface agreements, contradictions, and gaps.
-5. **Writing pipeline.** The server provides raw research materials; bundled client skills handle writing, summarization, proofreading, and translation, while the orchestrator routes requests to research workflow shapes including fact-checking.
-6. **Knowledge persistence.** Research results are indexed in a local knowledge base so subsequent queries can retrieve prior findings without repeating searches. The knowledge base is derivative — the server operates normally without it.
+| Function | Obligation | Evidence |
+|---|---|---|
+| **Direction** | Turn the consumer's need into an executable requirement — intent, sources, language, depth, shape, audience and handling — disclose what was inferred, and offer the choice instead of searching when two materially different requirements are plausible. | §7 dispatch; REQ-020a, REQ-020b, REQ-020c, REQ-020e, REQ-124, REQ-127, REQ-128 |
+| **Collection** | Reach the right sources across search, reference, scholarly, code, Q&A, news, filings and macro data, and degrade rather than fail when a provider is unavailable. | §A provider catalog; REQ-020h, REQ-031, REQ-031a |
+| **Processing and exploitation** | Turn raw provider responses into citable evidence: source identity and modality, dates, snapshots, deduplication, truncation and quota accounting. | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122 |
+| **Analysis and production** | Corroborate, attribute, calibrate confidence and likelihood, and state alternatives and gaps — judgments and graded claims, not link lists. | REQ-026a, REQ-123, REQ-115 |
+| **Dissemination** | Deliver manifest-bearing reports that pass the quality gate, archive with a receipt, and stay recallable and re-checkable. | REQ-114, REQ-116, REQ-119, REQ-110 |
 
-The knowledge base is a local caching layer — it does not alter the core
-intelligence cycle. When the KB is configured, the server checks the cache
-before collection (KB-First Sufficiency, REQ-076); when it is not, the
-server operates as a pure retrieval pipeline. Both paths satisfy the North
-Star contract: ask, and it finds out.
+The knowledge base is the loop's memory, not a side cache: a disseminated
+product is stored with its claims and source hashes, the next direction step
+recalls it before collecting anything new (KB-First Sufficiency, REQ-076), and
+monitoring compares against it later (REQ-117, REQ-125). With no knowledge base
+the pipeline still runs end to end, statelessly; the knowledge base is an
+accelerator and a memory, never a prerequisite.
+
+Constraints hold across every function: zero-config operation answers without an
+API key; one connection is one configuration; API keys never appear in tool
+output, logs or errors; and every tool input is validated server-side before any
+outbound request (SR-001–SR-010).
 
 ### North Star
+
+This subsection is framing, not contract; the normative statements live in §4.
 
 Infobroker is the Bothan Spynet as a tool. Like the Spynet's decentralized
 cells trading intelligence across the galaxy, Infobroker queries independent
@@ -47,11 +61,12 @@ provider backends — each with its own sources, specialties, and limits —
 through a single, impartial interface. It doesn't collect secrets, cultivate
 sources, or pick sides. It retrieves, normalizes, and delivers.
 
-In intelligence-cycle terms: the user's query is direction; provider
-backends are collection; the normalizer, rate-limiter, and quota tracker are
-processing; and the response contract is dissemination. Infobroker automates
-collection and processing so the user only supplies direction and receives
-dissemination — ask, and it finds out.
+In intelligence-cycle terms: the requirement is direction; provider backends are
+collection; the normalizer, rate limiter and quota tracker are processing and
+exploitation; corroboration and calibration are analysis and production; and the
+report is dissemination. The knowledge base carries the feedback that closes the
+circuit, so the next question starts from what the last answer established —
+ask, and it finds out.
 
 Infobroker is not a chatbot. It is a search backend. It complements (not replaces)
 built-in client `websearch`/`webfetch` tools — the bundled client instructions
