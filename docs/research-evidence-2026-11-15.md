@@ -56,3 +56,25 @@ Both failures are shape-selection divergences, not execution or evidence defects
 Everything else passed: every scenario engaged the MCP, `verify_claims` ran on the contested cases, and sampled citations were reachable apart from site-side blocks and one transient error. Two harness defects were fixed before the batches could produce usable rows (`7de2192`, `6bf4aed`).
 
 The shape divergence is filed on `ROADMAP.md` rather than treated as run noise: it repeated across two independent personas.
+
+## Repo-mode skills target (2026-11-15)
+
+`--mcp=repo` overrode the MCP server but not the client's `skills` list, so a
+repo-mode run exercised whatever the ambient config named — on this machine the
+deployed copy. The run project now declares `<repo>/skills` and refuses to start
+when the captured `opencode debug config` does not report that entry.
+
+Recorded run: `./scripts/test-research.sh --mcp=repo --only=S2`
+(port 39423, run dir `$TMPDIR/infobroker/research-tests/run-20261115-123216`).
+
+- Suite header: `project layer declares /home/fluke/Infobroker/skills`; S2
+  passed 1/1.
+- `mcp-target.txt`: `repo:<run>/mcp-project` and
+  `skills:/home/fluke/Infobroker/skills`.
+- Load proof: an untracked `skills/zz-repo-mode-probe/SKILL.md` (repo-only, so
+  absent from the deployed copy) was loaded in the retained run project and the
+  reply was `PROBE-7F3A`. Transcript: `run-20261115-123216/mcp-project` session
+  log in the same run directory; the probe was removed afterwards.
+
+The assertion proves configuration, not cross-layer precedence when two roots
+define the same skill name (D-129).

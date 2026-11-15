@@ -12,6 +12,13 @@ By default it runs against the configured deployment (`--mcp=ambient`). Pass
 config layer, which is the mode to use when the question is "did the current
 tree change this?" rather than "is the installed server healthy?".
 
+Repo mode also declares this working tree's `skills/` in the run project and
+refuses to start when `opencode debug config` does not report that entry. That
+matters because skills are a client artifact: without the declaration the run
+would silently exercise whatever skills the ambient client config names, which
+on a machine that also has an installed copy is not this tree. The suite prints
+the target and records it as `skills:<path>` in the run's `mcp-target.txt`.
+
 ## Scenarios
 
 `manifest.json` is a single array of scenario objects, one per run. Each

@@ -26,6 +26,18 @@
   `ROADMAP.md`; none changed the conclusion that the routing fix is correct,
   which a run with this tree's skills loaded confirmed.
 
+- Repo-mode runs now prove which skills they loaded. The run project declares
+  `skills: [<repo>/skills]`, and a new `assert-skills` check reads the captured
+  `opencode debug config`, finds the project layer by path, and refuses the run
+  (exit 1, named diagnostic) when that layer does not carry the working tree.
+  The suite prints the target and records it in `mcp-target.txt`. Verified live:
+  an S2 run passed with `project layer declares /home/fluke/Infobroker/skills`,
+  and a repo-only probe skill loaded in the retained run project and answered
+  `PROBE-7F3A` — the deployed copy does not have it. The assertion proves
+  configuration, not cross-layer precedence when two roots define the same skill
+  name (D-129). Contributor-facing only: `--mcp=repo` is not a user feature and
+  `scripts/` is excluded from the published package.
+
 - The research-suite matrix has been run in repo mode: 13 scenarios across
   every workflow shape, 11 pass, 2 shape-selection divergences recorded rather
   than chased green. `docs/research-evidence-2026-11-15.md` carries the method

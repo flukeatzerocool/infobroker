@@ -38,6 +38,11 @@ for arg in "$@"; do
 done
 
 require_tools opencode node
+if [[ "$MCP_MODE" == "repo" ]]; then
+  # The assertion module runs from the working tree, not from PATH.
+  [[ -x "$PROJECT_DIR/node_modules/.bin/tsx" ]] \
+    || die "Pre-flight failed: missing $PROJECT_DIR/node_modules/.bin/tsx (run npm install)"
+fi
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RUN_DIR="${TMPDIR:-/tmp}/infobroker/research-tests/run-${TIMESTAMP}"
@@ -84,6 +89,11 @@ if [[ "$MCP_MODE" == "repo" ]]; then
     const [repo, out, layer] = process.argv.slice(1);
     const cfg = {
       "$schema": "https://opencode.ai/config.json",
+      // The MCP override alone is not enough: the client also supplies skills,
+      // and the ambient list points wherever Infobroker was installed.
+      // Declaring the working-tree skills is what makes a repo-mode run prove
+      // this checkout, not an installed copy.
+      skills: [path.join(repo, "skills")],
       mcp: {
         infobroker: {
           type: "local",
@@ -98,8 +108,14 @@ if [[ "$MCP_MODE" == "repo" ]]; then
     fs.writeFileSync(path.join(out, "opencode.json"), JSON.stringify(cfg, null, 2) + "\n");
   ' "$PROJECT_DIR" "$MCP_PROJECT" "$RUN_DIR/config.local.json"
   ensure_opencode_serve_at "$RUN_DIR" "opencode-serve.log" "" "$MCP_PROJECT"
-  ( cd "$MCP_PROJECT" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" || true
+  ( cd "$MCP_PROJECT" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" \
+    || die "opencode debug config failed in $MCP_PROJECT (see $RUN_DIR/openruns.log)"
+  skills_detail=$("$PROJECT_DIR/node_modules/.bin/tsx" "$SCRIPT_DIR/test-research/assert-skills.ts" \
+    "$RUN_DIR/debug-config.json" "$MCP_PROJECT/opencode.json" "$PROJECT_DIR/skills") \
+    || die "Repo mode refused: the run project does not load this tree's skills (see $RUN_DIR/debug-config.json)"
+  info "$skills_detail"
   printf 'repo:%s\n' "$MCP_PROJECT" > "$RUN_DIR/mcp-target.txt"
+  printf 'skills:%s\n' "$PROJECT_DIR/skills" >> "$RUN_DIR/mcp-target.txt"
 else
   ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
   ( cd "$PWD" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true

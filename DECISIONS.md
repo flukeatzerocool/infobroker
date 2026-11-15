@@ -2561,6 +2561,35 @@ own grading target cannot test classification); fixing only `decision-tree.md`
 (SKILL.md Phase 0 is what the agent reads first and what REQ-051 is checked
 against); and leaving REQ-051 unchanged under a `## Spec Waivers` row.
 
+### D-129: Repo Mode Asserts the Skills Layer, Not Its Precedence (2026-11-15)
+
+`test-research.sh --mcp=repo` overrode the MCP server and the Infobroker config
+layer but not the client's `skills` list, so a repo-mode run exercised whatever
+the ambient config named — on the maintainer machine, the deployed copy — and a
+skill change could pass or fail without ever being loaded. The run project now
+declares `<repo>/skills`, and `scripts/test-research/assert-skills.ts` reads the
+captured `opencode debug config`, identifies the project layer by path, and
+refuses the run when that layer does not list the working tree. It is a
+non-`lib/` script, so `check-script-discipline` requires the shebang and header;
+it declares role **gate** although its invocation point is the research suite,
+not a `package.json` script.
+
+The check asserts configuration, not resolution. Which layer wins when two skill
+roots define the same name is undocumented, `/api/skill` returned an empty list
+without a session, and `OPENCODE_CONFIG` did not remove the global document
+layer. A collision between an ambient skill and a bundled one is therefore
+invisible to the assertion; the live probe (a repo-only skill answering
+`PROBE-7F3A`) is what distinguishes "configured" from "loaded", and it stays
+advisory. Rejected: shadowing the ambient layer through `OPENCODE_CONFIG` (it
+does not remove the layer) and editing a user's global config (outside the
+repository's surface).
+
+Scope: the harness drives `opencode run --server`, so it is opencode-specific by
+design; skills are client artifacts and no server response or other-client
+contract changes. `package.json` `files` ships `dist`, `bin`, `config.json`,
+`skills`, `instructions` and `check-pack` denies `scripts/`, so this has no
+npm-user surface and does not affect a single installed copy.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a
