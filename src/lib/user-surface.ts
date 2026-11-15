@@ -8,16 +8,54 @@
 // implementation and no check depends on the repository being present.
 
 import { parseFeatureTaxonomy } from "./feature-taxonomy.js";
+import { REPORT_AUDIENCES } from "./direction.js";
+
+/** The five §1 intelligence-process functions, as spec slugs. */
+export const DIRECTION_STAGES = [
+  "direction",
+  "collection",
+  "processing",
+  "analysis",
+  "dissemination",
+] as const;
+
+/**
+ * The workflow shapes declared in `skills/infobroker/references/workflows.md`,
+ * slugified. A shape declared there and covered by no scenario is a declared
+ * intent with no evidence (REQ-131a).
+ */
+export const DECLARED_SHAPES = [
+  "research-write",
+  "fact-check",
+  "deep-dive",
+  "gated-analysis",
+  "competitive-evaluation",
+  "literature-review",
+  "monitoring-delta",
+  "adversarial-red-team",
+  "vetting-due-diligence",
+] as const;
+
+/** Fixture shape names that name the same declared shape. */
+export const SHAPE_ALIASES: Readonly<Record<string, string>> = {
+  monitoring: "monitoring-delta",
+  "red-team": "adversarial-red-team",
+  vetting: "vetting-due-diligence",
+};
 
 export interface Persona {
   id: string;
   label?: string;
+  audience?: string;
+  intent?: string;
+  stage_span?: string[];
   feature_groups?: number[];
 }
 
 export interface Scenario {
   id: string;
   persona?: string;
+  shape?: string;
 }
 
 export interface UserSurfaceInput {
@@ -172,6 +210,29 @@ export function checkUserSurface(input: UserSurfaceInput): Finding[] {
       findings.push({ code: "persona-duplicate", message: `persona \`${persona.id}\` is declared twice` });
     }
     personaIds.add(persona.id);
+    // REQ-131a: a persona's audience comes from the report quality standard's
+    // list, and its intent from the declared workflow shapes. One vocabulary,
+    // not a third free-text field.
+    if (persona.audience !== undefined && !(REPORT_AUDIENCES as readonly string[]).includes(persona.audience)) {
+      findings.push({
+        code: "persona-audience-unknown",
+        message: `persona \`${persona.id}\` names audience \`${persona.audience}\`, which is not in the report quality standard`,
+      });
+    }
+    if (persona.intent !== undefined && !(DECLARED_SHAPES as readonly string[]).includes(persona.intent)) {
+      findings.push({
+        code: "persona-intent-unknown",
+        message: `persona \`${persona.id}\` names intent \`${persona.intent}\`, which is not a declared workflow shape`,
+      });
+    }
+    for (const stage of persona.stage_span ?? []) {
+      if (!(DIRECTION_STAGES as readonly string[]).includes(stage)) {
+        findings.push({
+          code: "persona-stage-unknown",
+          message: `persona \`${persona.id}\` names stage \`${stage}\`, which is not a §1 function`,
+        });
+      }
+    }
     for (const group of persona.feature_groups ?? []) {
       if (!groupNumbers.has(group)) {
         findings.push({
@@ -209,6 +270,24 @@ export function checkUserSurface(input: UserSurfaceInput): Finding[] {
       findings.push({
         code: "scenario-persona-unknown",
         message: `scenario \`${scenario.id}\` names persona \`${scenario.persona}\`, which is not declared`,
+      });
+    }
+  }
+
+  // REQ-131a: every declared workflow shape is exercised by at least one
+  // scenario in either harness. Fixture shape names are normalized through the
+  // alias table so the two vocabularies cannot drift apart silently.
+  const coveredShapes = new Set(
+    [...input.labScenarios, ...input.researchScenarios]
+      .map((scenario) => scenario.shape)
+      .filter((shape): shape is string => typeof shape === "string")
+      .map((shape) => SHAPE_ALIASES[shape] ?? shape)
+  );
+  for (const shape of DECLARED_SHAPES) {
+    if (!coveredShapes.has(shape)) {
+      findings.push({
+        code: "intent-uncovered",
+        message: `declared workflow shape \`${shape}\` has no scenario in either harness`,
       });
     }
   }

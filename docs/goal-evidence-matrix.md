@@ -48,8 +48,8 @@ or the increment record. The checklist is a review gate, not a new REQ.
 
 1. **Function.** Which §1 function does this serve — direction, collection,
    processing, analysis, or dissemination? If none, the change is out of scope.
-2. **Audience.** Which §D group and persona consume it? If none, it is
-   maintainer-only and must say so.
+2. **Audience.** Which §D group, audience value, and persona consume it? If
+   none, it is maintainer-only and must say so.
 3. **Default.** What happens on shipped defaults with no keys, no KB, and no
    user layer? If the answer is "an error", the remediation must be named.
 4. **Error and notice text.** What does the user read when it fails or

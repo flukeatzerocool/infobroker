@@ -9,6 +9,7 @@ import {
   registerPaths,
   registerableConfigPaths,
   specFunctions,
+  DECLARED_SHAPES,
   type UserSurfaceInput,
 } from "./user-surface.js";
 
@@ -68,7 +69,13 @@ function base(overrides: Partial<UserSurfaceInput> = {}): UserSurfaceInput {
     personas: [
       { id: "a", feature_groups: [1, 2, 3, 4, 5, 7] },
     ],
-    labScenarios: [{ id: "L1", persona: "a" }],
+    // One scenario per declared shape keeps the intent-coverage check quiet in
+    // the cases that are not about it.
+    labScenarios: DECLARED_SHAPES.map((shape, index) => ({
+      id: `L${index + 1}`,
+      persona: "a",
+      shape,
+    })),
     researchScenarios: [],
     defaultsRegister: REGISTER,
     goalMatrix: MATRIX,
@@ -165,6 +172,35 @@ describe("checkUserSurface", () => {
 
   it("flags a function missing from the matrix", () => {
     expect(codes(base({ goalMatrix: "| Direction |" }))).toContain("function-missing");
+  });
+
+  it("flags an audience outside the report quality standard", () => {
+    expect(codes(base({ personas: [{ id: "a", audience: "academic", feature_groups: [1, 2, 3, 4, 5, 7] }] })))
+      .toContain("persona-audience-unknown");
+  });
+
+  it("flags an intent that is not a declared workflow shape", () => {
+    expect(codes(base({ personas: [{ id: "a", intent: "implementation-lookup", feature_groups: [1, 2, 3, 4, 5, 7] }] })))
+      .toContain("persona-intent-unknown");
+  });
+
+  it("flags a stage that is not a §1 function", () => {
+    expect(codes(base({ personas: [{ id: "a", stage_span: ["reporting"], feature_groups: [1, 2, 3, 4, 5, 7] }] })))
+      .toContain("persona-stage-unknown");
+  });
+
+  it("flags a declared shape with no scenario", () => {
+    const covered = base();
+    const labScenarios = covered.labScenarios.filter((scenario) => scenario.shape !== "fact-check");
+    expect(codes(base({ labScenarios }))).toContain("intent-uncovered");
+  });
+
+  it("accepts a fixture alias as coverage of its declared shape", () => {
+    const covered = base();
+    const labScenarios = covered.labScenarios
+      .filter((scenario) => scenario.shape !== "monitoring-delta")
+      .concat([{ id: "L99", persona: "a", shape: "monitoring" }]);
+    expect(codes(base({ labScenarios }))).not.toContain("intent-uncovered");
   });
 
   it("flags a table with no Evidence column", () => {

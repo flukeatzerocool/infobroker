@@ -2,6 +2,17 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The evaluation harness now speaks the same vocabulary as the spec.
+  `debate-club/personas.json` replaces its free-text `audience` field — which
+  held *intents* ("literature review", "fact-check") under an audience name —
+  with an `audience` drawn from the report quality standard's seven values, an
+  optional `intent` drawn from the nine declared workflow shapes, and a
+  `stage_span` over the five §1 functions. `check-user-surface` gains three
+  checks (unknown audience, unknown intent, unknown stage) and a coverage rule:
+  a workflow shape declared in `workflows.md` with no scenario in either harness
+  now fails the gate. Fixture shape names normalize through one documented alias
+  table, so `monitoring` and `monitoring-delta` cannot drift apart unnoticed.
+
 - `verify_claims` now completes the analysis stage. Every judgment carries
   `alternatives` (the competing assertions of a contested claim) and `gaps` (the
   named conditions limiting confidence: no attributed source, fewer than two
