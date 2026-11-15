@@ -435,6 +435,29 @@ function getGaps(
     .map(([topic]) => topic);
 }
 
+/**
+ * REQ-132: analysis-stage projection. Every judgment states the alternatives it
+ * weighed and the gaps that limit it, with an explicit empty array when there
+ * are none, so a caller can tell "none found" from "not reported". `likelihood`
+ * is deliberately absent: REQ-115 keeps it a report-manifest field, distinct
+ * from the confidence in this judgment.
+ */
+export function annotateAnalysis(
+  findings: CorroborationFinding[],
+  confidenceThreshold: number
+): CorroborationFinding[] {
+  return findings.map((finding) => {
+    const gaps: string[] = [];
+    if (finding.sources.length === 0) gaps.push("no attributed source");
+    if ((finding.family_count ?? 0) < 2) gaps.push("fewer than two independent source families");
+    if (finding.confidence < confidenceThreshold) {
+      gaps.push("confidence below the confirmation threshold");
+    }
+    const alternatives = finding.verdict === "contested" ? [...(finding.perspectives ?? [])] : [];
+    return { ...finding, alternatives, gaps };
+  });
+}
+
 function deriveRefinedQuery(topic: string, originalQuery: string): string {
   const words = topic.split(/\s+/).filter((w) => w.length > 3);
   const keywords = words.slice(0, 4).join(" ");
@@ -869,7 +892,6 @@ export async function corroborate(
     condensed.filter((f) => f.sources.length > 0),
     confidenceThreshold
   );
-
   // REQ-026c/REQ-122: preservation runs as one bounded wave. Archiving is the
   // only unbounded network cost on the response path, so both waves share one
   // abortable deadline and overlap each other; snapshot storage itself is a
@@ -887,7 +909,7 @@ export async function corroborate(
   }
 
   return {
-    findings: condensed,
+    findings: annotateAnalysis(condensed, confidenceThreshold),
     agreement_map: agreementMap,
     synthesis,
     iteration_count: iteration,

@@ -2,6 +2,24 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- `verify_claims` now completes the analysis stage. Every judgment carries
+  `alternatives` (the competing assertions of a contested claim) and `gaps` (the
+  named conditions limiting confidence: no attributed source, fewer than two
+  independent families, confidence under the threshold), present and empty rather
+  than omitted so a caller can tell "none found" from "not reported" (REQ-132).
+  Likelihood stays where REQ-115 put it — a report-manifest field distinct from
+  this judgment's confidence — because a per-claim likelihood would either
+  duplicate confidence or assert a forecast the tool does not make.
+
+- §D repartitions to ten groups: "Direction & Retrieval", "Corroboration &
+  Analysis", "State, Resilience & Operations", "Dissemination & Report Contract"
+  (server-side report contract), and the new "Client Skills" group. Analysis
+  REQs (REQ-020f, REQ-127, REQ-088) move to the analysis home and the whole of
+  §4.4 resilience moves together, so "harden core retrieval" no longer means
+  "half a rate limiter". The report manifest's methodology, assumptions,
+  alternatives and gaps fields become mandatory for every report, and the change
+  record notes why this does not reopen D-109. (REQ-114; REQ-078.)
+
 - `search_web` now discloses the requirement it executed. A `direction` block in
   every successful response — including knowledge-base recall and empty results —
   reports the task type and whether it was supplied or inferred, the reading

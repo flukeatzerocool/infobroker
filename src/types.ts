@@ -321,6 +321,10 @@ export interface CorroborationFinding {
   source_types?: Record<string, number>;
   /** Number of independent source families (REQ-121). */
   family_count?: number;
+  /** Competing assertions where sources disagree; empty when none (REQ-132). */
+  alternatives?: string[];
+  /** Conditions that limit confidence; empty when none (REQ-132). */
+  gaps?: string[];
 }
 
 /**

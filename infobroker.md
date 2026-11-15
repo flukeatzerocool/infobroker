@@ -196,7 +196,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–131, `131a`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -390,6 +390,9 @@ WHEN `search_web` receives an analysis request, the tool SHALL return topics, en
 **REQ-131a — Audience and Intent Vocabulary**
 The server SHALL accept an audience only from the audience list defined by the report quality standard (REQ-114) and SHALL reject any other value with a corrective error naming the accepted values. An accepted audience SHALL be echoed in the direction block and SHALL be recorded unchanged in the report manifest when a report is produced. An omitted audience SHALL be reported as absent rather than defaulted. The server SHALL NOT maintain a second audience vocabulary. _Check:_ G1.
 
+**REQ-132 — Analysis Output**
+`verify_claims` SHALL return each judgment with its claim, verdict, confidence, supporting source spans, contradicting evidence, the alternatives it weighed, and the gaps that limit it. A field with nothing to report SHALL be present and empty rather than omitted, so a caller can distinguish "none found" from "not reported". Verdicts and confidence SHALL use the values defined by REQ-116 and REQ-115. Likelihood SHALL remain a report-manifest field (REQ-114, REQ-115) and SHALL NOT be emitted per judgment. Every gap SHALL name the condition that limits confidence. _Check:_ G1.
+
 **REQ-028 — `search_web` deep reading**
 WHEN `search_web` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. Each ranked passage SHALL include a span anchor identifying the passage's position in the source. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
 
@@ -504,7 +507,7 @@ Every tool reference in the client routing surface SHALL resolve to a registered
 The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The skill SHALL record the assumptions behind each finding and at least one alternative considered. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
 
 **REQ-114 — Report Manifest Contract**
-Every generated report SHALL carry a `report-manifest` block declaring its shape and claims, and MAY declare audience, target length, language, methodology, assumptions, alternatives, gaps, revision, supersedes, and per-claim verdict, confidence, likelihood, and source ids. The manifest SHALL use the confidence, likelihood, and verdict values defined by the report quality standard. The manifest SHALL be the payload archived in the report receipt so a stored report and its claims remain machine-checkable. The block SHALL appear before the first report section. A gate SHALL reject a manifest that omits its shape or claims, that names a shape or audience value outside the report quality standard, or that places the block after the first report section. _Check:_ G3.
+Every generated report SHALL carry a `report-manifest` block declaring its shape, claims, methodology, assumptions, alternatives, and gaps, and MAY declare audience, target length, language, revision, supersedes, and per-claim verdict, confidence, likelihood, and source ids. The manifest SHALL use the confidence, likelihood, and verdict values defined by the report quality standard. The manifest SHALL be the payload archived in the report receipt so a stored report and its claims remain machine-checkable. The block SHALL appear before the first report section. A gate SHALL reject a manifest that omits its shape or claims, that names a shape or audience value outside the report quality standard, or that places the block after the first report section. _Check:_ G3.
 
 **REQ-115 — Confidence Model**
 Reports and gated analysis SHALL use one confidence scale with three labels, one calibrated likelihood lexicon, and one source-grade scheme. Confidence SHALL distinguish the strength of a judgment from the likelihood of the judged event. Source reliability and information credibility SHALL be graded independently. The bundled references SHALL define the label bands, likelihood terms, and source grades, and the report and analysis artifacts SHALL cite that definition rather than restating a divergent scale. _Check:_ G3.
@@ -1325,6 +1328,7 @@ verdict is preserved (REQ-026f).
 | REQ-127 | `search_web` analysis aids | 4.3 | G0, G1 |
 | REQ-131 | Direction | 4.3 | G1 |
 | REQ-131a | Audience and Intent Vocabulary | 4.3 | G1 |
+| REQ-132 | Analysis Output | 4.3 | G1 |
 | REQ-124 | `search_web` query operators and language | 4.3 | G1 |
 | REQ-128 | Multilingual text handling and collection | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
@@ -1907,32 +1911,35 @@ the table.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020f, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-127, REQ-128, REQ-131, REQ-131a, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-030, REQ-031, REQ-031a, REQ-032, REQ-035, REQ-038, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
-| 3 | Corroboration | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-121, REQ-122, REQ-123 | G0, G1 |
+| 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-121, REQ-122, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
-| 5 | State & Operations | `reload_config` | REQ-033, REQ-034, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
+| 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
-| 7 | Client Artifacts | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-088, REQ-107, REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G1, G3 |
+| 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G1, G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
+| 10 | Client Skills | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-107 | G3 |
 
 Notes:
 
 - **Group 6** groups the output and error envelope contracts (REQ-001, REQ-002)
   that bind to every tool; the per-tool behavior REQs live in their thematic
   group (1–5).
-- **Group 7** and **Group 8** are build-and-spec concerns with no runtime tool
-  surface; they are verified by file presence and by the G3 drift detector
-  rather than by live tool calls.
+- **Group 7** and **Group 10** are build concerns with no runtime tool surface:
+  Group 7 is the server-side report contract (REQ-114–126), Group 10 is the
+  client skills that write the prose (REQ-050–054, REQ-107). Group 7 is verified
+  by the report fixtures and the G3 drift detector; Group 10 by file presence.
+- **Group 8** is a maintainer concern with no runtime tool surface, verified by
+  the G3 drift detector rather than by live tool calls.
 - The README documents Groups 1–5 as the user-facing feature tour, surfaces
-  Group 7 (Client Artifacts) in its Skills section, and documents Group 9
-  (Security & Content Safety) in its security section; Group 8 is a
-  maintainer concern surfaced only in this spec.
+  Groups 7 and 10 in its report and Skills sections, and documents Group 9
+  (Security & Content Safety) in its security section; Group 8 is a maintainer
+  concern surfaced only in this spec.
 - A group whose Tools cell begins with `(all 7 tools` or reads `(no tools)`
   restates tools as a cross-cutting concern rather than claiming a primary
   home; the normative requirement is in REQ-078.
-
 ---
 
 ## §E Appendix: Security Model

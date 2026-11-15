@@ -15,13 +15,13 @@ const SPEC_TAXONOMY = `## §D Appendix: Feature Taxonomy
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Core Retrieval | \`search_web\`, \`fetch_page\`, \`get_citations\` | REQ-003 | G0, G1 |
+| 1 | Direction & Retrieval | \`search_web\`, \`fetch_page\`, \`get_citations\` | REQ-003 | G0, G1 |
 | 2 | Provider Intelligence | \`inspect_providers\` | REQ-010 | G0, G1 |
 | 3 | Corroboration | \`verify_claims\` | REQ-026 | G0, G1 |
 | 4 | Knowledge Base | \`manage_kb\` | REQ-060 | G0, G1 |
 | 5 | State & Operations | \`reload_config\` | REQ-033 | G0, G1 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050 | G3 |
+| 7 | Dissemination & Report Contract | (no tools) | REQ-050 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055 | G3 |
 `;
 
@@ -91,7 +91,7 @@ describe("reconcileReadmeFeatures", () => {
         expect.stringContaining("3 'Corroboration'"),
         expect.stringContaining("4 'Knowledge Base'"),
         expect.stringContaining("5 'State & Operations'"),
-        expect.stringContaining("7 'Client Artifacts'"),
+        expect.stringContaining("7 'Dissemination & Report Contract'"),
       ]),
     );
   });
@@ -138,7 +138,7 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
     expect(gates.every((g) => group(2).gates.includes(g))).toBe(true);
     const spec = mutate("| REQ-010, REQ-011, REQ-013,", "| REQ-003, REQ-010, REQ-011, REQ-013,");
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 1 'Core Retrieval': REQ-003 also appears in group 2 — exactly one home required",
+      "Feature taxonomy (§D) group 1 'Direction & Retrieval': REQ-003 also appears in group 2 — exactly one home required",
     ]);
   });
 
@@ -148,7 +148,7 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
       "`search_web`, `fetch_page`, `get_citations`, `inspect_providers`",
     );
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 1 'Core Retrieval': tool `inspect_providers` also appears in group 2 — exactly one home required",
+      "Feature taxonomy (§D) group 1 'Direction & Retrieval': tool `inspect_providers` also appears in group 2 — exactly one home required",
     ]);
   });
 
@@ -170,7 +170,7 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
       "REQ-055, REQ-077, REQ-078, REQ-080, REQ-125 | G1, G3 |",
     );
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 7 'Client Artifacts': REQ-125 also appears in group 8 — exactly one home required",
+      "Feature taxonomy (§D) group 7 'Dissemination & Report Contract': REQ-125 also appears in group 8 — exactly one home required",
     ]);
   });
 
@@ -183,7 +183,7 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
       "REQ-120a, REQ-125, REQ-126 | G3 |",
     );
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 7 'Client Artifacts': REQ-125 declares no gate in §9.5",
+      "Feature taxonomy (§D) group 7 'Dissemination & Report Contract': REQ-125 declares no gate in §9.5",
     ]);
   });
 
@@ -208,15 +208,15 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
       "REQ-120a, REQ-125, REQ-126 | G3 |",
     );
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 7 'Client Artifacts': REQ-125 declares no gate in §9.5",
+      "Feature taxonomy (§D) group 7 'Dissemination & Report Contract': REQ-125 declares no gate in §9.5",
     ]);
   });
 
   it("reports a row with no REQs that declares a gate", () => {
     const row = rowFor(LIVE, 9);
-    const spec = LIVE.replace(row, `${row}\n| 10 | Empty | (no tools) | | G1 |`);
+    const spec = LIVE.replace(row, `${row}\n| 11 | Empty | (no tools) | | G1 |`);
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 10 'Empty': Gate [G1] does not match its REQs' manifest gates []",
+      "Feature taxonomy (§D) group 11 'Empty': Gate [G1] does not match its REQs' manifest gates []",
     ]);
   });
 });
