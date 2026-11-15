@@ -144,6 +144,24 @@ $(cat "$promptfile")"
 RESULTS_TMP="$RUN_DIR/results.ndjson"
 : > "$RESULTS_TMP"
 
+# Record a scenario whose turn did not complete. Full shape matters: the
+# verdict table and results.json consumer dereference every field below, and
+# one timed-out scenario must not stop the scenarios after it.
+record_failure() {
+  local id="$1" sc="$2" reason="$3" rc="$4" timeout_s="$5"
+  node -e '
+    const s = require(process.argv[1]);
+    const [reason, rc, timeoutS] = process.argv.slice(2);
+    const rec = {
+      id: s.id, label: s.label, shape: s.shape, mode: s.mode,
+      status: "fail", reason, rc: Number(rc), timeout_s: Number(timeoutS),
+      missing: [], absentFound: [], missingSections: [], audit: {},
+      auditFails: [reason], urlsFound: 0, citations: [],
+    };
+    process.stdout.write(JSON.stringify(rec) + "\n");
+  ' "$sc" "$reason" "$rc" "$timeout_s" >> "$RESULTS_TMP"
+}
+
 for id in $SCENARIO_IDS; do
   sc="$RUN_DIR/scenarios/$id.json"
   workdir="$RUN_DIR/$id"
@@ -153,10 +171,23 @@ for id in $SCENARIO_IDS; do
   utterance=$(node -e 'console.log(require(process.argv[1]).utterance)' "$sc")
   fu_count=$(node -e 'console.log((require(process.argv[1]).followups||[]).length)' "$sc")
 
-  # Base turn.
+  # Base turn. A non-zero exit is captured, not fatal: `timeout` returns 124,
+  # and under `set -e` an uncaught exit would end the whole suite, losing every
+  # scenario after it.
   printf '%s\n' "$utterance" > "$workdir/prompt.md"
   base_out="$workdir/turn0.txt"
-  run_turn "$id" "research-$id" "$workdir" "$workdir/prompt.md" "$base_out" ""
+  timeout_s="${OPC_TIMEOUT:-1800}"
+  if run_turn "$id" "research-$id" "$workdir" "$workdir/prompt.md" "$base_out" ""; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [[ "$rc" -ne 0 ]]; then
+    reason="timeout"; [[ "$rc" -eq 124 ]] || reason="turn-failed"
+    record_failure "$id" "$sc" "$reason" "$rc" "$timeout_s"
+    info "  $id: $reason (exit $rc) — recorded, continuing"
+    continue
+  fi
   # Read the session id without a `grep … | head -1` pipeline: under
   # `set -o pipefail` a grep that keeps writing after `head` exits takes
   # SIGPIPE, the pipeline returns 141, and `set -e` ends the run silently —
@@ -169,14 +200,27 @@ for id in $SCENARIO_IDS; do
   ' "$base_out")
 
   # Follow-up turns continue the session.
+  followup_failed=0
   if [[ "$fu_count" -gt 0 && -n "$session_id" ]]; then
     i=0
     while IFS= read -r fu; do
       i=$((i+1))
       printf '%s\n' "$fu" > "$workdir/followup$i.md"
-      run_turn "$id" "research-$id" "$workdir" "$workdir/followup$i.md" "$workdir/turn$i.txt" "$session_id" </dev/null
+      if run_turn "$id" "research-$id" "$workdir" "$workdir/followup$i.md" "$workdir/turn$i.txt" "$session_id" </dev/null; then
+        rc=0
+      else
+        rc=$?
+      fi
+      if [[ "$rc" -ne 0 ]]; then
+        reason="timeout"; [[ "$rc" -eq 124 ]] || reason="turn-failed"
+        record_failure "$id" "$sc" "$reason" "$rc" "$timeout_s"
+        info "  $id: follow-up $i $reason (exit $rc) — recorded, continuing"
+        followup_failed=1
+        break
+      fi
     done < <(node -e 'const j=require(process.argv[1]);(j.followups||[]).forEach(f=>console.log(f))' "$sc")
   fi
+  [[ "$followup_failed" -eq 1 ]] && continue
 
   # Combine transcripts for evaluation.
   combined="$workdir/combined.txt"
@@ -212,7 +256,10 @@ node -e '
     if(o.status==="pass")pass++;
     let detail="";
     if(o.status==="fail"){
-      const bits=[...o.missing.map(t=>"missing token: "+t), ...o.absentFound.map(t=>"unexpected token: "+t), ...o.missingSections.map(s=>"missing section: "+s), ...o.auditFails.map(k=>"audit fail: "+k)];
+      const bits=[];
+      if(o.reason==="timeout") bits.push(`timeout after ${o.timeout_s}s`);
+      else if(o.reason) bits.push(`turn failed (exit ${o.rc})`);
+      bits.push(...(o.missing||[]).map(t=>"missing token: "+t), ...(o.absentFound||[]).map(t=>"unexpected token: "+t), ...(o.missingSections||[]).map(s=>"missing section: "+s), ...(o.auditFails||[]).map(k=>"audit fail: "+k));
       detail=" — "+bits.join("; ");
     }
     console.log(`  ${mark.padEnd(5)} ${o.id.padEnd(4)} ${o.label}${detail}`);

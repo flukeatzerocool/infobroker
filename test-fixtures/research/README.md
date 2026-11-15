@@ -92,3 +92,12 @@ wall-clock, plus ~15s per sampled citation. The full 18-entry matrix is
 The failure detail lists exactly which hard gate tripped. Full transcripts
 (`combined.txt`), extracted final text (`final.txt`), and `results.json`
 land under `$TMPDIR/infobroker/research-tests/run-<ts>/`.
+
+A turn that does not complete is that scenario's failure, not the suite's:
+`timeout` (exit 124) is recorded as `timeout after <OPC_TIMEOUT>s`, any other
+non-zero exit as `turn failed (exit <rc>)`, and the next scenario runs. A
+timed-out scenario is never evaluated on a partial transcript.
+
+```
+  FAIL  A1a  audience-ciso — timeout after 1800s; audit fail: timeout
+```
