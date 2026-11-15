@@ -28,6 +28,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const resp = await infobrokerFetch(YEP_API, {
     providerSlug: "yep",
+    signal: options?.signal,
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

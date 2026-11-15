@@ -26,6 +26,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const resp = await infobrokerFetch(`${SS_API}?${params.toString()}`, {
     providerSlug: "semantic_scholar",
+    signal: options?.signal,
     headers,
   });
 

@@ -1,11 +1,11 @@
 // @implements REQ-031 REQ-031a REQ-034 REQ-038 REQ-015 REQ-027a REQ-111a
+// @implements REQ-031b win-cancel
+// @implements REQ-031b exhaustion
 // Dispatch orchestration is asserted through the spawned server against
 // loopback providers, so the hedge switch, cross-task fallback, empty-vs-error
 // distinction, exhaustion skip, and cooldown skip are measured on the real
 // handler instead of a copy of it.
 import { afterAll, describe, expect, test } from "vitest";
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -15,24 +15,18 @@ import {
   type HermeticConfigOptions,
   type HermeticProvider,
   type StubMode,
+  type StubProvider,
   type StubProviderOptions,
 } from "./lib/stub-provider.js";
+import { withServer, type RpcMessage } from "./lib/mcp-stdio.js";
 import { flushKbWrites, initKb, kbIngest } from "./kb.js";
 import type { KbConfig } from "./types.js";
 
-const REPO_ROOT = join(import.meta.dirname, "..");
 const cleanups: Array<() => Promise<void> | void> = [];
 
 afterAll(async () => {
   for (const cleanup of cleanups.reverse()) await cleanup();
 });
-
-interface RpcMessage {
-  jsonrpc: "2.0";
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string };
-}
 
 interface ToolPayload {
   status: string;
@@ -41,57 +35,6 @@ interface ToolPayload {
   meta?: Record<string, unknown>;
   notices?: Array<{ code: string; severity?: string; message: string; details?: Record<string, unknown> }>;
   error?: { code: string; message: string; details?: Record<string, unknown> };
-}
-
-async function withServer<T>(
-  env: NodeJS.ProcessEnv,
-  fn: (call: (method: string, params: unknown) => Promise<RpcMessage>) => Promise<T>,
-): Promise<T> {
-  const child = spawn(join(REPO_ROOT, "node_modules", ".bin", "tsx"), [join(REPO_ROOT, "src", "index.ts")], {
-    cwd: REPO_ROOT,
-    stdio: ["pipe", "pipe", "pipe"],
-    env,
-  });
-  const pending = new Map<number, (msg: RpcMessage) => void>();
-  const rl = createInterface({ input: child.stdout! });
-  rl.on("line", (line) => {
-    let msg: RpcMessage;
-    try {
-      msg = JSON.parse(line) as RpcMessage;
-    } catch {
-      return; // non-JSON stdout line is not an RPC response
-    }
-    if (typeof msg.id === "number" && pending.has(msg.id)) {
-      const resolve = pending.get(msg.id)!;
-      pending.delete(msg.id);
-      resolve(msg);
-    }
-  });
-  let nextId = 1;
-  const send = (obj: unknown) => child.stdin!.write(JSON.stringify(obj) + "\n");
-  const call = (method: string, params: unknown): Promise<RpcMessage> => {
-    const id = nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20000);
-      pending.set(id, (msg) => {
-        clearTimeout(timer);
-        resolve(msg);
-      });
-      send({ jsonrpc: "2.0", id, method, params });
-    });
-  };
-  try {
-    const init = await call("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "dispatch-orchestration-test", version: "1.0.0" },
-    });
-    expect(init.error).toBeUndefined();
-    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    return await fn(call);
-  } finally {
-    child.kill();
-  }
 }
 
 function parse(text: string): ToolPayload {
@@ -125,6 +68,16 @@ async function stub(mode: StubMode | StubProviderOptions, delayMs?: number) {
   return server;
 }
 
+/** Wait until the stub has seen `count` aborts, so the assertion is not racy. */
+async function waitForAborts(server: StubProvider, count: number, timeoutMs = 3_000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (server.aborts >= count) return server.aborts;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return server.aborts;
+}
+
 function seedQuota(root: string, slug: string, dailyCount: number): void {
   const future = new Date(Date.now() + 3_600_000).toISOString();
   writeFileSync(
@@ -155,7 +108,7 @@ describe("quota exhaustion and chain shape (REQ-031, REQ-034)", () => {
     const { cfg } = await setup([provider("stub_a", a.url, { rateLimit: { per_day: 1 } })]);
     seedQuota(cfg.root, "stub_a", 1);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const before = a.requests;
       const payload = await search(call, { query: "quota probe" });
       expect(payload.status).toBe("error");
@@ -176,7 +129,7 @@ describe("quota exhaustion and chain shape (REQ-031, REQ-034)", () => {
     ]);
     seedQuota(cfg.root, "stub_a", 1);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "mixed probe" });
       expect(payload.status).toBe("error");
       expect(payload.error?.code).toBe("all_providers_exhausted");
@@ -188,7 +141,7 @@ describe("quota exhaustion and chain shape (REQ-031, REQ-034)", () => {
     const b = await stub("empty");
     const { cfg } = await setup([provider("stub_a", a.url), provider("stub_b", b.url)]);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "empty probe" });
       expect(payload.status).toBe("ok");
       expect(payload.results).toEqual([]);
@@ -205,7 +158,7 @@ describe("quota exhaustion and chain shape (REQ-031, REQ-034)", () => {
     ]);
     seedQuota(cfg.root, "stub_a", 1);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const aBefore = a.requests;
       const bBefore = b.requests;
       const payload = await search(call, { query: "skip probe" });
@@ -226,22 +179,102 @@ describe("hedge, cross-task fallback and cooldown (REQ-031, REQ-031a, REQ-038)",
       { output: { hedge_enabled: true, hedge_min_delay_ms: 50, hedge_max_delay_ms: 60 } },
     );
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "hedge on" });
       expect(payload.status).toBe("ok");
       expect(payload.provider).toBe("stub_b");
     });
   });
 
-  test("disabling the hedge serves from the primary", async () => {
-    const slow = await stub("ok", 300);
+  // REQ-031b: a losing provider is cancelled while its request is in flight.
+  test("a hedged loss aborts the losing provider instead of letting it finish", async () => {
+    const slow = await stub("ok", 800);
+    const fast = await stub("ok");
+    const { cfg } = await setup(
+      [provider("stub_a", slow.url), provider("stub_b", fast.url)],
+      { output: { hedge_enabled: true, hedge_min_delay_ms: 50, hedge_max_delay_ms: 60 } },
+    );
+
+    await withServer({ env: cfg.env }, async (call) => {
+      const payload = await search(call, { query: "hedge cancel" });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("stub_b");
+      expect(await waitForAborts(slow, 1)).toBe(1);
+    });
+  });
+
+  // REQ-031b: the builtin searxng module forwards the cancellation signal too.
+  test("the builtin provider shape aborts its losing request as well", async () => {
+    const slow = await stub("ok", 800);
+    const fast = await stub("ok");
+    const cfg = writeHermeticConfig(slow.url, {
+      providers: [provider("stub_b", fast.url)],
+      enable: ["searxng"],
+      chains: { general_web: ["searxng", "stub_b"] },
+      output: { hedge_enabled: true, hedge_min_delay_ms: 50, hedge_max_delay_ms: 60 },
+    });
+
+    await withServer({ env: cfg.env }, async (call) => {
+      const payload = await search(call, { query: "hedge cancel builtin" });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("stub_b");
+      expect(await waitForAborts(slow, 1)).toBe(1);
+    });
+  });
+
+  // REQ-031b: on exhaustion nothing is cancelled early — every provider settles.
+  test("an exhausting hedge cancels nothing and reports exhaustion", async () => {
+    const a = await stub("error", 120);
+    const b = await stub("error", 120);
+    const { cfg } = await setup([provider("stub_a", a.url), provider("stub_b", b.url)], {
+      chains: { general_web: ["stub_a", "stub_b"] },
+      output: { hedge_enabled: true, hedge_min_delay_ms: 20, hedge_max_delay_ms: 30 },
+    });
+
+    await withServer({ env: cfg.env }, async (call) => {
+      const payload = await search(call, { query: "hedge exhausted" });
+      expect(payload.status).toBe("error");
+      expect(payload.error?.code).toBe("all_providers_exhausted");
+      expect(a.aborts).toBe(0);
+      expect(b.aborts).toBe(0);
+    });
+  });
+
+  // REQ-031b: a retry waiting in backoff must not re-dispatch after the loss.
+  test("a losing provider in retry backoff does not dispatch again", async () => {
+    const failing = await stub({ mode: "error", delayMs: 10 });
+    const fast = await stub("ok");
+    const { cfg } = await setup(
+      [
+        provider("stub_a", failing.url, { retryCount: 2, retryBackoffMs: 400 }),
+        provider("stub_b", fast.url),
+      ],
+      {
+        chains: { general_web: ["stub_a", "stub_b"] },
+        output: { hedge_enabled: true, hedge_min_delay_ms: 20, hedge_max_delay_ms: 30 },
+      },
+    );
+
+    await withServer({ env: cfg.env }, async (call) => {
+      // The startup probe may already have touched the provider once.
+      const before = failing.requests;
+      const payload = await search(call, { query: "hedge retry cancel" });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("stub_b");
+      // Give the retry loop time to wake up; the abort must stop it re-dispatching.
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      expect(failing.requests - before).toBe(1);
+    });
+  });
+
+  test("disabling the hedge serves from the primary", async () => {    const slow = await stub("ok", 300);
     const fast = await stub("ok");
     const { cfg } = await setup(
       [provider("stub_a", slow.url), provider("stub_b", fast.url)],
       { output: { hedge_enabled: false } },
     );
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "hedge off" });
       expect(payload.status).toBe("ok");
       expect(payload.provider).toBe("stub_a");
@@ -261,7 +294,7 @@ describe("hedge, cross-task fallback and cooldown (REQ-031, REQ-031a, REQ-038)",
       },
     );
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "cross task", task_type: "academic" });
       expect(payload.status).toBe("ok");
       expect(payload.provider).toBe("stub_b");
@@ -276,7 +309,7 @@ describe("hedge, cross-task fallback and cooldown (REQ-031, REQ-031a, REQ-038)",
       chains: { general_web: ["stub_a", "stub_b"] },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "all error" });
       expect(payload.status).toBe("error");
       expect(payload.error?.code).toBe("all_providers_exhausted");
@@ -287,7 +320,7 @@ describe("hedge, cross-task fallback and cooldown (REQ-031, REQ-031a, REQ-038)",
     const a = await stub("rate_limited");
     const { cfg } = await setup([provider("stub_a", a.url)]);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const before = a.requests;
       const first = await search(call, { query: "cooldown first" });
       expect(first.status).toBe("error");
@@ -332,7 +365,7 @@ describe("cooldown notice on tool responses (REQ-111a)", () => {
     const cooldownWindow = window as number;
     expect(cooldownWindow).toBeGreaterThan(0);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       // Control: before any provider is cooled down, the same tool carries no
       // cooldown notice. This also proves its payload has no notices of its
       // own, which is the precondition injectNotices requires.
@@ -378,7 +411,7 @@ describe("disabled provider exclusion (REQ-015)", () => {
       provider("stub_b", healthy.url),
     ]);
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const disabledBefore = disabled.requests;
       const healthyBefore = healthy.requests;
       const payload = await search(call, { query: "disabled probe" });
@@ -403,7 +436,7 @@ describe("explicit provider precedence (REQ-020a)", () => {
       },
     );
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       for (const priority of ["privacy", "free_only", "quality"] as const) {
         const payload = await search(call, { query: "precedence probe", provider: "stub_b", priority });
         expect(payload.status, priority).toBe("ok");
@@ -417,7 +450,7 @@ describe("explicit provider precedence (REQ-020a)", () => {
     const { cfg } = await setup([provider("stub_a", a.url)], {
       chains: { general_web: ["stub_a"], privacy_critical: ["stub_a"] },
     });
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "precedence probe", provider: "stub_a", priority: "privacy" });
       expect(payload.status).toBe("ok");
       expect(payload.provider).toBe("stub_a");
@@ -443,7 +476,7 @@ describe("collapse before the maximum slice (REQ-020g)", () => {
     const a = await stub({ mode: "ok", results: contents.length, contents });
     const { cfg } = await setup([provider("stub_a", a.url)], { output: { hedge_enabled: false } });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "quantum error correction", max_results: 4 });
       expect(payload.status).toBe("ok");
       expect(payload.results).toHaveLength(4);
@@ -464,7 +497,7 @@ describe("chain-wide language reporting (REQ-128)", () => {
         [provider("stub_a", a.url), provider("stub_b", b.url)],
         { output: { hedge_enabled: false, verbose } },
       );
-      await withServer(cfg.env, async (call) => {
+      await withServer({ env: cfg.env }, async (call) => {
         const payload = await search(call, { query: "language probe", language: "fr" });
         expect(payload.status).toBe("ok");
         expect(payload.provider).toBe("stub_a");
@@ -484,7 +517,7 @@ describe("analysis omission (REQ-127)", () => {
       source_quality: { enabled: true, weight: 0.15, blocklist: ["example.com"] },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "blocked probe", analyze: true });
       expect(payload.status).toBe("ok");
       expect(payload.results).toHaveLength(0);
@@ -505,7 +538,7 @@ describe("deep reading under compact verbosity (REQ-028)", () => {
       fetch: { allow_private_urls: true },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const before = a.requests;
       const payload = await search(call, { query: "deep compact probe", deep: true });
       expect(payload.status).toBe("ok");
@@ -526,7 +559,7 @@ describe("response truncation (REQ-004)", () => {
       output: { hedge_enabled: false, response_max_chars: 220 },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const msg = await call("tools/call", { name: "infobroker_search_web", arguments: { query: "truncation probe" } });
       const result = msg.result as {
         content: Array<{ text: string }>;
@@ -569,7 +602,7 @@ describe("KB-first metadata and ordering (REQ-020d, REQ-020h)", () => {
     );
     flushKbWrites();
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "catalogue archive note", fresh: false });
       expect(payload.status).toBe("ok");
       expect(payload.provider).toBe("knowledge_base");
@@ -594,7 +627,7 @@ describe("deep-reading snapshot reporting (REQ-122)", () => {
       fetch: { allow_private_urls: true },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "deep snapshot probe", deep: true });
       expect(payload.status).toBe("ok");
       const read = (payload.results ?? []).filter((r) => typeof r.snapshot_sha256 === "string");
@@ -614,7 +647,7 @@ describe("deep-reading snapshot reporting (REQ-122)", () => {
       preservation: { enabled: false },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await search(call, { query: "deep snapshot probe", deep: true });
       expect(payload.status).toBe("ok");
       expect((payload.results ?? []).every((r) => r.snapshot_sha256 === undefined)).toBe(true);
@@ -641,7 +674,7 @@ describe("compact get_citations metadata (REQ-027a)", () => {
       output: { verbose: false },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await citations(call, { query: "compact citation probe", max_results: 3 });
       expect(payload.status).toBe("ok");
       expect(payload.results.length).toBeGreaterThan(0);
@@ -658,7 +691,7 @@ describe("compact get_citations metadata (REQ-027a)", () => {
       output: { verbose: false },
     });
 
-    await withServer(cfg.env, async (call) => {
+    await withServer({ env: cfg.env }, async (call) => {
       const payload = await citations(call, { query: "empty citation probe", max_results: 3 });
       expect(payload.status).toBe("ok");
       expect(payload.results).toEqual([]);

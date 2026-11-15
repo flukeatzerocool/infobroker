@@ -1,5 +1,5 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
@@ -14,7 +14,7 @@ function ghToken(): string | undefined {
   return _ghToken;
 }
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const token = ghToken();
   const headers: Record<string, string> = {
     "Accept": "application/vnd.github.v3+json",
@@ -27,6 +27,7 @@ async function search(query: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query, per_page: "10" });
   const resp = await infobrokerFetch(`${endpoint}?${params.toString()}`, {
     providerSlug: "github",
+    signal: options?.signal,
     headers,
   });
 

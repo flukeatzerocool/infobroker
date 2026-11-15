@@ -12,7 +12,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     max_results: String(options?.max_results ?? 10),
   });
 
-  const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv" });
+  const resp = await infobrokerFetch(`${ARXIV_API}?${params.toString()}`, { providerSlug: "arxiv", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`arXiv returned HTTP ${resp.status}`, resp.status);
 

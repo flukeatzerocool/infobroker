@@ -14,15 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## `search_web` hedge cancellation
-
-- Give the search-side hedged dispatch the same per-provider `AbortController`
-  the fetch renderers got for F-R4-B-1 (`src/index.ts:795-810` against
-  `:1040-1075`), so a losing provider stops spending quota and recording stats.
-
-**Trigger:** start after the process-efficiency increment closes; close when a
-test proves the loser aborts on a win and on exhaustion.
-
 ## Align REQ-115 and REQ-118 with ICD 203/206
 
 - Read ICD 203 (Analytic Standards) and ICD 206 (Sourcing Requirements) from

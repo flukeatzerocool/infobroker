@@ -24,7 +24,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     origin: "*",
   });
 
-  const resp = await infobrokerFetch(`${wikiApi}?${params.toString()}`, { providerSlug: "wikipedia" });
+  const resp = await infobrokerFetch(`${wikiApi}?${params.toString()}`, { providerSlug: "wikipedia", signal: options?.signal });
 
   if (!resp.ok) {
     throw new RetryableError(`Wikipedia returned HTTP ${resp.status}`, resp.status);

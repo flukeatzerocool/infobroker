@@ -1,5 +1,5 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
@@ -7,7 +7,7 @@ import { noteAuthStatus, resolveApiKey } from "../key-pool.js";
 
 const CORE_API = "https://api.core.ac.uk/v3/search/works";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   // REQ-104: the credential pool of the conventional slug variables, read per
   // request so a rejected key is replaced on the next attempt.
   const apiKey = resolveApiKey("core");
@@ -21,6 +21,7 @@ async function search(query: string): Promise<SearchResult[]> {
     headers,
     body: JSON.stringify({ q: query, limit: 10 }),
     providerSlug: "core",
+  signal: options?.signal,
   });
 
   if (!resp.ok) {

@@ -20,7 +20,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     origin: "*",
   });
 
-  const resp = await infobrokerFetch(`${wiktionaryApi}?${params.toString()}`, { providerSlug: "wiktionary" });
+  const resp = await infobrokerFetch(`${wiktionaryApi}?${params.toString()}`, { providerSlug: "wiktionary", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`Wiktionary returned HTTP ${resp.status}`, resp.status);
 

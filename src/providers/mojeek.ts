@@ -1,16 +1,16 @@
 // @implements REQ-020
 import * as cheerio from "cheerio";
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const MOJEEK_URL = "https://www.mojeek.com/search";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query });
 
-  const resp = await infobrokerFetch(`${MOJEEK_URL}?${params.toString()}`, { providerSlug: "mojeek" });
+  const resp = await infobrokerFetch(`${MOJEEK_URL}?${params.toString()}`, { providerSlug: "mojeek", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`Mojeek returned HTTP ${resp.status}`, resp.status);
 

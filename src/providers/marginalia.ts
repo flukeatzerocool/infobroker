@@ -1,16 +1,16 @@
 // @implements REQ-020
 import * as cheerio from "cheerio";
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const MARGINALIA_URL = "https://search.marginalia.nu/search";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({ query, profile: "default" });
 
-  const resp = await infobrokerFetch(`${MARGINALIA_URL}?${params.toString()}`, { providerSlug: "marginalia" });
+  const resp = await infobrokerFetch(`${MARGINALIA_URL}?${params.toString()}`, { providerSlug: "marginalia", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`Marginalia returned HTTP ${resp.status}`, resp.status);
 

@@ -1,5 +1,5 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { resolveApiKey, noteAuthStatus } from "../key-pool.js";
@@ -7,7 +7,7 @@ import { infobrokerFetch } from "../http.js";
 
 const EXA_API = "https://api.exa.ai/search";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const apiKey = resolveApiKey("exa");
   if (!apiKey) throw new Error("INFOBROKER_EXA_API_KEY not set");
 
@@ -19,6 +19,7 @@ async function search(query: string): Promise<SearchResult[]> {
     },
     body: JSON.stringify({ query, numResults: 10, useAutoprompt: true }),
     providerSlug: "exa",
+  signal: options?.signal,
   });
 
   if (!resp.ok) {

@@ -1,5 +1,5 @@
 // @implements REQ-020 REQ-070 REQ-071
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
@@ -16,11 +16,12 @@ interface EdgarHit {
   };
 }
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query, forms: "10-K,10-Q,8-K" });
 
   const resp = await infobrokerFetch(`${SEC_SEARCH_API}?${params.toString()}`, {
     providerSlug: "sec_edgar",
+  signal: options?.signal,
   });
 
   if (!resp.ok) throw new RetryableError(`SEC EDGAR returned HTTP ${resp.status}`, resp.status);

@@ -26,7 +26,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const url = `${DDG_URL}?${params.toString()}${timeRange}`;
 
-  const resp = await infobrokerFetch(url, { providerSlug: "duckduckgo" });
+  const resp = await infobrokerFetch(url, { providerSlug: "duckduckgo", signal: options?.signal });
 
   // HTTP 202 signals the anti-bot challenge page; treat as a parse failure
   // so the fallback chain advances rather than reporting a silent empty.

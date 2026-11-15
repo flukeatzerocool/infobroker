@@ -16,6 +16,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const resp = await infobrokerFetch(`${EPMC_API}?${params.toString()}`, {
     providerSlug: "europe_pmc",
+  signal: options?.signal,
   });
 
   if (!resp.ok) throw new RetryableError(`Europe PMC returned HTTP ${resp.status}`, resp.status);

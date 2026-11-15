@@ -567,6 +567,12 @@ export interface SearchOptions {
   content_type?: string;
   region?: string;
   language?: string;
+  /**
+   * REQ-031b: set by a hedged dispatch so a losing provider can be cancelled
+   * while its request is still in flight. A provider forwards this to its HTTP
+   * call; it never crosses the MCP boundary.
+   */
+  signal?: AbortSignal;
 }
 
 export interface AnalysisConfig {

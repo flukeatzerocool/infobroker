@@ -35,6 +35,8 @@ export interface StubProviderOptions {
 export interface StubProvider {
   url: string;
   requests: number;
+  /** Requests whose client went away before the response was flushed. */
+  aborts: number;
   close(): Promise<void>;
 }
 
@@ -51,10 +53,19 @@ export async function startStubProvider(
   const mode = options.mode ?? "ok";
   const delayMs = options.delayMs ?? 0;
   const resultCount = options.results ?? 1;
-  const state = { requests: 0 };
+  const state = { requests: 0, aborts: 0 };
   let selfUrl = "";
   const server = createHttpServer(async (req, res) => {
     state.requests++;
+    // A cancelled client closes the connection before the response is flushed;
+    // that is the observable proof that a losing provider was aborted.
+    let flushed = false;
+    res.on("finish", () => {
+      flushed = true;
+    });
+    res.on("close", () => {
+      if (!flushed) state.aborts++;
+    });
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
     // A result URL served by this stub returns a small HTML page, so a deep
     // read can fetch it without leaving the loopback interface.
@@ -114,6 +125,9 @@ export async function startStubProvider(
     get requests() {
       return state.requests;
     },
+    get aborts() {
+      return state.aborts;
+    },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -153,6 +167,10 @@ export interface HermeticProvider {
   enabled?: boolean;
   /** Quota/throttle override for the provider. */
   rateLimit?: { per_second?: number; per_day?: number; per_month?: number; jitter_ms?: number };
+  /** Retries after a retryable failure (default 0). */
+  retryCount?: number;
+  /** Backoff between retries in milliseconds (default: provider default). */
+  retryBackoffMs?: number;
 }
 
 export interface HermeticConfigOptions {
@@ -264,8 +282,10 @@ export function writeHermeticConfig(
       results_path: "results",
       auth_env: provider.authEnv,
       ...(provider.authOptional ? { auth_optional: true } : {}),
-      // Keep error-path tests fast: a loopback stub answers immediately.
-      retry_count: 0,
+      // Keep error-path tests fast: a loopback stub answers immediately unless
+      // the case is about the retry path.
+      retry_count: provider.retryCount ?? 0,
+      ...(provider.retryBackoffMs !== undefined ? { retry_backoff_ms: provider.retryBackoffMs } : {}),
       field_map: { title: "title", url: "url", snippet: "snippet" },
     };
   }

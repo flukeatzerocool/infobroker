@@ -99,14 +99,14 @@ export function createGenericProvider(slug: string, cfg: ProviderConfig): Provid
     snippet: "snippet",
   };
 
-  async function search(query: string, options?: { max_results?: number }): Promise<SearchResult[]> {
+  async function search(query: string, options?: { max_results?: number; signal?: AbortSignal }): Promise<SearchResult[]> {
     const maxResults = options?.max_results ?? 10;
     const base = cfg.endpoint!.replace(/[?&]$/, "");
     const sep = base.includes("?") ? "&" : "?";
     const url = `${base}${sep}${encodeURIComponent(cfg.query_param!)}=${encodeURIComponent(query)}`;
 
     const key = credentialFor(cfg, slug);
-    const resp = await infobrokerFetch(url, { providerSlug: slug, headers: authHeaders(cfg, key) });
+    const resp = await infobrokerFetch(url, { providerSlug: slug, headers: authHeaders(cfg, key), signal: options?.signal });
 
     if (!resp.ok) {
       if (key) noteAuthStatus(slug, key, resp.status);

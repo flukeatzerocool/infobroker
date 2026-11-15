@@ -19,7 +19,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   const params = new URLSearchParams({ q: query, format: "json" });
   const language = normalizeLanguageTag(options?.language);
   if (language) params.set("language", language);
-  const resp = await infobrokerFetch(`${baseUrl}/search?${params.toString()}`, { providerSlug: "searxng" });
+  const resp = await infobrokerFetch(`${baseUrl}/search?${params.toString()}`, { providerSlug: "searxng", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`SearXNG returned HTTP ${resp.status}`, resp.status);
 

@@ -525,7 +525,11 @@ async function doWebSearch(
   // all_providers_exhausted path below stays identical to the sequential chain.
   const attempt = async (
     slug: string,
+    signal?: AbortSignal,
   ): Promise<{ slug: string; filtered: SearchResult[]; elapsed: number } | null> => {
+    // REQ-031b: a provider cancelled before it starts records nothing — no
+    // cooldown, no error, no attempt statistic.
+    if (signal?.aborted) return null;
     // REQ-038: a provider in cooldown is skipped without a new outbound call,
     // even when it is the chain primary. The skip is recorded as a rate-limit
     // failure so a fully-cooled chain reports exhaustion rather than empty.
@@ -569,7 +573,7 @@ async function doWebSearch(
 
       // REQ-073: ask for headroom so normalized-out rows do not consume the
       // caller's requested maximum; slice after the provider has normalized.
-      const providerOpts: SearchOptions = { ...opts, max_results: requestLimit(maxResults) };
+      const providerOpts: SearchOptions = { ...opts, max_results: requestLimit(maxResults), signal };
       const doCall = async (): Promise<SearchResult[]> => provider.search(query, providerOpts);
 
       const timeoutMs = config.providers[slug]?.timeout;
@@ -577,6 +581,9 @@ async function doWebSearch(
       // wait stays outside the timeout race so an interval cannot fake a timeout.
       const timedCall = async (): Promise<SearchResult[]> => {
         await throttle(slug);
+        // REQ-031b: a provider cancelled while waiting in the throttle queue
+        // must not dispatch — the wait can outlast the race.
+        signal?.throwIfAborted();
         start = Date.now();
         return withTimeout(doCall(), timeoutMs, () => `Provider ${slug} timed out after ${timeoutMs}ms`);
       };
@@ -613,6 +620,9 @@ async function doWebSearch(
 
       return { slug, filtered, elapsed };
     } catch (e) {
+      // REQ-031b: a cancelled loser is not a provider failure — no error
+      // record, no cooldown, no attempt statistic.
+      if (signal?.aborted || isCancellation(e)) return null;
       const msg = e instanceof Error ? e.message : String(e);
       recordProviderError(slug, msg);
       // REQ-038: a rate-limit or bot-challenge failure puts the provider in
@@ -807,7 +817,13 @@ async function doWebSearch(
     // if it has not answered by then (or fails), race the remaining providers
     // and take the first non-empty success, bounding worst-case latency.
     const hedgeDelay = computeHedgeDelay(latency.avg(primarySlug), { minMs: hedgeMinMs, maxMs: hedgeMaxMs });
-    const primaryPromise = attempt(primarySlug);
+
+    // REQ-031b: one cancellation handle per provider, so the race aborts the
+    // losers the moment it settles.
+    const controllers = new Map(chain.map((slug) => [slug, new AbortController()]));
+    const signalFor = (slug: string): AbortSignal => controllers.get(slug)!.signal;
+
+    const primaryPromise = attempt(primarySlug, signalFor(primarySlug));
     const deadline = new Promise<null>((resolve) => setTimeout(() => resolve(null), hedgeDelay));
     const primaryResult = await Promise.race([primaryPromise, deadline]);
 
@@ -816,10 +832,13 @@ async function doWebSearch(
     }
 
     try {
-      const winner = await raceFirstSuccess<{ slug: string; filtered: SearchResult[]; elapsed: number }>([
-        { slug: primarySlug, run: () => primaryPromise },
-        ...chain.slice(1).map((slug) => ({ slug, run: () => attempt(slug) })),
-      ]);
+      const winner = await raceFirstSuccess<{ slug: string; filtered: SearchResult[]; elapsed: number }>(
+        [
+          { slug: primarySlug, run: () => primaryPromise },
+          ...chain.slice(1).map((slug) => ({ slug, run: () => attempt(slug, signalFor(slug)) })),
+        ],
+        { signals: chain.map((slug) => ({ slug, controller: controllers.get(slug)! })) },
+      );
       return buildSuccess(winner.value.slug, winner.value.filtered, winner.value.elapsed);
     } catch {
       // every provider failed — fall through to the shared handling below

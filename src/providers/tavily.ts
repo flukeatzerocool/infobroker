@@ -1,5 +1,5 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { resolveApiKey, noteAuthStatus } from "../key-pool.js";
@@ -7,7 +7,7 @@ import { infobrokerFetch } from "../http.js";
 
 const TAVILY_API = "https://api.tavily.com/search";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const apiKey = resolveApiKey("tavily");
   if (!apiKey) throw new Error("INFOBROKER_TAVILY_API_KEY not set");
 
@@ -18,6 +18,7 @@ async function search(query: string): Promise<SearchResult[]> {
     },
     body: JSON.stringify({ api_key: apiKey, query, max_results: 10, include_answer: false }),
     providerSlug: "tavily",
+  signal: options?.signal,
   });
 
   if (!resp.ok) {

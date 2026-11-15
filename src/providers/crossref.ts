@@ -80,6 +80,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const resp = await infobrokerFetch(`${CROSSREF_API}?${params.toString()}`, {
     providerSlug: "crossref",
+  signal: options?.signal,
   });
 
   if (!resp.ok) throw new RetryableError(`Crossref returned HTTP ${resp.status}`, resp.status);

@@ -1,5 +1,5 @@
 // @implements REQ-020 REQ-021
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
@@ -31,8 +31,8 @@ async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
   return pageResp.text();
 }
 
-async function search(query: string): Promise<SearchResult[]> {
-  const checkResp = await infobrokerFetch(`${IA_API}?url=${encodeURIComponent(query)}`, { providerSlug: "internet_archive" });
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+  const checkResp = await infobrokerFetch(`${IA_API}?url=${encodeURIComponent(query)}`, { providerSlug: "internet_archive", signal: options?.signal });
 
   if (!checkResp.ok) throw new RetryableError(`Internet Archive returned HTTP ${checkResp.status}`, checkResp.status);
 

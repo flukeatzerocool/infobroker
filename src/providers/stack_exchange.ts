@@ -1,5 +1,5 @@
 // @implements REQ-020 REQ-021
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { getEnvVar } from "../config.js";
@@ -14,7 +14,7 @@ function seApiKey(): string | undefined {
   return _seApiKey;
 }
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     q: query,
     site: "stackoverflow",
@@ -26,7 +26,7 @@ async function search(query: string): Promise<SearchResult[]> {
   const key = seApiKey();
   if (key) params.set("key", key);
 
-  const resp = await infobrokerFetch(`${SE_API}?${params.toString()}`, { providerSlug: "stack_exchange" });
+  const resp = await infobrokerFetch(`${SE_API}?${params.toString()}`, { providerSlug: "stack_exchange", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`Stack Exchange returned HTTP ${resp.status}`, resp.status);
 

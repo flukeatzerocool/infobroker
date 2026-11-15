@@ -34,7 +34,7 @@ and a failed fetch re-enters direction.
 | Function | Obligation | Evidence |
 |---|---|---|
 | **Direction** | Turn the consumer's need into an executable requirement — intent, sources, language, depth, shape, audience and handling — disclose what was inferred, and offer the choice instead of searching when two materially different requirements are plausible. | §7 dispatch; REQ-020a, REQ-020b, REQ-020c, REQ-020e, REQ-124, REQ-127, REQ-128 |
-| **Collection** | Reach the right sources across search, reference, scholarly, code, Q&A, news, filings and macro data, and degrade rather than fail when a provider is unavailable. | §A provider catalog; REQ-020h, REQ-031, REQ-031a |
+| **Collection** | Reach the right sources across search, reference, scholarly, code, Q&A, news, filings and macro data, and degrade rather than fail when a provider is unavailable. | §A provider catalog; REQ-020h, REQ-031, REQ-031a, REQ-031b |
 | **Processing and exploitation** | Turn raw provider responses into citable evidence: source identity and modality, dates, snapshots, deduplication, truncation and quota accounting. | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122 |
 | **Analysis and production** | Corroborate, attribute, calibrate confidence and likelihood, and state alternatives and gaps — judgments and graded claims, not link lists. | REQ-026a, REQ-123, REQ-115 |
 | **Dissemination** | Deliver manifest-bearing reports that pass the quality gate, archive with a receipt, and stay recallable and re-checkable. | REQ-114, REQ-116, REQ-119, REQ-110 |
@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -429,6 +429,9 @@ The chain SHALL be ordered by provider priority in `config.json` and SHALL exclu
 
 **REQ-031a — Cross-task fallback**
 WHEN every provider in the serving task's dispatch chain is exhausted by errors and the serving task is not `general_web`, the server SHALL attempt the `general_web` chain before returning the `all_providers_exhausted` error. A provider already attempted in the serving chain SHALL NOT be retried in the fallback chain. _Check:_ G1.
+
+**REQ-031b — Hedged Dispatch Cancellation**
+A hedged dispatch SHALL cancel the provider requests that lose the race once a provider returns a usable answer, so a losing provider stops consuming quota and stops recording attempt statistics. A cancelled provider SHALL NOT be recorded as a failure, SHALL NOT enter cooldown, and SHALL NOT be counted as an attempted link in the chain. Cancellation SHALL reach the request that is still in flight, and SHALL NOT alter a provider that had already answered. When the dispatch ends in exhaustion, no provider SHALL be cancelled before its own request settles, and the response SHALL be the exhaustion error defined by REQ-031. _Check:_ G1.
 
 **REQ-032 — Retry Policy**
 Providers SHALL retry on transient errors before advancing to the next provider in the fallback chain. Retry backoff and maximum retry count SHALL be configurable per provider in `config.json`. _Check:_ G1.
@@ -1176,6 +1179,7 @@ verdict is preserved (REQ-026f).
 - Quota tracking: mock exhausted provider → verify fallback skip
 - Rate-limit cooldown: mock a provider returning a rate-limit or anti-bot response → verify it is skipped without a new outbound call on the following request within the cooldown window, and its quota counters are unchanged (REQ-038); the following successful response carries a bounded cooldown notice naming the provider (REQ-111a)
 - Cross-task fallback: mock every provider in a non-`general_web` chain failing → verify the `general_web` chain serves, without re-trying an already-attempted provider (REQ-031a)
+- Hedge cancellation: race a slow primary against a fast secondary → verify the loser's request is aborted while in flight, records no failure or cooldown, and that an exhausting hedge cancels nothing (REQ-031b)
 - Normalizer: input from each provider format → verify common output shape
 - `verify_claims`: mock 3 providers with overlapping claims → verify agreement detection
 - Batch claim verification: pass two independent claims → verify two findings in caller order with `claim_index`; pass a claim containing "and" → verify it is seeded verbatim; make one claim unsourced → verify it is returned `unverified` rather than dropped; pass duplicate claims at non-adjacent positions → verify the collapsed finding reports every input index; run a 10-claim batch against five failing providers → verify the dispatch count never exceeds `max_http_calls` (REQ-026g)
@@ -1344,6 +1348,7 @@ verdict is preserved (REQ-026f).
 | REQ-030 | Per-Provider Throttling | 4.4 | G1 |
 | REQ-031 | Fallback Chain | 4.4 | G1 |
 | REQ-031a | Cross-task fallback | 4.4 | G1 |
+| REQ-031b | Hedged Dispatch Cancellation | 4.4 | G1 |
 | REQ-032 | Retry Policy | 4.4 | G1 |
 | REQ-033 | Persistent Quota Tracking | 4.4 | G1 |
 | REQ-034 | Quota Warning Threshold | 4.4 | G1 |
@@ -1921,7 +1926,7 @@ the table.
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
 | 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-121, REQ-122, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
-| 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
+| 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-031b, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
 | 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G1, G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |

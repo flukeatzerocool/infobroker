@@ -28,6 +28,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const resp = await infobrokerFetch(`${OPENALEX_API}?${params.toString()}`, {
     providerSlug: "openalex",
+  signal: options?.signal,
   });
 
   if (!resp.ok) throw new RetryableError(`OpenAlex returned HTTP ${resp.status}`, resp.status);

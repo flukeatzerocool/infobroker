@@ -17,7 +17,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
     origin: "*",
   });
 
-  const resp = await infobrokerFetch(`${WIKIDATA_API}?${params.toString()}`, { providerSlug: "wikidata" });
+  const resp = await infobrokerFetch(`${WIKIDATA_API}?${params.toString()}`, { providerSlug: "wikidata", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`Wikidata returned HTTP ${resp.status}`, resp.status);
 

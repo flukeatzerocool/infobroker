@@ -1,5 +1,5 @@
 // @implements REQ-020 REQ-070 REQ-071 REQ-095
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
@@ -89,9 +89,9 @@ function resolveCountry(query: string, countries: CountryRecord[]): CountryRecor
   return countries.find((country) => country.iso2Code && country.iso2Code.length === 2 && new RegExp(`\\b${escapeRegExp(country.iso2Code)}\\b`).test(query)) ?? null;
 }
 
-async function fetchCountries(): Promise<CountryRecord[] | null> {
+async function fetchCountries(options?: SearchOptions): Promise<CountryRecord[] | null> {
   try {
-    const resp = await infobrokerFetch(`${COUNTRIES_API}?format=json&per_page=400`, { providerSlug: "world_bank" });
+    const resp = await infobrokerFetch(`${COUNTRIES_API}?format=json&per_page=400`, { providerSlug: "world_bank", signal: options?.signal });
     if (!resp.ok) return null;
     const data = (await resp.json()) as unknown;
     if (!Array.isArray(data) || !Array.isArray(data[1])) return null;
@@ -103,15 +103,15 @@ async function fetchCountries(): Promise<CountryRecord[] | null> {
   }
 }
 
-async function searchIndicator(query: string, alias: IndicatorAlias): Promise<SearchResult[] | null> {
-  const countries = await fetchCountries();
+async function searchIndicator(query: string, alias: IndicatorAlias, options?: SearchOptions): Promise<SearchResult[] | null> {
+  const countries = await fetchCountries(options);
   if (!countries) return null;
 
   const country = resolveCountry(query, countries) ?? WORLD;
   const year = new Date().getFullYear();
   const params = new URLSearchParams({ format: "json", per_page: "10", date: `${year - 9}:${year}` });
   const url = `${INDICATORS_BASE}/${country.id}/indicator/${alias.id}?${params.toString()}`;
-  const resp = await infobrokerFetch(url, { providerSlug: "world_bank" });
+  const resp = await infobrokerFetch(url, { providerSlug: "world_bank", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`World Bank returned HTTP ${resp.status}`, resp.status);
 
@@ -138,11 +138,12 @@ async function searchIndicator(query: string, alias: IndicatorAlias): Promise<Se
   return normalize(raw, "world_bank");
 }
 
-async function searchDocuments(query: string): Promise<SearchResult[]> {
+async function searchDocuments(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({ format: "json", qterm: query, rows: "10" });
 
   const resp = await infobrokerFetch(`${DOCUMENTS_API}?${params.toString()}`, {
     providerSlug: "world_bank",
+    signal: options?.signal,
   });
 
   if (!resp.ok) throw new RetryableError(`World Bank returned HTTP ${resp.status}`, resp.status);
@@ -164,13 +165,13 @@ async function searchDocuments(query: string): Promise<SearchResult[]> {
   return normalize(raw, "world_bank");
 }
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const alias = matchIndicator(query);
   if (alias) {
-    const indicatorResults = await searchIndicator(query, alias);
+    const indicatorResults = await searchIndicator(query, alias, options);
     if (indicatorResults) return indicatorResults;
   }
-  return searchDocuments(query);
+  return searchDocuments(query, options);
 }
 
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {

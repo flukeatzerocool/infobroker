@@ -2,6 +2,19 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- A losing hedged `search_web` provider is now cancelled instead of being left
+  to finish. The fetch renderers already aborted their losers; the search
+  dispatch passed neither a per-provider `AbortController` nor its `signals` to
+  the race, so a slow provider kept consuming quota and recording attempt
+  statistics after the answer had been served. `SearchOptions` carries the
+  signal, every provider forwards it into its outbound request, the search
+  `attempt` treats a cancelled call as no attempt at all (no error record, no
+  cooldown, no statistic), and a provider waiting in the throttle queue or in
+  retry backoff is stopped before it dispatches. REQ-031b states the contract
+  (REQ-031 was at its §Appendix B limits): a win cancels the in-flight losers,
+  and an exhausting dispatch cancels nothing before it settles, so the
+  exhaustion error is still the one REQ-031 defines.
+
 - Every suite that drives the real server over stdio now shares one client,
   `src/lib/mcp-stdio.ts`. Eleven suites carried their own copy of the same
   spawn / JSON-RPC / timeout block, and they had drifted: 20 s vs 30 s per-call

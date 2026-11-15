@@ -1,19 +1,19 @@
 // @implements REQ-020
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const OSM_API = "https://nominatim.openstreetmap.org/search";
 
-async function search(query: string): Promise<SearchResult[]> {
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     q: query,
     format: "json",
     limit: "10",
   });
 
-  const resp = await infobrokerFetch(`${OSM_API}?${params.toString()}`, { providerSlug: "openstreetmap" });
+  const resp = await infobrokerFetch(`${OSM_API}?${params.toString()}`, { providerSlug: "openstreetmap", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`OpenStreetMap returned HTTP ${resp.status}`, resp.status);
 

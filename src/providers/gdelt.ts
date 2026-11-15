@@ -22,6 +22,7 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
 
   const resp = await infobrokerFetch(`${GDELT_API}?${params.toString()}`, {
     providerSlug: "gdelt",
+  signal: options?.signal,
   });
 
   if (!resp.ok) throw new RetryableError(`GDELT returned HTTP ${resp.status}`, resp.status);

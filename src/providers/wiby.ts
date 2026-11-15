@@ -1,14 +1,14 @@
 // @implements REQ-020
 import * as cheerio from "cheerio";
-import type { SearchResult, Provider } from "../types.js";
+import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
 const WIBY_URL = "https://wiby.me/";
 
-async function search(query: string): Promise<SearchResult[]> {
-  const resp = await infobrokerFetch(`${WIBY_URL}?q=${encodeURIComponent(query)}`, { providerSlug: "wiby" });
+async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+  const resp = await infobrokerFetch(`${WIBY_URL}?q=${encodeURIComponent(query)}`, { providerSlug: "wiby", signal: options?.signal });
 
   if (!resp.ok) throw new RetryableError(`Wiby returned HTTP ${resp.status}`, resp.status);
 
