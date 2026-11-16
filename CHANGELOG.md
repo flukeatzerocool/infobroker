@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026.11.16 — Routing and reconciliation stated as contracts
+
+- Fact-checking has always accepted a `speed` routing intent, but the
+  specification defined only privacy, quality and free-only, so a caller
+  choosing speed had no promise behind it. The contract now states the
+  ordering: providers with a recent measurement come first by latency, and a
+  provider that has never answered falls in behind them in its existing order,
+  so an unmeasured newcomer cannot displace one with a track record. A test now
+  pins that ordering. (REQ-026i)
+
+- The corroboration vocabulary now matches what the tool returns. A finding
+  with no attributed source is a gap — left out of the agreement map and
+  reported as unverified — while the map's red bucket holds findings that do
+  have a source but score below the floor. The verdict list no longer offers a
+  "gap" outcome, so a reader is not left hunting for a value the response never
+  carries. (REQ-026)
+
+- Two reconciliation rules are now stated as observable contracts instead of
+  as instructions for how to compute them. Document identity says which
+  origins count as the same document — same host ignoring letter case, query
+  string, fragment, and trailing section or feed marker — and which name no
+  document at all, so the rule is testable without prescribing an
+  implementation. The snippet-collapse floor is stated as eight words rather
+  than in the reconciler's internal units. Neither restatement changes what
+  ships: the same pairs collapse. (REQ-020j, REQ-020k)
+
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
 - Results that name the same document now collapse before similarity runs.

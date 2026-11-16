@@ -1,6 +1,6 @@
 # Infobroker — Research & Writing Professional MCP Server
 
-**Spec version:** 2026.11.14
+**Spec version:** 2026.11.16
 
 ## Contents
 
@@ -182,8 +182,8 @@ route to Infobroker first, falling back to built-ins only on error.
 | **Throttling** | The per-provider minimum interval between requests (REQ-030); distinct from quota. |
 | **Finding** | A corroboration output: a claim with a verdict, confidence, and corroborating sources (§8.1). |
 | **Claim** | A statement attributed to one or more corroborating sources (§8.1). |
-| **Verdict** | A finding's agreement outcome — `unverified` (no agreeing source yet), `confirmed`, `contested`, or a gap (§8.1). |
-| **Agreement map** | The corroboration summary grouping findings by confidence: `green` at or above the confidence threshold, `yellow` between the corroboration floor and the threshold, and `red` below the floor or an unresolved gap (§8.2). |
+| **Verdict** | A finding's agreement outcome — `unverified` (no agreeing source yet), `confirmed`, or `contested` (§8.1). |
+| **Agreement map** | The corroboration summary grouping findings by confidence: `green` at or above the effective confidence threshold, `yellow` from the corroboration floor up to it, and `red` below that floor, each bucket holding only findings with an attributed source; a finding with no attributed source is omitted from the map and remains `unverified` (§8.2). |
 | **Passage** | A sentence-bounded segment of fetched content used in question-grounded extraction (REQ-021b). |
 | **Workflow shape** | A client-side research routing category used by the bundled skills (REQ-052), distinct from the server's task types (§7.1). |
 | **Report** | A delivered research artifact that carries the shared skeleton, a report manifest, and a Source Register, produced by a bundled writing skill. |
@@ -289,10 +289,10 @@ WHEN `search_web` returns results, the tool SHALL order them by semantic relevan
 WHEN `search_web` receives an array of queries, a failing element SHALL NOT fail the batch. The response SHALL return every successful element's results with per-input metadata, and SHALL report each failed element's error in that metadata. The batch SHALL report success when at least one element succeeds, and SHALL return an error per REQ-002 only when every element fails. Per-input metadata SHALL name the input, the serving provider, and the status, and SHALL report the ranked passage count and truncation state when those apply to the element. _Check:_ G1.
 
 **REQ-020j — Snippet-based reconciliation**
-WHEN a comparison of titles and snippets does not establish that two results express the same content, the tool SHALL compare the result snippets as a second basis for collapse. A snippet-based collapse SHALL require identical sets of identifying values in the two snippets, and where neither snippet carries one, similarity alone SHALL decide. A snippet shorter than eight tokens SHALL NOT establish a collapse, and a token SHALL mean one run of letters or digits as the reconciler tokenizes it. _Check:_ G1.
+WHEN a comparison of titles and snippets does not establish that two results express the same content, the tool SHALL compare the result snippets as a second basis for collapse. A snippet-based collapse SHALL require identical sets of identifying values in the two snippets, and where neither snippet carries one, similarity alone SHALL decide. A snippet shorter than eight words SHALL NOT establish a collapse, where a word is a run of letters or digits. _Check:_ G1.
 
 **REQ-020k — Document-origin identity**
-`original_source` SHALL record the origin a provider declared, which may name a publisher, a section, a feed, or a document. Reconciliation SHALL derive a document identity that names a document rather than a publisher, section, or feed: it SHALL accept only an http or https value with a non-empty, non-root path, SHALL case-fold the host while preserving the path verbatim, and SHALL ignore query parameters, fragments, and section or feed suffixes that do not change the document. WHEN two results share a derived identity, reconciliation SHALL collapse them into one representative before comparing content, preserving the contributing providers and the original source. A value that yields no identity SHALL be treated as carrying none. _Check:_ G1.
+`original_source` SHALL record the origin a provider declared, which may name a publisher, a section, a feed, or a document. Reconciliation SHALL treat two origins as naming the same document only when they differ solely in the letter case of the host, in a query string, in a fragment, or in a trailing section or feed marker, and SHALL treat an origin that is not an http or https address with a path beyond the site root as naming no document. WHEN two results share an origin naming the same document, reconciliation SHALL collapse them into one representative before comparing content, preserving the contributing providers and the original source. A value that names no document SHALL be treated as carrying none. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` primary, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50000), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, `extract`, and `raw`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render, preferring the primary within a configurable grace window and cancelling losing renderers; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
@@ -370,7 +370,7 @@ WHEN `verify_claims` receives a claim list, it SHALL verify each distinct claim 
 Every corroborating source returned by `verify_claims` SHALL report the modality of the claim it supports: asserted, reported, or speculative. A source whose claim is attributed or hedged SHALL be reported as reported, and one that states a possibility SHALL be reported as speculative. WHEN the source text contains a sentence supporting the claim, the source SHALL report a span locating that sentence within the source text; WHEN no supporting sentence can be located, the span SHALL be omitted rather than fabricated. The reported modality SHALL NOT change confidence, verdict, or source-family count. The marker lexicon SHALL be configurable. _Check:_ G1.
 
 **REQ-026i — corroboration routing intent**
-WHEN `verify_claims` receives a `priority`, it SHALL route its corroboration pool by that intent within the caller's provider list. A caller-supplied list SHALL bound the pool and SHALL NOT be replaced by a dispatch chain. `privacy` SHALL restrict the pool to providers that do not forward queries to third parties. `quality` SHALL order the pool by configured provider priority. `free_only` SHALL exclude keyed and self-hosted tiers. WHEN no provider in the list satisfies the intent, the list SHALL be used unchanged. _Check:_ G1.
+WHEN a `priority` is supplied, the tool SHALL route its corroboration pool by that intent within the caller's provider list. A caller-supplied list SHALL bound the pool and SHALL NOT be replaced by a dispatch chain. `privacy` SHALL restrict the pool to providers that do not forward queries to third parties. `quality` SHALL order the pool by configured provider priority. `speed` SHALL order the pool by recorded response latency, placing a provider with no recorded latency after those with a measurement and keeping their existing order. `free_only` SHALL exclude keyed and self-hosted tiers. WHEN no provider in the list satisfies the intent, the list SHALL be used unchanged. _Check:_ G1.
 
 **REQ-121 — Corroboration source families**
 Confidence counting for `verify_claims` SHALL count independent source families rather than registrable domains alone. Sources that share a canonical URL or republish substantially the same text SHALL be counted as one family, and sources on the same registrable domain SHALL remain one family. Each finding SHALL report its family count, and the family similarity threshold SHALL be configurable. _Check:_ G1.
@@ -991,7 +991,9 @@ An explicit `provider` parameter takes precedence over priority routing.
 The same parameter on `verify_claims` (REQ-026i) routes the corroboration pool
 instead, and never replaces a caller-supplied provider list: `privacy`
 restricts the list to providers that do not forward queries to third parties,
-`quality` orders it by configured provider priority, `free_only` excludes the
+`quality` orders it by configured provider priority, `speed` orders it by
+recorded response latency and ranks a provider with no measurement after
+measured providers in its configured priority order, `free_only` excludes the
 keyed and self-hosted tiers, and a list that satisfies no intent is used
 unchanged.
 
@@ -1371,7 +1373,6 @@ verdict is preserved (REQ-026f).
 | REQ-131 | Direction | 4.3 | G1 |
 | REQ-131a | Audience and Intent Vocabulary | 4.3 | G1 |
 | REQ-132 | Analysis Output | 4.3 | G1 |
-| REQ-134 | Report Grade | 4.9 | G1 |
 | REQ-135 | Requirement-quality benchmark | 4.3 | G1 |
 | REQ-136 | Processing-quality benchmark | 4.3 | G1 |
 | REQ-124 | `search_web` query operators and language | 4.3 | G1 |
@@ -1413,6 +1414,7 @@ verdict is preserved (REQ-026f).
 | REQ-120 | Report Delivery Verification | 4.7 | G3 |
 | REQ-120a | Report Archive Tail | 4.7 | G3 |
 | REQ-126 | Report artifact export | 4.7 | G3 |
+| REQ-134 | Report Grade | 4.7 | G1 |
 | REQ-055 | Spec-Code Traceability | 4.8 | G3 |
 | REQ-077 | REQ Manifest | 4.8 | G3 |
 | REQ-078 | Feature Taxonomy | 4.8 | G3 |

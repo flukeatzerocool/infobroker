@@ -1,7 +1,7 @@
 {
   "name": "infobroker",
-  "version": "2026.11.14",
-  "description": "Infobroker MCP Server \u2014 multi-provider research & writing backend",
+  "version": "2026.11.16",
+  "description": "Infobroker MCP Server — multi-provider research & writing backend",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

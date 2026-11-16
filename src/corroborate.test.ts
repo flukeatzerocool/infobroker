@@ -1676,6 +1676,7 @@ describe("providerOperational optional keys (REQ-011)", () => {
 // @implements REQ-026i privacy-within-list
 // @implements REQ-026i quality-ordering
 // @implements REQ-026i intent-unfulfilled
+// @implements REQ-026i speed-ordering
 // @implements REQ-026d finding-attribution
 describe("routing and provenance fidelity (REQ-026i, REQ-026d)", () => {
   it("re-snapshots a source that arrives with a hash but no tier (REQ-122)", async () => {
@@ -1765,6 +1766,11 @@ describe("applyPriority routing intent (REQ-026i)", () => {
   it("keeps providers with no recorded latency after those with a measurement", () => {
     const lat = (s: string) => ({ a: 300, b: 0 } as Record<string, number>)[s] ?? 0;
     expect(applyPriority(["a", "b"], "speed", lat)).toEqual(["a", "b"]);
+  });
+
+  it("keeps two unmeasured providers in their existing order behind the measured ones", () => {
+    const lat = (s: string) => ({ b: 250, a: 100 } as Record<string, number>)[s] ?? 0;
+    expect(applyPriority(["x", "a", "y", "b"], "speed", lat)).toEqual(["a", "b", "x", "y"]);
   });
 
   it("orders the pool by configured provider priority for quality", () => {

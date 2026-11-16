@@ -762,10 +762,11 @@ provider is rejected. Add the entry to `config.local.json` and call
 
 `priority` routes the `verify_claims` pool by intent without leaving the
 provider list: `privacy` restricts it to providers that do not forward queries
-to third parties, `quality` orders it by configured provider priority, and
-`free_only` drops the keyed and self-hosted tiers. A list that satisfies no
-intent is used unchanged. It does not reorder `search_web`, which follows
-dispatch-chain order.
+to third parties, `quality` orders it by configured provider priority, `speed`
+orders it by recent response latency with an unmeasured provider placed after
+the measured ones, and `free_only` drops the keyed and self-hosted tiers. A
+list that satisfies no intent is used unchanged. It does not reorder
+`search_web`, which follows dispatch-chain order.
 
 ### Per-provider status and provenance
 
@@ -850,7 +851,7 @@ contradiction, and gaps. The bundled skills close the loop from raw
 research to finished writing. One server. Every source. Research that
 delivers.
 
-Last updated: 2026-11-14.
+Last updated: 2026-11-16.
 
 ## Contribute
 
@@ -882,7 +883,7 @@ terms and API keys.
 ## Spec
 
 The server is built from a single source specification, `infobroker.md`
-(v2026.11.14), which defines every requirement and the gates that verify it.
+(v2026.11.16), which defines every requirement and the gates that verify it.
 Each requirement traces to an implementation file, and `npm run check`
 reconciles the code, the spec, and this README so what is documented is what
 the server actually delivers. The routing gate resolves every cited tool and
