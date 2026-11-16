@@ -14,17 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Close the parity record
-
-- Add a surface / evidence / measurement table per §1 function to
-  `docs/goal-evidence-matrix.md`, and convert `REQ-123` labels to `observed`
-  where a recorded verification run exists.
-- Update the README tour, `CHANGELOG.md`, and `DECISIONS.md` for the direction
-  precedence and the processing block.
-
-**Trigger:** the next documentation pass; close when `npm run check` is green
-with the table in place.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`

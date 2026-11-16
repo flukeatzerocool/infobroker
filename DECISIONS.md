@@ -754,7 +754,40 @@ transitioned.
 The open-web scope boundary lived in D-061's prose with a paraphrase on
 `ROADMAP.md`, and no gate read either: an empty section, a stale decision
 reference, or a pasted copy all passed. The list now lives in a machine-read
-`## Scope Non-goals` block in this file, following the `## Spec Waivers` pattern,
+`## Scope Non-goals` block in this file, following the `### D-135: Direction Yields to the Deferred Choice (2026-11-16)
+
+REQ-020a mandated classification and REQ-131 mandated offering the choice when a
+request was ambiguous. Both were normative and neither yielded, which is why the
+branch was never built. REQ-020a now classifies "unless REQ-131 defers the
+request for a choice", and REQ-131 owns the trigger: two task types above the
+floor in an equal-support tie whose usable dispatch chains differ. A clear
+winner, a tie between types on one chain, and an explicit `task_type` all
+classify normally. The deferred response reports the task type as undetermined
+and names no serving provider, because no search ran.
+
+### D-136: A Report Ingest Carries a Receipt and a Grade (2026-11-16)
+
+`receipt` was optional, so the knowledge base archived reports whose claims and
+sources were never recorded and REQ-110 applied only to callers who opted in.
+A report ingested into the knowledge base now requires a receipt; a disk-only
+ingest is unchanged, since there is no stored receipt to verify. REQ-134 grades
+the receipt deterministically: a structural result naming failed checks, and a
+grounding score equal to the share of claims backed by a stored document rather
+than a supplied snippet. A receipt with no stored source is *ungraded* (null),
+not ungrounded (0), and the grade never gates the ingest.
+
+### D-137: Requirement Quality Is Measured, Not Asserted (2026-11-16)
+
+Two of the four §1 measurements could not fail: the retrieval corpus pinned MRR
+and recall at 1, and direction had no corpus. Retrieval grows to twenty cases
+with non-degenerate ordering, and REQ-135 adds an authored corpus of
+underspecified queries scored through the live classifier and ambiguity rule.
+The corpus is authored rather than fitted — a case expects an offer because the
+query carries two requirements, not because the implementation ties — so a
+disagreement is a finding, not a fixture to edit. The retrieval baseline refresh
+and its reason live in the commit that changed it.
+
+## Spec Waivers` pattern,
 and `npm run check-non-goals` fails when the block is missing or empty, an entry
 cites an ID that is not a `### D-NNN:` heading, a category repeats, or the
 roadmap section stops being a pointer of at most two lines naming `DECISIONS.md`

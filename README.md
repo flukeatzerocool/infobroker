@@ -241,7 +241,13 @@ semantic clusters, and a dated timeline derived from those results — computed
 in-process, with no extra request. A query that names a measurable attribute —
 attendance, population, area, elevation, a percentage, a date — resolves a
 sourced `facts` entry from Wikidata or a Wikipedia infobox/table ahead of the
-prose results.
+prose results. `include_domains` narrows a search to the sources you trust —
+`restrict` returns only those hosts, `prefer` ranks them ahead without
+excluding the rest — on top of the configured blocklist, and the response
+reports the matched and excluded counts. When two task types are equally
+supported and would reach different providers, the tool offers both instead of
+guessing: you get the candidates and an empty result list, then re-issue with
+`task_type`.
 Failed providers fall back silently through a configurable chain so you get
 results, not error messages. Other search tools lock you to one engine;
 Infobroker routes every query to the right provider and keeps going when one
@@ -346,23 +352,20 @@ tells you how sure it is.
 Every search, fetch, and corroboration run is cached; `manage_kb` checks the
 cache before external providers, falling back when results aren't fresh or
 relevant, and ingests, reports, or removes content. Content is age-scored,
-expired on a schedule, and deduplicated by source and meaning; a differing
-name, date,
-or number keeps a page separate. Retrieval runs locally with a
-configurable embedding model; your content never leaves the machine. Beyond
-the cache, `manage_kb` archives generated reports: ingest with
-`source_type: "report"` and the Source Register URLs in the receipt; the ingest
-returns a `report_id` linking them. Revisit them with
-`manage_kb` list/get, or write them to a local directory. `search_web` scopes
-recall to a named `collection`, and `fresh: "blend"` keeps cached results
-beside fresh ones, reporting the kept count even when zero.
+expired on a schedule, and deduplicated by source and meaning. Retrieval runs
+locally with a configurable embedding model; your content never leaves the
+machine. `manage_kb` archives reports: ingest with `source_type: "report"` and
+a receipt, and it returns a `report_id`. Revisit them with `manage_kb` list/get,
+or write them to a local directory. `search_web` scopes recall to a named
+`collection`, and `fresh: "blend"` keeps cached results beside fresh ones.
 
-Corroboration results are also kept as claim records: one ledger entry per
-finding, linked to its sources' retrieval times and updated on
-re-verification. Cited sources are copied into the knowledge base as
-retrievable, hashed snapshots, so a report can be rechecked after the page
-changes. Deep reading reports a snapshot hash and freshness tier per page;
-each snapshot reports its basis (document or snippet) and truncation.
+Corroboration results are also kept as claim records, one per finding, linked
+to their sources' retrieval times. Cited sources are copied in as retrievable,
+hashed snapshots, so a report can be rechecked after the page changes. Deep reading reports a snapshot hash and freshness tier per page;
+each snapshot reports its basis (document or snippet) and truncation. An
+archived report must carry a receipt, and the receipt is graded: structural
+failures plus the share of claims backed by a stored document rather than a
+snippet. No stored sources means ungraded, not ungrounded.
 `preservation.archive: false` keeps snapshots and disables Wayback archiving,
 which is bounded and overlapped with snapshot storage, so a slow capture never
 delays the response.

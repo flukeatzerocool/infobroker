@@ -175,7 +175,7 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
   });
 
   it("reports a REQ whose §9.5 row is absent", () => {
-    const others = group(7).reqs.filter((req) => req !== "REQ-125");
+    const others = group(7).reqs.filter((req) => req !== "REQ-125" && req !== "REQ-134");
     expect(others.every((req) => (LIVE_GATES.get(req) ?? []).join(",") === "G3")).toBe(true);
     let spec = mutate("| REQ-125 | Watchlist Monitoring Runner | 4.7 | G1, G3 |\n", "");
     spec = spec.replace(

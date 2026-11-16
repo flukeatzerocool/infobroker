@@ -2,6 +2,29 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- `search_web` now defers a search when two task types clear the floor with equal
+  support and reach different providers, returning both candidate requirements
+  with an empty result list instead of picking a winner. REQ-020a yields to
+  REQ-131, which defines the trigger and the deferred shape (D-135). A new
+  `include_domains` parameter restricts or prefers listed domains on top of the
+  configured blocklist, and reports the matched and excluded counts.
+
+- Search and single-URL fetch responses carry a `processing` block: per result,
+  whether content was cached or live, truncated, how many duplicates it stands
+  in for, and its freshness (REQ-133). Processing finally has a §D home of its
+  own, and §1's Evidence column is checked instead of decorative.
+
+- A report ingested into the knowledge base now requires a receipt, and the
+  stored receipt carries a deterministic grade — structural failures plus the
+  share of claims backed by a stored document (REQ-110, REQ-134, D-136). A
+  report with no stored sources is ungraded rather than ungrounded.
+
+- The retrieval-quality corpus grew to twenty cases with non-degenerate
+  ordering, and a requirement-quality benchmark scores the direction function
+  against a committed corpus (REQ-135, D-137). The G3 clause detector now
+  recognizes `WHEN … SHALL <offer|ask|skip|defer|decline>` branches, and
+  `check-roadmap` fails on a heading hidden inside an HTML comment.
+
 - A scenario may now declare `invoke` to have the harness load a skill, and N4
   uses it for `analysis-loop`. The line is appended after the user request and
   labelled harness-owned; `results.json` records `invoked` and the observed

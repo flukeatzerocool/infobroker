@@ -27,6 +27,25 @@ Governance), 9 (Security) and 11 (Processing & Provenance) are cross-cutting: Ar
 security suite carry them. They are exempt from the persona requirement by
 `check-user-surface`.
 
+## Parity: surface, evidence, measurement
+
+The five functions are not equally productised, and this table says so rather
+than implying parity. "Surface" is what a caller can invoke; "evidence" is what
+a gate proves; "measurement" is what can regress and be caught.
+
+| Function | Runtime surface | Gate evidence | Measurement |
+|---|---|---|---|
+| Direction | `search_web` direction block, incl. the deferred choice | `check-tdqs`, Arena, `test-fixtures/direction` | REQ-135: offer rate, false-offer rate, slot recall |
+| Collection | `search_web`, `fetch_page`, `get_citations`, `inspect_providers` | Arena, `check-tdqs` | REQ-130: precision/recall/MRR/nDCG over 20 cases |
+| Processing and exploitation | `meta.processing` on search and fetch (no tool of its own) | Arena, `check-gate-coverage` | none — a recorded gap, see `ROADMAP.md` |
+| Analysis and production | `verify_claims`, `search_web (analyze)` | Arena, `check-gate-coverage` | REQ-123: Brier score over the gold set (labels still `documented`) |
+| Dissemination | `manage_kb` ingest with a required receipt and grade; the report itself is client-authored | `check-report-fixtures`, `check-gate-coverage` | REQ-134: structural grade and offline grounding score |
+
+Processing and Dissemination have no dedicated tool; that is a design decision
+(an eighth tool was rejected), not an omission. The measurement column is the
+honest part: Processing has none yet, and the Analysis gold set's labels are
+documented rather than observed, so its Brier score is not yet a quality metric.
+
 ## README Quick Start audit
 
 The README is the product; this table records whether a new user can do what

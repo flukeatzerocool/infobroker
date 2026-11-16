@@ -470,6 +470,23 @@ test("inspect_providers health runs a live probe against the pinned provider", a
   expect(row.slug).toBe("wikipedia");
 });
 
+test("manage_kb refuses a report ingest without a receipt", async () => {
+  scenario = "kb-ingest-no-receipt";
+  const refused = parseEnvelope(
+    (
+      await call("infobroker_manage_kb", {
+        action: "ingest",
+        title: "unreceipted report",
+        text: "A report that names no claims cannot be verified later.",
+        source_type: "report",
+      })
+    ).text
+  );
+  // REQ-110: a report that lands in the knowledge base carries a receipt.
+  expect(refused.ok).toBe(false);
+  expect((refused.body.error as Record<string, unknown>).code).toBe("receipt_required");
+});
+
 test("manage_kb ingests, searches, and reports stats", async () => {
   scenario = "kb-ingest";
   const ingest = expectOk(
@@ -479,6 +496,14 @@ test("manage_kb ingests, searches, and reports stats", async () => {
         title: "debate-club arena note",
         text: "The debate club arena stores a deterministic note about retrieval augmented generation.",
         source_type: "report",
+        receipt: {
+          claims: [
+            {
+              claim: "The arena stores a deterministic note about retrieval augmented generation.",
+              sources: [{ url: "https://example.org/arena", snippet: "arena note" }],
+            },
+          ],
+        },
       })
     ).text
   );
