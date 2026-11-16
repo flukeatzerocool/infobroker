@@ -9,6 +9,7 @@ import {
   recordProviderSuccess,
   recordSearchYield,
   resetProviderHistoryForTests,
+  bumpFailureStreak,
 } from "./provider-history.js";
 
 describe("provider operational history (REQ-024b)", () => {
@@ -67,5 +68,16 @@ describe("provider operational history (REQ-024b)", () => {
 
     recordSearchYield("wiby", 1, 40);
     expect(providerHistory("wiby")).toMatchObject({ lastResultCount: 1, zeroResultStreak: 0 });
+  });
+});
+
+// REQ-038: a persistent-failure streak is reset by any success.
+describe("failure streak (REQ-038)", () => {
+  it("counts consecutive failures and resets on success", () => {
+    expect(bumpFailureStreak("wiby")).toBe(1);
+    expect(bumpFailureStreak("wiby")).toBe(2);
+    expect(bumpFailureStreak("wiby")).toBe(3);
+    recordProviderSuccess("wiby", 1);
+    expect(bumpFailureStreak("wiby")).toBe(1);
   });
 });

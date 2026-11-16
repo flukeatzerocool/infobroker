@@ -29,7 +29,7 @@ import { checkContent, disposition, policyMode, policyMeta } from "./content-pol
 import { audit } from "./audit-log.js";
 import type { ProviderConfig, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { assembleHealthReport } from "./provider-health.js";
-import { recordProviderSuccess, recordProviderError, recordSearchYield, providerHistory } from "./provider-history.js";
+import { recordProviderSuccess, recordProviderError, recordSearchYield, bumpFailureStreak, providerHistory } from "./provider-history.js";
 import { assessProvider, selectActiveRows, keyPoolRow, type ProviderStatusInput, type ProviderAssessment } from "./provider-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
@@ -155,7 +155,9 @@ function saveReportToDisk(title: string, text: string, format: string): string {
   // Reports are the sensitive class: encrypt them at rest when encryption is
   // enabled (REQ-084), and always restrict permissions to the owner.
   const bytes = sealReportBytes(Buffer.from(text, "utf-8"));
-  writeFileSync(fpath, bytes);
+  // REQ-084: the report body is the most sensitive output class; create it with
+  // the restrictive mode rather than widening a default-umask file afterwards.
+  writeFileSync(fpath, bytes, { mode: 0o600 });
   try {
     chmodSync(fpath, 0o600);
   } catch {
@@ -666,6 +668,12 @@ async function doWebSearch(
       // cooldown so a burst of requests stops re-hammering it.
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
+      } else {
+        // A persistent 5xx or timeout is cooled down after three in a row.
+        const status = (e as { status?: unknown }).status;
+        if ((typeof status !== "number" || status >= 500) && bumpFailureStreak(slug) >= 3) {
+          markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
+        }
       }
       if (e instanceof RetryableError && e.status === 429) {
         rateLimited = true;
@@ -1132,6 +1140,14 @@ async function fetchPageContentInner(
       const failure = classifyFailure(e, slug);
       onFailure?.(failure);
       recordProviderError(slug, e instanceof Error ? e.message : String(e));
+      // REQ-038: a persistent 5xx/timeout is cooled down like a 429, so a
+      // permanently broken provider is not re-hammered on every request.
+      const status = (e as { status?: unknown }).status;
+      if (typeof status !== "number" || status >= 500) {
+        if (bumpFailureStreak(slug) >= 3) {
+          markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
+        }
+      }
       if (shouldCooldown(e)) {
         markCooldown(slug, cooldownDurationMs(config.output.rate_limit_cooldown_ms));
       }

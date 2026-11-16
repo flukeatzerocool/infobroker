@@ -15,6 +15,8 @@ export interface ProviderHistoryEntry {
   lastResultCount?: number;
   /** REQ-024b: consecutive successful attempts that returned zero results. */
   zeroResultStreak?: number;
+  /** REQ-038: consecutive 5xx/timeout failures, reset by a success. */
+  consecutiveFailures?: number;
 }
 
 const history = new Map<string, ProviderHistoryEntry>();
@@ -30,7 +32,16 @@ function entryFor(slug: string): ProviderHistoryEntry {
 
 /** Record a provider request that returned usable results. */
 export function recordProviderSuccess(slug: string, timestamp: number = Date.now()): void {
-  entryFor(slug).lastSuccess = timestamp;
+  const entry = entryFor(slug);
+  entry.lastSuccess = timestamp;
+  entry.consecutiveFailures = 0;
+}
+
+/** REQ-038: count a persistent failure; returns the new consecutive count. */
+export function bumpFailureStreak(slug: string): number {
+  const entry = entryFor(slug);
+  entry.consecutiveFailures = (entry.consecutiveFailures ?? 0) + 1;
+  return entry.consecutiveFailures;
 }
 
 /**

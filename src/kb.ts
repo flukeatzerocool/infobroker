@@ -1271,6 +1271,9 @@ export function resolveKeyFile(path: string): string {
 }
 
 export function runMaintenance(): void {
+  // REQ-100: spill files are swept on every maintenance tick, before the
+  // freshness-tier guard, so a tier-less configuration still reaps them.
+  runTruncSweep();
   if (sqliteStore) {
     const tiers = kbConfig?.freshness?.tiers;
     if (!tiers) return;

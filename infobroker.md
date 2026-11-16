@@ -477,7 +477,7 @@ configuration SHALL leave the previous configuration active without
 interruption. _Check:_ G1.
 
 **REQ-038 — Rate-Limit Cooldown**
-WHEN a provider returns a rate-limit response or an anti-bot challenge, the server SHALL place that provider in a per-provider cooldown for a configurable duration. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. A rate-limited response SHALL report the remaining cooldown in milliseconds as `retry_after_ms`. Every provider-attributable error's `remediation` SHALL name the provider-status surface. _Check:_ G1.
+WHEN a provider returns a rate-limit response or an anti-bot challenge, the server SHALL place that provider in a per-provider cooldown for a configurable duration. After a configurable number of consecutive connectivity or server-error failures, the server SHALL also place it in cooldown. WHILE a provider is in cooldown, the server SHALL skip it during fallback selection without a new outbound call, even when it is the chain primary. A provider's cooldown SHALL expire automatically, SHALL NOT consume its quota counters, and SHALL be reported through `inspect_providers`. A rate-limited response SHALL report the remaining cooldown in milliseconds as `retry_after_ms`. Every provider-attributable error's `remediation` SHALL name the provider-status surface. _Check:_ G1.
 
 ### 4.5 State and Configuration
 
