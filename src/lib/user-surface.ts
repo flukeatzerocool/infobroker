@@ -243,6 +243,18 @@ export function checkUserSurface(input: UserSurfaceInput): Finding[] {
     }
   }
 
+  // REQ-055: every §1 function must be exercised by some persona's stage_span.
+  // Validating the stage names alone lets a function drop out of the harness
+  // silently when a persona is edited.
+  for (const stage of DIRECTION_STAGES) {
+    if (!input.personas.some((persona) => (persona.stage_span ?? []).includes(stage))) {
+      findings.push({
+        code: "stage-uncovered",
+        message: `§1 function \`${stage}\` is named by no persona's stage_span`,
+      });
+    }
+  }
+
   for (const group of AUDIENCE_GROUPS) {
     if (!input.personas.some((persona) => (persona.feature_groups ?? []).includes(group))) {
       findings.push({

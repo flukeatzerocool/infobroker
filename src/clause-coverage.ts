@@ -11,7 +11,19 @@ export interface ClauseRequirements {
   orBranches: number;
   // Number of "when ... declares" conditionals the body contains.
   conditionals: number;
+  // Verbs of WHEN-clause branches that defer or decline the work instead of
+  // performing it ("offer the choice instead of searching", "refuse to fetch").
+  // These are independently implementable behaviors a count cannot cover, so
+  // each must be named by a test's clause tag.
+  imperativeVerbs: string[];
 }
+
+// A WHEN clause whose SHALL takes one of these verbs is a branch that defers
+// or declines the work in favour of the caller. The verb set is deliberately
+// narrow: "refuse" is excluded because a refusal guard is already enumerated by
+// the address/class lists that REQ-021a and its siblings tag, and ordinary verbs
+// (report, return, treat) would flag every conditional requirement.
+const IMPERATIVE_RE = /\bWHEN\b[^.\n]*?\bSHALL\s+(offer|ask|skip|defer|decline)\b/gi;
 
 // Detect "or"-joined parenthesized outcome enumerations, excluding groups that
 // contain backticks (those enumerate a value/type union like `"ok"` or
@@ -98,7 +110,23 @@ export function detectClauseRequirements(prose: string): ClauseRequirements {
 
   const conditionals = prose.match(CONDITIONAL_RE)?.length ?? 0;
 
-  return { orBranches, conditionals };
+  const imperativeVerbs = [
+    ...new Set([...prose.matchAll(IMPERATIVE_RE)].map((m) => (m[1] ?? "").toLowerCase())),
+  ];
+
+  return { orBranches, conditionals, imperativeVerbs };
+}
+
+/**
+ * Verbs of imperative branches that no test's clause tag names. A count cannot
+ * establish coverage here: two tags about unrelated aspects of the same REQ
+ * would satisfy a numeric rule while the deferral branch stayed unimplemented
+ * (the REQ-131 regression this guard exists to catch). A tag whose slug
+ * contains the verb names the branch; `offer-choice` binds `offer`.
+ */
+export function findUnnamedImperatives(req: ClauseRequirements, tags: ReadonlySet<string>): string[] {
+  const slugs = [...tags].map((tag) => tag.toLowerCase());
+  return req.imperativeVerbs.filter((verb) => !slugs.some((slug) => slug.includes(verb)));
 }
 
 // Extract clause tags from an `@implements` payload line. A run of non-REQ

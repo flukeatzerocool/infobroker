@@ -6,12 +6,12 @@
 // A REQ with no `@implements` citation is an error unless it is recorded in
 // the `## Spec Waivers` section of DECISIONS.md (intentionally unimplemented).
 //
-// Exit codes: 0 = all checks pass; 1 = errors found.
+// Exit codes: 0 = all checks pass (or --report); 1 = errors found.
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage, bindClauseTags } from "../src/clause-coverage.js";
+import { detectClauseRequirements, clauseTagsFromPayload, evaluateClauseCoverage, findUnnamedImperatives, bindClauseTags } from "../src/clause-coverage.js";
 import { checkFeatureTaxonomyCoverage } from "../src/lib/feature-taxonomy.js";
 import { writeProviderAuth, readConfig } from "./lib/provider-auth.js";
 import { writeProviderMap, readConfig as readMapConfig, PROVIDER_EXCLUSIONS } from "./lib/provider-map.js";
@@ -19,8 +19,28 @@ import { writeProviderPrivacy, readPrivacyConfig } from "./lib/provider-privacy.
 import { GATES } from "./lib/gate-manifest.js";
 import { checkSecurityModel } from "./lib/security-model.js";
 import { reconcile } from "./lib/tool-defaults.js";
+import { handleHelp, parseFlag, rejectUnknown } from "./lib/args.js";
 
 // @implements REQ-055
+
+const USAGE = `validate-spec — spec-code traceability and REQ-body hygiene
+
+Usage:
+  npx tsx scripts/validate-spec.ts [--report]
+
+Options:
+  --report  Print findings and always exit 0 (informational)
+  --help    Show this help (exit 0)
+
+Exit codes: 0 = pass (or report); 1 = errors found; 2 = fatal.
+`;
+
+const argv = process.argv.slice(2);
+handleHelp(argv, USAGE);
+rejectUnknown(argv, new Set(["--report", "--help", "-h"]), USAGE);
+// Report mode is a gate-installation and dry-run affordance: a new detector can
+// be measured against the live tree before it is allowed to fail the build.
+const REPORT_ONLY = parseFlag(argv, "--report");
 
 const __dirname = import.meta.dirname;
 const ROOT = join(__dirname, "..");
@@ -378,7 +398,8 @@ for (const rb of reqBodies) {
   if (prose.length === 0) continue;
 
   const req = detectClauseRequirements(prose);
-  const taggedCount = clauseTagsByReq.get(rb.id)?.size ?? 0;
+  const tags = clauseTagsByReq.get(rb.id) ?? new Set<string>();
+  const taggedCount = tags.size;
   const violation = evaluateClauseCoverage(rb.id, req, taggedCount);
 
   if (violation?.kind === "or-branches") {
@@ -388,6 +409,13 @@ for (const rb of reqBodies) {
   } else if (violation?.kind === "conditional") {
     error(
       `${rb.id}: contains a "when ... declares" conditional but no test tags a clause for it (found: none) — add an inline clause tag exercising the conditional, e.g. \`// @implements ${rb.id} <branch-slug>\``
+    );
+  }
+
+  const unnamed = findUnnamedImperatives(req, tags);
+  if (unnamed.length > 0) {
+    error(
+      `${rb.id}: WHEN-clause branch(es) ${unnamed.map((v) => `"${v}"`).join(", ")} have no test tag naming them (found: ${[...tags].join(", ") || "none"}) — name the branch in a tag slug, e.g. \`// @implements ${rb.id} ${unnamed[0]}-choice\``
     );
   }
 }
@@ -1359,4 +1387,4 @@ if (errors.length === 0 && warnings.length === 0) {
   console.log("\nAll checks passed.");
 }
 
-process.exit(errors.length > 0 ? 1 : 0);
+process.exit(errors.length > 0 && !REPORT_ONLY ? 1 : 0);

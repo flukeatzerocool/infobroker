@@ -87,6 +87,27 @@ function parseSections(text: string): Section[] {
   return sections;
 }
 
+// A `## ` heading inside an HTML comment is invisible to the gate above (which
+// strips comments) and to a reader rendering the file — the failure mode that
+// let a scheduled item sit inside the admission-rule block unnoticed.
+function headingsInsideComments(text: string): number[] {
+  const lines = text.split(/\r?\n/);
+  const found: number[] = [];
+  let inComment = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (inComment) {
+      if (/^##\s+\S/.test(line)) found.push(i + 1);
+      if (line.includes("-->")) inComment = false;
+      continue;
+    }
+    if (line.trimStart().startsWith("<!--")) {
+      if (!line.includes("-->")) inComment = true;
+    }
+  }
+  return found;
+}
+
 function evaluate(sections: Section[]): Finding[] {
   const findings: Finding[] = [];
 
@@ -136,6 +157,13 @@ try {
 
 const sections = parseSections(text);
 const findings = evaluate(sections);
+for (const line of headingsInsideComments(text)) {
+  findings.push({
+    line,
+    rule: "a `## ` heading sits inside an HTML comment — it is invisible to this gate and to readers; move the section out of the comment",
+  });
+}
+findings.sort((a, b) => a.line - b.line);
 
 if (json) {
   process.stdout.write(`${JSON.stringify({ file: "ROADMAP.md", sections: sections.length, findings }, null, 2)}\n`);

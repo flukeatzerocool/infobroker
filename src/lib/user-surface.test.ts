@@ -10,6 +10,7 @@ import {
   registerableConfigPaths,
   specFunctions,
   DECLARED_SHAPES,
+  DIRECTION_STAGES,
   type UserSurfaceInput,
 } from "./user-surface.js";
 
@@ -67,7 +68,9 @@ function base(overrides: Partial<UserSurfaceInput> = {}): UserSurfaceInput {
     specText: SPEC,
     config: CONFIG,
     personas: [
-      { id: "a", feature_groups: [1, 2, 3, 4, 5, 7] },
+      // Every §1 function is exercised, so the stage-coverage check is quiet in
+      // the cases that are not about it.
+      { id: "a", stage_span: [...DIRECTION_STAGES], feature_groups: [1, 2, 3, 4, 5, 7] },
     ],
     // One scenario per declared shape keeps the intent-coverage check quiet in
     // the cases that are not about it.
@@ -182,6 +185,12 @@ describe("checkUserSurface", () => {
   it("flags an intent that is not a declared workflow shape", () => {
     expect(codes(base({ personas: [{ id: "a", intent: "implementation-lookup", feature_groups: [1, 2, 3, 4, 5, 7] }] })))
       .toContain("persona-intent-unknown");
+  });
+
+  it("flags a §1 function that no persona's stage_span exercises", () => {
+    expect(codes(base({
+      personas: [{ id: "a", stage_span: ["direction", "collection", "processing", "analysis"], feature_groups: [1, 2, 3, 4, 5, 7] }],
+    }))).toContain("stage-uncovered");
   });
 
   it("flags a stage that is not a §1 function", () => {

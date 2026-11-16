@@ -4,6 +4,7 @@ import {
   detectClauseRequirements,
   clauseTagsFromPayload,
   evaluateClauseCoverage,
+  findUnnamedImperatives,
   bindClauseTags,
 } from "./clause-coverage.js";
 
@@ -139,8 +140,8 @@ describe("bindClauseTags (D5 binding rule)", () => {
 });
 
 describe("evaluateClauseCoverage (regression guard)", () => {
-  const orphanBranches = { orBranches: 2, conditionals: 0 };
-  const deadConditional = { orBranches: 0, conditionals: 1 };
+  const orphanBranches = { orBranches: 2, conditionals: 0, imperativeVerbs: [] };
+  const deadConditional = { orBranches: 0, conditionals: 1, imperativeVerbs: [] };
 
   it("fails an 'or' REQ with fewer than 2 tagged branches", () => {
     expect(evaluateClauseCoverage("REQ-013", orphanBranches, 1)).toEqual({
@@ -153,8 +154,8 @@ describe("evaluateClauseCoverage (regression guard)", () => {
     expect(evaluateClauseCoverage("REQ-013", orphanBranches, 2)).toBeNull();
   });
 
-  const threeBranches = { orBranches: 3, conditionals: 0 };
-  const fourBranches = { orBranches: 4, conditionals: 0 };
+  const threeBranches = { orBranches: 3, conditionals: 0, imperativeVerbs: [] };
+  const fourBranches = { orBranches: 4, conditionals: 0, imperativeVerbs: [] };
 
   it("fails a three-branch REQ with only two tagged branches", () => {
     expect(evaluateClauseCoverage("REQ-900", threeBranches, 2)).toEqual({
@@ -186,6 +187,35 @@ describe("evaluateClauseCoverage (regression guard)", () => {
   });
 
   it("leaves single-lineage REQs (no branches, no conditional) untouched", () => {
-    expect(evaluateClauseCoverage("REQ-004", { orBranches: 0, conditionals: 0 }, 0)).toBeNull();
+    expect(evaluateClauseCoverage("REQ-004", { orBranches: 0, conditionals: 0, imperativeVerbs: [] }, 0)).toBeNull();
+  });
+});
+
+describe("imperative branch detection (deferral branches)", () => {
+  const REQ_131 =
+    "WHEN two task types clear the floor with equal support and their chains differ, the tool SHALL offer the choice instead of searching, returning both candidate types.";
+
+  it("detects the REQ-131 'offer the choice instead of searching' branch", () => {
+    expect(detectClauseRequirements(REQ_131).imperativeVerbs).toEqual(["offer"]);
+  });
+
+  it("does not flag ordinary conditionals or refusal guards", () => {
+    expect(
+      detectClauseRequirements("WHEN action is list, the tool SHALL report every provider.").imperativeVerbs,
+    ).toEqual([]);
+    expect(
+      detectClauseRequirements(
+        "WHEN a URL resolves to a loopback address, the tool SHALL refuse to fetch it.",
+      ).imperativeVerbs,
+    ).toEqual([]);
+  });
+
+  it("requires a tag whose slug names the branch, not merely any tag", () => {
+    const req = detectClauseRequirements(REQ_131);
+    // Two tags about other aspects of the same REQ do not cover the branch.
+    expect(findUnnamedImperatives(req, new Set(["task-type-supplied", "task-type-inferred"]))).toEqual([
+      "offer",
+    ]);
+    expect(findUnnamedImperatives(req, new Set(["task-type-supplied", "offer-choice"]))).toEqual([]);
   });
 });
