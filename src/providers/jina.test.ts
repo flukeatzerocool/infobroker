@@ -63,3 +63,20 @@ describe("Jina reader endpoint (REQ-021)", () => {
     expect(calls).toEqual(["http://127.0.0.1:8080/https://example.com"]);
   });
 });
+
+describe("Jina target-error warning (REQ-021h)", () => {
+  it("treats a warning-only 404 page as a renderer failure carrying the status", async () => {
+    stubFetch(
+      "Title: Example Domain\n\nURL Source: https://example.com/nope\n\nWarning: Target URL returned error 404: Not Found\n\nMarkdown Content:\n"
+    );
+    await expect(provider.fetchPage!("https://example.com/nope")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("serves a page that mentions the warning but carries real content", async () => {
+    const body =
+      "Warning: Target URL returned error 404: Not Found\n\n" +
+      "This page documents how a reader reports a missing target. ".repeat(6);
+    stubFetch(body);
+    await expect(provider.fetchPage!("https://example.com/doc")).resolves.toContain("documents how a reader");
+  });
+});

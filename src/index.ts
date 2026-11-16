@@ -19,7 +19,7 @@ import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldown
 import { recordAttempt, recordTool, callLogTarget } from "./call-log.js";
 import { sessionStats } from "./session-stats.js";
 import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
-import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
+import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnresolvableHostError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
 import { withGuardedTarget } from "./lib/fetch-target.js";
 import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, stopKbMaintenance, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
@@ -1056,6 +1056,13 @@ async function fetchPageContentInner(
       recordAttempt(slug, "cooldown");
       return null;
     }
+    // REQ-033: the fetch path honours the same per-provider quota as search.
+    if (checkQuota(slug, config.providers[slug]?.rate_limit).exhausted) {
+      sessionStats.recordAttempt(slug, "quota");
+      recordAttempt(slug, "quota");
+      recordProviderError(slug, "quota exhausted");
+      return null;
+    }
     let start = 0;
     try {
       const doCall = async (): Promise<string> => {
@@ -1615,6 +1622,10 @@ async function doFetchPage(
       failures.push(failure)
     );
   } catch (e) {
+    if (e instanceof UnresolvableHostError) {
+      audit("network_target_unresolved", url);
+      return `[ERROR] ${json(err("none", "network_error", sanitizeErrorMessage(e.message), e.retryable ? "The resolver failed temporarily; retry shortly" : "Check the URL host for a typo, then retry"))}`;
+    }
     if (e instanceof SsrRefusalError) {
       audit("network_target_refused", url);
       return `[ERROR] ${json(err("none", "network_target_refused", sanitizeErrorMessage(e.message), `Set fetch.allow_private_urls=true to permit private targets`))}`;

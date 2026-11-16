@@ -2,6 +2,7 @@
 import type { Provider } from "../types.js";
 import { RetryableError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
+import { HttpStatusError } from "../lib/url-guard.js";
 import { getEnvVar } from "../config.js";
 
 const JINA_BASE = "https://r.jina.ai/";
@@ -26,7 +27,20 @@ async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
     throw new RetryableError(`Jina returned HTTP ${resp.status}`, resp.status);
   }
 
-  return resp.text();
+  const text = await resp.text();
+  // Jina serves a 404/5xx page with HTTP 200 and a leading warning line. Treat
+  // it as a renderer failure so the chain falls through to native_fetch; a page
+  // that merely quotes the warning is served because content follows it.
+  const lines = text.split(/\r?\n/);
+  const warningIndex = lines.findIndex((line) => /^Warning: Target URL returned error \d{3}/.test(line.trim()));
+  if (warningIndex >= 0) {
+    const warning = lines[warningIndex].trim().match(/^Warning: Target URL returned error (\d{3})/);
+    const trailing = lines.slice(warningIndex + 1).join("\n").trim();
+    if (warning && trailing.length < 200) {
+      throw new HttpStatusError(`Jina reported HTTP ${warning[1]} for the target`, Number(warning[1]));
+    }
+  }
+  return text;
 }
 
 async function health(): Promise<{ status: string; avgLatencyMs: number }> {

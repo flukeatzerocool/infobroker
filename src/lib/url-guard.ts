@@ -85,6 +85,20 @@ export function isPrivateHostname(hostname: string): boolean {
 
 export class SsrRefusalError extends Error {}
 
+/**
+ * REQ-021a: resolution failed, which is a connectivity error, not a safety
+ * refusal. A transient resolver failure (EAI_AGAIN) is worth a retry; a name
+ * that does not exist is a URL typo.
+ */
+export class UnresolvableHostError extends Error {
+  constructor(
+    message: string,
+    public readonly retryable: boolean = false,
+  ) {
+    super(message);
+  }
+}
+
 export function assertPublicUrl(rawUrl: string, allowPrivate: boolean): void {
   let parsed: URL;
   try {
@@ -126,8 +140,9 @@ export async function assertPublicUrlResolved(
   let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await resolver(host);
-  } catch {
-    throw new SsrRefusalError(`Could not resolve host "${host}"`);
+  } catch (error) {
+    const code = (error as { code?: string } | undefined)?.code;
+    throw new UnresolvableHostError(`Could not resolve host "${host}"`, code === "EAI_AGAIN" || code === "ETIMEOUT");
   }
   for (const addr of addresses) {
     if (allowPrivate) continue;

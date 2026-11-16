@@ -1,6 +1,6 @@
 // @implements REQ-021a resolved-address REQ-021a loopback REQ-021a private REQ-021a link-local REQ-021a metadata-address REQ-021a configuration-opt-out REQ-021a per-redirect-reguard
 import { describe, it, expect } from "vitest";
-import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, isPrivateHostname, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError } from "./url-guard.js";
+import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, isPrivateHostname, fetchFollowRedirects, SsrRefusalError, UnresolvableHostError, UnsupportedProtocolError } from "./url-guard.js";
 
 const stubResolver = async (host: string) => {
   if (host === "private.example") return [{ address: "10.0.0.5", family: 4 }];
@@ -90,11 +90,19 @@ describe("assertPublicUrlResolved (REQ-021a resolved-address)", () => {
       .rejects.toThrow(/resolved private\/internal address/);
   });
 
-  it("fails closed when resolution fails", async () => {
+  it("reports an unresolvable host as a connectivity error, not a safety refusal", async () => {
     await expect(assertPublicUrlResolved("http://unresolvable.example/x", false, stubResolver))
-      .rejects.toThrow(SsrRefusalError);
+      .rejects.toBeInstanceOf(UnresolvableHostError);
     await expect(assertPublicUrlResolved("http://unresolvable.example/x", false, stubResolver))
       .rejects.toThrow(/Could not resolve host/);
+  });
+
+  it("marks a transient resolver failure as retryable", async () => {
+    const transient = async () => {
+      throw Object.assign(new Error("temporary failure"), { code: "EAI_AGAIN" });
+    };
+    await expect(assertPublicUrlResolved("http://flaky.example/x", false, transient))
+      .rejects.toMatchObject({ retryable: true });
   });
 
   it("accepts a hostname that resolves publicly", async () => {
