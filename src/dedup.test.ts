@@ -97,3 +97,84 @@ describe("reconcileResults (REQ-020g)", () => {
     expect(out[0].url).toBe("https://b.com/2");
   });
 });
+
+// @implements REQ-020j snippet-basis
+// @implements REQ-020j identity-sets token-floor
+describe("reconcileResults snippet basis (REQ-020j)", () => {
+  const SYNDICATED =
+    "The central bank held its policy rate unchanged at 4.25 percent, citing persistent services inflation.";
+
+  it("collapses a reheadlined syndication on the snippet (REQ-020j snippet-basis)", () => {
+    const results = [
+      { ...r("Central bank holds rates", "https://news.example.com/rates", SYNDICATED), provider: "duckduckgo" },
+      { ...r("Rate decision: no change", "https://wire.example.net/story-1182", SYNDICATED), provider: "mojeek" },
+      r("Analyst outlook", "https://research.example.net/outlook", "Economists expect one cut before year end."),
+    ];
+    const out = reconcileResults(results, "central bank rate decision");
+    expect(out).toHaveLength(2);
+    const pair = out.filter((x) => x.url.includes("rates") || x.url.includes("story-1182"));
+    expect(pair).toHaveLength(1);
+    expect(pair[0].providers).toEqual(["duckduckgo", "mojeek"]);
+  });
+
+  it("accepts a snippet of exactly eight tokens (REQ-020j token-floor)", () => {
+    const body = "Officials approved the port expansion late on Tuesday";
+    expect(body.split(/\s+/)).toHaveLength(8);
+    const out = reconcileResults(
+      [
+        r("Port expansion approved", "https://a.example.com/port", body),
+        r("Harbour works get go-ahead", "https://b.example.net/port", body),
+      ],
+      "port expansion",
+    );
+    expect(out).toHaveLength(1);
+  });
+
+  it("refuses a snippet below the token floor (REQ-020j token-floor)", () => {
+    const body = "Approved port expansion follows four year review";
+    expect(body.split(/\s+/)).toHaveLength(7);
+    const out = reconcileResults(
+      [
+        r("Port expansion approved", "https://a.example.com/port", body),
+        r("Harbour works get go-ahead", "https://b.example.net/port", body),
+      ],
+      "port expansion",
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it("refuses differing identifying values on each side (REQ-020j identity-sets)", () => {
+    const out = reconcileResults(
+      [
+        r(
+          "Northwind posts quarterly results",
+          "https://finance.example.com/northwind",
+          "The company reported revenue of 2026 million dollars in the third quarter review.",
+        ),
+        r(
+          "Analyst note on Southgate figures",
+          "https://markets.example.net/southgate",
+          "The company reported revenue of 2026 million dollars, up from 4.2 billion, in the third quarter review.",
+        ),
+      ],
+      "quarterly revenue",
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it("allows the collapse when neither snippet carries an identifying value (REQ-020j identity-sets)", () => {
+    const body =
+      "Protected cycle lanes were associated with a marked reduction in cyclist injuries over five years.";
+    // Titles share no content word, so full-text similarity stays at 0.670 —
+    // well below threshold. Only the snippet basis can collapse this pair, so a
+    // refusal of the both-empty abstention fails here.
+    const out = reconcileResults(
+      [
+        r("Study finds fewer crashes", "https://transport.example.org/lanes", body),
+        r("Council briefing note", "https://policy.example.net/brief", body),
+      ],
+      "cycling infrastructure",
+    );
+    expect(out).toHaveLength(1);
+  });
+});

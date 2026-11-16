@@ -1,4 +1,4 @@
-// @implements REQ-020g REQ-121
+// @implements REQ-020g REQ-020j REQ-121
 // Cross-provider result reconciliation: collapse results that express the same
 // content into one representative and order the survivors by semantic
 // relevance to the query. Provenance (source type and original source) is
@@ -6,12 +6,28 @@
 // the shared in-process embedding models (REQ-103); the lexical model is the
 // automatic fallback on small result sets.
 import type { SearchResult } from "./types.js";
-import { pairwiseSimilarity, rankDocs } from "./embed.js";
+import { identityTokens, pairwiseSimilarity, rankDocs, tokenize } from "./embed.js";
 
 export const DEFAULT_DEDUP_THRESHOLD = 0.85;
 
+/** REQ-020j: a snippet shorter than this cannot establish a collapse alone. */
+export const SNIPPET_MIN_TOKENS = 8;
+
 function resultText(r: SearchResult): string {
   return `${r.title ?? ""} ${r.snippet ?? ""}`.trim();
+}
+
+function snippetText(r: SearchResult): string {
+  return r.snippet?.trim() ?? "";
+}
+
+// REQ-020j: identical sets — not disjointness and not containment. Two snippets
+// that carry different identifying values describe different content even when
+// their wording matches, which is the rule REQ-072 already applies to ingest.
+function sameIdentity(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  if (left.size !== right.size) return false;
+  for (const term of left) if (!right.has(term)) return false;
+  return true;
 }
 
 function mergeProvenance(keep: SearchResult, dup: SearchResult): void {
@@ -112,6 +128,33 @@ export function reconcileResults(
 
   const order = orderedIndexes(results, query, qualityOf, qualityWeight);
 
+  // REQ-020j: a second acceptance path. A reheadlined syndication of the same
+  // body falls below threshold on title-plus-snippet alone, so the snippets are
+  // compared as a basis in their own right — guarded by an identifying-value
+  // agreement and a substance floor, because shared boilerplate is not content.
+  const bodies = results.map(snippetText);
+  const substantive = bodies.map((body) => tokenize(body).length >= SNIPPET_MIN_TOKENS);
+  const identities = bodies.map((body) => identityTokens(body));
+  let snippetSim: number[][] | undefined;
+  const snippetMatches = (i: number, j: number): boolean => {
+    if (!substantive[i] || !substantive[j]) return false;
+    if (!snippetSim) {
+      try {
+        snippetSim = pairwiseSimilarity(bodies, "lsa");
+      } catch {
+        // REQ-020j: a degenerate snippet vocabulary yields no snippet evidence;
+        // it cannot turn a full-text match into a miss.
+        snippetSim = [];
+      }
+    }
+    if (snippetSim.length === 0) return false;
+    // Both-empty abstains: with no identifying value on either side, the
+    // similarity decides, which is how REQ-072 treats the same situation.
+    const agree =
+      (identities[i].size === 0 && identities[j].size === 0) || sameIdentity(identities[i], identities[j]);
+    return snippetSim[i][j] >= threshold && agree;
+  };
+
   const drop = new Set<number>();
   const kept: SearchResult[] = [];
   for (const i of order) {
@@ -119,7 +162,7 @@ export function reconcileResults(
     const keep = { ...results[i] };
     for (let j = 0; j < results.length; j++) {
       if (j === i || drop.has(j)) continue;
-      if (sim[i][j] >= threshold) {
+      if (sim[i][j] >= threshold || snippetMatches(i, j)) {
         mergeProvenance(keep, results[j]);
         drop.add(j);
       }

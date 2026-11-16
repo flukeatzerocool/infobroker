@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–136, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–136, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -287,6 +287,9 @@ WHEN `search_web` returns results, the tool SHALL order them by semantic relevan
 
 **REQ-020i — `search_web` batch partial results**
 WHEN `search_web` receives an array of queries, a failing element SHALL NOT fail the batch. The response SHALL return every successful element's results with per-input metadata, and SHALL report each failed element's error in that metadata. The batch SHALL report success when at least one element succeeds, and SHALL return an error per REQ-002 only when every element fails. Per-input metadata SHALL name the input, the serving provider, and the status, and SHALL report the ranked passage count and truncation state when those apply to the element. _Check:_ G1.
+
+**REQ-020j — Snippet-based reconciliation**
+WHEN a comparison of titles and snippets does not establish that two results express the same content, the tool SHALL compare the result snippets as a second basis for collapse. A snippet-based collapse SHALL require identical sets of identifying values in the two snippets, and where neither snippet carries one, similarity alone SHALL decide. A snippet shorter than eight tokens SHALL NOT establish a collapse, and a token SHALL mean one run of letters or digits as the reconciler tokenizes it. _Check:_ G1.
 
 **REQ-021 — `fetch_page`**
 Fetch and extract the content of a URL. Parameters: `url` (required) which SHALL accept a single value or an array of up to five; plus optional `renderer` (`jina` primary, `native_fetch`, `wikipedia`, `internet_archive`, `arxiv`, `stack_exchange`), `max_length` (default 50000), `question`, `passage_size`, `max_passages`, `detect_date`, `crawl`, `extract`, and `raw`. When the primary renderer is slow, the tool SHALL race a fallback renderer, returning the first successful render, preferring the primary within a configurable grace window and cancelling losing renderers; it SHALL also fall back when the renderer is throttled or errors. Array inputs SHALL be processed concurrently and merged into one response where each result names its serving provider and per-input provenance is retained. _Check:_ G0, G1.
@@ -1199,6 +1202,7 @@ verdict is preserved (REQ-026f).
 - Routing intent: pass a caller list with `priority:"privacy"` → verify only private providers from that list are called and the list is not replaced; pass `priority:"quality"` → verify the pool is ordered by provider priority (REQ-026i)
 - Semantic claim reconciliation: mock two providers with paraphrased agreeing claims → verify one confirmed finding; mock a claim with opposed polarity or a conflicting value → verify the `contested` verdict with perspectives is preserved (REQ-026f)
 - Cross-provider reconciliation: mock results where two providers return the same page at different URLs → verify the results collapse to one representative with provenance retained and distinct results preserved (REQ-020g)
+- Snippet-based reconciliation: mock a reheadlined syndication carrying an identical body → verify it collapses; mock a pair whose bodies differ in an identifying figure → verify both survive; mock an identical snippet below eight tokens → verify both survive (REQ-020j)
 - Rate-limit error code: mock an explicitly requested provider returning HTTP 429 → verify the error code is `rate_limited`, not `provider_unavailable` (REQ-002)
 - Key-pool rotation: supply two credentials; mock the first returning 401 then a success → verify the rejected credential is not reused and the second serves; mock 429 → verify that credential cools down while the other remains usable (REQ-104)
 - Embedding model unavailable: configure an unknown `embedding_model` → verify KB tools report degraded availability with a remediation and non-knowledge-base tools still work (REQ-103, F9)
@@ -1316,6 +1320,7 @@ verdict is preserved (REQ-026f).
 | REQ-020g | Cross-provider result reconciliation | 4.3 | G1 |
 | REQ-020h | Source-quality ordering and domain blocklist | 4.3 | G1 |
 | REQ-020i | `search_web` batch partial results | 4.3 | G1 |
+| REQ-020j | Snippet-based reconciliation | 4.3 | G1 |
 | REQ-021 | `fetch_page` | 4.3 | G0, G1 |
 | REQ-021a | `fetch_page` network-target safety | 4.3 | G1 |
 | REQ-021b | `fetch_page` question-grounded extraction | 4.3 | G1 |
@@ -1939,7 +1944,7 @@ the table.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-135 | G0, G1 |
+| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-020j, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-135 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
 | 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |

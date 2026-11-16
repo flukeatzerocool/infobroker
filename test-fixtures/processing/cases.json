@@ -256,6 +256,64 @@
         ]
       ],
       "collapsed_count": 1
+    },
+    {
+      "id": "boilerplate-shared",
+      "query": "quarterly earnings results",
+      "results": [
+        {
+          "title": "Northwind posts quarterly results",
+          "url": "https://finance.example.com/northwind-q3",
+          "snippet": "The company reported quarterly revenue of 4.2 billion dollars, up from the prior year, driven by strong demand."
+        },
+        {
+          "title": "Southgate quarterly update",
+          "url": "https://finance.example.net/southgate-q3",
+          "snippet": "The company reported quarterly revenue of 5.7 billion dollars, up from the prior year, driven by strong demand."
+        },
+        {
+          "title": "Analyst reaction",
+          "url": "https://markets.example.org/reaction",
+          "snippet": "Analysts raised targets after the results."
+        }
+      ],
+      "must_collapse": [],
+      "must_survive": [
+        [
+          "https://finance.example.com/northwind-q3",
+          "https://finance.example.net/southgate-q3"
+        ]
+      ],
+      "collapsed_count": 0
+    },
+    {
+      "id": "short-shared-snippet",
+      "query": "local election results",
+      "results": [
+        {
+          "title": "Council seat flips",
+          "url": "https://local.example.com/seat",
+          "snippet": "Click to read the full story."
+        },
+        {
+          "title": "Turnout recovers",
+          "url": "https://local.example.net/turnout",
+          "snippet": "Click to read the full story."
+        },
+        {
+          "title": "Recount requested",
+          "url": "https://local.example.org/recount",
+          "snippet": "A recount was requested in one ward."
+        }
+      ],
+      "must_collapse": [],
+      "must_survive": [
+        [
+          "https://local.example.com/seat",
+          "https://local.example.net/turnout"
+        ]
+      ],
+      "collapsed_count": 0
     }
   ]
 }
