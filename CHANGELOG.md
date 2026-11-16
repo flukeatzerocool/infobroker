@@ -2,6 +2,12 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- A scenario may now declare `invoke` to have the harness load a skill, and N4
+  uses it for `analysis-loop`. The line is appended after the user request and
+  labelled harness-owned; `results.json` records `invoked` and the observed
+  `skills_loaded`. N4 thereby becomes a single-turn contract test for the
+  zero-source path rather than an unreliable routing test (D-134).
+
 - Research-suite runs are now observable and their tail is shorter. Each
   scenario prints its PASS/FAIL line as it finishes, every run writes
   `timings.json` (server start, per-turn, evaluate, citation), and citation

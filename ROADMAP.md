@@ -27,40 +27,6 @@ run records an isolated KB path in its run artifacts.
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Manifest needles test literal prose, not the finding
-
-- N4's `sections` needle `zero usable` failed a run that reported the zero-source
-  conclusion as "nonexistent", named three gaps, and carried an Uncertainty
-  Register (2026-11-15) — the wording differed, the finding did not.
-- The set now reads `zero usable|no usable|nonexistent`; the 2026-11-15 repo-mode
-  re-runs failed earlier than the needle — N4 routed to Research & Write, so no
-  Uncertainty Register or shape token was written. The residual is routing, not
-  wording (`docs/research-evidence-2026-11-15.md`).
-- Two routing fixes failed: the named marker (D-132) did not move a run that
-  loaded the skill (`run-20261115-182956`), and a high-stakes vendor-decision
-  phrasing routed Vetting (`run-20261115-195035`), which the Vetting-vs-Gated
-  tie-breaker says is correct. Prompt wording cannot pin the route; N4 needs
-  explicit skill invocation or a re-scoped expectation (D-133).
-
-**Trigger:** start with the next research-suite change; close when a repo-mode N4
-run that reports a zero-source conclusion passes its section gate.
-
-## Research-suite token set assumes a single-turn answer
-
-- The gated-analysis scenario asserts four phase tokens, but a multi-turn run
-  emits them across turns and the evaluator reads only the final message, so a
-  correct run fails on `research-analysis complete.` (S9, 2026-11-15).
-- Decided and stated: `token_scope: session` in the manifest, documented in
-  `test-fixtures/research/README.md`; S9 passes under it. The single-turn gated
-  side is unproven because N4 does not route to gated analysis.
-- The 2026-11-15 named-marker change (D-132) did not move N4 even on a run that
-  loaded the skill (`run-20261115-182956`); the next lever is not prose on the
-  Phase 0 surface.
-
-**Trigger:** start with the next research-suite change; close when a passing
-multi-turn gated run and a single-turn gated run both satisfy the same stated
-contract.
-
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`

@@ -2678,6 +2678,27 @@ its original utterance.
 
 Scope: developer harness only.
 
+### D-134: An Invoked Scenario Is a Contract Test, Not a Routing Test (2026-11-15)
+
+Routing N4 by prompt wording is not achievable: three realistic phrasings were
+classified as Research & Write, Research & Write, and Vetting, each correct
+under the policy (D-133). N4 now declares `invoke: ["analysis-loop"]`; the
+harness appends a labelled load line after the user request, and the evaluator
+records `invoked` and the observed `skills_loaded` (advisory).
+
+The trade is explicit: N4 verifies `analysis-loop`'s single-turn zero-source
+contract (Uncertainty Register, gaps, no-source statement, completion token) and
+no longer exercises route selection. S9 keeps the multi-turn gated route and S6
+the vetting route. A gate pass with an empty `skills_loaded` closes nothing; the
+roadmap sections stay open until the load is observed.
+
+Rejected: further prompt wording (D-133), a second skill's forced load (the
+`infobroker` skill is not required for tool use and would be stricter than the
+`test-skills` precedent), and gating on `skills_loaded` (client-version
+dependent, so it stays advisory while the contract gates decide).
+
+Scope: developer harness only.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a

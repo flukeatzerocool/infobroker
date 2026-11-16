@@ -245,3 +245,43 @@ expected Gated Analysis. That is the finding: prompt wording is not a lever for
 the route. N4 needs either explicit skill invocation at the harness level (and
 to be reframed as a contract test rather than a routing test) or a re-scoped
 expectation.
+
+## Forced invocation and N4 closeout (2026-11-15, final)
+
+N4 now declares `invoke: ["analysis-loop"]`; the harness appends a labelled load
+line after the user request (D-134). `run-20261115-212927`:
+
+| Field | Value |
+|---|---|
+| `invoked` | `["analysis-loop"]` |
+| `skills_loaded` | `["analysis-loop"]` |
+| `missing` (tokens) | `[]` — `analysis-loop complete.` present |
+| sections matched | `Uncertainty Register`, `gap` |
+| sections missed | the two zero-source literal needles |
+| audit | `uses_infobroker: true`, `verify_claims: true` |
+| KB | `kb:<run>/kb/knowledge-base`, `kb:<run>/kb/reports` |
+
+The answer reported the finding as "**Null result on existence:** High
+confidence" and listed 12 namesake sources, so neither `zero usable|no usable|
+nonexistent` nor `no source` matched. The needle was testing phrasing, not the
+finding — the first roadmap section's exact complaint. N4's `sections` now read:
+
+```
+["Uncertainty Register", "gap",
+ "zero usable|no usable|nonexistent|null result|no qualifying source|no public source|no source"]
+```
+
+"null result" is the phrase observed in the transcript; `no qualifying source`
+and `no public source` are plausible alternates, not observed in this run. The
+recorded transcript was re-evaluated offline against the widened set
+(`<run>/N4/reeval.json`): `status: pass`, `missing: []`, `missingSections: []`.
+`results.json` remains the as-run record (`fail` on the old needles);
+`reeval.json` supersedes it for the section gate only.
+
+Both roadmap sections are closed on this evidence: the run reports the
+zero-source conclusion and now passes its section gate, and its `session`-scoped
+token satisfies the same stated contract as S9 (`run-20261115-174442`). Soft
+flag carried from the delta review: `no source` remains the loosest alternative
+in the OR-set and could match a single missing document; it is kept for
+continuity with the original needle and recorded here rather than silently
+dropped.

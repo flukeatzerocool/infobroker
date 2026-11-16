@@ -146,6 +146,14 @@ run_turn() {
   prompt="The following request is from your user. Fulfill it as a capable research assistant would, using your research tools and skills, and deliver a complete, well-sourced answer.
 
 $(cat "$promptfile")"
+  # A scenario may name skills the harness should load (manifest `invoke`). The
+  # line is appended after the request and labelled as harness-owned, so the
+  # user utterance itself stays non-leading (D-134).
+  if [[ -n "${INVOKE_HINT:-}" ]]; then
+    prompt="$prompt
+
+$INVOKE_HINT"
+  fi
   if [[ -n "$session" ]]; then
     "${cmd[@]}" "${args[@]}" --session "$session" "$prompt" > "$outfile" 2>> "$RUN_DIR/openruns.log"
   else
@@ -166,6 +174,7 @@ record_failure() {
     const [reason, rc, timeoutS] = process.argv.slice(2);
     const rec = {
       id: s.id, label: s.label, shape: s.shape, mode: s.mode,
+      invoked: s.invoke ?? [], skills_loaded: [],
       status: "fail", reason, rc: Number(rc), timeout_s: Number(timeoutS),
       missing: [], absentFound: [], missingSections: [], audit: {},
       auditFails: [reason], urlsFound: 0, citations: [],
@@ -183,9 +192,15 @@ for id in $SCENARIO_IDS; do
   turn_ms_csv=""
   eval_ms=0
   citation_ms=0
+  INVOKE_HINT=""
 
   utterance=$(node -e 'console.log(require(process.argv[1]).utterance)' "$sc")
   fu_count=$(node -e 'console.log((require(process.argv[1]).followups||[]).length)' "$sc")
+  invoke_ids=$(node -e 'const s=require(process.argv[1]);process.stdout.write((s.invoke||[]).join(","))' "$sc")
+  if [[ -n "$invoke_ids" ]]; then
+    INVOKE_HINT="Harness instruction: load these skills in order and follow their contract: \`${invoke_ids//,/\`, \`}\`."
+    info "  invoking: $invoke_ids"
+  fi
 
   # Base turn. A non-zero exit is captured, not fatal: `timeout` returns 124,
   # and under `set -e` an uncaught exit would end the whole suite, losing every

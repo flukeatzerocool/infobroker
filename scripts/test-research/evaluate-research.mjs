@@ -37,6 +37,23 @@ const toolOrder = extractToolOrder(raw);
 // events. Both signals count as engagement.
 const mcpTools = extractMcpToolCalls(raw, "infobroker");
 
+// A scenario may ask the harness to load a skill (`invoke`). Report both what
+// was asked for and what the transcript actually shows, so a forced-contract
+// run (D-134) is auditable. Advisory: the contract gates are unchanged.
+const skillsLoaded = (() => {
+  const ids = [];
+  for (const line of raw.split("\n")) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    const tool = ev?.tool ?? ev?.part?.tool;
+    const isToolUse = ev?.type === "tool_use" || ev?.part?.type === "tool";
+    if (!isToolUse || tool !== "skill") continue;
+    const id = ev?.input?.id ?? ev?.part?.state?.input?.id;
+    if (typeof id === "string") ids.push(id);
+  }
+  return ids;
+})();
+
 writeFileSync(`${outDir}/final.txt`, text.trim().slice(-4000), "utf8");
 
 // --- tokens (in order) ---
@@ -104,6 +121,8 @@ process.stdout.write(JSON.stringify({
   label: scenario.label,
   shape: scenario.shape,
   mode: scenario.mode,
+  invoked: scenario.invoke ?? [],
+  skills_loaded: skillsLoaded,
   status,
   token_scope: tokenScope,
   missing,

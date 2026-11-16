@@ -33,11 +33,17 @@ entry declares:
   it does not appear in the prompt), `mode` (`positive`, `negative`, or
   `multiturn`).
 - `utterance`: the realistic, non-leading user request. The persona and the
-  expectation of shape/token live only in the manifest, never in the prompt.
+  expectation of shape/token live only in the manifest; an `invoke` scenario
+  adds a harness-owned load line *after* the request (see below).
+- `invoke` (optional): skill ids the harness asks the run to load, in order. An
+  invoked scenario is a contract test — it verifies the skill's deliverable, not
+  route selection. `results.json` records `invoked` and the observed
+  `skills_loaded` (advisory; the contract gates still decide pass/fail).
 - `followups`: subsequent turns, continued in the same session. Interactive
-  skills (`analysis-loop`) need a "Proceed with reasonable defaults." turn
-  and a "Close it here and accept the remaining gaps." turn to reach their
-  final completion token.
+  skills (`analysis-loop`) may need a "Proceed with reasonable defaults." turn
+  and a "Close it here and accept the remaining gaps." turn to reach their final
+  completion token; an invoked single-turn scenario (N4) instead relies on the
+  skill's own contract in one turn.
 - `tokens` (order-sensitive), `absent` (must not appear), `sections`
   (case-insensitive substring needles, `|` = OR). A `sections` needle must
   list the acceptable synonyms for one finding, not one literal: when a
@@ -59,8 +65,9 @@ entry declares:
 Neither scope can be satisfied by user, system, or tool text: both helpers
 return assistant blocks only, so a completion token the user typed — or one
 echoed from loaded skill content — cannot pass a gate. `S9` therefore needs
-two passing runs to prove the contract: a multi-turn run and a single-turn
-gated run (`N4`).
+two passing runs to prove the contract: a multi-turn run (`S9`) and an invoked
+single-turn gated run (`N4`). An invoked scenario is a contract test, not a
+routing test (D-134).
 
 **Hard gates** (a failing one fails the scenario):
 

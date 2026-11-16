@@ -102,6 +102,29 @@ test("section needles are OR-sets of accepted synonyms", () => {
   assert.deepEqual(result.missingSections, []);
 });
 
+// --- invocation reporting ---
+
+test("invoked is echoed from the scenario", () => {
+  const result = runCase({
+    scenario: { id: "T5", label: "t5", invoke: ["analysis-loop"], tokens: [], sections: [], tool_audit: { uses_infobroker: false } },
+    events: [assistant("done", "m1")],
+  });
+  assert.deepEqual(result.invoked, ["analysis-loop"]);
+  assert.deepEqual(result.skills_loaded, []);
+});
+
+test("skills_loaded reads skill tool events in order", () => {
+  const result = runCase({
+    scenario: { id: "T6", label: "t6", invoke: ["infobroker", "analysis-loop"], tokens: [], sections: [], tool_audit: { uses_infobroker: false } },
+    events: [
+      { type: "tool_use", part: { type: "tool", tool: "skill", state: { input: { id: "infobroker" } } } },
+      { type: "tool_use", tool: "skill", input: { id: "analysis-loop" } },
+      assistant("done", "m1"),
+    ],
+  });
+  assert.deepEqual(result.skills_loaded, ["infobroker", "analysis-loop"]);
+});
+
 // --- citation sampler ---
 
 function stubFetch(statuses, { delayMs = 10 } = {}) {
