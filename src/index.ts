@@ -22,7 +22,7 @@ import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
 import { withGuardedTarget } from "./lib/fetch-target.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, stopKbMaintenance, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
@@ -75,6 +75,9 @@ const START_TIME = Date.now();
 const toolMetrics = createToolMetrics();
 const SPEC_REVIEW_TIME = Date.now();
 const BUILD_VERSION = readPackageVersion();
+// REQ-031a/REQ-021: the three tools whose provider fan-out can run for
+// minutes carry a wall-clock budget; KB and configuration calls are local.
+const BUDGETED_TOOLS = new Set(["infobroker_search_web", "infobroker_fetch_page", "infobroker_verify_claims"]);
 
 function readPackageVersion(): string {
   try {
@@ -2078,7 +2081,11 @@ const instrumentTool = (name: string, config: any, handler: any) =>
   server.registerTool(name, config, async (...args: any[]) => {
     const start = Date.now();
     try {
-      const result = await handler(...args);
+      const budget = getConfig().output.request_budget_ms;
+      const work = Promise.resolve(handler(...args));
+      const result = BUDGETED_TOOLS.has(name)
+        ? await withTimeout(work, budget, () => `${name} exceeded its ${budget}ms request budget`)
+        : await work;
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, true);
       recordTool(name, true, elapsed);
@@ -3048,6 +3055,32 @@ process.on("SIGHUP", () => {
 
 async function main() {
   const transport = new StdioServerTransport();
+  // REQ-066: a client disconnect (stdin close) ends the process. Without this
+  // the KB maintenance interval keeps the event loop alive as an orphan.
+  transport.onclose = () => {
+    try {
+      flushKbWrites();
+    } catch {
+      // best effort: the process is exiting
+    }
+    stopKbMaintenance();
+  };
+  const stopForSignal = () => {
+    try {
+      flushKbWrites();
+    } catch {
+      // best effort: the process is exiting
+    }
+    stopKbMaintenance();
+  };
+  // Run on the exit path rather than intercepting SIGINT/SIGTERM: a signal
+  // listener would suppress the platform default and the process would not die.
+  process.once("exit", stopForSignal);
+  process.once("SIGTERM", () => {
+    stopForSignal();
+    process.removeAllListeners("SIGTERM");
+    process.kill(process.pid, "SIGTERM");
+  });
   await server.connect(transport);
   // Load the KB after the MCP handshake so a large vector store cannot block
   // the `initialize` request past a client's timeout window.

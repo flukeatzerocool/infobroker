@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–136, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–137, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -500,6 +500,9 @@ Every outbound HTTP request from a provider backend SHALL include an
 identifier that distinguishes the request as originating from this server.
 The identifier SHALL be consistent across all providers regardless of
 provider tier or transport. _Check:_ G1.
+
+**REQ-137 — Outbound Response Bounds**
+Every provider and renderer response body SHALL be read under a configurable byte cap. A text body that exceeds the cap SHALL be truncated at the cap and reported as truncated, and the truncation SHALL NOT crash the caller. A structured body that exceeds the cap SHALL be treated as a provider failure rather than parsed partially. The cap SHALL count decompressed bytes, and a response that declares no length or a false length SHALL still be bounded. _Check:_ G1.
 
 **REQ-095 — Financial Task Type**
 The server SHALL support a `financial` task type serving queries for filings, market data, and economic indicators. Queries classified as `financial` SHALL route through the financial dispatch chain, whose providers SHALL be zero-config and SHALL include at least one primary-source filings source and one economic-indicator source. When every financial provider is exhausted or empty, the chain SHALL fall back per REQ-031. _Check:_ G1.
@@ -1381,6 +1384,7 @@ verdict is preserved (REQ-026f).
 | REQ-040 | Configuration Reload | 4.5 | G1 |
 | REQ-070 | Provider Registration | 4.6 | G1 |
 | REQ-071 | Outbound HTTP Identification | 4.6 | G1 |
+| REQ-137 | Outbound Response Bounds | 4.6 | G1 |
 | REQ-095 | Financial Task Type | 4.6 | G1 |
 | REQ-050 | `search-preferences.md` | 4.7 | G3 |
 | REQ-051 | Orchestrator Skill | 4.7 | G3 |
@@ -1944,7 +1948,7 @@ the table.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-020j, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-135 | G0, G1 |
+| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-020j, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-135, REQ-137 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
 | 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |

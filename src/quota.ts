@@ -86,6 +86,9 @@ function scheduleWrite(): void {
     writeTimer = null;
     saveQuotaState();
   }, WRITE_INTERVAL_MS);
+  // A pending debounce must not hold the event loop open after shutdown; the
+  // beforeExit and signal handlers flush it first.
+  writeTimer.unref?.();
 }
 
 function flushWrite(): void {

@@ -1,6 +1,7 @@
 // @implements REQ-035 REQ-071 REQ-111a
 import { getConfig } from "./config.js";
 import { USER_AGENT } from "./lib/html.js";
+import { responseByteCap, cappedResponse } from "./lib/body.js";
 import { recordHttp } from "./call-log.js";
 import { sessionStats } from "./session-stats.js";
 
@@ -46,7 +47,7 @@ export async function infobrokerFetch(
       recordHttp(providerSlug, response.ok, elapsed, response.status);
       sessionStats.recordHttp(providerSlug, response.ok, elapsed);
     }
-    return response;
+    return cappedResponse(response, responseByteCap());
   } catch (error) {
     if (providerSlug) {
       const elapsed = Date.now() - start;

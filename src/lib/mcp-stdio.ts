@@ -81,6 +81,8 @@ export interface McpServer {
   stderr(): string;
   /** Send a signal to the child and wait for it to exit. */
   kill(signal?: NodeJS.Signals, timeoutMs?: number): Promise<void>;
+  /** Close stdin (the client-disconnect signal) and wait for the process to exit. */
+  closeAndWait(timeoutMs?: number): Promise<{ code: number | null; ms: number }>;
   stop(): Promise<void>;
 }
 
@@ -168,11 +170,26 @@ export async function startMcpServer(options: McpServerOptions = {}): Promise<Mc
     ]);
   };
 
+  /** Close stdin and wait: the client-disconnect path must exit on its own. */
+  const closeAndWait = async (timeoutMs = 3_000): Promise<{ code: number | null; ms: number }> => {
+    const start = Date.now();
+    child.stdin.end();
+    const outcome = await Promise.race([
+      exited.then(() => "exited" as const),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), timeoutMs)),
+    ]);
+    if (outcome === "timeout") {
+      throw new Error(`server did not exit within ${timeoutMs} ms of stdin close`);
+    }
+    return { code: child.exitCode, ms: Date.now() - start };
+  };
+
   const server: McpServer = {
     call,
     notify,
     stderr: () => stderrTail,
     kill,
+    closeAndWait,
     stop,
     async listTools() {
       const reply = await call("tools/list", {});

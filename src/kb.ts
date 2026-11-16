@@ -68,6 +68,14 @@ let sqliteStore: SqliteStore | null = null;
 let kbConfig: KbConfig | null = null;
 let storagePath: string | null = null;
 let maintenanceTimer: ReturnType<typeof setInterval> | null = null;
+
+/** REQ-066: clear the periodic maintenance interval so shutdown can complete. */
+export function stopKbMaintenance(): void {
+  if (maintenanceTimer) {
+    clearInterval(maintenanceTimer);
+    maintenanceTimer = null;
+  }
+}
 let resolvedKey: ResolvedKey | null = null;
 let lockError: { code: string; message: string; remediation: string } | null = null;
 /**
@@ -486,6 +494,9 @@ export function initKb(config: KbConfig): void {
     // scheduling a tight zero-delay loop.
     if (config.maintenance_interval_minutes > 0) {
       maintenanceTimer = setInterval(runMaintenance, config.maintenance_interval_minutes * 60 * 1000);
+      // A maintenance timer must not keep the process alive after the client
+      // closes stdin (REQ-066).
+      maintenanceTimer.unref?.();
     }
   } catch (e) {
     sqliteStore?.close();

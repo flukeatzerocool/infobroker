@@ -155,6 +155,8 @@ export interface Config {
     max_chars: number;
     /** REQ-004: bound on any single tool response, in characters. */
     response_max_chars?: number;
+    /** REQ-137: wall-clock ceiling for a fan-out tool call, in milliseconds. */
+    request_budget_ms?: number;
     latency_window_size: number;
     /** REQ-036: which bound the latency window applies. Defaults to `both`. */
     latency_window_strategy?: "count" | "time" | "both";
@@ -187,6 +189,8 @@ export interface Config {
   content_policy?: ContentPolicyConfig;
   fetch?: {
     allow_private_urls?: boolean;
+    /** REQ-137: per-response byte ceiling. */
+    max_response_bytes?: number;
     passage_size?: number;
     max_passages?: number;
     detect_date?: boolean;

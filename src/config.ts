@@ -903,6 +903,12 @@ export function validateConfig(config: Config): void {
   ) {
     errors.push(`output.rate_limit_cooldown_ms must be a non-negative number no greater than ${MAX_TIMER_MS}`);
   }
+  if (
+    config.output.request_budget_ms !== undefined &&
+    (!isFiniteNumber(config.output.request_budget_ms) || config.output.request_budget_ms < 1 || config.output.request_budget_ms > MAX_TIMER_MS)
+  ) {
+    errors.push(`output.request_budget_ms must be a positive number no greater than ${MAX_TIMER_MS}`);
+  }
   if (config.output.audit_log_path !== undefined && typeof config.output.audit_log_path !== "string") {
     errors.push("output.audit_log_path must be a string");
   }
@@ -972,6 +978,9 @@ export function validateConfig(config: Config): void {
   if (config.fetch) {
     if (config.fetch.allow_private_urls !== undefined && typeof config.fetch.allow_private_urls !== "boolean") {
       errors.push("fetch.allow_private_urls must be a boolean");
+    }
+    if (config.fetch.max_response_bytes !== undefined && (!isFiniteNumber(config.fetch.max_response_bytes) || config.fetch.max_response_bytes < 1)) {
+      errors.push("fetch.max_response_bytes must be a positive number");
     }
     if (config.fetch.passage_size !== undefined && (!isFiniteNumber(config.fetch.passage_size) || config.fetch.passage_size < 1)) {
       errors.push("fetch.passage_size must be a positive number");

@@ -1,6 +1,7 @@
 // @implements REQ-021a
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
+import { readTextCapped, responseByteCap } from "./body.js";
 
 // Deny-list of IPv4 ranges that must never be fetched as a public target.
 // Beyond RFC1918/loopback/link-local this covers the unspecified address
@@ -206,7 +207,8 @@ export async function fetchFollowRedirects(
       continue;
     }
     if (!resp.ok) throw new HttpStatusError(`HTTP ${resp.status}`, resp.status);
-    return await resp.text();
+    // REQ-137: the final hop is read under the same byte cap as a provider call.
+    return (await readTextCapped(resp, responseByteCap())).text;
   }
   throw new Error(`Too many redirects for ${url}`);
 }

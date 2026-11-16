@@ -19,6 +19,7 @@ Audience key: **Reader** (uses the server through a client), **Researcher**
 | Path | Default | Audience | Change when / evidence |
 |---|---|---|---|
 | `fetch.allow_private_urls` | `false` | Operator | Keep `false`; set `true` only for an intentional local crawl. |
+| `fetch.max_response_bytes` | `20971520` | Operator | The per-response byte ceiling; lower it on a constrained host. |
 | `fetch.passage_size` | `250` | Reader | Raise for long documents; it grows the response payload. |
 | `fetch.max_passages` | `6` | Reader | Raise to return more excerpts; bounded by the response cap. |
 | `fetch.detect_date` | `true` | Reader | Set `false` when date metadata is not needed and latency matters. |
@@ -83,6 +84,7 @@ Audience key: **Reader** (uses the server through a client), **Researcher**
 | Path | Default | Audience | Change when / evidence |
 |---|---|---|---|
 | `output.max_chars` | `50000` | Reader | The response truncation cap; raise only with a client that can use it. |
+| `output.request_budget_ms` | `300000` | Operator | Wall-clock ceiling for search, fetch, and verification; lower it to bound spend. |
 | `output.response_max_chars` | `50000` | Reader | The shared finalizer cap; keep aligned with `max_chars`. |
 | `output.latency_window_size` | `100` | Operator | Advanced tuning; leave at the shipped value unless a run shows a need. |
 | `output.latency_window_strategy` | `both` | Operator | Advanced tuning; leave at the shipped value unless a run shows a need. |
