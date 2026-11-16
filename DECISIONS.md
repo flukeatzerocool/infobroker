@@ -787,6 +787,21 @@ query carries two requirements, not because the implementation ties — so a
 disagreement is a finding, not a fixture to edit. The retrieval baseline refresh
 and its reason live in the commit that changed it.
 
+### D-138: Three Measurement Gaps Closed by Measuring, Not Asserting (2026-11-16)
+
+Recall@5 was arithmetically pinned at 1 because 19 of 20 retrieval cases
+returned five results or fewer; the corpus now carries wide cases so the metric
+can fall, and the suite asserts `raw.mean_recall < reconciled.mean_recall` rather
+than manufacturing a failure in the fixture. REQ-123's caveat denied the metric
+it implemented; the claim is now precise in the fixture note, its README, the
+parity table and the REQ — documented truth measures whether the ladder is
+ordered against settled fact, and an `observed` label remains the precondition
+for the stronger claim. Processing gained REQ-136: a committed corpus scoring
+dedup recall, dedup precision and the collapse total derived from the reconciler,
+with the floor travelling with the corpus. Its first run measured 0.667 recall —
+reheadlined syndication is not collapsed — which is a finding the corpus now
+holds open rather than a defect hidden.
+
 ## Spec Waivers` pattern,
 and `npm run check-non-goals` fails when the block is missing or empty, an entry
 cites an ID that is not a `### D-NNN:` heading, a category repeats, or the

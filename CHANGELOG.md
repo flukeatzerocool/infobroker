@@ -2,6 +2,18 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Two measurements that could not fail now can. The retrieval corpus gained six
+  wide cases so recall@5 falls when ranking degrades (reconciled 1.000, raw
+  0.923, asserted in the suite), and a processing benchmark measures
+  deduplication against a committed corpus (REQ-136). Its first run found a real
+  gap: reheadlined syndication is not collapsed, so dedup recall is 0.667 and the
+  floor records it.
+
+- The calibration caveat is reframed rather than deferred. A Brier score over
+  documented truth reports whether the confidence ladder is ordered against
+  settled fact — a real metric — and no longer claims not to be one; an
+  `observed` label remains the precondition for the stronger claim (D-138).
+
 - `search_web` now defers a search when two task types clear the floor with equal
   support and reach different providers, returning both candidate requirements
   with an empty result list instead of picking a winner. REQ-020a yields to
