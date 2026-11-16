@@ -195,3 +195,37 @@ scenario's `gated-analysis` expectation is. S9 passes under the same
 A side observation from `run-20261115-173322`: `verify_claims` returned the
 run's own claim text as `report://` sources, which the agent correctly rejected
 as self-referential. Not investigated here.
+
+## Named gated marker (2026-11-15, later)
+
+The skill's routing surfaces disagreed with their own references: Phase 0's
+Gated Analysis row listed only conditional markers, while `workflows.md` and
+the decision-tree tie-breaker already selected Gated Analysis for an explicit
+gated request. Phase 0, "When to Escalate", the decision-tree's first question,
+and the journeys row now carry the named marker (`gated research / gated
+analysis / confidence-scored research`), and `validate-spec` asserts it under
+REQ-052 (D-132).
+
+The routing outcome did not change:
+
+| Run | Result | Detail |
+|---|---|---|
+| `run-20261115-182713` | **fail** | never loaded the infobroker skill (tools: `websearch`, `execute`); answered Research & Write |
+| `run-20261115-182956` | **fail** | loaded the skill (`skill:infobroker`); still answered Research & Write, no `analysis-loop` |
+
+Both runs recorded `kb:` lines for the run-scoped store, so the isolated-layer
+guarantee held. The negative result is the finding: prose on the Phase 0
+surface is not the lever that moves the route.
+
+Regression guards, recorded as-is:
+
+- `run-20261115-183934` (N1) — fail: emitted `research-collection complete.`
+  (the absent token) and no `clarif` section. N1's high-stakes input already
+  routed gated before this change; the failure is the skipped scoping gate, so
+  it is not attributed to the marker, but it is not evidence of no harm either.
+- `run-20261115-185913` (S6) — timeout after 1800 s; recorded as that
+  scenario's failure, no verdict.
+
+Both roadmap items stay open. The next lever is outside this increment: either
+the suite prompt/skill invocation makes the gated route explicit, or the
+routing expectation is re-scoped.

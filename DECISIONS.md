@@ -2634,6 +2634,24 @@ of the reports fallback (new server surface for a harness concern).
 
 Scope: developer harness only, no server or npm-user surface.
 
+### D-132: The Named Gated Marker Lives in Phase 0 (2026-11-15)
+
+D-128 ranked the signals but left the gated row's first-column marker
+conditional-only ("high-stakes, decision-driving, needs rigor"). A repo-mode
+N4 request that said "run your rigorous gated research" therefore classified as
+a fact-check even though `workflows.md` and the decision-tree tie-breaker
+already said an explicit gated request selects Gated Analysis. Phase 0 now
+names `gated research / gated analysis / confidence-scored research`, the
+"When to Escalate" section names the same marker, and the decision tree's first
+question routes a named gated request before the unnamed high-stakes branch.
+`validate-spec` asserts the marker under REQ-052 (shape routing); REQ-051's
+escalation clause is unchanged because it governs unnamed requests.
+
+This is a scope note on D-128, not a second rule: the precedence and the
+rejection of prompt-side grading remain as decided there.
+
+Scope: client skill surface.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a

@@ -59,7 +59,7 @@ defines the shared terminology these references use.
 | "what changed / monitor / track / brief me since" | Monitoring / Delta |
 | "red-team / stress-test / what could go wrong" | Adversarial / Red-Team |
 | "vet / background check / due diligence / is it legit" | Vetting |
-| high-stakes, decision-driving, needs rigor | Gated Analysis (escalate to `analysis-loop`; the escalation signal, not a named shape) |
+| "gated research / gated analysis / confidence-scored research"; high-stakes, decision-driving, needs rigor | Gated Analysis (route to `analysis-loop`) |
 
 **Precedence when signals conflict.** Phase 0 reads three signals: the shape
 the request names through its intent markers, what its content resembles once
@@ -249,11 +249,13 @@ the token — do not stop early.
 ## When to Escalate
 
 Use the `analysis-loop` skill instead of the standard pipeline when the
-question is high-stakes or decision-driving and requires gated analytic
-rigor: confidence-scored findings, source-reliability grading, structured
-analytic techniques (analysis of competing hypotheses, devil's advocacy),
-and explicit refinement rounds. This skill runs the lighter research-and-write
-path; `analysis-loop` runs the disciplined, gated path.
+request explicitly asks for gated or confidence-scored research ("gated
+research", "gated analysis"), or when the question is high-stakes or
+decision-driving and requires gated analytic rigor: confidence-scored
+findings, source-reliability grading, structured analytic techniques
+(analysis of competing hypotheses, devil's advocacy), and explicit
+refinement rounds. This skill runs the lighter research-and-write path;
+`analysis-loop` runs the disciplined, gated path.
 
 ## Best Practices
 

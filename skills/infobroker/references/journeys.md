@@ -17,11 +17,12 @@ row below.
 | "what changed / monitor / track" | Monitoring / Delta | monitor (receipt baseline → `verify_report` → revision with `supersedes`) | — |
 | "red-team / stress-test" | Adversarial / Red-Team | red-team | — |
 | "vet / background check / due diligence" | Vetting / Due-Diligence | vetting | — |
-| high-stakes, decision-driving | Gated Analysis | — | `analysis-loop` (the escalation signal, not a named shape) |
+| "gated research / gated analysis / confidence-scored research"; high-stakes, decision-driving | Gated Analysis | — | `analysis-loop` (the named gated marker, or the escalation signal when no shape is named) |
 
-A named intent marker in the first column decides the row; the
-`high-stakes, decision-driving` row is the escalation signal and applies only
-when no other intent is named (`decision-tree.md` §1.0).
+A named intent marker in the first column decides the row. A request that names
+gated or confidence-scored research takes the Gated Analysis row directly; the
+`high-stakes, decision-driving` clause is the escalation signal and applies only
+when no shape is named (`decision-tree.md` §1.0).
 
 ## Tool Journeys
 

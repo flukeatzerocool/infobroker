@@ -657,6 +657,14 @@ function checkArtifactContent(): void {
         }
       }
     }
+    // REQ-052: a gated request names its shape. Two repo-mode N4 runs routed
+    // "rigorous gated research" to Research & Write because Phase 0 listed
+    // only conditional markers while the reference tie-breaker already named
+    // the marker. Assert it here so the routing rule cannot be dropped
+    // silently (docs/research-evidence-2026-11-15.md).
+    if (phase0 !== null && !phase0.includes("gated research")) {
+      error("skills/infobroker/SKILL.md: Phase 0 does not name 'gated research' as a Gated Analysis marker (REQ-052)");
+    }
     for (const [refFile, token] of [
       ["skills/infobroker/references/decision-tree.md", "1.0 Precedence"],
       ["skills/infobroker/references/journeys.md", "escalation signal"],

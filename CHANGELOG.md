@@ -2,6 +2,14 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The infobroker skill's routing surfaces now agree that a named gated request
+  selects Gated Analysis: Phase 0, "When to Escalate", the decision-tree's
+  first question, and the journeys row all carry the marker, and
+  `validate-spec` asserts it under REQ-052 (D-132). This removes the internal
+  contradiction the reference tie-breaker already resolved; a repo-mode N4 run
+  that loaded the skill still answered as Research & Write, so the routing
+  outcome is not yet demonstrated and the roadmap item stays open.
+
 - Repo-mode runs can no longer be corroborated by the operator's knowledge
   base. Both repo-mode entry points build their run layer through
   `scripts/lib/repo-mode.ts`, which pins a run-scoped `kb.storage_path` and

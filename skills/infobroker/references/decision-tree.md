@@ -21,25 +21,28 @@ Register). When no shape is named, §3 still escalates at 3 or more.
 
 Ask, in order:
 
-1. Is this high-stakes or decision-driving, does it need source-reliability
+1. Does the request explicitly ask for gated or confidence-scored research
+   ("gated research", "gated analysis", "structured analysis")? → **Gated
+   Analysis** (route to `analysis-loop`). See §3 to record the rubric total.
+2. Is this high-stakes or decision-driving, does it need source-reliability
    grading plus a structured analytic technique, **and does the request not
    name a shape of its own (§1.0)?** → **Gated Analysis**
    (escalate to `analysis-loop`). See §3 for the escalation rubric.
-2. Is the user asking you to verify specific claims they supplied ("is it
+3. Is the user asking you to verify specific claims they supplied ("is it
    true", "fact-check", "verify")? → **Fact-Check**.
-3. Is the user asking you to compare or choose among options ("which X is
+4. Is the user asking you to compare or choose among options ("which X is
    best", "X vs Y", "evaluate these")? → **Competitive Evaluation**.
-4. Is the user asking for a scholarly synthesis ("state of the art",
+5. Is the user asking for a scholarly synthesis ("state of the art",
    "related work", "literature review")? → **Literature Review**.
-5. Is the user asking what changed since a prior point ("monitor", "track",
+6. Is the user asking what changed since a prior point ("monitor", "track",
    "brief me since")? → **Monitoring / Delta**.
-6. Is the user asking you to attack a plan or conclusion ("what could go
+7. Is the user asking you to attack a plan or conclusion ("what could go
    wrong", "argue against", "red-team")? → **Adversarial / Red-Team**.
-7. Is the user asking you to check a person, organization, or product
+8. Is the user asking you to check a person, organization, or product
    ("vet", "background check", "is it legit")? → **Vetting / Due-Diligence**.
-8. Is the request a systematic multi-subtopic investigation (several distinct
+9. Is the request a systematic multi-subtopic investigation (several distinct
    sub-questions, each needing its own sources)? → **Deep-Dive**.
-9. Otherwise → **Research & Write** (the default).
+10. Otherwise → **Research & Write** (the default).
 
 **Tie-breakers.** When two shapes plausibly fit:
 

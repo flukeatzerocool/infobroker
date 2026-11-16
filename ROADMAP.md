@@ -32,12 +32,13 @@ run records an isolated KB path in its run artifacts.
 - N4's `sections` needle `zero usable` failed a run that reported the zero-source
   conclusion as "nonexistent", named three gaps, and carried an Uncertainty
   Register (2026-11-15) — the wording differed, the finding did not.
-- Either widen the needle set or have the shape's block state the phrase the
-  manifest asserts.
 - The set now reads `zero usable|no usable|nonexistent`; the 2026-11-15 repo-mode
   re-runs failed earlier than the needle — N4 routed to Research & Write, so no
   Uncertainty Register or shape token was written. The residual is routing, not
   wording (`docs/research-evidence-2026-11-15.md`).
+- The named-marker attempt (D-132) also failed: a run that loaded the skill
+  still answered Research & Write (`run-20261115-182956`), so widening needles
+  is still not the lever.
 
 **Trigger:** start with the next research-suite change; close when a repo-mode N4
 run that reports a zero-source conclusion passes its section gate.
@@ -47,11 +48,12 @@ run that reports a zero-source conclusion passes its section gate.
 - The gated-analysis scenario asserts four phase tokens, but a multi-turn run
   emits them across turns and the evaluator reads only the final message, so a
   correct run fails on `research-analysis complete.` (S9, 2026-11-15).
-- Decide whether the phase tokens are a per-session contract (scan the whole
-  transcript) or a final-message contract, and state it in the manifest.
 - Decided and stated: `token_scope: session` in the manifest, documented in
   `test-fixtures/research/README.md`; S9 passes under it. The single-turn gated
   side is unproven because N4 does not route to gated analysis.
+- The 2026-11-15 named-marker change (D-132) did not move N4 even on a run that
+  loaded the skill (`run-20261115-182956`); the next lever is not prose on the
+  Phase 0 surface.
 
 **Trigger:** start with the next research-suite change; close when a passing
 multi-turn gated run and a single-turn gated run both satisfy the same stated
