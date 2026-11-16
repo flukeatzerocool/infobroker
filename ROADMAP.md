@@ -14,6 +14,51 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
+## Domain allowlist on `search_web`
+
+- `REQ-020h` is to become one domain-policy contract covering the existing
+  blocklist and a new `include_domains` with `restrict` and `prefer` modes; the
+  rewrite must stay inside Appendix B (≤8 SHALL, ≤800 chars).
+- Filtering goes beside the existing blocklist path, with tests for both modes
+  and for a preference that does not exclude.
+
+**Trigger:** the next search-surface change; close when `include_domains`
+ships with a `@implements` citation and the REQ body records its Appendix B
+counts.
+
+## Grade a report at ingest
+
+- `REQ-110` is to require a receipt for a `source_type: report` ingest into the
+  knowledge base, and `REQ-134` is to carry a structural grade plus an offline
+  citation-grounding score computed from stored snapshots (`REQ-122`).
+- The score must not gate the ingest, and must be null when no snapshot covers
+  a cited source.
+
+**Trigger:** the next knowledge-base or report-contract change; close when a
+report ingested without a receipt errors with a remediation and a graded
+receipt round-trips through `verify_report`.
+
+## Measure direction and make the retrieval floor bite
+
+- Grow the `REQ-130` corpus from 10 to 20 cases with at least four where the
+  relevant document ranks below 5, and refresh `baseline.json` with a reason.
+- Add `REQ-135`: requirement quality measured against a committed
+  underspecified-query corpus (offer-rate, requirement-slot recall), offline.
+
+**Trigger:** the next benchmark or retrieval-quality change; close when a
+deliberately degraded ranking fails the floor.
+
+## Close the parity record
+
+- Add a surface / evidence / measurement table per §1 function to
+  `docs/goal-evidence-matrix.md`, and convert `REQ-123` labels to `observed`
+  where a recorded verification run exists.
+- Update the README tour, `CHANGELOG.md`, and `DECISIONS.md` for the direction
+  precedence and the processing block.
+
+**Trigger:** the next documentation pass; close when `npm run check` is green
+with the table in place.
+
 ## Non-goals
 
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
