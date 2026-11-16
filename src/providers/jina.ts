@@ -32,13 +32,13 @@ async function fetchPage(url: string, signal?: AbortSignal): Promise<string> {
   // it as a renderer failure so the chain falls through to native_fetch; a page
   // that merely quotes the warning is served because content follows it.
   const lines = text.split(/\r?\n/);
-  const warningIndex = lines.findIndex((line) => /^Warning: Target URL returned error \d{3}/.test(line.trim()));
-  if (warningIndex >= 0) {
-    const warning = lines[warningIndex].trim().match(/^Warning: Target URL returned error (\d{3})/);
-    const trailing = lines.slice(warningIndex + 1).join("\n").trim();
-    if (warning && trailing.length < 200) {
-      throw new HttpStatusError(`Jina reported HTTP ${warning[1]} for the target`, Number(warning[1]));
-    }
+  const warning = lines
+    .map((line) => line.trim().match(/^Warning: Target URL returned error (\d{3})/))
+    .find((match) => match !== null);
+  if (warning) {
+    // The warning line is Jina's own status report, so it is authoritative; a
+    // real page that quotes it mid-sentence does not start a line with it.
+    throw new HttpStatusError(`Jina reported HTTP ${warning[1]} for the target`, Number(warning[1]));
   }
   return text;
 }

@@ -72,11 +72,10 @@ describe("Jina target-error warning (REQ-021h)", () => {
     await expect(provider.fetchPage!("https://example.com/nope")).rejects.toMatchObject({ status: 404 });
   });
 
-  it("serves a page that mentions the warning but carries real content", async () => {
+  it("serves a page that mentions the warning inside prose", async () => {
     const body =
-      "Warning: Target URL returned error 404: Not Found\n\n" +
-      "This page documents how a reader reports a missing target. ".repeat(6);
+      "Title: Reader notes\n\nThe reader may emit a line such as \"Warning: Target URL returned error 404: Not Found\" when the target is missing; this page explains how to read that report.\n";
     stubFetch(body);
-    await expect(provider.fetchPage!("https://example.com/doc")).resolves.toContain("documents how a reader");
+    await expect(provider.fetchPage!("https://example.com/doc")).resolves.toContain("explains how to read");
   });
 });
