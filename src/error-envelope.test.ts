@@ -1,7 +1,7 @@
 // @implements REQ-002 rate-limited-precedence
 // @implements REQ-038 cooldown-reporting inspect-providers
 import { describe, it, expect } from "vitest";
-import { chainExhaustion, providerRemediation } from "./error-envelope.js";
+import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
 
 describe("provider remediation (REQ-038)", () => {
   it("appends the provider-status surface", () => {
@@ -58,5 +58,22 @@ describe("chain exhaustion (REQ-002, REQ-038)", () => {
     });
     expect(body.error.message).toContain("duckduckgo");
     expect(body.error.details?.exhausted_chain).toEqual(["duckduckgo", "marginalia", "mojeek"]);
+  });
+});
+
+// REQ-102: details are sanitized too, not only the top-level message.
+describe("err details sanitization (REQ-102)", () => {
+  it("strips absolute paths and credential-shaped strings from nested details", () => {
+    const payload = err("none", "internal_error", "boom", "retry", {
+      failures: [
+        { renderer: "jina", message: "ENOENT /home/fluke/secret/file.txt" },
+        { renderer: "native", message: "Authorization: Bearer sk-secret-value" },
+      ],
+      path: "/home/fluke/another",
+    });
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain("/home/fluke/secret");
+    expect(serialized).not.toContain("sk-secret-value");
+    expect(payload.error.details?.failures).toBeTruthy();
   });
 });

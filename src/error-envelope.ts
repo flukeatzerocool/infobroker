@@ -20,8 +20,25 @@ export function err(
     provider,
     // REQ-102: centralize exceptional-condition hygiene so no call site can
     // leak an absolute path or stack-frame marker in an error message.
-    error: { code, message: sanitizeErrorMessage(message), remediation, ...(details ? { details } : {}) },
+    error: {
+      code,
+      message: sanitizeErrorMessage(message),
+      remediation,
+      ...(details ? { details: sanitizeDetails(details) as Record<string, unknown> } : {}),
+    },
   };
+}
+
+/** REQ-102: `details` values are sanitized too, not only the message. */
+function sanitizeDetails(value: unknown): unknown {
+  if (typeof value === "string") return sanitizeErrorMessage(value);
+  if (Array.isArray(value)) return value.map(sanitizeDetails);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, sanitizeDetails(child)])
+    );
+  }
+  return value;
 }
 
 const STATUS_HINT = "Use infobroker_inspect_providers action=health to see provider status";

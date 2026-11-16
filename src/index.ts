@@ -35,6 +35,7 @@ import { maybeTruncate } from "./truncate.js";
 import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
 import { settleBatch } from "./batch-run.js";
 import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
+import { toolErrorEnvelope } from "./tool-wrapper.js";
 import { orderByRelevance, reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
 import { resolveTaskType, classifyTaskCandidates, MIN_SIGNAL_SCORE, SEARCHABLE_TASK_TYPES } from "./task-type.js";
@@ -2087,10 +2088,18 @@ const instrumentTool = (name: string, config: any, handler: any) =>
         return { text: bounded.text, truncated: bounded.truncated, ...(bounded.outputPath ? { outputPath: bounded.outputPath } : {}) };
       }, TOOL_REQUIRED_META[name]);
     } catch (error) {
+      // REQ-001/REQ-002: a handler throw still returns the documented envelope.
       const elapsed = Date.now() - start;
       toolMetrics.record(name, elapsed, false);
       recordTool(name, false, elapsed);
-      throw error;
+      const text = toolErrorEnvelope(name, error);
+      return finalizeToolResult(
+        { content: [{ type: "text" as const, text }] },
+        [],
+        compactMode(getConfig()),
+        (inner) => ({ text: inner, truncated: false }),
+        TOOL_REQUIRED_META[name]
+      );
     }
   });
 
