@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "floor": {
+    "dedup_recall": 0.66,
+    "dedup_precision": 0.95,
+    "collapsed_total_accuracy": 0.66
+  },
+  "cases": [
+    {
+      "id": "wire-syndication",
+      "query": "central bank rate decision",
+      "results": [
+        {
+          "title": "Central bank holds rates",
+          "url": "https://news.example.com/rates",
+          "snippet": "The central bank held its policy rate unchanged at 4.25 percent, citing persistent services inflation."
+        },
+        {
+          "title": "Rate decision: no change",
+          "url": "https://wire.example.net/story-1182",
+          "snippet": "The central bank held its policy rate unchanged at 4.25 percent, citing persistent services inflation."
+        },
+        {
+          "title": "Bond market reaction",
+          "url": "https://markets.example.org/bonds",
+          "snippet": "Yields moved modestly after the decision."
+        },
+        {
+          "title": "Analyst outlook",
+          "url": "https://research.example.net/outlook",
+          "snippet": "Economists expect one cut before year end."
+        }
+      ],
+      "must_collapse": [
+        [
+          "https://news.example.com/rates",
+          "https://wire.example.net/story-1182"
+        ]
+      ],
+      "must_survive": [
+        [
+          "https://markets.example.org/bonds",
+          "https://research.example.net/outlook"
+        ]
+      ],
+      "collapsed_count": 1
+    },
+    {
+      "id": "mirror-repost",
+      "query": "solar panel efficiency record",
+      "results": [
+        {
+          "title": "Efficiency record for tandem cells",
+          "url": "https://energy.example.org/tandem-record",
+          "snippet": "A tandem perovskite-silicon cell reached 34.6 percent efficiency in independent testing."
+        },
+        {
+          "title": "Tandem cell hits 34.6 percent",
+          "url": "https://mirror.example.com/repost-7741",
+          "snippet": "A tandem perovskite-silicon cell reached 34.6 percent efficiency in independent testing."
+        },
+        {
+          "title": "Manufacturing costs",
+          "url": "https://industry.example.net/costs",
+          "snippet": "Per-watt costs for perovskite production lines."
+        },
+        {
+          "title": "Degradation study",
+          "url": "https://journal.example.org/degradation",
+          "snippet": "Humidity-induced degradation in perovskite films."
+        },
+        {
+          "title": "Policy incentives",
+          "url": "https://gov.example.org/incentives",
+          "snippet": "Feed-in tariff changes for rooftop solar."
+        }
+      ],
+      "must_collapse": [
+        [
+          "https://energy.example.org/tandem-record",
+          "https://mirror.example.com/repost-7741"
+        ]
+      ],
+      "must_survive": [
+        [
+          "https://industry.example.net/costs",
+          "https://journal.example.org/degradation"
+        ],
+        [
+          "https://journal.example.org/degradation",
+          "https://gov.example.org/incentives"
+        ]
+      ],
+      "collapsed_count": 1
+    },
+    {
+      "id": "two-wire-copies",
+      "query": "earthquake magnitude region",
+      "results": [
+        {
+          "title": "Magnitude 6.1 offshore",
+          "url": "https://wire.example.net/quake-a",
+          "snippet": "A magnitude 6.1 earthquake struck offshore at a depth of 12 kilometres, with no tsunami warning issued."
+        },
+        {
+          "title": "Offshore quake measured 6.1",
+          "url": "https://news.example.com/quake-b",
+          "snippet": "A magnitude 6.1 earthquake struck offshore at a depth of 12 kilometres, with no tsunami warning issued."
+        },
+        {
+          "title": "Aftershock sequence",
+          "url": "https://seismo.example.org/aftershocks",
+          "snippet": "Aftershocks continued overnight, the largest at magnitude 4.9."
+        },
+        {
+          "title": "Building codes",
+          "url": "https://engineering.example.com/codes",
+          "snippet": "Seismic provisions for mid-rise construction."
+        }
+      ],
+      "must_collapse": [
+        [
+          "https://wire.example.net/quake-a",
+          "https://news.example.com/quake-b"
+        ]
+      ],
+      "must_survive": [
+        [
+          "https://seismo.example.org/aftershocks",
+          "https://engineering.example.com/codes"
+        ]
+      ],
+      "collapsed_count": 1
+    },
+    {
+      "id": "press-release-cluster",
+      "query": "drug trial results phase three",
+      "results": [
+        {
+          "title": "Phase three trial meets endpoint",
+          "url": "https://pharma.example.org/trial-pr",
+          "snippet": "The phase three trial met its primary endpoint, reducing hospitalisations by 28 percent over twelve months."
+        },
+        {
+          "title": "Trial meets primary endpoint",
+          "url": "https://health.example.com/report-551",
+          "snippet": "The phase three trial met its primary endpoint, reducing hospitalisations by 28 percent over twelve months."
+        },
+        {
+          "title": "Trial meets primary endpoint (syndicated)",
+          "url": "https://wire.example.net/drug-551",
+          "snippet": "The phase three trial met its primary endpoint, reducing hospitalisations by 28 percent over twelve months."
+        },
+        {
+          "title": "Safety profile",
+          "url": "https://journal.example.org/safety",
+          "snippet": "Adverse events were similar to placebo."
+        },
+        {
+          "title": "Pricing analysis",
+          "url": "https://markets.example.net/pricing",
+          "snippet": "Analysts model a launch price below competitors."
+        }
+      ],
+      "must_collapse": [
+        [
+          "https://pharma.example.org/trial-pr",
+          "https://health.example.com/report-551"
+        ],
+        [
+          "https://pharma.example.org/trial-pr",
+          "https://wire.example.net/drug-551"
+        ]
+      ],
+      "must_survive": [
+        [
+          "https://journal.example.org/safety",
+          "https://markets.example.net/pricing"
+        ]
+      ],
+      "collapsed_count": 2
+    },
+    {
+      "id": "no-duplicates",
+      "query": "archive cataloguing standards",
+      "results": [
+        {
+          "title": "Descriptive standards overview",
+          "url": "https://archive.example.org/standards",
+          "snippet": "An overview of descriptive cataloguing standards."
+        },
+        {
+          "title": "Authority control",
+          "url": "https://archive.example.net/authority",
+          "snippet": "Managing name authority records."
+        },
+        {
+          "title": "Digitisation workflows",
+          "url": "https://library.example.com/workflows",
+          "snippet": "Capture and quality assurance steps."
+        },
+        {
+          "title": "Preservation storage",
+          "url": "https://archive.example.org/storage",
+          "snippet": "Cold storage requirements for masters."
+        }
+      ],
+      "must_collapse": [],
+      "must_survive": [
+        [
+          "https://archive.example.org/standards",
+          "https://archive.example.net/authority"
+        ],
+        [
+          "https://library.example.com/workflows",
+          "https://archive.example.org/storage"
+        ]
+      ],
+      "collapsed_count": 0
+    },
+    {
+      "id": "partial-rewrite",
+      "query": "city cycling infrastructure",
+      "results": [
+        {
+          "title": "Protected lanes cut injuries",
+          "url": "https://transport.example.org/lanes",
+          "snippet": "Protected cycle lanes were associated with a 22 percent reduction in cyclist injuries over five years."
+        },
+        {
+          "title": "Protected lanes and injury data",
+          "url": "https://policy.example.net/brief-44",
+          "snippet": "Protected cycle lanes were associated with a 22 percent reduction in cyclist injuries over five years."
+        },
+        {
+          "title": "Modal shift survey",
+          "url": "https://transport.example.net/survey",
+          "snippet": "Commuters switching from cars to bicycles."
+        },
+        {
+          "title": "Winter maintenance",
+          "url": "https://city.example.org/winter",
+          "snippet": "Gritting routes for cycle paths."
+        }
+      ],
+      "must_collapse": [
+        [
+          "https://transport.example.org/lanes",
+          "https://policy.example.net/brief-44"
+        ]
+      ],
+      "must_survive": [
+        [
+          "https://transport.example.net/survey",
+          "https://city.example.org/winter"
+        ]
+      ],
+      "collapsed_count": 1
+    }
+  ]
+}

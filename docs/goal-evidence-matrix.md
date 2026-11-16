@@ -16,7 +16,7 @@ each function is *evidenced*, not a sequence to be enforced.
 |---|---|---|---|---|---|
 | Direction | 1, 2 | REQ-020a–e, REQ-124, REQ-127, REQ-128 | `check-tdqs`, Arena | Lab L6; S2 (repo, 2026-11-15), N3 (repo, 2026-11-15) | Task type chosen; inferred values disclosed; no key required |
 | Collection | 1, 2 | REQ-020h, REQ-031, REQ-031a, REQ-129 | `check-tdqs`, Arena | Lab L5, L7; S3 (repo, 2026-11-15, predecessor record) | Cold-start tool success; fallback advances on provider failure |
-| Processing and exploitation | 11 | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122 | Arena, `validate-spec` | Lab L6; S2 (repo, 2026-11-15) | Normalized result; source identity and date preserved |
+| Processing and exploitation | 11 | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122, REQ-133, REQ-136 | Arena, `validate-spec` | Lab L6; S2 (repo, 2026-11-15) | Normalized result; source identity and date preserved |
 | Analysis and production | 3 | REQ-026a–i, REQ-115, REQ-123 | Arena, `check-gate-coverage` | Lab L1, L8; S2 (repo, 2026-11-15), N3 (repo, 2026-11-15) | Verdict and confidence; contradiction reported |
 | Dissemination | 7 | REQ-114–REQ-120a, REQ-126, REQ-110 | `check-report-fixtures`, G3 | Lab L9; S9 (repo, 2026-11-15), A1a/A1b (repo, 2026-11-15, predecessor record) | Manifest, grade and receipt; audience-shaped answer |
 
@@ -37,13 +37,15 @@ a gate proves; "measurement" is what can regress and be caught.
 |---|---|---|---|
 | Direction | `search_web` direction block, incl. the deferred choice | `check-tdqs`, Arena, `test-fixtures/direction` | REQ-135: offer rate, false-offer rate, slot recall |
 | Collection | `search_web`, `fetch_page`, `get_citations`, `inspect_providers` | Arena, `check-tdqs` | REQ-130: precision/recall/MRR/nDCG over 20 cases |
-| Processing and exploitation | `meta.processing` on search and fetch (no tool of its own) | Arena, `check-gate-coverage` | none — a recorded gap, see `ROADMAP.md` |
+| Processing and exploitation | `meta.processing` on search and fetch (no tool of its own) | Arena, `check-gate-coverage` | REQ-136: dedup recall/precision and collapse-total accuracy over 6 cases |
 | Analysis and production | `verify_claims`, `search_web (analyze)` | Arena, `check-gate-coverage` | REQ-123: Brier score and reliability curve over the documented gold set |
 | Dissemination | `manage_kb` ingest with a required receipt and grade; the report itself is client-authored | `check-report-fixtures`, `check-gate-coverage` | REQ-134: structural grade and offline grounding score |
 
 Processing and Dissemination have no dedicated tool; that is a design decision
 (an eighth tool was rejected), not an omission. The measurement column is the
-honest part: Processing has none yet. The Analysis Brier score measures whether
+honest part: Processing's benchmark currently measures 0.667 dedup recall —
+reheadlined syndication is not collapsed — and the floor records that gap rather
+than hiding it. The Analysis Brier score measures whether
 the confidence ladder is ordered against documented truth; it does not measure
 truth the server discovered, which would need an `observed` label.
 

@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–136, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -404,6 +404,9 @@ The server SHALL accept an audience only from the audience list defined by the r
 
 **REQ-135 — Requirement-quality benchmark**
 The server SHALL support measuring requirement quality against a committed corpus of underspecified queries, reporting the share of cases where a choice was offered correctly, the share where one was offered incorrectly, and the share of expected requirement attributes the direction block reported. The corpus SHALL run deterministically and offline. A regression threshold SHALL fail the suite when offer quality or attribute coverage falls below the recorded baseline. The benchmark SHALL be distinct from the retrieval-quality benchmark and the confidence-calibration gold set. _Check:_ G1.
+
+**REQ-136 — Processing-quality benchmark**
+A committed corpus SHALL measure deduplication quality offline and deterministically, reporting the share of known duplicate pairs that collapsed to one representative, the share of known distinct pairs that both survived, and the share of cases whose reported collapse total equals the reconciler's delta. A regression floor SHALL travel with the corpus and SHALL fail the suite when any of the three falls below it. The corpus SHALL be distinct from the retrieval, requirement and calibration measurements. _Check:_ G1.
 
 **REQ-028 — `search_web` deep reading**
 WHEN `search_web` receives `deep` set to true, the tool SHALL, after returning search results, fetch the top-ranked result pages and rank each page's passages against the query, reusing the passage ranking of REQ-021b. The response SHALL associate each fetched result with its ranked passages, each with a relevance score, up to the configured passage count. Each ranked passage SHALL include a span anchor identifying the passage's position in the source. A result whose page cannot be fetched SHALL be reported with its snippet rather than dropped. The number of pages fetched SHALL be bounded by configuration. _Check:_ G1.
@@ -1352,6 +1355,7 @@ verdict is preserved (REQ-026f).
 | REQ-132 | Analysis Output | 4.3 | G1 |
 | REQ-134 | Report Grade | 4.9 | G1 |
 | REQ-135 | Requirement-quality benchmark | 4.3 | G1 |
+| REQ-136 | Processing-quality benchmark | 4.3 | G1 |
 | REQ-124 | `search_web` query operators and language | 4.3 | G1 |
 | REQ-128 | Multilingual text handling and collection | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
@@ -1945,7 +1949,7 @@ the table.
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 | 10 | Client Skills | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-107 | G3 |
-| 11 | Processing & Provenance | (no tools) | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122, REQ-133 | G1 |
+| 11 | Processing & Provenance | (no tools) | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122, REQ-133, REQ-136 | G1 |
 
 Notes:
 

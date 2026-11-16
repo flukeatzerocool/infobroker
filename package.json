@@ -86,7 +86,8 @@
     "benchmark-kb": "npx tsx scripts/benchmark-kb-store.ts",
     "monitor-delta": "npx tsx scripts/monitor-delta.ts",
     "monitor-watchlist": "npx tsx scripts/monitor-watchlist.ts",
-    "benchmark-direction": "npx tsx scripts/benchmark-direction.ts"
+    "benchmark-direction": "npx tsx scripts/benchmark-direction.ts",
+    "benchmark-processing": "npx tsx scripts/benchmark-processing.ts"
   },
   "keywords": [
     "search",
