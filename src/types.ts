@@ -439,6 +439,8 @@ export interface ReportReceiptManifest {
   /** Deduplicated union of report-level and claim-level sources (REQ-110). */
   sources?: ReportReceiptSource[];
   claims: ReportReceiptClaim[];
+  /** REQ-134: structural grade plus the offline grounding score. */
+  grade?: import("./kb-receipt.js").ReportGrade;
   digest_sha256: string;
 }
 

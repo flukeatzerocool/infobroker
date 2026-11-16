@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import type {
   ReportManifestMeta,
   ReportReceiptClaim,
+  ReportReceiptSource,
   ReportReceiptInput,
   ReportReceiptManifest,
   ReportReceiptSourceInput,
@@ -287,6 +288,44 @@ export function normalizeReceiptInput(
  * hash come from the stored document; per-source hashes come from the cached
  * document when present, otherwise from the caller's snippet.
  */
+/** REQ-134: the deterministic part of a report grade. */
+export interface ReportGrade {
+  structural: { pass: boolean; failed: string[] };
+  /** Fraction of claims with at least one document-basis source; null when no
+   * claim can be grounded from the store. */
+  grounding: { score: number; claims: number; supported: number } | null;
+}
+
+/**
+ * REQ-134: grade the receipt from what the server can see. Structural checks
+ * are deterministic; grounding is the share of claims backed by a stored
+ * document rather than a supplied snippet, so it measures the evidence the
+ * server can actually re-check offline. Absent evidence is null, never 0 — a
+ * report with no stored sources is ungraded, not ungrounded.
+ */
+export function gradeReceipt(claims: ReportReceiptClaim[], sources: ReportReceiptSource[]): ReportGrade {
+  const failed: string[] = [];
+  if (claims.length === 0) failed.push("no_claims");
+  const unsourced = claims.filter((claim) => claim.sources.length === 0).length;
+  if (unsourced > 0) failed.push(`${unsourced}_claim(s)_without_source`);
+  const emptyUrls = sources.filter((source) => source.url.trim() === "").length;
+  if (emptyUrls > 0) failed.push(`${emptyUrls}_empty_source_url(s)`);
+
+  const documentClaim = (claim: ReportReceiptClaim): boolean =>
+    claim.sources.some((source) => source.hash_basis === "document");
+  const supported = claims.filter(documentClaim).length;
+  const grounding =
+    claims.length > 0 && claims.some(documentClaim)
+      ? { score: round3(supported / claims.length), claims: claims.length, supported }
+      : null;
+
+  return { structural: { pass: failed.length === 0, failed }, grounding };
+}
+
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
 export function buildReceiptManifest(args: {
   reportId: string;
   contentSha256: string;
@@ -337,6 +376,8 @@ export function buildReceiptManifest(args: {
     ...(args.report ? { report: args.report } : {}),
     ...(sources.length > 0 ? { sources } : {}),
     claims,
+    // REQ-134: the grade covers the receipt the server just built.
+    grade: gradeReceipt(claims, sources),
   };
   return { ...manifest, digest_sha256: receiptDigest(manifest) };
 }

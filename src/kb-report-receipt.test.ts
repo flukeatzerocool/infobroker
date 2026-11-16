@@ -1,4 +1,4 @@
-// @implements REQ-110 REQ-060i REQ-060b REQ-083 report-sources
+// @implements REQ-110 REQ-060i REQ-060b REQ-083 REQ-134 report-sources
 // Report verification receipts (REQ-110) and the read-only offline
 // `verify_report` action (REQ-060i). The receipt is a canonical manifest the
 // server computes at ingest; verification rehashes the cached report and its
@@ -25,6 +25,7 @@ import {
   resolveReportIdentity,
   ingestDestinations,
 } from "./kb.js";
+import { gradeReceipt } from "./kb-receipt.js";
 import { canonicalJson, receiptDigest, normalizeReceiptInput, verifyReceipt, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { SqliteStore } from "./kb-sqlite.js";
 import { SNIPPET_SOURCE_TYPE } from "./kb-store.js";
@@ -790,5 +791,45 @@ describe("report revision chain (REQ-083)", () => {
     expect(stored.ok).toBe(false);
     if (stored.ok) throw new Error("unreachable");
     expect(stored.error.message).toMatch(/must name the report it supersedes/);
+  });
+});
+
+describe("report grade (REQ-134)", () => {
+  const source = (url: string, basis: "document" | "snippet") => ({
+    url,
+    title: "",
+    retrieved_at: "2026-11-15T00:00:00.000Z",
+    hash_basis: basis,
+    source_sha256: "0".repeat(64),
+  });
+  const claim = (text: string, sources: ReturnType<typeof source>[]) => ({ claim: text, sources });
+
+  it("passes structurally and grounds a claim backed by a stored document", () => {
+    const grade = gradeReceipt(
+      [claim("A", [source("https://a.test/1", "document")])],
+      [source("https://a.test/1", "document")],
+    );
+    expect(grade.structural).toEqual({ pass: true, failed: [] });
+    expect(grade.grounding).toEqual({ score: 1, claims: 1, supported: 1 });
+  });
+
+  it("scores partial grounding and reports a claim with no source", () => {
+    const grade = gradeReceipt(
+      [
+        claim("A", [source("https://a.test/1", "document")]),
+        claim("B", [source("https://b.test/1", "snippet")]),
+        claim("C", []),
+      ],
+      [],
+    );
+    expect(grade.structural.pass).toBe(false);
+    expect(grade.structural.failed).toContain("1_claim(s)_without_source");
+    expect(grade.grounding).toEqual({ score: 0.333, claims: 3, supported: 1 });
+  });
+
+  it("is ungraded rather than ungrounded when no claim has a stored document", () => {
+    const grade = gradeReceipt([claim("A", [source("https://a.test/1", "snippet")])], []);
+    expect(grade.grounding).toBeNull();
+    expect(grade.structural.pass).toBe(true);
   });
 });

@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -518,6 +518,9 @@ Every tool reference in the client routing surface SHALL resolve to a registered
 **REQ-088 — Gated-Analysis Technique Selection**
 The build SHALL produce a gated-analysis skill at `skills/analysis-loop/SKILL.md` that provides a technique-selection mechanism. When the skill enters its analysis phase, it SHALL select one structured analytic technique by matching the analysis state to fit criteria in a bundled catalog at `skills/analysis-loop/references/techniques.md`, SHALL name the selected technique and its fit rationale in the output, and SHALL apply the technique as a discrete step whose result is reported. The skill SHALL record the assumptions behind each finding and at least one alternative considered. The catalog SHALL document at least six techniques across at least three families of the intelligence tradecraft canon, each with a fit criterion, a method, and an output. _Check:_ G3 (file presence, content verification).
 
+**REQ-134 — Report Grade**
+A stored report receipt SHALL carry a grade with a structural result naming each failed check and, when any cited claim is backed by a stored document, a grounding score. The grounding score SHALL be the share of cited claims with at least one stored-document source, and SHALL be absent rather than zero when no claim is so backed. The structural result SHALL report a claim with no source and an empty source URL. The grade SHALL be computed from the stored receipt and SHALL NOT gate the ingest. _Check:_ G1.
+
 **REQ-114 — Report Manifest Contract**
 Every generated report SHALL carry a `report-manifest` block declaring its shape, claims, methodology, assumptions, alternatives, and gaps, and MAY declare audience, target length, language, revision, supersedes, and per-claim verdict, confidence, likelihood, and source ids. The manifest SHALL use the confidence, likelihood, and verdict values defined by the report quality standard. The manifest SHALL be the payload archived in the report receipt so a stored report and its claims remain machine-checkable. The block SHALL appear before the first report section. A gate SHALL reject a manifest that omits its shape or claims, that names a shape or audience value outside the report quality standard, or that places the block after the first report section. _Check:_ G3.
 
@@ -667,7 +670,7 @@ The knowledge base SHALL remain operable when the persisted chunk data exceeds t
 WHEN `verify_claims` produces findings, the server SHALL persist each finding as a claim record linked to its corroborating sources with the retrieval time of each source. The ledger SHALL be stored in the local knowledge base and SHALL be sealed at rest whenever at-rest encryption is enabled. A persistence failure SHALL NOT fail or alter the `verify_claims` response. _Check:_ G1.
 
 **REQ-110 — Report Verification Receipt**
-WHEN a report is ingested with a receipt, the server SHALL store a canonical manifest of claim, source, retrieval time, grade, verdict, confidence, likelihood, report metadata, report content hash, and per-source hash. The report metadata SHALL cover shape, audience, methodology, assumptions, alternatives, gaps, and revision chain. The server SHALL compute the hash from the stored document and ignore caller-supplied hashes and digests. The manifest SHALL carry the deduplicated union of report-level and claim-level sources, sorted by URL. The manifest SHALL be sealed at rest when at-rest encryption is enabled and SHALL be bounded in claim, source, and metadata count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
+A report ingested into the knowledge base SHALL carry a receipt, and the server SHALL store a canonical manifest of claim, source, retrieval time, grade, verdict, confidence, likelihood, report metadata, report content hash, and per-source hash. The report metadata SHALL cover shape, audience, methodology, assumptions, alternatives, gaps, and revision chain. The server SHALL compute the hash from the stored document and ignore caller-supplied hashes and digests. The manifest SHALL carry the deduplicated union of report-level and claim-level sources, sorted by URL. The manifest SHALL be sealed at rest when encryption is enabled and bounded in claim, source, and metadata count. A receipt SHALL require knowledge-base storage; a disk-only ingest SHALL return an error. _Check:_ G1.
 
 **REQ-103 — Local Embedding Execution**
 Knowledge-base and passage retrieval SHALL be performed with an embedding model that executes within the server instance, and content submitted for embedding SHALL NOT be transmitted to a third party. The model reference SHALL be configurable so an alternative model can be selected without a specification change. WHEN no model is available, retrieval SHALL degrade with a remediation message and SHALL NOT prevent non-knowledge-base operation. Changing the configured model SHALL reconcile stored content per REQ-082. The active model name and availability SHALL be reported per REQ-060c. _Check:_ G1.
@@ -1344,6 +1347,7 @@ verdict is preserved (REQ-026f).
 | REQ-131 | Direction | 4.3 | G1 |
 | REQ-131a | Audience and Intent Vocabulary | 4.3 | G1 |
 | REQ-132 | Analysis Output | 4.3 | G1 |
+| REQ-134 | Report Grade | 4.9 | G1 |
 | REQ-124 | `search_web` query operators and language | 4.3 | G1 |
 | REQ-128 | Multilingual text handling and collection | 4.3 | G1 |
 | REQ-089 | Tool-definition quality | 4.3 | G0, G1 |
@@ -1933,7 +1937,7 @@ the table.
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-031b, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
-| 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G1, G3 |
+| 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126, REQ-134 | G1, G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 | 10 | Client Skills | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-107 | G3 |

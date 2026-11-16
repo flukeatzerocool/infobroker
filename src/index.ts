@@ -2614,6 +2614,11 @@ instrumentTool(
         }
 
         const dest = ingestDestinations(saveTo);
+        // REQ-110: a report that lands in the knowledge base carries a receipt.
+        // A disk-only report is unchanged: there is no stored receipt to verify.
+        if (isReport && dest.kb && normalizedReceipt === null) {
+          return { content: [{ type: "text" as const, text: `[ERROR] ${json(err("knowledge_base", "receipt_required", "A report ingested into the knowledge base requires a receipt", "Supply `receipt` with the report's claims and sources, or use save_to: \"disk\" for a disk-only ingest"))}` }] };
+        }
         // REQ-060b: a fetched URL wins, then a caller-supplied identity, then a
         // stable synthesized identity. Without this, text-only ingest dropped
         // `source_url` and an anonymous document stored an empty identity, so

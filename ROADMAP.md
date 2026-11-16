@@ -14,18 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Grade a report at ingest
-
-- `REQ-110` is to require a receipt for a `source_type: report` ingest into the
-  knowledge base, and `REQ-134` is to carry a structural grade plus an offline
-  citation-grounding score computed from stored snapshots (`REQ-122`).
-- The score must not gate the ingest, and must be null when no snapshot covers
-  a cited source.
-
-**Trigger:** the next knowledge-base or report-contract change; close when a
-report ingested without a receipt errors with a remediation and a graded
-receipt round-trips through `verify_report`.
-
 ## Measure direction and make the retrieval floor bite
 
 - Grow the `REQ-130` corpus from 10 to 20 cases with at least four where the
