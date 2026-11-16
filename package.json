@@ -88,7 +88,8 @@
     "monitor-watchlist": "npx tsx scripts/monitor-watchlist.ts",
     "benchmark-direction": "npx tsx scripts/benchmark-direction.ts",
     "benchmark-processing": "npx tsx scripts/benchmark-processing.ts",
-    "smoke:providers": "npx tsx scripts/provider-smoke.ts"
+    "smoke:providers": "npx tsx scripts/provider-smoke.ts",
+    "benchmark-kb-sufficiency": "npx tsx scripts/benchmark-kb-sufficiency.ts"
   },
   "keywords": [
     "search",

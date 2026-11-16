@@ -224,14 +224,21 @@ function reconcileModel(): number {
   }
 }
 
-function keywordScore(regexes: RegExp[], text: string): number {
+// REQ-076b: one pass yields both the keyword share and the number of distinct
+// query tokens the chunk contains. The admission floor needs the second value,
+// and deriving it here avoids re-tokenizing every scanned chunk.
+function keywordEvidence(regexes: RegExp[], text: string): { score: number; matched: number } {
   const lower = text.toLowerCase();
-  let score = 0;
+  let hits = 0;
+  let matched = 0;
   for (const re of regexes) {
     const matches = lower.match(re);
-    if (matches) score += matches.length;
+    if (matches) {
+      hits += matches.length;
+      matched++;
+    }
   }
-  return score / (text.length || 1);
+  return { score: hits / (text.length || 1), matched };
 }
 
 function atomicWriteFile(fpath: string, bytes: Buffer): void {
@@ -599,11 +606,15 @@ function sqliteSearch(
     if (collection && chunk.collection !== collection) return;
     if (sourceType && chunk.source_type !== sourceType) return;
     const vecSimilarity = cosineSimilarity(queryVec, chunk.embedding);
-    const kwScore = keywordScore(kwRegexes, chunk.text);
-    const combinedScore = vecSimilarity * 0.7 + kwScore * 0.3;
+    // REQ-076b: evidence counts distinct query tokens present in the stored
+    // chunk. The snippet below is truncated at 200 characters, so it cannot
+    // stand in for the chunk when the admission floor asks what was matched.
+    const evidence = keywordEvidence(kwRegexes, chunk.text);
+    const combinedScore = vecSimilarity * 0.7 + evidence.score * 0.3;
     if (combinedScore <= 0) return;
     ranker.offer({
       score: combinedScore,
+      matched_tokens: evidence.matched,
       freshness_score: computeFreshnessScore(chunk.freshness_tier, chunk.ingested_at, now),
       freshness_tier: chunk.freshness_tier,
       source_url: chunk.source_url,
@@ -922,6 +933,17 @@ export function kbSearch(
   if (!kbConfig) throw new Error(CONFIG_ERROR_CODE);
   if (!sqliteStore) return [];
   return sqliteSearch(query, maxResults, collection, sourceType);
+}
+
+/**
+ * REQ-076b: the client-facing projection of a KB search result. `matched_tokens`
+ * is internal evidence for the admission decision and is stripped here rather
+ * than at each call site, so a new consumer cannot leak it by spreading a row.
+ */
+export function publicSearchResults(
+  rows: KbSearchResult[]
+): Array<Omit<KbSearchResult, "matched_tokens">> {
+  return rows.map(({ matched_tokens: _matched, ...rest }) => rest);
 }
 
 export function kbIngest(

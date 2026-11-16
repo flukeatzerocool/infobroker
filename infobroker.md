@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–137, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–137, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a–076b, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -656,6 +656,9 @@ When the knowledge base is configured, every web search SHALL query the knowledg
 
 **REQ-076a — Knowledge-Base Blend**
 WHEN a search requests the blend mode, the tool SHALL query the knowledge base and the external providers and SHALL return both result sets, with external results preferred on a duplicate URL and the displaced cached count reported. The blend SHALL still return the cached results when every external provider fails. Skip mode SHALL bypass knowledge-base recall, and the default mode SHALL retain KB-first sufficiency per REQ-076. The response SHALL report the recall state and the blended result count. A deep or research request SHALL report recall as not applicable. _Check:_ G1.
+
+**REQ-076b — KB-first sufficiency measurement**
+The server SHALL measure the KB-first admission decision over a stored-chunk corpus that includes documents a query does not concern. The measurement SHALL exercise the production admission predicate and the production retrieval path, and SHALL report the share of admitted chunks judged irrelevant to the query separately from the share that carry no relevance judgment. The measurement SHALL run at more than one stored-chunk size, so a floor derived from short text is not assumed to hold for long text. The measurement SHALL be reproducible offline from committed fixtures and SHALL NOT read or write the configured knowledge-base storage. _Check:_ G1.
 
 **REQ-082 — KB Retrieval Consistency**
 The knowledge base SHALL remain retrievable as content accumulates: content indexed earlier SHALL remain discoverable by search after later content is ingested, and retrieval SHALL NOT discard matching content solely because the store has grown or because the embedding model configuration changed since that content was indexed. When the embedding model configuration changes, the server SHALL reconcile stored content so that previously indexed chunks remain comparable to new queries. Stored content that cannot be retrieved under the current configuration SHALL be surfaced as a status event rather than silently omitted. _Check:_ G1.
@@ -1427,6 +1430,7 @@ verdict is preserved (REQ-026f).
 | REQ-075 | Confidence Decay | 4.9 | G1 |
 | REQ-076 | KB-First Sufficiency | 4.9 | G1 |
 | REQ-076a | Knowledge-Base Blend | 4.9 | G1 |
+| REQ-076b | KB-first sufficiency measurement | 4.9 | G1 |
 | REQ-082 | KB Retrieval Consistency | 4.9 | G1 |
 | REQ-083 | Report Storage | 4.9 | G1 |
 | REQ-084 | KB At-Rest Encryption | 4.9 | G1 |
@@ -1951,7 +1955,7 @@ the table.
 | 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-020j, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-135, REQ-137 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
 | 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
-| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
+| 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-076b, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
 | 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-031b, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
 | 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126, REQ-134 | G1, G3 |

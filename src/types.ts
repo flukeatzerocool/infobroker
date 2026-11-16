@@ -668,6 +668,12 @@ export interface KbSearchResult {
   source_type: string;
   ingested_at: number;
   source_updated_at?: string;
+  /**
+   * REQ-076b: internal evidence field — the number of distinct query tokens
+   * present in the stored chunk (not the 200-character snippet). Never returned
+   * to clients; every response boundary strips it.
+   */
+  matched_tokens?: number;
 }
 
 export interface KbListEntry {

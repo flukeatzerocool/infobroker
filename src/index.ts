@@ -22,7 +22,8 @@ import { filterBlocked, isBlocked, qualityScore } from "./source-quality.js";
 import { assertPublicUrl, assertPublicUrlResolved, assertHttpUrlProtocol, fetchFollowRedirects, SsrRefusalError, UnresolvableHostError, UnsupportedProtocolError, type FetchLike } from "./lib/url-guard.js";
 import { isBotChallenge } from "./lib/bot-challenge.js";
 import { withGuardedTarget } from "./lib/fetch-target.js";
-import { initKb, isKbConfigured, kbSearch, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, stopKbMaintenance, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
+import { initKb, isKbConfigured, kbSearch, publicSearchResults, kbIngest, kbStats, kbDelete, kbList, kbGet, kbGetReportSources, resolveReportIdentity, resolveTextIdentity, resolveCollection, ingestDestinations, autoIndex, flushKbWrites, stopKbMaintenance, getKbLockError, getKbEncryptionState, sealReportBytes, generateKeyFile, verifyStoreKey, backupKeyFile, kbEncryptionStatus, rekeyStoreTo, resolveKeyFile, kbRecordClaims, kbClaims, kbPutReportReceipt, kbVerifyReport } from "./kb.js";
+import { partitionBySufficiency, sufficiencyThresholds } from "./kb-sufficiency.js";
 import { readKeyFile, type ResolvedKey } from "./kb-crypto.js";
 import { normalizeReceiptInput, RECEIPT_LIMITS } from "./kb-receipt.js";
 import { checkContent, disposition, policyMode, policyMeta } from "./content-policy.js";
@@ -443,11 +444,12 @@ async function doWebSearch(
         // row; the count is reported as zero rather than omitted.
         kbRecall = fresh === "blend" ? "blended" : "miss";
         if (kbResults.length > 0) {
-          const relevanceThreshold = config.kb!.kb_first_relevance_threshold;
-          const confidenceThreshold = config.kb!.kb_first_confidence_threshold;
-          const sufficientResults = kbResults.filter(
-            (r) => r.freshness_score >= confidenceThreshold && (r.score ?? 0) >= relevanceThreshold
-          );
+          // REQ-076: the admission predicate lives in src/kb-sufficiency.ts so the
+          // sufficiency benchmark measures the same code the server runs.
+          const sufficientResults = partitionBySufficiency(
+            kbResults,
+            sufficiencyThresholds(config)
+          ).sufficient;
           // REQ-076a: a blend returns both result sets, so the sufficiency
           // thresholds gate KB-first mode only and never drop cached rows a
           // caller explicitly asked to keep.
@@ -2594,11 +2596,14 @@ instrumentTool(
       }
 
       if (action === "search") {
-        const results = kbSearch(
-          String(params.query ?? ""),
-          Number(params.max_results),
-          resolveCollection(params.collection as string | undefined),
-          params.source_type as string | undefined
+        // REQ-076b: the internal evidence field never reaches a client payload.
+        const results = publicSearchResults(
+          kbSearch(
+            String(params.query ?? ""),
+            Number(params.max_results),
+            resolveCollection(params.collection as string | undefined),
+            params.source_type as string | undefined
+          )
         );
         return { content: [{ type: "text" as const, text: `[OK] ${json({ status: "ok", provider: "knowledge_base", results })}` }] };
       }

@@ -2,6 +2,16 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- KB-first sufficiency is now measured. Retrieved chunks were ranked by a
+  score that divides matched occurrences by text length, and a threshold of 0.3
+  was hand-set with no evidence about what it admitted. A benchmark seeds a temp
+  store from the committed retrieval corpus, runs the production predicate at
+  snippet and page chunk scale, and separates judged-irrelevant admissions from
+  unjudged ones (REQ-076b). Its first run admits a cross-topic chunk in 4.8% of
+  snippet-scale admissions and none at page scale, and no admission rests on a
+  single query token; that measurement is the input to the relevance-floor
+  increment (D-142).
+
 - A reheadlined syndication now collapses. Cross-provider reconciliation compared
   title plus snippet, so the headline vetoed byte-identical content and the
   processing benchmark recorded 0.667 recall. A snippet comparison is now a second

@@ -2828,3 +2828,30 @@ cross-task rule because `general_web` never triggers the cross-task fallback,
 and because an all-empty chain is a legitimate end state that must be preceded
 by the rescue attempt. Enabling an Exa or Tavily key is therefore enough to
 serve general web search when the keyless providers are blocked.
+
+### D-142: Measure KB-First Admission Before Lowering Its Floor (2026-11-16)
+
+The KB-first relevance floor was a hand-set 0.3 and nothing measured what it
+admitted. The score is `0.7·cosine + 0.3·(matchedOccurrences / textLength)`, so a
+short chunk matched by one query token can clear it, and the snippet returned to
+the admission check is only the first 200 characters of the stored chunk. The
+roadmap therefore asked for measurement before any threshold change.
+
+The measurement (`src/kb-sufficiency-benchmark.ts`, REQ-076b) seeds a temp store
+from the committed retrieval corpus, searches it with the production path, and
+applies the production predicate, which now lives in `src/kb-sufficiency.ts` so
+the server and the benchmark cannot drift. Two deliberate choices about truth:
+a result the retrieval fixture does not judge is reported as *unjudged* and is
+never counted as irrelevant, which is why the corpus carries a committed label
+file rather than inferring irrelevance from absence of a judgment; and a document
+from another case's result set is a constructed cross-topic distractor. Page
+scale is modelled by deterministic neutral padding to the configured chunk size,
+because the fixture has no page text — this isolates the length denominator but
+is not a model of real boilerplate, and the decision records it as a lower bound.
+`matched_tokens` is carried on the internal result and stripped before any client
+payload.
+
+First run: 4.8% of snippet-scale admissions are cross-topic, 0% at page scale,
+no admission rests on a single token, and sufficiency recall is 0.69 (snippet) /
+0.50 (page). The item's trigger has fired at snippet scale, so the relevance-floor
+increment proceeds against this baseline.

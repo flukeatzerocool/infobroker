@@ -1,0 +1,433 @@
+{
+  "version": 1,
+  "source": "test-fixtures/retrieval/queries.json",
+  "note": "Labels for the KB-first sufficiency benchmark. A grade comes from the retrieval fixture's own judgments; a same-query result the fixture does not judge is listed as unjudged and is never counted as either relevant or irrelevant; a document from another case's result set is a constructed cross-topic distractor (grade 0).",
+  "cross_topic_rule": "a document whose URL belongs to another case's result set and not to this case's result set",
+  "cases": {
+    "ev-battery-range": {
+      "query": "electric vehicle battery range",
+      "relevant": [
+        {
+          "url": "https://energy.example.com/ev-range",
+          "grade": 2
+        },
+        {
+          "url": "https://auto.example.org/battery-guide",
+          "grade": 1
+        },
+        {
+          "url": "https://news.example.net/ev-sales",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://mirror.example.net/ev-range-copy",
+        "https://news.example.net/charging"
+      ]
+    },
+    "rag-evaluation": {
+      "query": "retrieval augmented generation evaluation benchmarks",
+      "relevant": [
+        {
+          "url": "https://arxiv.example.org/abs/rag-eval",
+          "grade": 2
+        },
+        {
+          "url": "https://aclanthology.example.org/rag-survey",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://code.example.net/cache",
+        "https://blog.example.org/rag-pitfalls"
+      ]
+    },
+    "klimawandel-de": {
+      "query": "Klimawandel Folgen f\u00fcr Deutschland",
+      "relevant": [
+        {
+          "url": "https://umwelt.example.de/klimafolgen",
+          "grade": 2
+        },
+        {
+          "url": "https://wiki.example.de/klimawandel",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://wetter.example.de/morgen"
+      ]
+    },
+    "cjk-semiconductor": {
+      "query": "\u534a\u5c0e\u4f53 \u4f9b\u7d66\u4e0d\u8db3",
+      "relevant": [
+        {
+          "url": "https://jp.example.org/semiconductor-supply",
+          "grade": 2
+        },
+        {
+          "url": "https://jp.example.net/chip-outlook",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://jp.example.net/weather"
+      ]
+    },
+    "ru-ai-regulation": {
+      "query": "\u0438\u0441\u043a\u0443\u0441\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442 \u0440\u0435\u0433\u0443\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435",
+      "relevant": [
+        {
+          "url": "https://ru.example.org/ai-law",
+          "grade": 2
+        },
+        {
+          "url": "https://ru.example.net/ai-policy",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://ru.example.net/weather"
+      ]
+    },
+    "aspirin-prevention": {
+      "query": "aspirin cardiovascular prevention evidence",
+      "relevant": [
+        {
+          "url": "https://pubmed.example.org/aspirin",
+          "grade": 2
+        },
+        {
+          "url": "https://cardio.example.org/aspirin-guideline",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://health.example.net/headache"
+      ]
+    },
+    "hagia-sophia": {
+      "query": "Hagia Sophia architecture history",
+      "relevant": [
+        {
+          "url": "https://arch.example.org/hagia-sophia",
+          "grade": 2
+        },
+        {
+          "url": "https://history.example.org/byzantium",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://travel.example.net/istanbul"
+      ]
+    },
+    "sec-risk-factors": {
+      "query": "SEC 10-K risk factors disclosure",
+      "relevant": [
+        {
+          "url": "https://sec.example.gov/10k-guide",
+          "grade": 2
+        },
+        {
+          "url": "https://finance.example.org/risk-factors",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://finance.example.net/recap"
+      ]
+    },
+    "rust-tokio": {
+      "query": "rust async runtime tokio",
+      "relevant": [
+        {
+          "url": "https://docs.example.org/tokio",
+          "grade": 2
+        },
+        {
+          "url": "https://rust.example.org/async",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://code.example.net/python"
+      ]
+    },
+    "central-bank-rates": {
+      "query": "central bank interest rate decision",
+      "relevant": [
+        {
+          "url": "https://bank.example.org/decision",
+          "grade": 2
+        },
+        {
+          "url": "https://news.example.net/rates",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://sports.example.net/results"
+      ]
+    },
+    "graph-db-tradeoffs": {
+      "query": "graph database tradeoffs for social networks",
+      "relevant": [
+        {
+          "url": "https://db.example.org/graph-social",
+          "grade": 2
+        },
+        {
+          "url": "https://blog.example.com/graph-notes",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://code.example.net/orm",
+        "https://code.example.net/cache",
+        "https://ops.example.com/k8s",
+        "https://data.example.org/columnar"
+      ]
+    },
+    "battery-chemistry": {
+      "query": "lithium iron phosphate versus nickel manganese cobalt",
+      "relevant": [
+        {
+          "url": "https://energy.example.com/lfp-nmc",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://energy.example.org/grid",
+        "https://auto.example.net/standards",
+        "https://industry.example.com/recycle"
+      ]
+    },
+    "transformer-interpretability": {
+      "query": "transformer interpretability attention probes",
+      "relevant": [
+        {
+          "url": "https://arxiv.example.org/abs/probes",
+          "grade": 2
+        },
+        {
+          "url": "https://aclanthology.example.org/probe-survey",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://infra.example.com/latency",
+        "https://blog.example.net/tokenizer"
+      ]
+    },
+    "water-scarcity-policy": {
+      "query": "urban water scarcity policy instruments",
+      "relevant": [
+        {
+          "url": "https://policy.example.org/water",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://news.example.com/reservoir",
+        "https://city.example.net/pipes",
+        "https://comm.example.org/drought"
+      ]
+    },
+    "rust-async-runtime": {
+      "query": "rust async runtime internals executor",
+      "relevant": [
+        {
+          "url": "https://docs.example.org/rust-async",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://docs.example.net/cargo"
+      ]
+    },
+    "food-label-regulation": {
+      "query": "front of pack nutrition labelling evidence",
+      "relevant": [
+        {
+          "url": "https://health.example.org/labels",
+          "grade": 2
+        },
+        {
+          "url": "https://journal.example.net/label-rct",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://retail.example.com/promo"
+      ]
+    },
+    "grid-interconnection-queue": {
+      "query": "interconnection queue reform electricity",
+      "relevant": [
+        {
+          "url": "https://energy.example.net/queue",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://energy.example.net/siting"
+      ]
+    },
+    "museum-provenance": {
+      "query": "museum acquisition provenance research methods",
+      "relevant": [
+        {
+          "url": "https://museum.example.org/provenance",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://museum.example.org/lighting"
+      ]
+    },
+    "coral-bleaching-thresholds": {
+      "query": "coral bleaching thermal thresholds",
+      "relevant": [
+        {
+          "url": "https://marine.example.org/bleaching",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://tourism.example.com/dive"
+      ]
+    },
+    "procurement-ai-clauses": {
+      "query": "public procurement contract clauses for AI systems",
+      "relevant": [
+        {
+          "url": "https://legal.example.org/ai-clauses",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://procure.example.com/scoring"
+      ]
+    },
+    "heat-pump-cold-climate": {
+      "query": "heat pump performance in cold climates",
+      "relevant": [
+        {
+          "url": "https://energy.example.org/heat-pump-cold",
+          "grade": 2
+        },
+        {
+          "url": "https://hvac.example.com/cold-weather",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://hvac.example.net/boilers",
+        "https://gov.example.org/insulation",
+        "https://hvac.example.net/refrigerant",
+        "https://energy.example.com/solar-thermal",
+        "https://gadget.example.com/thermostat",
+        "https://city.example.net/district",
+        "https://news.example.com/noise"
+      ]
+    },
+    "coral-restoration-costs": {
+      "query": "coral reef restoration cost per hectare",
+      "relevant": [
+        {
+          "url": "https://marine.example.org/restoration-costs",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://tourism.example.com/dive",
+        "https://marine.example.net/nursery",
+        "https://fisheries.example.org/stock",
+        "https://marine.example.org/bleaching",
+        "https://policy.example.net/mpa",
+        "https://engineering.example.com/reef",
+        "https://ngo.example.org/volunteers"
+      ]
+    },
+    "grid-storage-arbitrage": {
+      "query": "battery storage arbitrage revenue stack",
+      "relevant": [
+        {
+          "url": "https://energy.example.net/revenue-stack",
+          "grade": 2
+        },
+        {
+          "url": "https://markets.example.org/arbitrage",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://markets.example.net/capacity",
+        "https://markets.example.org/ancillary",
+        "https://materials.example.com/lithium",
+        "https://grid.example.org/queues",
+        "https://standards.example.net/bess",
+        "https://materials.example.net/degradation",
+        "https://regulator.example.org/licence"
+      ]
+    },
+    "vaccine-cold-chain": {
+      "query": "vaccine cold chain failure rates",
+      "relevant": [
+        {
+          "url": "https://health.example.org/cold-chain",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://health.example.net/coverage",
+        "https://health.example.net/wastage",
+        "https://engineering.example.com/sdd",
+        "https://training.example.org/epi",
+        "https://health.example.org/sero",
+        "https://supply.example.net/leadtimes",
+        "https://devices.example.com/loggers"
+      ]
+    },
+    "school-air-quality": {
+      "query": "classroom ventilation and student performance",
+      "relevant": [
+        {
+          "url": "https://buildings.example.org/ventilation",
+          "grade": 2
+        },
+        {
+          "url": "https://journal.example.net/co2-attention",
+          "grade": 1
+        }
+      ],
+      "unjudged": [
+        "https://education.example.com/absence",
+        "https://education.example.net/class-size",
+        "https://buildings.example.net/regs",
+        "https://buildings.example.com/acoustics",
+        "https://energy.example.net/school-heating",
+        "https://education.example.org/workload"
+      ]
+    },
+    "microplastics-drinking-water": {
+      "query": "microplastics removal in drinking water treatment",
+      "relevant": [
+        {
+          "url": "https://water.example.org/microplastics",
+          "grade": 2
+        }
+      ],
+      "unjudged": [
+        "https://water.example.net/leaks",
+        "https://water.example.net/dbps",
+        "https://water.example.com/reservoirs",
+        "https://water.example.com/lead",
+        "https://market.example.org/bottled",
+        "https://water.example.org/reuse",
+        "https://water.example.net/algae"
+      ]
+    }
+  }
+}
