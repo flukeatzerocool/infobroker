@@ -14,16 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Measure direction and make the retrieval floor bite
-
-- Grow the `REQ-130` corpus from 10 to 20 cases with at least four where the
-  relevant document ranks below 5, and refresh `baseline.json` with a reason.
-- Add `REQ-135`: requirement quality measured against a committed
-  underspecified-query corpus (offer-rate, requirement-slot recall), offline.
-
-**Trigger:** the next benchmark or retrieval-quality change; close when a
-deliberately degraded ranking fails the floor.
-
 ## Close the parity record
 
 - Add a surface / evidence / measurement table per §1 function to

@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "floor": 2,
+  "cases": [
+    {
+      "id": "arxiv-10k",
+      "query": "arxiv 10-K filing",
+      "expect_offer": true,
+      "candidates": [
+        "academic",
+        "financial"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "wiki-population",
+      "query": "wikipedia population of Berlin",
+      "expect_offer": true,
+      "candidates": [
+        "structured_fact",
+        "encyclopedia"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "wiki-python-definition",
+      "query": "wikipedia definition of python",
+      "expect_offer": true,
+      "candidates": [
+        "definition",
+        "encyclopedia"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "arxiv-news-dataset",
+      "query": "news about arxiv dataset",
+      "expect_offer": true,
+      "candidates": [
+        "academic",
+        "news"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "sec-arxiv",
+      "query": "sec filing arxiv",
+      "expect_offer": true,
+      "candidates": [
+        "financial",
+        "academic"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "wiki-rust-definition",
+      "query": "wiki definition of rust language",
+      "expect_offer": true,
+      "candidates": [
+        "definition",
+        "encyclopedia"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "tenk-wikipedia",
+      "query": "10-K wikipedia",
+      "expect_offer": true,
+      "candidates": [
+        "encyclopedia",
+        "financial"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "news-sec-acme",
+      "query": "news sec filing acme",
+      "expect_offer": true,
+      "candidates": [
+        "financial",
+        "news"
+      ],
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "definition-serendipity",
+      "query": "define serendipity",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "financial-10k",
+      "query": "10-K filing Acme 2024",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "fact-population",
+      "query": "population of Berlin",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "code-sort",
+      "query": "how to sort a list in python",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "scholarly-attention",
+      "query": "attention is all you need",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "news-election",
+      "query": "who won the 2024 election",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "archive-hagia",
+      "query": "hagia sophia history",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "code-tokio",
+      "query": "tokio async runtime",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "scholarly-vaccine",
+      "query": "covid vaccine efficacy 2021",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "general-laptop",
+      "query": "best laptop 2026",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "general-climate",
+      "query": "climate change impacts",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    },
+    {
+      "id": "code-github-tenk",
+      "query": "github 10-K filing",
+      "expect_offer": false,
+      "slots": [
+        "task_type",
+        "depth"
+      ]
+    }
+  ]
+}

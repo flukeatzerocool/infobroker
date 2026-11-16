@@ -7,16 +7,47 @@
       "query": "electric vehicle battery range",
       "language": "en",
       "judgments": [
-        { "url": "https://energy.example.com/ev-range", "grade": 2 },
-        { "url": "https://auto.example.org/battery-guide", "grade": 1 },
-        { "url": "https://news.example.net/ev-sales", "grade": 1 }
+        {
+          "url": "https://energy.example.com/ev-range",
+          "grade": 2
+        },
+        {
+          "url": "https://auto.example.org/battery-guide",
+          "grade": 1
+        },
+        {
+          "url": "https://news.example.net/ev-sales",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "How far can an electric car go on one charge?", "url": "https://energy.example.com/ev-range", "snippet": "Battery range for electric vehicles depends on capacity, temperature, and driving speed.", "source_type": "web_search" },
-        { "title": "EV battery buying guide", "url": "https://auto.example.org/battery-guide", "snippet": "Compare electric vehicle battery chemistries, charging rates, and real-world range." },
-        { "title": "Electric car sales rise again", "url": "https://news.example.net/ev-sales", "snippet": "Electric vehicle sales rose, though range anxiety remains a concern for buyers." },
-        { "title": "How far can an electric car go on one charge?", "url": "https://mirror.example.net/ev-range-copy", "snippet": "Battery range for electric vehicles depends on capacity, temperature, and driving speed.", "original_source": "https://energy.example.com/ev-range" },
-        { "title": "Charging networks expand", "url": "https://news.example.net/charging", "snippet": "New fast-charging stations reduce downtime on long trips." }
+        {
+          "title": "How far can an electric car go on one charge?",
+          "url": "https://energy.example.com/ev-range",
+          "snippet": "Battery range for electric vehicles depends on capacity, temperature, and driving speed.",
+          "source_type": "web_search"
+        },
+        {
+          "title": "EV battery buying guide",
+          "url": "https://auto.example.org/battery-guide",
+          "snippet": "Compare electric vehicle battery chemistries, charging rates, and real-world range."
+        },
+        {
+          "title": "Electric car sales rise again",
+          "url": "https://news.example.net/ev-sales",
+          "snippet": "Electric vehicle sales rose, though range anxiety remains a concern for buyers."
+        },
+        {
+          "title": "How far can an electric car go on one charge?",
+          "url": "https://mirror.example.net/ev-range-copy",
+          "snippet": "Battery range for electric vehicles depends on capacity, temperature, and driving speed.",
+          "original_source": "https://energy.example.com/ev-range"
+        },
+        {
+          "title": "Charging networks expand",
+          "url": "https://news.example.net/charging",
+          "snippet": "New fast-charging stations reduce downtime on long trips."
+        }
       ]
     },
     {
@@ -24,56 +55,132 @@
       "query": "retrieval augmented generation evaluation benchmarks",
       "language": "en",
       "judgments": [
-        { "url": "https://arxiv.example.org/abs/rag-eval", "grade": 2 },
-        { "url": "https://aclanthology.example.org/rag-survey", "grade": 1 }
+        {
+          "url": "https://arxiv.example.org/abs/rag-eval",
+          "grade": 2
+        },
+        {
+          "url": "https://aclanthology.example.org/rag-survey",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Evaluating retrieval-augmented generation systems", "url": "https://arxiv.example.org/abs/rag-eval", "snippet": "We benchmark retrieval-augmented generation on question answering, factuality, and attribution." },
-        { "title": "RAG survey: methods and evaluation", "url": "https://aclanthology.example.org/rag-survey", "snippet": "A survey of retrieval augmented generation methods, datasets, and evaluation benchmarks." },
-        { "title": "Unrelated caching library", "url": "https://code.example.net/cache", "snippet": "A small in-memory cache for web applications." },
-        { "title": "RAG evaluation pitfalls", "url": "https://blog.example.org/rag-pitfalls", "snippet": "Common mistakes when measuring retrieval and generation quality." }
+        {
+          "title": "Evaluating retrieval-augmented generation systems",
+          "url": "https://arxiv.example.org/abs/rag-eval",
+          "snippet": "We benchmark retrieval-augmented generation on question answering, factuality, and attribution."
+        },
+        {
+          "title": "RAG survey: methods and evaluation",
+          "url": "https://aclanthology.example.org/rag-survey",
+          "snippet": "A survey of retrieval augmented generation methods, datasets, and evaluation benchmarks."
+        },
+        {
+          "title": "Unrelated caching library",
+          "url": "https://code.example.net/cache",
+          "snippet": "A small in-memory cache for web applications."
+        },
+        {
+          "title": "RAG evaluation pitfalls",
+          "url": "https://blog.example.org/rag-pitfalls",
+          "snippet": "Common mistakes when measuring retrieval and generation quality."
+        }
       ]
     },
     {
       "id": "klimawandel-de",
-      "query": "Klimawandel Folgen für Deutschland",
+      "query": "Klimawandel Folgen f\u00fcr Deutschland",
       "language": "de",
       "judgments": [
-        { "url": "https://umwelt.example.de/klimafolgen", "grade": 2 },
-        { "url": "https://wiki.example.de/klimawandel", "grade": 1 }
+        {
+          "url": "https://umwelt.example.de/klimafolgen",
+          "grade": 2
+        },
+        {
+          "url": "https://wiki.example.de/klimawandel",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Folgen des Klimawandels in Deutschland", "url": "https://umwelt.example.de/klimafolgen", "snippet": "Hitze, Dürre und Starkregen nehmen in Deutschland infolge des Klimawandels zu." },
-        { "title": "Klimawandel", "url": "https://wiki.example.de/klimawandel", "snippet": "Der Klimawandel beschreibt die langfristige Veränderung des Klimas auf der Erde." },
-        { "title": "Wettervorhersage morgen", "url": "https://wetter.example.de/morgen", "snippet": "Regen und kühle Temperaturen am Wochenende." }
+        {
+          "title": "Folgen des Klimawandels in Deutschland",
+          "url": "https://umwelt.example.de/klimafolgen",
+          "snippet": "Hitze, D\u00fcrre und Starkregen nehmen in Deutschland infolge des Klimawandels zu."
+        },
+        {
+          "title": "Klimawandel",
+          "url": "https://wiki.example.de/klimawandel",
+          "snippet": "Der Klimawandel beschreibt die langfristige Ver\u00e4nderung des Klimas auf der Erde."
+        },
+        {
+          "title": "Wettervorhersage morgen",
+          "url": "https://wetter.example.de/morgen",
+          "snippet": "Regen und k\u00fchle Temperaturen am Wochenende."
+        }
       ]
     },
     {
       "id": "cjk-semiconductor",
-      "query": "半導体 供給不足",
+      "query": "\u534a\u5c0e\u4f53 \u4f9b\u7d66\u4e0d\u8db3",
       "language": "ja",
       "judgments": [
-        { "url": "https://jp.example.org/semiconductor-supply", "grade": 2 },
-        { "url": "https://jp.example.net/chip-outlook", "grade": 1 }
+        {
+          "url": "https://jp.example.org/semiconductor-supply",
+          "grade": 2
+        },
+        {
+          "url": "https://jp.example.net/chip-outlook",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "半導体の供給不足が続く", "url": "https://jp.example.org/semiconductor-supply", "snippet": "半導体の供給不足は自動車産業や電子機器の生産に影響している。" },
-        { "title": "半導体市場の見通し", "url": "https://jp.example.net/chip-outlook", "snippet": "半導体の需要は拡大し、供給体制の強化が課題となる。" },
-        { "title": "今日の天気", "url": "https://jp.example.net/weather", "snippet": "全国的に晴れ、気温は平年並み。" }
+        {
+          "title": "\u534a\u5c0e\u4f53\u306e\u4f9b\u7d66\u4e0d\u8db3\u304c\u7d9a\u304f",
+          "url": "https://jp.example.org/semiconductor-supply",
+          "snippet": "\u534a\u5c0e\u4f53\u306e\u4f9b\u7d66\u4e0d\u8db3\u306f\u81ea\u52d5\u8eca\u7523\u696d\u3084\u96fb\u5b50\u6a5f\u5668\u306e\u751f\u7523\u306b\u5f71\u97ff\u3057\u3066\u3044\u308b\u3002"
+        },
+        {
+          "title": "\u534a\u5c0e\u4f53\u5e02\u5834\u306e\u898b\u901a\u3057",
+          "url": "https://jp.example.net/chip-outlook",
+          "snippet": "\u534a\u5c0e\u4f53\u306e\u9700\u8981\u306f\u62e1\u5927\u3057\u3001\u4f9b\u7d66\u4f53\u5236\u306e\u5f37\u5316\u304c\u8ab2\u984c\u3068\u306a\u308b\u3002"
+        },
+        {
+          "title": "\u4eca\u65e5\u306e\u5929\u6c17",
+          "url": "https://jp.example.net/weather",
+          "snippet": "\u5168\u56fd\u7684\u306b\u6674\u308c\u3001\u6c17\u6e29\u306f\u5e73\u5e74\u4e26\u307f\u3002"
+        }
       ]
     },
     {
       "id": "ru-ai-regulation",
-      "query": "искусственный интеллект регулирование",
+      "query": "\u0438\u0441\u043a\u0443\u0441\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442 \u0440\u0435\u0433\u0443\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435",
       "language": "ru",
       "judgments": [
-        { "url": "https://ru.example.org/ai-law", "grade": 2 },
-        { "url": "https://ru.example.net/ai-policy", "grade": 1 }
+        {
+          "url": "https://ru.example.org/ai-law",
+          "grade": 2
+        },
+        {
+          "url": "https://ru.example.net/ai-policy",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Регулирование искусственного интеллекта", "url": "https://ru.example.org/ai-law", "snippet": "Новые правила регулирования искусственного интеллекта обсуждают риски и ответственность." },
-        { "title": "Политика в области ИИ", "url": "https://ru.example.net/ai-policy", "snippet": "Государственная политика развития искусственного интеллекта и надзора." },
-        { "title": "Прогноз погоды", "url": "https://ru.example.net/weather", "snippet": "Ожидается солнечная погода." }
+        {
+          "title": "\u0420\u0435\u0433\u0443\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0438\u0441\u043a\u0443\u0441\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442\u0430",
+          "url": "https://ru.example.org/ai-law",
+          "snippet": "\u041d\u043e\u0432\u044b\u0435 \u043f\u0440\u0430\u0432\u0438\u043b\u0430 \u0440\u0435\u0433\u0443\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0438\u0441\u043a\u0443\u0441\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442\u0430 \u043e\u0431\u0441\u0443\u0436\u0434\u0430\u044e\u0442 \u0440\u0438\u0441\u043a\u0438 \u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0441\u0442\u044c."
+        },
+        {
+          "title": "\u041f\u043e\u043b\u0438\u0442\u0438\u043a\u0430 \u0432 \u043e\u0431\u043b\u0430\u0441\u0442\u0438 \u0418\u0418",
+          "url": "https://ru.example.net/ai-policy",
+          "snippet": "\u0413\u043e\u0441\u0443\u0434\u0430\u0440\u0441\u0442\u0432\u0435\u043d\u043d\u0430\u044f \u043f\u043e\u043b\u0438\u0442\u0438\u043a\u0430 \u0440\u0430\u0437\u0432\u0438\u0442\u0438\u044f \u0438\u0441\u043a\u0443\u0441\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442\u0430 \u0438 \u043d\u0430\u0434\u0437\u043e\u0440\u0430."
+        },
+        {
+          "title": "\u041f\u0440\u043e\u0433\u043d\u043e\u0437 \u043f\u043e\u0433\u043e\u0434\u044b",
+          "url": "https://ru.example.net/weather",
+          "snippet": "\u041e\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044f \u0441\u043e\u043b\u043d\u0435\u0447\u043d\u0430\u044f \u043f\u043e\u0433\u043e\u0434\u0430."
+        }
       ]
     },
     {
@@ -81,13 +188,31 @@
       "query": "aspirin cardiovascular prevention evidence",
       "language": "en",
       "judgments": [
-        { "url": "https://pubmed.example.org/aspirin", "grade": 2 },
-        { "url": "https://cardio.example.org/aspirin-guideline", "grade": 1 }
+        {
+          "url": "https://pubmed.example.org/aspirin",
+          "grade": 2
+        },
+        {
+          "url": "https://cardio.example.org/aspirin-guideline",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Aspirin for primary prevention of cardiovascular disease", "url": "https://pubmed.example.org/aspirin", "snippet": "Randomized trials show modest benefit and increased bleeding risk for aspirin in primary prevention." },
-        { "title": "Cardiology guideline update", "url": "https://cardio.example.org/aspirin-guideline", "snippet": "Guidelines recommend individualized aspirin use for cardiovascular prevention." },
-        { "title": "Headache treatment options", "url": "https://health.example.net/headache", "snippet": "Over-the-counter pain relief for headaches." }
+        {
+          "title": "Aspirin for primary prevention of cardiovascular disease",
+          "url": "https://pubmed.example.org/aspirin",
+          "snippet": "Randomized trials show modest benefit and increased bleeding risk for aspirin in primary prevention."
+        },
+        {
+          "title": "Cardiology guideline update",
+          "url": "https://cardio.example.org/aspirin-guideline",
+          "snippet": "Guidelines recommend individualized aspirin use for cardiovascular prevention."
+        },
+        {
+          "title": "Headache treatment options",
+          "url": "https://health.example.net/headache",
+          "snippet": "Over-the-counter pain relief for headaches."
+        }
       ]
     },
     {
@@ -95,13 +220,31 @@
       "query": "Hagia Sophia architecture history",
       "language": "en",
       "judgments": [
-        { "url": "https://arch.example.org/hagia-sophia", "grade": 2 },
-        { "url": "https://history.example.org/byzantium", "grade": 1 }
+        {
+          "url": "https://arch.example.org/hagia-sophia",
+          "grade": 2
+        },
+        {
+          "url": "https://history.example.org/byzantium",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Hagia Sophia: Byzantine architecture", "url": "https://arch.example.org/hagia-sophia", "snippet": "The Hagia Sophia dome and pendentives shaped Byzantine and Ottoman architecture." },
-        { "title": "Byzantine Empire overview", "url": "https://history.example.org/byzantium", "snippet": "A history of the Byzantine Empire and its monuments." },
-        { "title": "Istanbul travel guide", "url": "https://travel.example.net/istanbul", "snippet": "Where to eat and stay in Istanbul." }
+        {
+          "title": "Hagia Sophia: Byzantine architecture",
+          "url": "https://arch.example.org/hagia-sophia",
+          "snippet": "The Hagia Sophia dome and pendentives shaped Byzantine and Ottoman architecture."
+        },
+        {
+          "title": "Byzantine Empire overview",
+          "url": "https://history.example.org/byzantium",
+          "snippet": "A history of the Byzantine Empire and its monuments."
+        },
+        {
+          "title": "Istanbul travel guide",
+          "url": "https://travel.example.net/istanbul",
+          "snippet": "Where to eat and stay in Istanbul."
+        }
       ]
     },
     {
@@ -109,13 +252,31 @@
       "query": "SEC 10-K risk factors disclosure",
       "language": "en",
       "judgments": [
-        { "url": "https://sec.example.gov/10k-guide", "grade": 2 },
-        { "url": "https://finance.example.org/risk-factors", "grade": 1 }
+        {
+          "url": "https://sec.example.gov/10k-guide",
+          "grade": 2
+        },
+        {
+          "url": "https://finance.example.org/risk-factors",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "SEC guidance on 10-K risk factors", "url": "https://sec.example.gov/10k-guide", "snippet": "Regulation S-K requires companies to disclose material risk factors in annual reports." },
-        { "title": "Reading a 10-K", "url": "https://finance.example.org/risk-factors", "snippet": "Risk factors are among the most important sections of a 10-K filing." },
-        { "title": "Stock market recap", "url": "https://finance.example.net/recap", "snippet": "Markets closed higher on Friday." }
+        {
+          "title": "SEC guidance on 10-K risk factors",
+          "url": "https://sec.example.gov/10k-guide",
+          "snippet": "Regulation S-K requires companies to disclose material risk factors in annual reports."
+        },
+        {
+          "title": "Reading a 10-K",
+          "url": "https://finance.example.org/risk-factors",
+          "snippet": "Risk factors are among the most important sections of a 10-K filing."
+        },
+        {
+          "title": "Stock market recap",
+          "url": "https://finance.example.net/recap",
+          "snippet": "Markets closed higher on Friday."
+        }
       ]
     },
     {
@@ -123,13 +284,31 @@
       "query": "rust async runtime tokio",
       "language": "en",
       "judgments": [
-        { "url": "https://docs.example.org/tokio", "grade": 2 },
-        { "url": "https://rust.example.org/async", "grade": 1 }
+        {
+          "url": "https://docs.example.org/tokio",
+          "grade": 2
+        },
+        {
+          "url": "https://rust.example.org/async",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Tokio: an asynchronous runtime for Rust", "url": "https://docs.example.org/tokio", "snippet": "Tokio provides an async runtime, tasks, timers, and I/O for Rust applications." },
-        { "title": "Asynchronous programming in Rust", "url": "https://rust.example.org/async", "snippet": "Futures and async/await syntax in Rust, and how runtimes execute them." },
-        { "title": "Python packaging tips", "url": "https://code.example.net/python", "snippet": "Virtual environments and dependency pinning." }
+        {
+          "title": "Tokio: an asynchronous runtime for Rust",
+          "url": "https://docs.example.org/tokio",
+          "snippet": "Tokio provides an async runtime, tasks, timers, and I/O for Rust applications."
+        },
+        {
+          "title": "Asynchronous programming in Rust",
+          "url": "https://rust.example.org/async",
+          "snippet": "Futures and async/await syntax in Rust, and how runtimes execute them."
+        },
+        {
+          "title": "Python packaging tips",
+          "url": "https://code.example.net/python",
+          "snippet": "Virtual environments and dependency pinning."
+        }
       ]
     },
     {
@@ -137,13 +316,328 @@
       "query": "central bank interest rate decision",
       "language": "en",
       "judgments": [
-        { "url": "https://bank.example.org/decision", "grade": 2 },
-        { "url": "https://news.example.net/rates", "grade": 1 }
+        {
+          "url": "https://bank.example.org/decision",
+          "grade": 2
+        },
+        {
+          "url": "https://news.example.net/rates",
+          "grade": 1
+        }
       ],
       "results": [
-        { "title": "Central bank holds interest rates steady", "url": "https://bank.example.org/decision", "snippet": "The central bank kept its policy interest rate unchanged, citing inflation progress." },
-        { "title": "Rate decision explained", "url": "https://news.example.net/rates", "snippet": "What the latest interest rate decision means for borrowers." },
-        { "title": "Sports results", "url": "https://sports.example.net/results", "snippet": "Weekend football scores." }
+        {
+          "title": "Central bank holds interest rates steady",
+          "url": "https://bank.example.org/decision",
+          "snippet": "The central bank kept its policy interest rate unchanged, citing inflation progress."
+        },
+        {
+          "title": "Rate decision explained",
+          "url": "https://news.example.net/rates",
+          "snippet": "What the latest interest rate decision means for borrowers."
+        },
+        {
+          "title": "Sports results",
+          "url": "https://sports.example.net/results",
+          "snippet": "Weekend football scores."
+        }
+      ]
+    },
+    {
+      "id": "graph-db-tradeoffs",
+      "query": "graph database tradeoffs for social networks",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://db.example.org/graph-social",
+          "grade": 2
+        },
+        {
+          "url": "https://blog.example.com/graph-notes",
+          "grade": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "Unrelated ORM release",
+          "url": "https://code.example.net/orm",
+          "snippet": "An object-relational mapper ships a new migration helper."
+        },
+        {
+          "title": "Caching layer benchmark",
+          "url": "https://code.example.net/cache",
+          "snippet": "Comparing in-memory cache eviction strategies."
+        },
+        {
+          "title": "Kubernetes autoscaling",
+          "url": "https://ops.example.com/k8s",
+          "snippet": "Horizontal pod autoscaling in practice."
+        },
+        {
+          "title": "Graph notes",
+          "url": "https://blog.example.com/graph-notes",
+          "snippet": "Practical notes on modelling social graphs."
+        },
+        {
+          "title": "Columnar storage primer",
+          "url": "https://data.example.org/columnar",
+          "snippet": "Why columnar layouts help analytics."
+        },
+        {
+          "title": "Graph databases for social graphs",
+          "url": "https://db.example.org/graph-social",
+          "snippet": "Traversal cost, fan-out, and sharding tradeoffs for social networks."
+        }
+      ]
+    },
+    {
+      "id": "battery-chemistry",
+      "query": "lithium iron phosphate versus nickel manganese cobalt",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://energy.example.com/lfp-nmc",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Grid storage outlook",
+          "url": "https://energy.example.org/grid",
+          "snippet": "Utility-scale storage forecasts."
+        },
+        {
+          "title": "Charging standards",
+          "url": "https://auto.example.net/standards",
+          "snippet": "Connector standards across regions."
+        },
+        {
+          "title": "Recycling economics",
+          "url": "https://industry.example.com/recycle",
+          "snippet": "Battery recycling margins."
+        },
+        {
+          "title": "LFP versus NMC",
+          "url": "https://energy.example.com/lfp-nmc",
+          "snippet": "Energy density, cycle life, cost and thermal stability compared."
+        }
+      ]
+    },
+    {
+      "id": "transformer-interpretability",
+      "query": "transformer interpretability attention probes",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://arxiv.example.org/abs/probes",
+          "grade": 2
+        },
+        {
+          "url": "https://aclanthology.example.org/probe-survey",
+          "grade": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "Serving latency",
+          "url": "https://infra.example.com/latency",
+          "snippet": "Reducing inference latency."
+        },
+        {
+          "title": "Tokenizer quirks",
+          "url": "https://blog.example.net/tokenizer",
+          "snippet": "Byte-pair tokenizer edge cases."
+        },
+        {
+          "title": "Probe survey",
+          "url": "https://aclanthology.example.org/probe-survey",
+          "snippet": "A survey of probing methods for representations."
+        },
+        {
+          "title": "Attention probes for transformers",
+          "url": "https://arxiv.example.org/abs/probes",
+          "snippet": "Linear probes recover syntactic structure from attention states."
+        }
+      ]
+    },
+    {
+      "id": "water-scarcity-policy",
+      "query": "urban water scarcity policy instruments",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://policy.example.org/water",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Reservoir levels",
+          "url": "https://news.example.com/reservoir",
+          "snippet": "Seasonal reservoir measurements."
+        },
+        {
+          "title": "Pipe replacement costs",
+          "url": "https://city.example.net/pipes",
+          "snippet": "Capital costs of mains replacement."
+        },
+        {
+          "title": "Drought messaging",
+          "url": "https://comm.example.org/drought",
+          "snippet": "Public communication campaigns."
+        },
+        {
+          "title": "Price signals and rationing",
+          "url": "https://policy.example.org/water",
+          "snippet": "Comparing tariffs, quotas and restrictions."
+        }
+      ]
+    },
+    {
+      "id": "rust-async-runtime",
+      "query": "rust async runtime internals executor",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://docs.example.org/rust-async",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Cargo workspaces",
+          "url": "https://docs.example.net/cargo",
+          "snippet": "Splitting a crate into workspaces."
+        },
+        {
+          "title": "Async executor internals",
+          "url": "https://docs.example.org/rust-async",
+          "snippet": "Waker, task and poll mechanics in an executor."
+        }
+      ]
+    },
+    {
+      "id": "food-label-regulation",
+      "query": "front of pack nutrition labelling evidence",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://health.example.org/labels",
+          "grade": 2
+        },
+        {
+          "url": "https://journal.example.net/label-rct",
+          "grade": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "Retail promotion data",
+          "url": "https://retail.example.com/promo",
+          "snippet": "Promotion frequency by category."
+        },
+        {
+          "title": "Label RCT",
+          "url": "https://journal.example.net/label-rct",
+          "snippet": "A randomised trial of front-of-pack labels."
+        },
+        {
+          "title": "Front-of-pack labels",
+          "url": "https://health.example.org/labels",
+          "snippet": "Evidence review of labelling schemes and reformulation."
+        }
+      ]
+    },
+    {
+      "id": "grid-interconnection-queue",
+      "query": "interconnection queue reform electricity",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://energy.example.net/queue",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Transmission siting",
+          "url": "https://energy.example.net/siting",
+          "snippet": "Siting constraints for new lines."
+        },
+        {
+          "title": "Queue reform",
+          "url": "https://energy.example.net/queue",
+          "snippet": "Cluster studies and withdrawal penalties."
+        }
+      ]
+    },
+    {
+      "id": "museum-provenance",
+      "query": "museum acquisition provenance research methods",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://museum.example.org/provenance",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Gallery lighting",
+          "url": "https://museum.example.org/lighting",
+          "snippet": "Conservation lighting standards."
+        },
+        {
+          "title": "Provenance methods",
+          "url": "https://museum.example.org/provenance",
+          "snippet": "Archival tracing and gaps in ownership records."
+        }
+      ]
+    },
+    {
+      "id": "coral-bleaching-thresholds",
+      "query": "coral bleaching thermal thresholds",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://marine.example.org/bleaching",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Dive tourism",
+          "url": "https://tourism.example.com/dive",
+          "snippet": "Reef tourism economics."
+        },
+        {
+          "title": "Bleaching thresholds",
+          "url": "https://marine.example.org/bleaching",
+          "snippet": "Degree-heating weeks and mortality thresholds."
+        }
+      ]
+    },
+    {
+      "id": "procurement-ai-clauses",
+      "query": "public procurement contract clauses for AI systems",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://legal.example.org/ai-clauses",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Bid scoring",
+          "url": "https://procure.example.com/scoring",
+          "snippet": "Weighting technical criteria."
+        },
+        {
+          "title": "AI contract clauses",
+          "url": "https://legal.example.org/ai-clauses",
+          "snippet": "Audit, liability and model-change clauses."
+        }
       ]
     }
   ]

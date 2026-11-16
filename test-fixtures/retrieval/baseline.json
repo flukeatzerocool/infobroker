@@ -1,18 +1,18 @@
 {
   "version": 1,
   "k": 5,
-  "corpus": 10,
+  "corpus": 20,
   "reconciled": {
-    "mean_precision": 0.658,
+    "mean_precision": 0.558,
     "mean_recall": 1,
-    "mrr": 1,
-    "ndcg": 0.955
+    "mrr": 0.963,
+    "ndcg": 0.947
   },
   "raw": {
-    "mean_precision": 0.643,
-    "mean_recall": 1,
-    "mrr": 1,
-    "ndcg": 1
+    "mean_precision": 0.54,
+    "mean_recall": 0.975,
+    "mrr": 0.704,
+    "ndcg": 0.761
   },
   "cases": [
     {
@@ -104,6 +104,96 @@
       "ndcg_at_k": 1,
       "returned": 3,
       "relevant": 2
+    },
+    {
+      "id": "graph-db-tradeoffs",
+      "precision_at_k": 0.4,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 6,
+      "relevant": 2
+    },
+    {
+      "id": "battery-chemistry",
+      "precision_at_k": 0.25,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 4,
+      "relevant": 1
+    },
+    {
+      "id": "transformer-interpretability",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 0.944847956559586,
+      "returned": 4,
+      "relevant": 2
+    },
+    {
+      "id": "water-scarcity-policy",
+      "precision_at_k": 0.25,
+      "recall_at_k": 1,
+      "mrr": 0.25,
+      "ndcg_at_k": 0.4306765580733931,
+      "returned": 4,
+      "relevant": 1
+    },
+    {
+      "id": "rust-async-runtime",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 2,
+      "relevant": 1
+    },
+    {
+      "id": "food-label-regulation",
+      "precision_at_k": 0.6666666666666666,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 3,
+      "relevant": 2
+    },
+    {
+      "id": "grid-interconnection-queue",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 2,
+      "relevant": 1
+    },
+    {
+      "id": "museum-provenance",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 2,
+      "relevant": 1
+    },
+    {
+      "id": "coral-bleaching-thresholds",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 2,
+      "relevant": 1
+    },
+    {
+      "id": "procurement-ai-clauses",
+      "precision_at_k": 0.5,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 2,
+      "relevant": 1
     }
   ]
 }
