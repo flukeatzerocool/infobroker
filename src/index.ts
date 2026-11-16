@@ -62,6 +62,7 @@ import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { advertisedSchemaBytes, medianOfWindow, type RegisteredTool } from "./tool-footprint.js";
 import { withTimeout } from "./lib/timeout.js";
 import { buildDirection, ambiguousRequirements, REPORT_AUDIENCES } from "./lib/direction.js";
+import { buildProcessing, processingEntry, processingForUrls } from "./processing.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
 import { classifyFailure, failureTaxonomy, isCancellation, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
@@ -716,10 +717,14 @@ async function doWebSearch(
     // REQ-020g/REQ-020h: collapse results expressing the same content across
     // providers and order survivors by semantic relevance adjusted by source
     // quality. With no quality configuration this is the previous behavior.
+    const beforeReconcile = filtered.length;
     filtered = reconcileResults(filtered, query, undefined, {
       qualityWeight: sourceQuality?.enabled === false ? 0 : (sourceQuality?.weight ?? 0.15),
       qualityScore: (result) => qualityScore(result.url, sourceQuality),
     });
+    // REQ-133: the number reconciliation collapsed is the processing block's
+    // collapsed total; per-entry attribution is not recoverable.
+    const collapsedCount = Math.max(0, beforeReconcile - filtered.length);
 
     // REQ-076a: blend appends the cached KB rows the external tier did not
     // return. An external row wins a URL duplicate because it is fresher; the
@@ -815,6 +820,7 @@ async function doWebSearch(
         deep: true,
         direction: direction(chain),
         pages_read: deepMeta.pages_read,
+        processing: processingForUrls(deepMeta.results.map((result) => result.url), collapsedCount),
         ...kbMeta,
         ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
         ...(analyze && deepMeta.results.length > 0 ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
@@ -837,6 +843,7 @@ async function doWebSearch(
       ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
       ...(analyze && finalResults.length > 0 ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
       direction: direction(chain),
+      processing: processingForUrls(finalResults.map((result) => result.url), collapsedCount),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -1315,6 +1322,11 @@ async function doFetchPage(
         fallback_used: false,
         cache: "hit",
         cache_age_ms: Date.now() - cached.ingested_at,
+        // REQ-133: the copy came from the store, so it is cached content at the
+        // tier it was stored under, not live retrieval.
+        processing: buildProcessing([
+          processingEntry({ url, served: "cache", freshness: cached.freshness_tier }),
+        ]),
       };
       // REQ-021c: only a stored source update date exists on a cached copy, and
       // that is a modification date.
@@ -1761,6 +1773,7 @@ async function doFetchPage(
       fallback_used: false,
       passages_returned: 0,
       match_quality: matchQuality(undefined, 0),
+      processing: buildProcessing([processingEntry({ url, truncated: truncated.truncated })]),
       ...(policyNote ?? {}),
     },
     ...(truncated.truncated ? { truncated: true, output_path: truncated.outputPath, truncation_hint: "Call fetch_page again with `question` to get the relevant passages instead of reading output_path." } : {}),

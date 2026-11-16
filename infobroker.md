@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020i`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -223,6 +223,9 @@ All providers SHALL return results in a common shape that includes a title, URL,
 
 **REQ-004 — Truncation**
 Tool outputs longer than the configured max length SHALL be truncated and written to the filesystem at the truncation location defined in §10.1. The tool response SHALL include a `truncated: true` flag and `output_path` pointing to the full file. The truncated text SHALL include an in-band note identifying that truncation occurred and where the full content was written. _Check:_ G1.
+
+**REQ-133 — Processing Provenance**
+Every search response and every single-URL fetch response SHALL report a `processing` block with one entry per returned result naming the result URL, whether its content was served from cache or the network, whether it was truncated, how many results it stands in for when duplicates were collapsed, and its freshness. The block SHALL report the truncated and collapsed totals. A result served from the knowledge base SHALL report as cached at its stored freshness tier, and a live result SHALL report as network at live freshness. A result that was neither truncated nor collapsed SHALL report zero rather than omit the field. _Check:_ G1.
 
 **REQ-073 — Minimum Viable Result**
 After normalization, any result whose URL is absent or empty SHALL be discarded. Discarded results SHALL NOT count toward the caller's requested maximum results count. Title-only suggestion and expansion entries are exempt from this discard. _Check:_ G1.
@@ -1287,6 +1290,7 @@ verdict is preserved (REQ-026f).
 | REQ-004 | Truncation | 4.1 | G1 |
 | REQ-073 | Minimum Viable Result | 4.1 | G1 |
 | REQ-079 | Output Verbosity | 4.1 | G1 |
+| REQ-133 | Processing Provenance | 4.1 | G1 |
 | REQ-010 | Config File | 4.2 | G1 |
 | REQ-011 | API Key Safety | 4.2 | G1 |
 | REQ-013 | Provider Discovery | 4.2 | G1 |
@@ -1923,7 +1927,7 @@ the table.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130 | G0, G1 |
+| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-133 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
 | 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-121, REQ-122, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
