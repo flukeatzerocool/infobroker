@@ -739,3 +739,21 @@ describe("keyed rescue (REQ-031)", () => {
     });
   });
 });
+
+// REQ-031: a failing rescue attempt must not turn an all-empty chain into an
+// exhaustion error; the zero-result answer is still legitimate.
+test("a failed rescue preserves the all-empty success", async () => {
+  const empty = await stub("empty");
+  const failing = await stub("error");
+  const { cfg } = await setup([
+    provider("stub_empty", empty.url),
+    provider("stub_rescue", failing.url, { dispatch: false }),
+  ]);
+
+  await withServer({ env: cfg.env }, async (call) => {
+    const payload = await search(call, { query: "empty rescue probe", fresh: true, task_type: "general_web" });
+    expect(payload.status).toBe("ok");
+    expect(payload.results).toEqual([]);
+    expect(payload.meta?.no_results).toBe(true);
+  });
+});

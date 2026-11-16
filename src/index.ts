@@ -938,6 +938,7 @@ async function doWebSearch(
   }
 
   const attemptedBeforeRescue = [...chain, ...crossTaskAttempted];
+  const hadErrorBeforeRescue = lastError !== null;
   const rescue = rescueChain(
     attemptedBeforeRescue,
     config.providers,
@@ -952,6 +953,9 @@ async function doWebSearch(
       return buildSuccess(result.slug, result.filtered, result.elapsed, rescued);
     }
   }
+  // REQ-031: a rescue attempt must not turn an all-empty chain into an error.
+  // Only a chain that was already erroring ends in exhaustion.
+  if (!hadErrorBeforeRescue) lastError = null;
 
   // A chain that ended on provider errors is a failure; a chain whose
   // providers all returned empty is a legitimate zero-result answer.

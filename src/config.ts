@@ -352,6 +352,9 @@ const PATCHABLE_PATHS: RegExp[] = [
   /^providers\.[^.]+\.rate_limit(\.(per_second|per_day|per_month|jitter_ms))?$/,
   /^output\.(max_chars|response_max_chars|latency_window_size|latency_window_strategy|latency_window_ms|verbose|fallback_depth|max_redirect_hops|degraded_latency_ms|hedge_enabled|hedge_min_delay_ms|hedge_max_delay_ms|hedge_grace_ms|rate_limit_cooldown_ms|call_log|call_log_max_bytes)$/,
   /^state\.update_check$/,
+  // A collection switch changes which stored rows recall reads, not where the
+  // store lives or how large it may grow.
+  /^kb\.default_collection$/,
 ];
 
 interface PatchLeaf {
