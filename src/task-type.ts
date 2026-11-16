@@ -279,9 +279,9 @@ function scoreType(type: SearchableTaskType, lower: string, raw: string): TypeSc
   return { type, score: Math.min(score, 5), maxWeight, longest };
 }
 
-function selectScored(query: string): TypeScore | null {
+function scoredSignals(query: string): TypeScore[] {
   const lower = query.toLowerCase();
-  const scored = SEARCHABLE_TASK_TYPES
+  return SEARCHABLE_TASK_TYPES
     .map((type) => scoreType(type, lower, query))
     .filter((s) => s.score > 0)
     .sort(
@@ -291,7 +291,21 @@ function selectScored(query: string): TypeScore | null {
         b.longest - a.longest ||
         SEARCHABLE_TASK_TYPES.indexOf(a.type) - SEARCHABLE_TASK_TYPES.indexOf(b.type),
     );
-  return scored[0] ?? null;
+}
+
+function selectScored(query: string): TypeScore | null {
+  return scoredSignals(query)[0] ?? null;
+}
+
+export interface TaskTypeCandidate {
+  taskType: string;
+  score: number;
+}
+
+// REQ-131: the ranked classification, so a caller can tell a confident winner
+// from two equally supported requirements instead of receiving only the winner.
+export function classifyTaskCandidates(query: string): TaskTypeCandidate[] {
+  return scoredSignals(query).map((scored) => ({ taskType: scored.type, score: scored.score }));
 }
 
 export type Ranker = (query: string, docs: string[], modelName?: string) => RankedDoc[];

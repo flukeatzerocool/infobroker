@@ -37,7 +37,7 @@ import { settleBatch } from "./batch-run.js";
 import { err, chainExhaustion, providerRemediation } from "./error-envelope.js";
 import { orderByRelevance, reconcileResults } from "./dedup.js";
 import { rankDocs } from "./embed.js";
-import { resolveTaskType, SEARCHABLE_TASK_TYPES } from "./task-type.js";
+import { resolveTaskType, classifyTaskCandidates, MIN_SIGNAL_SCORE, SEARCHABLE_TASK_TYPES } from "./task-type.js";
 import { createLatencyTracker } from "./latency.js";
 import { compactMode, compactResults, CITATION_REQUIRED_META_KEYS, pickRequiredMeta } from "./verbosity.js";
 import { requestLimit } from "./normalizer.js";
@@ -61,7 +61,7 @@ import { createToolMetrics } from "./tool-metrics.js";
 import { sanitizeErrorMessage } from "./lib/sanitize-error.js";
 import { advertisedSchemaBytes, medianOfWindow, type RegisteredTool } from "./tool-footprint.js";
 import { withTimeout } from "./lib/timeout.js";
-import { buildDirection, REPORT_AUDIENCES } from "./lib/direction.js";
+import { buildDirection, ambiguousRequirements, REPORT_AUDIENCES } from "./lib/direction.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
 import { classifyFailure, failureTaxonomy, isCancellation, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
@@ -385,6 +385,35 @@ async function doWebSearch(
   // after the knowledge-base recall step.
   const direction = (providers: string[]) =>
     buildDirection({ taskType, taskTypeOverride, audience, language, maxResults, deep, research, providers });
+
+  // REQ-131: two equally supported requirements that reach different sources are
+  // a choice, not a search. The response names both, performs no outbound call,
+  // and a caller proceeds by re-issuing the query with `task_type`.
+  if (resolvedTaskType.source === "auto" && !deep && !Array.isArray(query)) {
+    const candidates = ambiguousRequirements(classifyTaskCandidates(String(query)), getDispatchChain, MIN_SIGNAL_SCORE);
+    if (candidates) {
+      const pool = [...new Set(candidates.flatMap((candidate) => candidate.providers))];
+      return `[OK] ${json(ok("none", [], {
+        query_time_ms: 0,
+        fallback_used: false,
+        no_results: true,
+        deferred_choice: true,
+        task_type: "undetermined",
+        direction: buildDirection({
+          taskType: "undetermined",
+          taskTypeOverride,
+          audience,
+          language,
+          maxResults,
+          deep,
+          research,
+          providers: pool,
+          ambiguousCandidates: candidates,
+        }),
+        ignored_params: [],
+      }))}`;
+    }
+  }
   const parsedQuery = parseQuery(Array.isArray(query) ? query[0] ?? "" : String(query));
 
   // REQ-076a: blend keeps the KB rows as a seed for the external response
@@ -2016,7 +2045,7 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. `audience` records who will read the result and is echoed in `meta.direction` with the executed task type, reading depth, result bound and provider pool. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, area, elevation, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. `audience` records who will read the result and is echoed in `meta.direction` with the executed task type, reading depth, result bound and provider pool. When two task types are equally supported and would reach different providers, the tool returns both candidate requirements with an empty result list (`meta.direction.ambiguous`) instead of searching, so the caller can re-issue with `task_type`. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, area, elevation, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5); a failed element is reported per input without failing the batch")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
