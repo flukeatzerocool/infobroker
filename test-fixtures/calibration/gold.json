@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Deterministic calibration set for REQ-123. Each entry states a claim, its truth (settled by truth_sources), the raw confidence rung, and the source types behind the finding. A label is the truth of the claim, not a function of the reported score. All rows are label_basis 'documented'; 'observed' is reserved for a finding whose outcome came from a recorded verification run, and is the precondition for treating the Brier score as a quality metric.",
+  "note": "Deterministic calibration set for REQ-123. Each entry states a claim, its truth (settled by truth_sources), the raw confidence rung, and the source types behind the finding. A label is the truth of the claim, not a function of the reported score. All rows are label_basis 'documented': the truth is settled by the cited sources, not by a run of this server. A Brier score over these rows measures whether the confidence ladder is ordered against settled fact. It does not measure truth the system itself established; an 'observed' label remains the precondition for that stronger claim, not for this one.",
   "entries": [
     {
       "id": "c01",

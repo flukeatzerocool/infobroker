@@ -30,11 +30,12 @@ Retrieval quality is measured separately by `test-fixtures/retrieval/`
 
 ## Reading the curve
 
-A `documented` row still stipulates its `confidence` and `sources`; only the
-outcome is documented. Until `observed` rows exist, the Brier score is a
-mechanics value and a regression lock, not a claim that the confidence ladder
-is calibrated for production. Add real verified runs as `observed` rows before
-treating it as a quality metric.
+A `documented` row stipulates its `confidence` and `sources`; the outcome comes
+from the cited sources. The Brier score over these rows is a calibration
+measurement: it reports whether the confidence ladder is ordered against settled
+fact, and a movement in it is a real regression in that ordering. What it does
+not measure is truth the server established itself — that needs an `observed`
+label, which stays reserved for a recorded, externally adjudicated run.
 
 The reliability bands are half-open. A `0.3`-rung row backed by a weight-`1.0`
 source type reports exactly `0.3000` and therefore lands in `0.3-0.5`; a
