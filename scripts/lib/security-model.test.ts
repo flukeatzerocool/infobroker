@@ -69,6 +69,7 @@ describe("security model (REQ-096)", () => {
       "REQ-100",
       "REQ-101",
       "REQ-102",
+      "REQ-138",
     ]);
   });
 

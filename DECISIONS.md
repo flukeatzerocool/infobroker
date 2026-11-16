@@ -2877,3 +2877,26 @@ by a comment: `src/kb-sufficiency-benchmark.test.ts` reads the shipped
 `config.json` values, runs the measurement, and fails if any case becomes
 sufficient on non-relevant chunks alone. A future floor change must show a
 non-zero case-level count and record its recall cost.
+
+### D-144: Mark Retrieved Text Without Touching It (2026-11-16)
+
+The security model carried one accepted residual: retrieved content that passed
+the content policy still reached the caller as prose indistinguishable from the
+server's own message, so a client had no signal that a page body was data. The
+roadmap asked for an in-band marker that is additive and stays out of the result
+payload.
+
+REQ-138 adds a top-level `content_trust` block at the single envelope seam. Two
+design choices are worth recording. First, the block is placed before compaction
+and truncation, so it leads the JSON text the caller reads and cannot be cut off
+by the response bound; compact output already preserves unknown top-level keys, so
+no verbosity exception was needed. Second, no retrieved body is fenced, prefixed,
+or otherwise edited. The earlier plan proposed delimiters around `fetch_page`
+content; implementing it showed the conflict — the response bound clips the
+serialized text, so a closing delimiter cannot be guaranteed, and report receipts
+hash retrieved bodies (REQ-116/REQ-134), so adding bytes would change a digest a
+downstream consumer depends on. A declaration the client can read is the honest
+control; a delimiter that survives only below the truncation bound is not. `raw`
+mode therefore returns its body verbatim and carries the marker on the structured
+side, per REQ-001's plain-text clause. The residual narrows to a client that
+ignores the marker, which no server-side marker can fix.

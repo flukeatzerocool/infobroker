@@ -2,6 +2,15 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Retrieved text is now marked as data. The security model named a residual
+  risk: fetched page text reached the client indistinguishable from the server's
+  own output, so an agent had nothing to tell a page body from an instruction
+  (LLM01). Every response that carries external text now leads with a
+  `content_trust` block naming the trust class (REQ-138), added at the one
+  envelope seam before compaction and truncation. The marker is additive by
+  rule — no retrieved byte changes, because report receipts hash those bodies —
+  and a plain-text raw fetch keeps its body verbatim (D-144).
+
 - The KB-first relevance floor stays at 0.3, and the measurement says why. The
   sufficiency benchmark can now separate "a cross-topic chunk rode along" from
   "unrelated content satisfied sufficiency", and at both chunk scales the second

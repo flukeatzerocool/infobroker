@@ -2126,7 +2126,7 @@ const instrumentTool = (name: string, config: any, handler: any) =>
       return finalizeToolResult(injectNotices(result, notices), notices, compactMode(getConfig()), (text) => {
         const bounded = maybeTruncate(text, getConfig().output.response_max_chars ?? getConfig().output.max_chars);
         return { text: bounded.text, truncated: bounded.truncated, ...(bounded.outputPath ? { outputPath: bounded.outputPath } : {}) };
-      }, TOOL_REQUIRED_META[name]);
+      }, TOOL_REQUIRED_META[name], name);
     } catch (error) {
       // REQ-001/REQ-002: a handler throw still returns the documented envelope.
       const elapsed = Date.now() - start;
@@ -2138,7 +2138,8 @@ const instrumentTool = (name: string, config: any, handler: any) =>
         [],
         compactMode(getConfig()),
         (inner) => ({ text: inner, truncated: false }),
-        TOOL_REQUIRED_META[name]
+        TOOL_REQUIRED_META[name],
+        name
       );
     }
   });

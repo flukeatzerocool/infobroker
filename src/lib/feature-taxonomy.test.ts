@@ -188,7 +188,7 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
   });
 
   it("accepts a Gate cell in any order", () => {
-    const spec = mutate("REQ-101, REQ-102 | G0, G1, G3 |", "REQ-101, REQ-102 | G3, G1, G0 |");
+    const spec = mutate("REQ-102, REQ-138 | G0, G1, G3 |", "REQ-102, REQ-138 | G3, G1, G0 |");
     expect(run(spec)).toEqual([]);
   });
 

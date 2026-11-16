@@ -5,6 +5,7 @@
 // Kept as pure functions so the contract is unit-testable without a server.
 import { compactEnvelope } from "./verbosity.js";
 import { coerceStringArray } from "./batch.js";
+import { EXTERNAL_TEXT_TOOLS, carriesExternalText, contentTrustBlock } from "./trust-marker.js";
 
 export interface ToolResultLike {
   content?: unknown;
@@ -66,6 +67,7 @@ export function finalizeToolResult<T extends ToolResultLike>(
   compact = false,
   truncate?: (text: string) => { text: string; truncated: boolean; outputPath?: string },
   requiredMetaKeys?: readonly string[],
+  toolName?: string,
 ): T & { structuredContent: Record<string, unknown> } {
   const base = { ...(result as Record<string, unknown>) };
   let structured =
@@ -88,6 +90,26 @@ export function finalizeToolResult<T extends ToolResultLike>(
 
   if (notices.length > 0 && !Array.isArray(structured.notices)) {
     structured = { ...structured, notices };
+  }
+
+  // REQ-138: name retrieved text as untrusted before compaction and truncation,
+  // so the marker is the first key of the envelope text the caller reads. The
+  // block is additive and no retrieved body is altered.
+  if (
+    toolName &&
+    EXTERNAL_TEXT_TOOLS.has(toolName) &&
+    structured.status !== "error" &&
+    carriesExternalText(structured)
+  ) {
+    structured = { content_trust: contentTrustBlock(), ...structured };
+    const envelopeText = firstText(base);
+    if (envelopeText !== undefined && parseEnvelopeObject(envelopeText) !== undefined) {
+      const prefix = envelopeText.trim().startsWith("[ERROR]") ? "[ERROR]" : "[OK]";
+      base.content = replaceFirstText(
+        base,
+        `${prefix} ${JSON.stringify(structured, null, 2)}`,
+      ).content;
+    }
   }
 
   if (compact) {

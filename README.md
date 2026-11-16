@@ -417,7 +417,10 @@ pending migrations, backend capabilities, and update status. When something
 needs your attention — configuration drift, a pending migration, or a
 provider cooling down — successful tool responses carry a bounded `notices`
 array with the condition and, where one exists, the fix, so a stale user
-layer does not stay invisible. You always know what your search server is
+layer does not stay invisible. Any response carrying retrieved text also
+carries a top-level `content_trust` marker naming that text as untrusted
+external content, so an agent reading a page body can tell data from
+instructions; the marker is additive and never alters a retrieved body. You always know what your search server is
 doing and how much capacity remains. The `check-tdqs` gate reports each tool's
 parameter counts, schema description coverage, invocation cost, and definition
 size, and fails when a definition breaks the deterministic TDQS bar.

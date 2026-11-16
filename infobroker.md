@@ -202,7 +202,7 @@ route to Infobroker first, falling back to built-ins only on error.
 
 ---
 
-REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–137, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a–076b, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102 (security and content safety).
+REQ IDs use block reservations: 001–004, 073, 079, 133 (output/error contracts), 010–011, 013–015, 129, 104 (provider configuration), 020–021, 024, 026–028 and their sub-REQs `020a`–`020j`, `021a`–`021k`, `024a`–`024c`, `026a`–`026i`, `027a`, 121–124, 127–128, 130–132, 135–137, `131a`, `031a`, `031b` (core tools), 030–038 (rate limiting and resilience), 040, 042–043, 091, 105, 111–113 and `111a` (state, configuration, and distribution), 050–054, 088, 107, 114–120, 120a, 125–126, 134 (client artifacts), 055, 077–078, 080–081, 089–090, 092, 106 (spec integrity and tool-definition quality), 060, 064–067, 072, 074–076, 076a–076b, 082–087, 103, 108–110 and sub-REQs `060a`–`060i` (knowledge base), 070–071, 095 (provider architecture), 096–102, 138 (security and content safety).
 
 **Out of scope.** §4 defines functional requirements and tool contracts. Output format catalogs, file format specifications, and code-level interfaces are defined in `src/types.ts`. Worked examples and tutorials belong in the README.
 
@@ -745,6 +745,9 @@ The build process SHALL run a dependency-vulnerability check against the locked 
 
 **REQ-102 — Exceptional-Condition Hygiene**
 Tool error responses SHALL NOT expose stack traces, internal file paths, or environment configuration. When an operation fails on malformed external data, the error SHALL describe the failure generically and SHALL NOT include the malformed payload. _Check:_ G1.
+
+**REQ-138 — Untrusted-content provenance marker**
+Every tool response that carries externally retrieved text SHALL include a top-level marker naming that text as untrusted external content that the caller SHALL treat as data rather than instructions. The marker SHALL be additive: it SHALL NOT alter any retrieved body's bytes, rename or remove an existing field, or change a value's type. The marker SHALL appear in the response the caller reads and SHALL survive compact output. A response that carries no retrieved text SHALL omit it. _Check:_ G1.
 
 ---
 
@@ -1457,6 +1460,7 @@ verdict is preserved (REQ-026f).
 | REQ-100 | State-File Hardening | 4.11 | G1 |
 | REQ-101 | Dependency Vulnerability Gate | 4.11 | G3 |
 | REQ-102 | Exceptional-Condition Hygiene | 4.11 | G1 |
+| REQ-138 | Untrusted-content provenance marker | 4.11 | G1 |
 
 ---
 
@@ -1960,7 +1964,7 @@ the table.
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
 | 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126, REQ-134 | G1, G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
-| 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
+| 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102, REQ-138 | G0, G1, G3 |
 | 10 | Client Skills | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-107 | G3 |
 | 11 | Processing & Provenance | (no tools) | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122, REQ-133, REQ-136 | G1 |
 
@@ -2031,7 +2035,7 @@ explicitly named here so the security posture is auditable without guessing.
 
 | Risk | Controlling REQ / disposition |
 |------|-------------------------------|
-| LLM01 Prompt Injection | REQ-097 (content policy flags injection-style content and refuses storage of flagged material); residual: retrieved content that passes the policy still reaches the client and is treated as data, not instructions |
+| LLM01 Prompt Injection | REQ-097 (content policy flags injection-style content and refuses storage of flagged material), REQ-138 (retrieved text is marked untrusted in every response that carries it); residual: a client that ignores the marker can still follow injected instructions |
 | LLM02 Sensitive Information Disclosure | REQ-011 (keys never surfaced), REQ-084 (KB at-rest encryption), REQ-103 (embedding stays local), REQ-004 + truncation permissions |
 | LLM03 Supply Chain | REQ-101 |
 | LLM04 Data and Model Poisoning | REQ-097 (policy before storage), REQ-026e/REQ-076 (KB recall limited to corroboration, never sole source) |
