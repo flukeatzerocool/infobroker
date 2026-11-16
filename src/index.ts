@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, isOperational, classifyCredential, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
+import { loadConfig, reloadConfig, getConfig, getDispatchChain, providerUsable, isOperational, classifyCredential, getUserConfigDrift, migrateUserConfigLayer, patchUserConfigLayer, rollbackUserConfigLayer, getStartupConfigIssue, getStartupMigration } from "./config.js";
 import { configureAllProviders, throttle } from "./rate-limiter.js";
 import { increment, checkQuota, loadQuotaState, getQuotaStatePath } from "./quota.js";
 import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./providers/index.js";
@@ -2783,12 +2783,12 @@ instrumentTool(
   {
     title: "Reload Configuration",
     description:
-      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json, or when passing `patch` to change configuration programmatically. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). `patch` merges a partial config into the user layer (config.local.json) as it exists on disk, rejecting unknown top-level keys, backing up the exact bytes read, and validating the merged result before writing; a `null` value removes that key from the layer. `migrate` true backs up and applies registered user-layer migrations before reloading. The call re-reads the startup configuration source and reports any user-layer schema drift. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns an [OK] or [ERROR] JSON envelope.",
+      "Re-read the configuration file and apply provider, rate-limit, and knowledge-base changes without restarting; active connections are preserved. Use when you have edited config.json or config.local.json, or when passing `patch` to change configuration programmatically. Do NOT use to inspect configuration or provider state (use infobroker_inspect_providers). `patch` merges a partial config into the user layer (config.local.json) as it exists on disk, accepting only an allow-listed set of operational keys (provider enablement, priority, rate limits, timeouts and retries; response shape; the update check) and rejecting transport, credential, safety, and resource-bound keys — edit the file directly for those. It validates and activates the merged result before writing, backs up the exact bytes read, and rolls the layer back if activation fails; a `null` value removes that key from the layer. `migrate` true backs up and applies registered user-layer migrations before reloading. The call re-reads the startup configuration source and reports any user-layer schema drift. If the new configuration is invalid, the previous configuration stays active and an error is returned. Returns an [OK] or [ERROR] JSON envelope.",
     inputSchema: {
       patch: z
         .record(z.string(), z.unknown())
         .optional()
-        .describe("Partial configuration merged into the user layer (config.local.json) as it exists on disk before reloading; a `null` value removes that key, unknown top-level keys are rejected, and the exact bytes read are backed up"),
+        .describe("Partial configuration merged into the user layer (config.local.json) as it exists on disk before reloading; only operational keys are accepted (provider enablement/priority/rate limits/timeouts/retries, response shape, update check), `null` removes a key, and the exact bytes read are backed up"),
       migrate: z
         .boolean()
         .optional()
@@ -2817,7 +2817,39 @@ instrumentTool(
         if (result) migration = { changes: result.changes, backup: result.backup };
       }
       const newConfig = reloadConfig();
-      configureAllProviders(newConfig);
+      try {
+        configureAllProviders(newConfig);
+      } catch (activationError) {
+        if (!patchResult) throw activationError;
+        // REQ-040: a patch that cannot activate must not leave the new layer
+        // serving. Restore the backup, or delete the layer the patch created.
+        const activationMessage = activationError instanceof Error ? activationError.message : String(activationError);
+        try {
+          rollbackUserConfigLayer(patchResult.path, patchResult.backup);
+          const restored = reloadConfig();
+          configureAllProviders(restored);
+          audit("config_reload", "failed activation — patched layer rolled back");
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `[ERROR] ${json(err("system", "config_error", `Configuration patch failed to activate (${activationMessage}). Previous configuration restored.`, "Edit config.local.json directly, then call reload_config"))}`,
+              },
+            ],
+          };
+        } catch (restoreError) {
+          const restoreMessage = restoreError instanceof Error ? restoreError.message : String(restoreError);
+          audit("config_reload", "failed activation — rollback failed");
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `[ERROR] ${json(err("system", "config_error", `Configuration patch failed to activate (${activationMessage}) and rollback failed (${restoreMessage}). The previous configuration may not be active.`, "Fix config.local.json by hand and restart the server"))}`,
+              },
+            ],
+          };
+        }
+      }
       configureUpdateCheck(newConfig.state?.update_check === true, BUILD_VERSION);
       // REQ-040: rebuild generic providers so reload applies endpoint/mapping changes.
       resetGenericProviderCache();

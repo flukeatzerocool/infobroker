@@ -1,8 +1,9 @@
 // @implements REQ-010 REQ-011 REQ-013 REQ-014 REQ-015 REQ-026a REQ-037 REQ-040 REQ-042 REQ-043 REQ-067 REQ-074 REQ-084 REQ-105 REQ-113
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, copyFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import type { Config, ProviderConfig } from "./types.js";
+import { configureAllProviders } from "./rate-limiter.js";
 import {
   detectConfigDrift,
   applyConfigMigrations,
@@ -341,6 +342,67 @@ function deleteAtPaths(layer: Record<string, unknown>, removals: string[][]): Re
 }
 
 /**
+ * REQ-040: the patch surface is an allow-list, not a deny-list. A client may
+ * tune operational provider keys and response shape, but may not add or
+ * repoint a provider, change credentials, relax the network guard, or move a
+ * resource bound. Everything else is operator-only via the config file.
+ */
+const PATCHABLE_PATHS: RegExp[] = [
+  /^providers\.[^.]+\.(enabled|priority|timeout|retry_count|auth_env)$/,
+  /^providers\.[^.]+\.rate_limit(\.(per_second|per_day|per_month|jitter_ms))?$/,
+  /^output\.(max_chars|response_max_chars|latency_window_size|latency_window_strategy|latency_window_ms|verbose|fallback_depth|max_redirect_hops|degraded_latency_ms|hedge_enabled|hedge_min_delay_ms|hedge_max_delay_ms|hedge_grace_ms|rate_limit_cooldown_ms|call_log|call_log_max_bytes)$/,
+  /^state\.update_check$/,
+];
+
+interface PatchLeaf {
+  path: string;
+  value: unknown;
+}
+
+/** Flatten a patch object to dot paths; a `null` leaf is a removal. */
+function patchLeafPaths(value: unknown, prefix: string, out: PatchLeaf[]): void {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      out.push({ path: prefix, value });
+      return;
+    }
+    for (const [key, child] of entries) {
+      patchLeafPaths(child, prefix ? `${prefix}.${key}` : key, out);
+    }
+    return;
+  }
+  out.push({ path: prefix, value });
+}
+
+/** REQ-040: paths a client patch may not write. */
+export function rejectedPatchPaths(patch: Record<string, unknown>): string[] {
+  const leaves: PatchLeaf[] = [];
+  patchLeafPaths(patch, "", leaves);
+  return leaves
+    .filter(({ path }) => !PATCHABLE_PATHS.some((pattern) => pattern.test(path)))
+    // Removing an operator-only provider key cannot introduce a target; setting
+    // one can. A `null` leaf under a provider is therefore allowed.
+    .filter(({ path, value }) => !(value === null && /^providers\.[^.]+\./.test(path)))
+    .map(({ path }) => path);
+}
+
+/**
+ * REQ-040: undo a patch that was written but could not activate. Restore the
+ * backup bytes when one exists; otherwise delete the layer the patch created
+ * and clear the in-memory copy, so the shipped defaults take over again.
+ */
+export function rollbackUserConfigLayer(path: string, backup: string | null): void {
+  if (backup) {
+    copyFileSync(backup, path);
+    userConfigLayer = readUserLayerFile(path).layer ?? null;
+    return;
+  }
+  if (existsSync(path)) unlinkSync(path);
+  userConfigLayer = null;
+}
+
+/**
  * REQ-040: apply a caller-supplied configuration patch to the user layer.
  * The patch is deep-merged over the layer as it exists on disk now, a `null`
  * leaf removes that key, the merged configuration is validated before any
@@ -363,6 +425,16 @@ export function patchUserConfigLayer(patch: Record<string, unknown>): {
       throw new Error(`Unknown configuration key "${key}" — the patch may only set keys the shipped schema declares`);
     }
   }
+  // REQ-040: default-deny. A client patch cannot add or repoint a provider,
+  // change transport identity or credentials, relax the network guard, or move
+  // a resource bound; the operator edits the layer file for those.
+  const rejected = rejectedPatchPaths(patch);
+  if (rejected.length > 0) {
+    throw new Error(
+      `Patch rejected: ${rejected.join(", ")} ${rejected.length === 1 ? "is" : "are"} operator-only. ` +
+        `Edit ${userPath} directly, then call reload_config.`
+    );
+  }
   let existing: Record<string, unknown> = {};
   let existingBytes: Buffer | null = null;
   if (existsSync(userPath)) {
@@ -375,6 +447,9 @@ export function patchUserConfigLayer(patch: Record<string, unknown>): {
   // Validate the merged result before touching disk (REQ-040).
   const merged = applyDefaults(mergeLayer(base, nextLayer));
   validateConfig(merged);
+  // REQ-040: activation is part of the preflight, so a provider that cannot be
+  // configured fails before the write rather than after it.
+  configureAllProviders(merged);
   const backup = existingBytes ? backupBytes(existingBytes, userPath) : null;
   atomicWriteFile(userPath, Buffer.from(`${JSON.stringify(nextLayer, null, 2)}\n`, "utf-8"));
   userConfigLayer = nextLayer;
@@ -895,6 +970,9 @@ export function validateConfig(config: Config): void {
   }
 
   if (config.fetch) {
+    if (config.fetch.allow_private_urls !== undefined && typeof config.fetch.allow_private_urls !== "boolean") {
+      errors.push("fetch.allow_private_urls must be a boolean");
+    }
     if (config.fetch.passage_size !== undefined && (!isFiniteNumber(config.fetch.passage_size) || config.fetch.passage_size < 1)) {
       errors.push("fetch.passage_size must be a positive number");
     }

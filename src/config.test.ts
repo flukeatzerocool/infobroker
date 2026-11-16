@@ -1233,3 +1233,95 @@ describe("freshness default tier validation (REQ-074)", () => {
     }
   });
 });
+
+// REQ-040: a client patch is an allow-list of operational keys. Transport
+// identity, credentials, safety switches, and resource bounds are operator-only.
+describe("configuration patch allow-list (REQ-040)", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = testTmpDir("ib-patch-");
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({ ...BASE, fetch: { allow_private_urls: false }, content_policy: { mode: "flag" } })
+    );
+    writeFileSync(join(dir, "config.local.json"), JSON.stringify({}));
+    process.env["INFOBROKER_CONFIG"] = join(dir, "config.json");
+    process.env["INFOBROKER_CONFIG_LOCAL"] = join(dir, "config.local.json");
+    vi.resetModules();
+    const { loadConfig } = await import("./config.js");
+    loadConfig();
+  });
+
+  afterEach(() => {
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("accepts operational provider and response keys", async () => {
+    const { patchUserConfigLayer } = await import("./config.js");
+    expect(() =>
+      patchUserConfigLayer({
+        providers: { duckduckgo: { priority: 3, rate_limit: { per_second: 2 } } },
+        output: { max_chars: 40000 },
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects a provider endpoint, the private-network switch, and a policy relaxation", async () => {
+    const { patchUserConfigLayer } = await import("./config.js");
+    const attempt = (patch: Record<string, unknown>) => () => patchUserConfigLayer(patch);
+    expect(attempt({ providers: { evil: { endpoint: "http://127.0.0.1:9/search", query_param: "q" } } })).toThrow(/operator-only/);
+    expect(attempt({ providers: { duckduckgo: { endpoint: "http://127.0.0.1:9/search" } } })).toThrow(/operator-only/);
+    expect(attempt({ fetch: { allow_private_urls: true } })).toThrow(/operator-only/);
+    expect(attempt({ content_policy: { mode: "off" } })).toThrow(/operator-only/);
+  });
+
+  it("activates a provider whose rate_limit is removed instead of crashing", async () => {
+    const { patchUserConfigLayer } = await import("./config.js");
+    expect(() => patchUserConfigLayer({ providers: { duckduckgo: { rate_limit: null } } })).not.toThrow();
+  });
+});
+
+// REQ-040: rollback restores the bytes read, or removes the layer a patch
+// created when there was no prior layer at all.
+describe("configuration patch rollback (REQ-040)", () => {
+  afterEach(() => {
+    delete process.env["INFOBROKER_CONFIG"];
+    delete process.env["INFOBROKER_CONFIG_LOCAL"];
+  });
+
+  async function setupOverlay(initial: string | null) {
+    const dir = testTmpDir("ib-rollback-");
+    writeFileSync(join(dir, "config.json"), JSON.stringify(BASE));
+    const overlay = join(dir, "config.local.json");
+    if (initial !== null) writeFileSync(overlay, initial);
+    process.env["INFOBROKER_CONFIG"] = join(dir, "config.json");
+    process.env["INFOBROKER_CONFIG_LOCAL"] = overlay;
+    vi.resetModules();
+    const mod = await import("./config.js");
+    mod.loadConfig();
+    return { dir, overlay, mod };
+  }
+
+  it("restores the exact bytes when a backup exists", async () => {
+    const initial = `{\n  "providers": { "duckduckgo": { "priority": 5 } }\n}\n`;
+    const { dir, overlay, mod } = await setupOverlay(initial);
+    const result = mod.patchUserConfigLayer({ output: { max_chars: 40000 } });
+    expect(readFileSync(overlay, "utf-8")).not.toBe(initial);
+    mod.rollbackUserConfigLayer(result.path, result.backup);
+    expect(readFileSync(overlay, "utf-8")).toBe(initial);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("deletes the layer a patch created when there was no backup", async () => {
+    const { dir, overlay, mod } = await setupOverlay(null);
+    const result = mod.patchUserConfigLayer({ output: { max_chars: 40000 } });
+    expect(existsSync(overlay)).toBe(true);
+    expect(result.backup).toBeNull();
+    mod.rollbackUserConfigLayer(result.path, result.backup);
+    expect(existsSync(overlay)).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

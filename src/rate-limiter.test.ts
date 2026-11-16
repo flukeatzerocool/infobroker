@@ -87,3 +87,12 @@ describe("throttle (REQ-030)", () => {
     await second;
   });
 });
+
+describe("configureProviderRateLimit without a rate limit (REQ-030)", () => {
+  it("treats an absent rate_limit as unthrottled instead of throwing", async () => {
+    expect(() => configureProviderRateLimit("unlimited", undefined)).not.toThrow();
+    const start = Date.now();
+    await throttle("unlimited");
+    expect(Date.now() - start).toBeLessThan(50);
+  });
+});

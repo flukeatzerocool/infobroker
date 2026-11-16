@@ -15,9 +15,11 @@ const queues: Map<string, Promise<void>> = new Map();
 
 export function configureProviderRateLimit(
   slug: string,
-  config: ProviderConfig["rate_limit"],
+  config: ProviderConfig["rate_limit"] | undefined,
   random: () => number = Math.random,
 ): void {
+  // A provider without a rate_limit is unthrottled, not a crash (REQ-030).
+  if (!config) return;
   const perSecond = config.per_second;
   if (!perSecond || perSecond <= 0) return;
   const jitter = config.jitter_ms;
