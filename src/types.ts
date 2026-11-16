@@ -225,6 +225,12 @@ export interface HealthReport {
   avg_latency_ms?: number;
   last_error?: string;
   last_success?: string;
+  /** REQ-024b: result count of the most recent successful search attempt. */
+  last_result_count?: number;
+  /** REQ-024b: `ok` when that attempt returned results; `zero` when it did not. */
+  result_yield?: "ok" | "zero";
+  /** REQ-024b: consecutive zero-result attempts. */
+  zero_result_streak?: number;
   auth_ok: boolean;
   /** REQ-024b: present only when configuration or quota states the cause. */
   inactive_reason?:

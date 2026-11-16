@@ -11,6 +11,10 @@
 export interface ProviderHistoryEntry {
   lastError?: { message: string; timestamp: number };
   lastSuccess?: number;
+  /** REQ-024b: result count of the most recent successful search attempt. */
+  lastResultCount?: number;
+  /** REQ-024b: consecutive successful attempts that returned zero results. */
+  zeroResultStreak?: number;
 }
 
 const history = new Map<string, ProviderHistoryEntry>();
@@ -27,6 +31,18 @@ function entryFor(slug: string): ProviderHistoryEntry {
 /** Record a provider request that returned usable results. */
 export function recordProviderSuccess(slug: string, timestamp: number = Date.now()): void {
   entryFor(slug).lastSuccess = timestamp;
+}
+
+/**
+ * REQ-024b: record the result count of a successful search attempt, including
+ * zero. A zero-result attempt is still a success for history purposes — the
+ * yield fields are how a silently drifting parser becomes visible.
+ */
+export function recordSearchYield(slug: string, resultCount: number, timestamp: number = Date.now()): void {
+  const entry = entryFor(slug);
+  entry.lastResultCount = resultCount;
+  entry.lastSuccess = timestamp;
+  entry.zeroResultStreak = resultCount === 0 ? (entry.zeroResultStreak ?? 0) + 1 : 0;
 }
 
 /** Record a provider request that failed, with its message (never key material). */

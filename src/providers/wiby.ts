@@ -15,14 +15,19 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   const html = await resp.text();
   const $ = cheerio.load(html);
 
+  // Current markup: each result is a <blockquote> holding `a.tlink` (the
+  // title and href), `p.url` (the display URL), and one plain <p> snippet.
+  // Older markup used `a[rel='noopener']`, which now matches nothing.
   const raw: Array<Record<string, unknown>> = [];
-  $("a[rel='noopener']").each((_i, el) => {
+  $("blockquote a.tlink").each((_i, el) => {
     if (raw.length >= 10) return false;
     const link = $(el).attr("href") || "";
     const title = $(el).text().trim();
-    const snippet = "";
+    const block = $(el).closest("blockquote");
+    const displayUrl = block.find("p.url").first().text().trim();
+    const snippet = block.find("p").not(".url").first().text().trim();
     if (title && link) {
-      raw.push({ title, url: link, snippet });
+      raw.push({ title, url: displayUrl || link, snippet });
     }
   });
 

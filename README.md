@@ -306,7 +306,10 @@ dispatch chain (for example `academic`), and `meta.task_type` reports the
 chain that served the query. `inspect_providers` surfaces every configured
 source, reports its
 derived privacy posture, and drills into a single provider's uptime and error
-history. The generated `skills/infobroker/references/provider-privacy.md`
+history; a provider that has served traffic also reports its last result count,
+whether the last attempt yielded `ok` or `zero`, and the consecutive
+zero-result streak, so a silently drifting parser is visible before the fallback
+chain is exhausted. The generated `skills/infobroker/references/provider-privacy.md`
 documents query forwarding, retention, account requirements, and resale for
 every provider, marking what configuration cannot establish as unknown rather
 than assuming privacy. No other search MCP server gives you operational

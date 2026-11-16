@@ -7,6 +7,7 @@ import {
   providerHistory,
   recordProviderError,
   recordProviderSuccess,
+  recordSearchYield,
   resetProviderHistoryForTests,
 } from "./provider-history.js";
 
@@ -52,5 +53,19 @@ describe("provider operational history (REQ-024b)", () => {
     recordProviderSuccess("wikipedia", 1);
     resetProviderHistoryForTests();
     expect(providerHistory("wikipedia")).toBeUndefined();
+  });
+
+  it("records search yield and counts consecutive zero-result attempts", () => {
+    recordSearchYield("wiby", 3, 10);
+    expect(providerHistory("wiby")).toMatchObject({ lastResultCount: 3, zeroResultStreak: 0, lastSuccess: 10 });
+
+    recordSearchYield("wiby", 0, 20);
+    expect(providerHistory("wiby")).toMatchObject({ lastResultCount: 0, zeroResultStreak: 1 });
+
+    recordSearchYield("wiby", 0, 30);
+    expect(providerHistory("wiby")?.zeroResultStreak).toBe(2);
+
+    recordSearchYield("wiby", 1, 40);
+    expect(providerHistory("wiby")).toMatchObject({ lastResultCount: 1, zeroResultStreak: 0 });
   });
 });

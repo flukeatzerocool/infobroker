@@ -29,7 +29,7 @@ import { checkContent, disposition, policyMode, policyMeta } from "./content-pol
 import { audit } from "./audit-log.js";
 import type { ProviderConfig, SearchResult, ToolOkResponse, ToolErrorResponse, SearchOptions } from "./types.js";
 import { assembleHealthReport } from "./provider-health.js";
-import { recordProviderSuccess, recordProviderError, providerHistory } from "./provider-history.js";
+import { recordProviderSuccess, recordProviderError, recordSearchYield, providerHistory } from "./provider-history.js";
 import { assessProvider, selectActiveRows, keyPoolRow, type ProviderStatusInput, type ProviderAssessment } from "./provider-status.js";
 import { maybeTruncate } from "./truncate.js";
 import { blendResponseMeta, capInputs, coerceStringArray, mergeItems, mergeKnowledgeBaseResults, parseEnvelope, type KbRecallState } from "./batch.js";
@@ -628,6 +628,7 @@ async function doWebSearch(
       increment(slug, config.providers[slug]?.rate_limit);
       latency.track(slug, elapsed);
       recordProviderSuccess(slug);
+      recordSearchYield(slug, results.length);
       sessionStats.recordAttempt(slug, "ok");
       recordAttempt(slug, "ok", elapsed);
 

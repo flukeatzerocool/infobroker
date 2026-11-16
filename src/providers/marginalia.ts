@@ -2,10 +2,13 @@
 import * as cheerio from "cheerio";
 import type { SearchResult, Provider, SearchOptions } from "../types.js";
 import { normalize } from "../normalizer.js";
-import { RetryableError } from "../retry.js";
+import { RetryableError, BotChallengeError } from "../retry.js";
 import { infobrokerFetch } from "../http.js";
 
-const MARGINALIA_URL = "https://search.marginalia.nu/search";
+// The public search moved from search.marginalia.nu (which now redirects) to
+// marginalia-search.com. The old host still resolves, but its markup and the
+// redirect cost a hop per request.
+const MARGINALIA_URL = "https://marginalia-search.com/search";
 
 async function search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
   const params = new URLSearchParams({ query, profile: "default" });
@@ -17,16 +20,26 @@ async function search(query: string, options?: SearchOptions): Promise<SearchRes
   const html = await resp.text();
   const $ = cheerio.load(html);
 
+  // Current Tailwind layout: no `.result` container. The title is an
+  // `h2 > a[rel="noopener noreferrer"]`; the snippet is the first
+  // `div.overflow-auto p` inside the result's `div.flex.flex-col.grow` column.
   const raw: Array<Record<string, unknown>> = [];
-  $(".result").each((_i, el) => {
+  $("h2 a[rel='noopener noreferrer']").each((_i, el) => {
     if (raw.length >= 10) return false;
-    const title = $(el).find("h2, .title, a").first().text().trim();
-    const link = $(el).find("a").first().attr("href") || "";
-    const snippet = $(el).find("p, .description, .snippet").first().text().trim();
-    if (title) {
-      raw.push({ title, url: link.startsWith("/") ? `https://search.marginalia.nu${link}` : link, snippet });
-    }
+    const title = $(el).text().trim();
+    const link = $(el).attr("href") || "";
+    if (!title || !/^https?:\/\//i.test(link)) return;
+    const column = $(el).closest("div.flex.flex-col.grow");
+    const snippet = column.find("div.overflow-auto p").first().text().trim();
+    raw.push({ title, url: link, snippet });
   });
+
+  // A bot-activity interstitial is HTTP 200 with no results. Reporting it as
+  // "zero results" hides the cause and skips the cooldown, so treat it as a
+  // challenge (REQ-021f) instead.
+  if (raw.length === 0 && /aggressive bot activity|Please wait for \d+ second/i.test(html)) {
+    throw new BotChallengeError("Marginalia returned a bot-activity interstitial");
+  }
 
   return normalize(raw, "marginalia");
 }

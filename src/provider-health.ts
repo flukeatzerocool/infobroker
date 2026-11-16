@@ -52,6 +52,13 @@ export function assembleHealthReport(input: HealthReportInput): HealthReport {
   if (input.history?.lastSuccess) {
     report.last_success = new Date(input.history.lastSuccess).toISOString();
   }
+  // REQ-024b: yield is operational traffic, not a probe result, so it is
+  // omitted until the provider has served a search attempt in this process.
+  if (input.history?.lastResultCount !== undefined) {
+    report.last_result_count = input.history.lastResultCount;
+    report.result_yield = input.history.lastResultCount > 0 ? "ok" : "zero";
+    report.zero_result_streak = input.history.zeroResultStreak ?? 0;
+  }
   if (input.cooldownRemainingMs !== undefined) {
     report.cooldown_remaining_ms = input.cooldownRemainingMs;
   }

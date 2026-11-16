@@ -81,6 +81,23 @@ describe("assembleHealthReport (REQ-024b)", () => {
     expect(assembleHealthReport(input()).last_error).toBeUndefined();
   });
 
+  it("reports yield from search traffic and omits it before any attempt", () => {
+    const withTraffic = assembleHealthReport(
+      input({ history: { lastSuccess: 1, lastResultCount: 0, zeroResultStreak: 2 } })
+    );
+    expect(withTraffic.last_result_count).toBe(0);
+    expect(withTraffic.result_yield).toBe("zero");
+    expect(withTraffic.zero_result_streak).toBe(2);
+
+    const served = assembleHealthReport(
+      input({ history: { lastSuccess: 1, lastResultCount: 4, zeroResultStreak: 0 } })
+    );
+    expect(served.result_yield).toBe("ok");
+
+    expect(assembleHealthReport(input({ history: {} })).result_yield).toBeUndefined();
+    expect(assembleHealthReport(input()).last_result_count).toBeUndefined();
+  });
+
   it("carries the cooldown remaining only when present", () => {
     expect(assembleHealthReport(input({ cooldownRemainingMs: 900 })).cooldown_remaining_ms).toBe(900);
     expect(assembleHealthReport(input()).cooldown_remaining_ms).toBeUndefined();

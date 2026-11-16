@@ -87,7 +87,8 @@
     "monitor-delta": "npx tsx scripts/monitor-delta.ts",
     "monitor-watchlist": "npx tsx scripts/monitor-watchlist.ts",
     "benchmark-direction": "npx tsx scripts/benchmark-direction.ts",
-    "benchmark-processing": "npx tsx scripts/benchmark-processing.ts"
+    "benchmark-processing": "npx tsx scripts/benchmark-processing.ts",
+    "smoke:providers": "npx tsx scripts/provider-smoke.ts"
   },
   "keywords": [
     "search",
