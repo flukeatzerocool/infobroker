@@ -7,7 +7,7 @@ vi.mock("./config.js", () => ({
 }));
 
 import { getConfig, getDispatchChain } from "./config.js";
-import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable, languageUnsupportedProviders, compareByLatency } from "./chain.js";
+import { selectChain, ignoredParams, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable, languageUnsupportedProviders, compareByLatency, rescueChain } from "./chain.js";
 
 function makeProvider(tier: string) {
   return { tier, enabled: true, capabilities: ["web_search"], rate_limit: {}, priority: 10 };
@@ -198,5 +198,29 @@ describe("languageUnsupportedProviders (REQ-128)", () => {
   it("returns an empty list when no language is requested or every provider is capable", () => {
     expect(languageUnsupportedProviders(["duckduckgo", "mojeek"], "duckduckgo", undefined)).toEqual([]);
     expect(languageUnsupportedProviders(["wikipedia", "wiktionary"], "wikipedia", "de")).toEqual([]);
+  });
+});
+
+// REQ-031: a search-capable provider never attempted can rescue the chain
+// after every keyless provider was tried.
+describe("rescueChain (REQ-031)", () => {
+  const providers = {
+    duckduckgo: { capabilities: ["web_search"], priority: 10 },
+    exa: { capabilities: ["semantic"], priority: 30 },
+    tavily: { capabilities: ["synthesis"], priority: 31 },
+    jina: { capabilities: ["content_fetch"], priority: 5 },
+  };
+
+  it("returns unattempted search-capable providers in priority order", () => {
+    expect(rescueChain(["duckduckgo"], providers, () => true, 5)).toEqual(["exa", "tavily"]);
+  });
+
+  it("excludes providers that are not usable and respects the depth", () => {
+    expect(rescueChain(["duckduckgo"], providers, (slug) => slug !== "exa", 5)).toEqual(["tavily"]);
+    expect(rescueChain(["duckduckgo"], providers, () => true, 1)).toEqual(["exa"]);
+  });
+
+  it("never returns a renderer or an already-attempted provider", () => {
+    expect(rescueChain(["duckduckgo", "exa", "tavily"], providers, () => true, 5)).toEqual([]);
   });
 });

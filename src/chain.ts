@@ -112,6 +112,30 @@ export function crossTaskFallbackChain(
   return generalChain.filter((slug) => !attemptedSet.has(slug));
 }
 
+// REQ-031: after the serving chain (and its cross-task fallback) ends, a
+// search-capable provider that was never attempted can still answer — most
+// often a keyed provider when every keyless one is blocked. The rescue is
+// bounded by the same fallback depth and ordered by configured priority.
+const RESCUE_CAPABILITIES = new Set(["web_search", "semantic", "synthesis"]);
+
+export function rescueChain(
+  attempted: string[],
+  providers: Record<string, { capabilities: string[]; priority: number }>,
+  usable: (slug: string) => boolean,
+  depth: number,
+): string[] {
+  const seen = new Set(attempted);
+  return Object.entries(providers)
+    .filter(([slug, provider]) =>
+      !seen.has(slug) &&
+      provider.capabilities.some((capability) => RESCUE_CAPABILITIES.has(capability)) &&
+      usable(slug)
+    )
+    .sort((a, b) => a[1].priority - b[1].priority)
+    .map(([slug]) => slug)
+    .slice(0, Math.max(0, depth));
+}
+
 // REQ-128: when a caller restricts the result language, put providers that
 // honor it ahead of those that would report it as ignored, preserving the
 // relative order within each group.

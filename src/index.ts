@@ -13,7 +13,7 @@ import { PROVIDERS, resolveProvider, resetGenericProviderCache } from "./provide
 import { retryWithBackoff, ParseError, RetryableError } from "./retry.js";
 import { corroborate, UnusableProviderError } from "./corroborate.js";
 import { snapshotSource } from "./preservation.js";
-import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable, languageUnsupportedProviders } from "./chain.js";
+import { ignoredParams, selectChain, demoteQuotaWarnings, crossTaskFallbackChain, preferLanguageCapable, languageUnsupportedProviders, rescueChain } from "./chain.js";
 import { ignoredOperators, parseQuery } from "./query.js";
 import { shouldCooldown, markCooldown, inCooldown, cooldownRemainingMs, cooldownDurationMs, activeCooldowns } from "./cooldown.js";
 import { recordAttempt, recordTool, callLogTarget } from "./call-log.js";
@@ -686,7 +686,8 @@ async function doWebSearch(
   // Shape the winner's results into the response. `fallback_used` now means
   // "the serving provider was not the chain's first-choice provider" (the
   // hedge raced ahead of the primary), not merely "a provider errored".
-  const buildSuccess = async (slug: string, filtered: SearchResult[], elapsed: number): Promise<string> => {
+  const buildSuccess = async (slug: string, filtered: SearchResult[], elapsed: number, rescued: string[] = []): Promise<string> => {
+    const rescueMeta = rescued.length > 0 ? { rescued_providers: rescued } : {};
     // REQ-128: every selected provider that cannot honor the requested language.
     const languageUnsupported = languageUnsupportedProviders(chain, slug, language);
     for (const result of filtered) {
@@ -828,6 +829,7 @@ async function doWebSearch(
         ignored_operators: ignoredOperators(slug, parsedQuery),
         ...(languageUnsupported.length > 0 ? { language_unsupported: languageUnsupported } : {}),
         deep: true,
+        ...rescueMeta,
         direction: direction(chain),
         pages_read: deepMeta.pages_read,
         processing: processingForUrls(deepMeta.results.map((result) => result.url), collapsedCount),
@@ -852,6 +854,7 @@ async function doWebSearch(
       ],
       ignored_operators: ignoredOperators(slug, parsedQuery),
       ...(languageUnsupported.length > 0 ? { language_unsupported: languageUnsupported } : {}),
+      ...rescueMeta,
       ...kbMeta,
       ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
       ...(analyze && finalResults.length > 0 ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
@@ -904,14 +907,15 @@ async function doWebSearch(
     }
   }
 
-  // A chain that ended on provider errors is a failure; a chain whose
-  // providers all returned empty is a legitimate zero-result answer.
+  // REQ-031: a search-capable provider that was never attempted can rescue the
+  // chain — whether it ended on errors or on empty results. A keyed provider is
+  // the common case when every keyless provider is blocked from this host.
+  let crossTaskAttempted: string[] = [];
   if (lastError !== null) {
     // REQ-031a: before failing a non-general_web task, retry the general_web
     // chain (minus providers already attempted) so a narrow specialized chain
     // does not fail while a broader web chain could still answer.
     const crossTaskChain = crossTaskFallbackChain(taskType, chain, selectChain(getDispatchChain("general_web"), undefined, latency.avg));
-    let crossTaskAttempted: string[] = [];
     for (const slug of crossTaskChain) {
       crossTaskAttempted.push(slug);
       const result = await attempt(slug);
@@ -919,7 +923,27 @@ async function doWebSearch(
         return buildSuccess(result.slug, result.filtered, result.elapsed);
       }
     }
+  }
 
+  const attemptedBeforeRescue = [...chain, ...crossTaskAttempted];
+  const rescue = rescueChain(
+    attemptedBeforeRescue,
+    config.providers,
+    (slug) => providerUsable(slug, config),
+    config.output.fallback_depth
+  );
+  const rescued: string[] = [];
+  for (const slug of rescue) {
+    rescued.push(slug);
+    const result = await attempt(slug);
+    if (result !== null) {
+      return buildSuccess(result.slug, result.filtered, result.elapsed, rescued);
+    }
+  }
+
+  // A chain that ended on provider errors is a failure; a chain whose
+  // providers all returned empty is a legitimate zero-result answer.
+  if (lastError !== null) {
     // REQ-076a: a blend whose external tier failed still returns the cached
     // work instead of degrading a useful answer into an error.
     if (kbCached.length > 0) {
@@ -947,7 +971,7 @@ async function doWebSearch(
       chainExhaustion(chain, {
         rateLimited,
         quotaExhausted,
-        attempted: [...chain, ...crossTaskAttempted],
+        attempted: [...attemptedBeforeRescue, ...rescued],
       })
     )}`;
   }

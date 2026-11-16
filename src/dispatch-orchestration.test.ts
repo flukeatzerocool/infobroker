@@ -702,3 +702,40 @@ describe("compact get_citations metadata (REQ-027a)", () => {
     });
   });
 });
+
+// REQ-031: a search-capable provider outside the serving chain rescues the
+// request before the empty-vs-error end state. The keyed-provider case is the
+// one that matters when every keyless provider is blocked.
+describe("keyed rescue (REQ-031)", () => {
+  test("a usable provider outside the chain serves after an all-empty chain", async () => {
+    const empty = await stub("empty");
+    const rescue = await stub("ok");
+    const { cfg } = await setup([
+      provider("stub_empty", empty.url),
+      provider("stub_rescue", rescue.url, { dispatch: false }),
+    ]);
+
+    await withServer({ env: cfg.env }, async (call) => {
+      const payload = await search(call, { query: "rescue probe", fresh: true, task_type: "general_web" });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("stub_rescue");
+      expect(payload.results.length).toBeGreaterThan(0);
+      expect(payload.meta?.rescued_providers).toContain("stub_rescue");
+    });
+  });
+
+  test("a usable provider outside the chain serves after an all-error chain", async () => {
+    const failing = await stub("error");
+    const rescue = await stub("ok");
+    const { cfg } = await setup([
+      provider("stub_fail", failing.url),
+      provider("stub_rescue", rescue.url, { dispatch: false }),
+    ]);
+
+    await withServer({ env: cfg.env }, async (call) => {
+      const payload = await search(call, { query: "rescue probe", fresh: true, task_type: "general_web" });
+      expect(payload.status).toBe("ok");
+      expect(payload.provider).toBe("stub_rescue");
+    });
+  });
+});

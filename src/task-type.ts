@@ -206,7 +206,7 @@ export const MIN_SIGNAL_SCORE = 2;
 // subject area. Routing a person's name to a geocoder is the failure this
 // prevents, and the LSA score gives no warning (it scored location 1.00 for a
 // biography query). Narrow chains need a literal signal (REQ-020a).
-const NARROW_CHAINS = new Set<string>(["location", "structured_fact", "financial", "definition", "code"]);
+const NARROW_CHAINS = new Set<string>(["location", "structured_fact", "financial", "definition", "code", "academic"]);
 
 // A DOI (10.NNNN/suffix), an author–year citation ("Smith 2020",
 // "Smith et al., 2020"), or a cited work title ("Mazer "Donald Trump Shoots

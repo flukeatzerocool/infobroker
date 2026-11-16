@@ -130,9 +130,9 @@ describe("classifyTaskType (REQ-020a)", () => {
   });
 
   it("falls back to semantic similarity when no keyword matches", () => {
-    const academicIndex = Object.keys(TASK_TYPE_KEYWORDS).indexOf("academic");
-    const ranker: Ranker = () => [{ index: academicIndex, score: 0.9 }];
-    expect(classifyTaskType("quantum entanglement", ranker)).toBe("academic");
+    const newsIndex = Object.keys(TASK_TYPE_KEYWORDS).indexOf("news");
+    const ranker: Ranker = () => [{ index: newsIndex, score: 0.9 }];
+    expect(classifyTaskType("quantum entanglement", ranker)).toBe("news");
   });
 
   // REQ-020a narrow-chain-guard: a semantic-only match may not pick a narrow
@@ -145,6 +145,13 @@ describe("classifyTaskType (REQ-020a)", () => {
     const definitionIndex = Object.keys(TASK_TYPE_KEYWORDS).indexOf("definition");
     const definitionRanker: Ranker = () => [{ index: definitionIndex, score: 0.99 }];
     expect(classifyTaskType("serendipity", definitionRanker)).toBe("general_web");
+
+    // A commerce query that ends in "review" is not a scholarly signal; the
+    // semantic prototype scores academic highly (0.996 measured), so academic
+    // must be literal-signal-only.
+    const academicIndex = Object.keys(TASK_TYPE_KEYWORDS).indexOf("academic");
+    const academicRanker: Ranker = () => [{ index: academicIndex, score: 0.99 }];
+    expect(classifyTaskType("best noise cancelling headphones 2026 review", academicRanker)).toBe("general_web");
 
     const encyclopediaIndex = Object.keys(TASK_TYPE_KEYWORDS).indexOf("encyclopedia");
     const broadRanker: Ranker = () => [{ index: encyclopediaIndex, score: 0.99 }];
