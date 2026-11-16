@@ -2,6 +2,16 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- A reheadlined syndication now collapses. Cross-provider reconciliation compared
+  title plus snippet, so the headline vetoed byte-identical content and the
+  processing benchmark recorded 0.667 recall. A snippet comparison is now a second
+  basis (REQ-020j), guarded by identical identifying values and an eight-token
+  floor so shared boilerplate cannot merge distinct documents; the full-text branch
+  is unchanged, and origin grouping is deferred to the roadmap because
+  `original_source` has no producer that promises a document-identifying URL
+  (D-139). Processing measures 1.000 recall over 8 cases, and precision keeps its
+  0.05 margin.
+
 - Two measurements that could not fail now can. The retrieval corpus gained six
   wide cases so recall@5 falls when ranking degrades (reconciled 1.000, raw
   0.923, asserted in the suite), and a processing benchmark measures

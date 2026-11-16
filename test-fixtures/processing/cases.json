@@ -1,9 +1,9 @@
 {
   "version": 1,
   "floor": {
-    "dedup_recall": 0.66,
+    "dedup_recall": 1,
     "dedup_precision": 0.95,
-    "collapsed_total_accuracy": 0.66
+    "collapsed_total_accuracy": 1
   },
   "cases": [
     {

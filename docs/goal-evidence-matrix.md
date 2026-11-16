@@ -37,15 +37,17 @@ a gate proves; "measurement" is what can regress and be caught.
 |---|---|---|---|
 | Direction | `search_web` direction block, incl. the deferred choice | `check-tdqs`, Arena, `test-fixtures/direction` | REQ-135: offer rate, false-offer rate, slot recall |
 | Collection | `search_web`, `fetch_page`, `get_citations`, `inspect_providers` | Arena, `check-tdqs` | REQ-130: precision/recall/MRR/nDCG over 20 cases |
-| Processing and exploitation | `meta.processing` on search and fetch (no tool of its own) | Arena, `check-gate-coverage` | REQ-136: dedup recall/precision and collapse-total accuracy over 6 cases |
+| Processing and exploitation | `meta.processing` on search and fetch (no tool of its own) | Arena, `check-gate-coverage` | REQ-136/REQ-020j: dedup recall/precision and collapse-total accuracy over 8 cases |
 | Analysis and production | `verify_claims`, `search_web (analyze)` | Arena, `check-gate-coverage` | REQ-123: Brier score and reliability curve over the documented gold set |
 | Dissemination | `manage_kb` ingest with a required receipt and grade; the report itself is client-authored | `check-report-fixtures`, `check-gate-coverage` | REQ-134: structural grade and offline grounding score |
 
 Processing and Dissemination have no dedicated tool; that is a design decision
 (an eighth tool was rejected), not an omission. The measurement column is the
-honest part: Processing's benchmark currently measures 0.667 dedup recall —
-reheadlined syndication is not collapsed — and the floor records that gap rather
-than hiding it. The Analysis Brier score measures whether
+honest part: Processing's benchmark measures 1.000 dedup recall over 8 cases now
+that snippet-based collapse is guarded, while the reconciler still admits one
+residual class — long shared boilerplate with no identifying values on either
+side — and the full-text branch keeps its pre-existing precision bound. The
+Analysis Brier score measures whether
 the confidence ladder is ordered against documented truth; it does not measure
 truth the server discovered, which would need an `observed` label.
 

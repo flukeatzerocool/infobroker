@@ -787,6 +787,33 @@ query carries two requirements, not because the implementation ties — so a
 disagreement is a finding, not a fixture to edit. The retrieval baseline refresh
 and its reason live in the commit that changed it.
 
+### D-139: A Headline Is Not Content, and a Snippet Is Not a Document (2026-11-16)
+
+Cross-provider reconciliation judged a pair on title plus snippet, so a syndicated
+copy with a reworded headline scored below the threshold and survived: the title
+vetoed byte-identical content, and the processing benchmark measured 0.667 recall.
+REQ-020j adds a second basis — the snippet comparison — and guards it twice. It
+requires identical sets of identifying names, dates and numbers on both sides, the
+rule REQ-072 already applies to ingest, with both-empty abstaining so similarity
+alone decides; and it refuses a snippet shorter than eight tokens, because a
+shared "Click to read the full story" is boilerplate, not content. The full-text
+branch is left byte-for-byte unchanged. That keeps the change surgical and leaves
+one pre-existing precision path open, recorded as a residual rather than claimed
+closed. The sub-REQ route was chosen over extending REQ-020g because that body
+already carries six SHALL clauses and one logical contract.
+
+Precision keeps a 0.05 floor margin while recall and the collapse total are pinned
+at the measured 1.000: the admitted residual class is a long shared boilerplate
+body with no identifying values on either side, so pinning precision at 1.000
+would make the first case that exercises it a gate failure rather than a measured
+bound. Rejected: weighting the title (measured to lower duplicate similarity from
+0.773 to 0.498 at double weight), lowering the threshold to 0.75 (reaches 1.000 on
+the corpus but collapses the differing-figures pair, precision 0.917), snippet-only
+similarity (loses title-only matches), and grouping on `original_source` — that
+field has three producer paths, none promising a document-identifying URL, so a
+feed or section URL would merge unrelated results. Origin grouping is scheduled on
+`ROADMAP.md`.
+
 ### D-138: Three Measurement Gaps Closed by Measuring, Not Asserting (2026-11-16)
 
 Recall@5 was arithmetically pinned at 1 because 19 of 20 retrieval cases
