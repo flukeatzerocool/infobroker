@@ -2798,3 +2798,33 @@ requires a decision. `ROADMAP.md` carries only a pointer to this block.
 - Chain-of-custody — D-061
 - Multi-user case management — D-061
 - Enterprise scheduling — D-061
+
+### D-140: A Client Patch Changes Operations, Not Identity or Bounds (2026-11-16)
+
+`reload_config`'s `patch` is a convenience for operational tuning, not a second
+configuration channel. The patch surface is therefore a default-deny allow-list:
+provider enablement, priority, rate limit, timeout, retry count, credential
+source name, a curated set of response-shaping keys, and the update check.
+Transport identity (endpoint, health endpoint, URL env, query parameter, result
+path, field map, tier, capabilities), the private-network switch, content-policy
+mode, filesystem paths, and resource bounds are operator-only and must be set by
+editing the user layer. Removing a provider-only key is allowed because removal
+cannot introduce a target. Validation and provider activation run before the
+write; a failed activation restores the backup, or deletes the layer the patch
+created, and reports both errors if restore itself fails. This closes the
+loopback-provider bypass the readiness audit demonstrated without breaking the
+documented BYO-endpoint workflow, which edits the file.
+
+### D-141: Academic Routing Requires a Literal Scholarly Signal; Keys Rescue (2026-11-16)
+
+A shopping query ending in "review" scored academic 0.996 against 0.255 for the
+runner-up, so a confidence margin cannot separate it from a scholarly query.
+Academic joins the literal-signal-only chains (location, structured fact,
+filing, definition, code), and the semantic fallback test uses a broad chain.
+Separately, when the serving chain ends in errors or empties, the server tries
+usable search-capable providers that were never attempted, ordered by priority
+and bounded by the fallback depth. That rescue lives in REQ-031 rather than the
+cross-task rule because `general_web` never triggers the cross-task fallback,
+and because an all-empty chain is a legitimate end state that must be preceded
+by the rescue attempt. Enabling an Exa or Tavily key is therefore enough to
+serve general web search when the keyless providers are blocked.

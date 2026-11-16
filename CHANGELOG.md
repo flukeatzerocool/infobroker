@@ -354,6 +354,45 @@
   working tree with a run-local empty config layer; the default remains the
   configured deployment.
 
+- Keyless general search works again. Wiby's result anchors and Marginalia's
+  host and markup both drifted, so each returned zero results from an HTTP 200
+  and the `general_web` chain had nothing left. The parsers follow the current
+  pages, a bot interstitial is reported as a challenge rather than a zero, and
+  `inspect_providers` carries the last result count, a result-yield marker, and
+  the zero-result streak, so the next drift is visible. A network-only
+  `smoke:providers` gate reports yield per provider. (REQ-020, REQ-024b)
+
+- Consumer queries no longer fall into the academic chain on a semantic score
+  alone: academic is literal-signal-only, like location and structured_fact.
+  When the serving chain ends in errors or empties, a usable search-capable
+  provider that was never attempted is tried, so a configured key can serve
+  when every keyless provider is blocked. (REQ-020a, REQ-031)
+
+- A configuration patch is now a default-deny allow-list of operational keys.
+  It cannot add or repoint a provider, relax the private-network guard, or move
+  a resource bound; removal of a provider-only key remains allowed. Validation
+  and provider activation run before the write, and a failed activation
+  restores the backup or deletes the layer it created. (REQ-040, REQ-021a)
+
+- A handler throw returns the documented `[ERROR]` envelope with a sanitized
+  message instead of raw SDK text, and nested `details` are sanitized too.
+  (REQ-001, REQ-002, REQ-102)
+
+- Every provider and renderer body is read under a configurable byte cap
+  (REQ-137); text truncates and marks, a truncated structured body fails that
+  provider. The server exits when its client closes stdin, and search, fetch,
+  and verification carry a configurable wall-clock budget.
+
+- `fetch_page` reports Jina's target-error page as a missing page, and an
+  unresolvable host as a connectivity error with typo-vs-transient remediation,
+  rather than a private-target refusal; the fetch path honours provider quota.
+  (REQ-021a, REQ-021h, REQ-033)
+
+- A provider that fails three times in a row with a 5xx or timeout is cooled
+  down. Reports are created owner-only, and truncation spill files use `wx`
+  with a random suffix and are swept on every maintenance tick. (REQ-038,
+  REQ-100)
+
 ## 2026.11.11 — Register reconciliation and clause-tag run registration
 
 - The full-review register's disposition census is re-derived from the file
