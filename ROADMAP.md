@@ -36,9 +36,11 @@ run records an isolated KB path in its run artifacts.
   re-runs failed earlier than the needle — N4 routed to Research & Write, so no
   Uncertainty Register or shape token was written. The residual is routing, not
   wording (`docs/research-evidence-2026-11-15.md`).
-- The named-marker attempt (D-132) also failed: a run that loaded the skill
-  still answered Research & Write (`run-20261115-182956`), so widening needles
-  is still not the lever.
+- Two routing fixes failed: the named marker (D-132) did not move a run that
+  loaded the skill (`run-20261115-182956`), and a high-stakes vendor-decision
+  phrasing routed Vetting (`run-20261115-195035`), which the Vetting-vs-Gated
+  tie-breaker says is correct. Prompt wording cannot pin the route; N4 needs
+  explicit skill invocation or a re-scoped expectation (D-133).
 
 **Trigger:** start with the next research-suite change; close when a repo-mode N4
 run that reports a zero-source conclusion passes its section gate.

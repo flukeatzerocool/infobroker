@@ -229,3 +229,19 @@ Regression guards, recorded as-is:
 Both roadmap items stay open. The next lever is outside this increment: either
 the suite prompt/skill invocation makes the gated route explicit, or the
 routing expectation is re-scoped.
+
+### Premise fix — and why it also failed (2026-11-15, later)
+
+N4's original question is not high-stakes, so the §3 rubric does not escalate
+it. Replacing the utterance with a board-level vendor decision ("about to
+commit $40M … before we sign") produced a **Vetting** answer instead
+(`run-20261115-195035`, 15 URLs, ~10 min): the Vetting-vs-Gated tie-breaker
+correctly classifies "clear this vendor before we sign" as vetting even at high
+stakes. The utterance was reverted; D-133 records the rule.
+
+Three realistic phrasings have now produced three different correct
+classifications — Research & Write, Research & Write, Vetting — and none the
+expected Gated Analysis. That is the finding: prompt wording is not a lever for
+the route. N4 needs either explicit skill invocation at the harness level (and
+to be reframed as a contract test rather than a routing test) or a re-scoped
+expectation.

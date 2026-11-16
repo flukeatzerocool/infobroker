@@ -2652,6 +2652,32 @@ rejection of prompt-side grading remain as decided there.
 
 Scope: client skill surface.
 
+### D-133: A Scenario's Input Must Satisfy Its Expected Shape's Rubric (2026-11-15)
+
+N4 expected `gated-analysis` from an unannounced-product question. Two phrasings
+were tried and both failed, for different and instructive reasons:
+
+- "Run your rigorous gated research …" (original) — routed Research & Write in
+  three runs, one of them after the infobroker skill was loaded (D-132).
+- "Our board is about to commit $40M … before we sign, clear this vendor" — a
+  vendor-clearance framing, routed Vetting ("Vetting report", 15 URLs, 10 min),
+  which the Vetting-vs-Gated tie-breaker (`decision-tree.md:55-58`) says is
+  correct even when the stakes are high.
+
+Rule: a scenario whose expected shape is reachable only by escalation must carry
+inputs the §3 rubric scores; a scenario that names a shape must name it in the
+user's own words; and a scenario that asks to clear a vendor is a Vetting
+scenario, not a Gated Analysis one. Prompt wording cannot be used to pin a route
+the policy assigns elsewhere — three realistic phrasings produced three
+different correct classifications, none of them the expected one.
+
+N4's expectation therefore needs a harness-level fix (explicit skill
+invocation, with the scenario reframed as a contract test) or a re-scoped
+expectation; more prompt wording is not a lever. The manifest is restored to
+its original utterance.
+
+Scope: developer harness only.
+
 ## Spec Waivers
 
 REQ IDs listed here are intentionally unimplemented. `validate-spec` accepts a
