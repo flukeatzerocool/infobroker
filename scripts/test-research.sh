@@ -48,6 +48,28 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 RUN_DIR="${TMPDIR:-/tmp}/infobroker/research-tests/run-${TIMESTAMP}"
 mkdir -p "$RUN_DIR"
 RESULTS_FILE="$RUN_DIR/results.json"
+TIMINGS_FILE="$RUN_DIR/timings.json"
+TIMINGS_NDJSON="$RUN_DIR/timings.ndjson"
+: > "$TIMINGS_NDJSON"
+
+now_ms() { date +%s%3N; }
+SUITE_START_MS=$(now_ms)
+SERVER_START_MS=0
+
+# record_timing <id> <status> <label> <turn-ms-csv> <evaluate-ms> <citation-ms> <total-ms>
+record_timing() {
+  node -e '
+    const [id, status, label, turns, evaluateMs, citationMs, totalMs] = process.argv.slice(1);
+    const turn_ms = turns.split(",").filter(Boolean).map(Number);
+    process.stdout.write(JSON.stringify({
+      id, status, label,
+      turn_ms,
+      evaluate_ms: Number(evaluateMs),
+      citation_ms: Number(citationMs),
+      total_ms: Number(totalMs),
+    }) + "\n");
+  ' "$1" "$2" "$3" "$4" "$5" "$6" "$7" >> "$TIMINGS_NDJSON"
+}
 
 # Load and filter the manifest.
 export ONLY FROM
@@ -90,7 +112,9 @@ if [[ "$MCP_MODE" == "repo" ]]; then
     || die "Repo mode failed: could not build the run-local config layer"
   "$TSX" "$SCRIPT_DIR/lib/repo-mode.ts" project "$PROJECT_DIR" "$RUN_DIR/config.local.json" "$MCP_PROJECT/opencode.json" \
     || die "Repo mode failed: could not write the project MCP config"
+  server_start_t0=$(now_ms)
   ensure_opencode_serve_at "$RUN_DIR" "opencode-serve.log" "" "$MCP_PROJECT"
+  SERVER_START_MS=$(( $(now_ms) - server_start_t0 ))
   ( cd "$MCP_PROJECT" && opencode debug config ) > "$RUN_DIR/debug-config.json" 2>> "$RUN_DIR/openruns.log" \
     || die "opencode debug config failed in $MCP_PROJECT (see $RUN_DIR/openruns.log)"
   skills_detail=$("$PROJECT_DIR/node_modules/.bin/tsx" "$SCRIPT_DIR/test-research/assert-skills.ts" \
@@ -103,7 +127,9 @@ if [[ "$MCP_MODE" == "repo" ]]; then
     "$TSX" "$SCRIPT_DIR/lib/repo-mode.ts" paths "$KB_ROOT"
   } > "$RUN_DIR/mcp-target.txt"
 else
+  server_start_t0=$(now_ms)
   ensure_opencode_serve "$RUN_DIR" "opencode-serve.log"
+  SERVER_START_MS=$(( $(now_ms) - server_start_t0 ))
   ( cd "$PWD" && opencode mcp list ) > "$RUN_DIR/mcp-target.txt" 2>&1 || true
 fi
 
@@ -153,6 +179,10 @@ for id in $SCENARIO_IDS; do
   workdir="$RUN_DIR/$id"
   mkdir -p "$workdir"
   info "════ Running $id ════"
+  scenario_start=$(now_ms)
+  turn_ms_csv=""
+  eval_ms=0
+  citation_ms=0
 
   utterance=$(node -e 'console.log(require(process.argv[1]).utterance)' "$sc")
   fu_count=$(node -e 'console.log((require(process.argv[1]).followups||[]).length)' "$sc")
@@ -163,14 +193,18 @@ for id in $SCENARIO_IDS; do
   printf '%s\n' "$utterance" > "$workdir/prompt.md"
   base_out="$workdir/turn0.txt"
   timeout_s="${OPC_TIMEOUT:-1800}"
+  turn_t0=$(now_ms)
   if run_turn "$id" "research-$id" "$workdir" "$workdir/prompt.md" "$base_out" ""; then
     rc=0
   else
     rc=$?
   fi
+  turn_ms_csv="$(( $(now_ms) - turn_t0 ))"
   if [[ "$rc" -ne 0 ]]; then
     reason="timeout"; [[ "$rc" -eq 124 ]] || reason="turn-failed"
     record_failure "$id" "$sc" "$reason" "$rc" "$timeout_s"
+    record_timing "$id" "fail" "$(node -e 'console.log(require(process.argv[1]).label)' "$sc")" \
+      "$turn_ms_csv" 0 0 "$(( $(now_ms) - scenario_start ))"
     info "  $id: $reason (exit $rc) — recorded, continuing"
     continue
   fi
@@ -192,14 +226,18 @@ for id in $SCENARIO_IDS; do
     while IFS= read -r fu; do
       i=$((i+1))
       printf '%s\n' "$fu" > "$workdir/followup$i.md"
+      turn_t0=$(now_ms)
       if run_turn "$id" "research-$id" "$workdir" "$workdir/followup$i.md" "$workdir/turn$i.txt" "$session_id" </dev/null; then
         rc=0
       else
         rc=$?
       fi
+      turn_ms_csv="${turn_ms_csv:+$turn_ms_csv,}$(( $(now_ms) - turn_t0 ))"
       if [[ "$rc" -ne 0 ]]; then
         reason="timeout"; [[ "$rc" -eq 124 ]] || reason="turn-failed"
         record_failure "$id" "$sc" "$reason" "$rc" "$timeout_s"
+        record_timing "$id" "fail" "$(node -e 'console.log(require(process.argv[1]).label)' "$sc")" \
+          "$turn_ms_csv" 0 0 "$(( $(now_ms) - scenario_start ))"
         info "  $id: follow-up $i $reason (exit $rc) — recorded, continuing"
         followup_failed=1
         break
@@ -215,7 +253,17 @@ for id in $SCENARIO_IDS; do
     [[ -e "$f" ]] && cat "$f" >> "$combined"
   done
 
-  node "$EVALUATOR" "$sc" "$combined" "$workdir" >> "$RESULTS_TMP"
+  eval_t0=$(now_ms)
+  eval_json=$(node "$EVALUATOR" "$sc" "$combined" "$workdir")
+  eval_ms=$(( $(now_ms) - eval_t0 ))
+  printf '%s\n' "$eval_json" >> "$RESULTS_TMP"
+  eval_status=$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).status||"fail")}catch{process.stdout.write("fail")}' "$eval_json")
+  eval_label=$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).label||"")}catch{process.stdout.write(process.argv[2])}' "$eval_json" "$id")
+  citation_ms=$(node -e 'try{process.stdout.write(String(JSON.parse(process.argv[1]).citation_ms??0))}catch{process.stdout.write("0")}' "$eval_json")
+  if [[ "$eval_status" == "pass" ]]; then mark=PASS; else mark=FAIL; fi
+  scenario_ms=$(( $(now_ms) - scenario_start ))
+  record_timing "$id" "$eval_status" "$eval_label" "$turn_ms_csv" "$eval_ms" "$citation_ms" "$scenario_ms"
+  info "  $mark  $id  $eval_label ($(( scenario_ms / 1000 ))s)"
 done
 
 # Assemble results.json.
@@ -226,6 +274,15 @@ node -e '
   for(const l of lines){ let o; try{o=JSON.parse(l)}catch{continue}; out[o.id]=o; }
   fs.writeFileSync(process.argv[2], JSON.stringify(out,null,2));
 ' "$RESULTS_TMP" "$RESULTS_FILE"
+
+# Assemble timings.json — diagnostics only; nothing gates on these values.
+node -e '
+  const fs=require("fs");
+  const lines=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").filter(Boolean);
+  const out={server_start_ms:Number(process.argv[2]), suite_ms:Number(process.argv[3]), scenarios:{}};
+  for(const l of lines){ let o; try{o=JSON.parse(l)}catch{continue}; out.scenarios[o.id]=o; }
+  fs.writeFileSync(process.argv[4], JSON.stringify(out,null,2)+"\n");
+' "$TIMINGS_NDJSON" "$SERVER_START_MS" "$(( $(now_ms) - SUITE_START_MS ))" "$TIMINGS_FILE"
 
 # ── Verdict table ──
 echo ""
@@ -253,6 +310,7 @@ node -e '
   console.log(`\n  ${pass}/${ids.length} scenarios passed`);
   console.log("  Results + transcripts: " + process.argv[1].replace(/results\.json$/, ""));
 ' "$RESULTS_FILE"
+info "  Timings: $TIMINGS_FILE"
 
 fails=$(node -e 'const r=require(process.argv[1]);console.log(Object.values(r).filter(o=>o.status==="fail").length)' "$RESULTS_FILE")
 if [[ "$fails" != "0" ]]; then

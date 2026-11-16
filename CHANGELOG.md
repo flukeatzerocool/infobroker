@@ -2,6 +2,12 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Research-suite runs are now observable and their tail is shorter. Each
+  scenario prints its PASS/FAIL line as it finishes, every run writes
+  `timings.json` (server start, per-turn, evaluate, citation), and citation
+  sampling runs at most four URLs in flight instead of one at a time. The
+  values are diagnostics; no scenario gate changed.
+
 - The infobroker skill's routing surfaces now agree that a named gated request
   selects Gated Analysis: Phase 0, "When to Escalate", the decision-tree's
   first question, and the journeys row all carry the marker, and

@@ -7,6 +7,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { extractAllAssistantText, extractFinalAssistantText, extractMcpToolCalls, extractToolOrder } from "../lib/event-stream.mjs";
+import { sampleCitations } from "../lib/citations.mjs";
 
 const [scenarioJsonPath, transcriptPath, outDir] = process.argv.slice(2);
 const scenario = JSON.parse(readFileSync(scenarioJsonPath, "utf8"));
@@ -92,26 +93,11 @@ const status = hardFailures.length === 0 ? "pass" : "fail";
 // --- citation sampling (advisory) ---
 const urls = extractUrls(text);
 const sample = (scenario.citation_sample ?? 0) > 0 ? urls.slice(0, scenario.citation_sample) : [];
-const citations = [];
-for (const u of sample) {
-  let kind = "error";
-  try {
-    const resp = await (async () => {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 15000);
-      try { return await fetch(u, { method: "HEAD", redirect: "follow", signal: ctrl.signal }); }
-      catch { return await fetch(u, { method: "GET", redirect: "follow", signal: ctrl.signal }); }
-      finally { clearTimeout(t); }
-    })();
-    if (resp.status >= 200 && resp.status < 400) kind = "reachable";
-    else if (resp.status === 403 || resp.status === 429) kind = "blocked";
-    else if (resp.status === 404 || resp.status === 410) kind = "invalid";
-    else kind = `status-${resp.status}`;
-  } catch {
-    kind = "error";
-  }
-  citations.push({ url: u, status: kind });
-}
+const citationStart = Date.now();
+const citations = sample.length > 0
+  ? await sampleCitations(sample, { count: scenario.citation_sample, fetchImpl: fetch })
+  : [];
+const citationMs = Date.now() - citationStart;
 
 process.stdout.write(JSON.stringify({
   id: scenario.id,
@@ -127,4 +113,5 @@ process.stdout.write(JSON.stringify({
   auditFails,
   urlsFound: urls.length,
   citations,
+  citation_ms: citationMs,
 }) + "\n");

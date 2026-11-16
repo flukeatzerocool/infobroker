@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { sampleCitations } from "../lib/citations.mjs";
 
 const EVALUATOR = join(dirname(fileURLToPath(import.meta.url)), "evaluate-research.mjs");
 const roots = [];
@@ -99,4 +100,57 @@ test("section needles are OR-sets of accepted synonyms", () => {
   });
   assert.equal(result.status, "pass", JSON.stringify(result));
   assert.deepEqual(result.missingSections, []);
+});
+
+// --- citation sampler ---
+
+function stubFetch(statuses, { delayMs = 10 } = {}) {
+  const state = { inFlight: 0, maxInFlight: 0, calls: [] };
+  state.impl = async (url) => {
+    state.calls.push(url);
+    state.inFlight += 1;
+    state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    state.inFlight -= 1;
+    return { status: statuses[url] ?? 200 };
+  };
+  return state;
+}
+
+test("sampleCitations preserves input order under concurrency", async () => {
+  const urls = ["a", "b", "c", "d", "e", "f"];
+  const stub = stubFetch(Object.fromEntries(urls.map((u) => [u, 200])));
+  const results = await sampleCitations(urls, { fetchImpl: stub.impl, limit: 4 });
+  assert.deepEqual(results.map((r) => r.url), urls);
+  assert.ok(results.every((r) => r.status === "reachable"));
+});
+
+test("sampleCitations never exceeds the concurrency cap", async () => {
+  const urls = Array.from({ length: 10 }, (_, i) => `u${i}`);
+  const stub = stubFetch({}, { delayMs: 5 });
+  await sampleCitations(urls, { fetchImpl: stub.impl, limit: 3 });
+  assert.equal(stub.maxInFlight, 3, `peak ${stub.maxInFlight}`);
+  assert.equal(stub.calls.length, 10);
+});
+
+test("sampleCitations classifies HTTP outcomes", async () => {
+  const urls = ["ok", "blocked", "invalid", "boom"];
+  const stub = stubFetch({ ok: 200, blocked: 403, invalid: 404, boom: 500 });
+  const results = await sampleCitations(urls, { fetchImpl: stub.impl });
+  assert.deepEqual(results.map((r) => r.status), ["reachable", "blocked", "invalid", "status-500"]);
+});
+
+test("sampleCitations honours count and reports aborts as errors", async () => {
+  const stub = { impl: async (url, { signal }) => {
+    if (url === "slow") throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    assert.ok(signal, "signal passed");
+    return { status: 200 };
+  } };
+  const results = await sampleCitations(["slow", "fast", "ignored"], { fetchImpl: stub.impl, count: 2 });
+  assert.deepEqual(results.map((r) => r.status), ["error", "reachable"]);
+});
+
+test("sampleCitations requires an injectable fetch", async () => {
+  await assert.rejects(() => sampleCitations(["a"], {}), /requires fetchImpl/);
+  assert.deepEqual(await sampleCitations([], { fetchImpl: async () => ({ status: 200 }) }), []);
 });

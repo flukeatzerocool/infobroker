@@ -106,3 +106,16 @@ timed-out scenario is never evaluated on a partial transcript.
 ```
   FAIL  A1a  audience-ciso — timeout after 1800s; audit fail: timeout
 ```
+
+## Timings
+
+Each scenario prints a `PASS`/`FAIL` line the moment its evaluator returns, so a
+slow run is visibly progressing instead of silent until the table. Every run also
+writes `timings.json` beside `results.json`:
+
+- `server_start_ms` — the `opencode serve` bring-up for the run.
+- per scenario — `turn_ms[]` (one entry per turn), `evaluate_ms`,
+  `citation_ms`, and `total_ms`.
+
+The values are wall-clock diagnostics for deciding whether a run is slow, hung,
+or provider-bound; nothing gates on them.
