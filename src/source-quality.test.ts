@@ -1,10 +1,12 @@
-// @implements REQ-020h
+// @implements REQ-020h allowlist-restrict allowlist-prefer
 import { describe, it, expect } from "vitest";
 import {
+  applyDomainPolicy,
   filterBlocked,
   hostOf,
   isBlocked,
   matchesDomain,
+  matchesPolicy,
   qualityScore,
   type SourceQualityConfig,
 } from "./source-quality.js";
@@ -77,5 +79,38 @@ describe("source-quality ordering (REQ-020h)", () => {
   it("returns zero when disabled or the URL is invalid", () => {
     expect(qualityScore("https://agency.gov/report", { ...BASE, enabled: false })).toBe(0);
     expect(qualityScore("not a url", BASE)).toBe(0);
+  });
+});
+
+describe("caller domain policy (REQ-020h)", () => {
+  const rows = [
+    { url: "https://arxiv.org/abs/1" },
+    { url: "https://news.example.com/a" },
+    { url: "https://blog.example.com/b" },
+  ];
+
+  it("allowlist restrict returns only matching hosts and reports the excluded count", () => {
+    const out = applyDomainPolicy(rows, { include: ["arxiv.org"], mode: "restrict" });
+    expect(out.kept.map((row) => row.url)).toEqual(["https://arxiv.org/abs/1"]);
+    expect(out.excluded).toBe(2);
+  });
+
+  it("allowlist prefer ranks matching hosts first without excluding any", () => {
+    const out = applyDomainPolicy(rows, { include: ["example.com"], mode: "prefer" });
+    expect(out.kept).toHaveLength(3);
+    expect(out.excluded).toBe(0);
+    expect(out.matched).toBe(2);
+    expect(matchesPolicy("https://example.com/x", { include: ["example.com"], mode: "prefer" })).toBe(true);
+    expect(matchesPolicy("https://other.test/x", { include: ["example.com"], mode: "prefer" })).toBe(false);
+  });
+
+  it("matches subdomains and is case-insensitive like the blocklist", () => {
+    const out = applyDomainPolicy(rows, { include: ["EXAMPLE.COM"], mode: "restrict" });
+    expect(out.kept).toHaveLength(2);
+  });
+
+  it("is a no-op with no policy or an empty include list", () => {
+    expect(applyDomainPolicy(rows).kept).toHaveLength(3);
+    expect(applyDomainPolicy(rows, { include: [], mode: "restrict" }).excluded).toBe(0);
   });
 });

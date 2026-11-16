@@ -14,18 +14,6 @@
   `## Scope Non-goals` block in DECISIONS.md.
 -->
 
-## Domain allowlist on `search_web`
-
-- `REQ-020h` is to become one domain-policy contract covering the existing
-  blocklist and a new `include_domains` with `restrict` and `prefer` modes; the
-  rewrite must stay inside Appendix B (≤8 SHALL, ≤800 chars).
-- Filtering goes beside the existing blocklist path, with tests for both modes
-  and for a preference that does not exclude.
-
-**Trigger:** the next search-surface change; close when `include_domains`
-ships with a `@implements` citation and the REQ body records its Appendix B
-counts.
-
 ## Grade a report at ingest
 
 - `REQ-110` is to require a receipt for a `source_type: report` ingest into the

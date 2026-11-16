@@ -73,3 +73,47 @@ export function filterBlocked<T extends { url?: string }>(
   }
   return { kept, blocked };
 }
+
+/** A caller-supplied domain policy: restrict to, or prefer, listed domains. */
+export interface DomainPolicy {
+  include: string[];
+  mode: "restrict" | "prefer";
+}
+
+export interface DomainPolicyResult<T> {
+  kept: T[];
+  /** Results removed by restrict mode. */
+  excluded: number;
+  /** Results matched by the policy (prefer mode ranks these ahead). */
+  matched: number;
+}
+
+/**
+ * REQ-020h: the caller's domain policy, applied on top of the configured
+ * blocklist. `restrict` is a filter; `prefer` is a boost the caller composes
+ * into quality scoring, leaving every result in place so a preference never
+ * turns into an exclusion.
+ */
+export function applyDomainPolicy<T extends { url?: string }>(
+  results: T[],
+  policy?: DomainPolicy,
+): DomainPolicyResult<T> {
+  if (!policy || policy.include.length === 0) return { kept: results, excluded: 0, matched: 0 };
+  const matches = (result: T): boolean => {
+    const host = hostOf(result.url);
+    return host !== null && policy.include.some((pattern) => matchesDomain(host, pattern));
+  };
+  if (policy.mode === "restrict") {
+    const kept = results.filter(matches);
+    return { kept, excluded: results.length - kept.length, matched: kept.length };
+  }
+  const matched = results.filter(matches).length;
+  return { kept: results, excluded: 0, matched };
+}
+
+/** True when the result's host is inside the policy, for prefer-mode boosting. */
+export function matchesPolicy(url: string | undefined, policy?: DomainPolicy): boolean {
+  if (!policy || policy.include.length === 0) return false;
+  const host = hostOf(url);
+  return host !== null && policy.include.some((pattern) => matchesDomain(host, pattern));
+}

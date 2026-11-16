@@ -63,6 +63,7 @@ import { advertisedSchemaBytes, medianOfWindow, type RegisteredTool } from "./to
 import { withTimeout } from "./lib/timeout.js";
 import { buildDirection, ambiguousRequirements, REPORT_AUDIENCES } from "./lib/direction.js";
 import { buildProcessing, processingEntry, processingForUrls } from "./processing.js";
+import { applyDomainPolicy, matchesPolicy, type DomainPolicy } from "./source-quality.js";
 import { extractStructured, extractLinks, isSameOrigin } from "./extract.js";
 import { applyFactsToEnvelope, enrichStructuredFacts } from "./structured-fact.js";
 import { classifyFailure, failureTaxonomy, isCancellation, resolveFetchFallback, type FetchFailure } from "./fetch-fallback.js";
@@ -261,7 +262,8 @@ async function doWebSearch(
   deepBudget?: { remaining: number },
   taskTypeOverride?: string,
   collection?: string,
-  audience?: string
+  audience?: string,
+  domainPolicy?: DomainPolicy
 ): Promise<string> {
   // REQ-020: a union-typed input can arrive as a JSON-encoded array string.
   // Coerce before dispatch so a stringified batch is searched as a batch
@@ -285,7 +287,7 @@ async function doWebSearch(
     const envelopes = await settleBatch(
       queries,
       (q) =>
-        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride, collection),
+        doWebSearch(q, preferredProvider, maxResults, safeSearch, timeRange, page, priority, suggest, contentType, region, language, expand, deep, research, fresh, analyze, deepBudget, taskTypeOverride, collection, undefined, domainPolicy),
       (_q, e) =>
         `[ERROR] ${json(err("none", "internal_error", sanitizeErrorMessage(e instanceof Error ? e.message : String(e)), providerRemediation("Retry the query individually to isolate the failure")))}`,
     );
@@ -352,7 +354,7 @@ async function doWebSearch(
       return doWebSearch(
         variant, preferredProvider, maxResults, safeSearch, timeRange, page,
         priority, false, contentType, region, language, false, true, false, false, false, budget,
-        taskTypeOverride, collection
+        taskTypeOverride, collection, undefined, domainPolicy
       );
     });
     return `[OK] ${json({
@@ -714,13 +716,20 @@ async function doWebSearch(
     filtered = blocked.kept;
     const blockedCount = blocked.blocked;
 
+    // REQ-020h: the caller's domain policy sits on top of the configured
+    // blocklist. Restrict filters; prefer boosts and leaves every result.
+    const domainPolicyResult = applyDomainPolicy(filtered, domainPolicy);
+    filtered = domainPolicyResult.kept;
+
     // REQ-020g/REQ-020h: collapse results expressing the same content across
     // providers and order survivors by semantic relevance adjusted by source
     // quality. With no quality configuration this is the previous behavior.
     const beforeReconcile = filtered.length;
     filtered = reconcileResults(filtered, query, undefined, {
       qualityWeight: sourceQuality?.enabled === false ? 0 : (sourceQuality?.weight ?? 0.15),
-      qualityScore: (result) => qualityScore(result.url, sourceQuality),
+      qualityScore: (result) =>
+        qualityScore(result.url, sourceQuality) +
+        (domainPolicy?.mode === "prefer" && matchesPolicy(result.url, domainPolicy) ? 0.5 : 0),
     });
     // REQ-133: the number reconciliation collapsed is the processing block's
     // collapsed total; per-entry attribution is not recoverable.
@@ -821,6 +830,9 @@ async function doWebSearch(
         direction: direction(chain),
         pages_read: deepMeta.pages_read,
         processing: processingForUrls(deepMeta.results.map((result) => result.url), collapsedCount),
+        ...(domainPolicyResult && (domainPolicyResult.excluded > 0 || domainPolicyResult.matched > 0)
+          ? { include_domains: { mode: domainPolicy?.mode ?? "restrict", matched: domainPolicyResult.matched, excluded: domainPolicyResult.excluded } }
+          : {}),
         ...kbMeta,
         ...(config.source_quality?.enabled !== false ? { blocked_count: blockedCount } : {}),
         ...(analyze && deepMeta.results.length > 0 ? { analysis: analyzeResults(deepMeta.results, config.analysis) } : {}),
@@ -844,6 +856,9 @@ async function doWebSearch(
       ...(analyze && finalResults.length > 0 ? { analysis: analyzeResults(finalResults, config.analysis) } : {}),
       direction: direction(chain),
       processing: processingForUrls(finalResults.map((result) => result.url), collapsedCount),
+      ...(domainPolicyResult && (domainPolicyResult.excluded > 0 || domainPolicyResult.matched > 0)
+        ? { include_domains: { mode: domainPolicy?.mode ?? "restrict", matched: domainPolicyResult.matched, excluded: domainPolicyResult.excluded } }
+        : {}),
       ...(policyNote ?? {}),
     }))}`;
   };
@@ -2058,7 +2073,7 @@ instrumentTool(
   "infobroker_search_web",
   {
     title: "Web Search",
-    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. `audience` records who will read the result and is echoed in `meta.direction` with the executed task type, reading depth, result bound and provider pool. When two task types are equally supported and would reach different providers, the tool returns both candidate requirements with an empty result list (`meta.direction.ambiguous`) instead of searching, so the caller can re-issue with `task_type`. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, area, elevation, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
+    description: "Search the web, encyclopedia, academic, and code sources through one interface with automatic provider selection and a fallback chain. Use when you need broad or batched search, query autocomplete (suggest), query expansion (expand), ranked passages from the top pages (deep), or a multi-variant research compile that deep-reads each variant (research), and optional in-process analysis of the returned results (analyze: topics, entities, clusters, timeline). Do NOT use for a URL you already have (use infobroker_fetch_page), for high-stakes claim verification (use infobroker_verify_claims), for stored-report recall (use infobroker_manage_kb search), or for academic citations (use infobroker_get_citations). Caches results in the local knowledge base, enforces per-provider rate limits, and needs no API key for the free providers. `task_type` forces a dispatch chain (for example academic) when the automatic classification picks the wrong one. `fresh: false` keeps KB-first sufficiency, `fresh: true` skips KB recall and searches external providers, and `fresh: 'blend'` keeps cached KB results alongside fresh external results. `collection` scopes KB recall to a named collection. `audience` records who will read the result and is echoed in `meta.direction` with the executed task type, reading depth, result bound and provider pool. When two task types are equally supported and would reach different providers, the tool returns both candidate requirements with an empty result list (`meta.direction.ambiguous`) instead of searching, so the caller can re-issue with `task_type`. `include_domains` restricts results to or prefers listed domains (`include_domains_mode`: restrict filters, prefer ranks them ahead), on top of the configured blocklist; the response reports the matched and excluded counts. An array `query` is searched in parallel and merged, and a failed element is reported in `meta.per_query` without failing the batch. A measurable attribute (attendance, population, area, elevation, percentage, date) returns a sourced `facts` entry before prose, with `meta.fact_status`. Returns a JSON envelope prefixed `[OK]` or `[ERROR]` with status, provider, results, and meta.",
     inputSchema: {
       query: z.union([z.string().describe("Search query"), z.array(z.string()).max(5).describe("Multiple queries to search in parallel (max 5); a failed element is reported per input without failing the batch")]).describe("Search query: a single string, or up to five strings searched in parallel"),
       provider: z.string().optional().describe("Provider slug (auto-select if omitted)"),
@@ -2078,6 +2093,8 @@ instrumentTool(
       content_type: z.enum(["docs", "issue", "changelog", "blog", "spec", "all"]).optional().default("all").describe("Source kind to search: docs, issue, changelog, blog, spec, or all (default all)"),
       region: z.string().optional().describe("ISO region/country code (e.g. 'us-en', 'DE')"),
       language: z.string().optional().describe("Preferred result language (ISO 639-1, e.g. 'de'). Providers that cannot honor it report it in meta.ignored_params"),
+      include_domains: z.array(z.string()).max(300).optional().describe("Domains to restrict or prefer (max 300). Matching is case-insensitive and a domain matches its subdomains; an empty list is a no-op"),
+      include_domains_mode: z.enum(["restrict", "prefer"]).optional().default("restrict").describe("How include_domains applies: restrict returns only matching hosts, prefer ranks them ahead without excluding any (default restrict)"),
       audience: z.enum(REPORT_AUDIENCES).optional().describe("Who will read the result: executive, analyst, engineer, policy, legal, journalist, or investor. Recorded in the direction block and carried into a report manifest; it calibrates depth and emphasis, never facts"),
     },
     annotations: {
@@ -2109,7 +2126,13 @@ instrumentTool(
       undefined,
       params.task_type as string | undefined,
       params.collection as string | undefined,
-      params.audience as string | undefined
+      params.audience as string | undefined,
+      Array.isArray(params.include_domains) && params.include_domains.length > 0
+        ? {
+            include: params.include_domains as string[],
+            mode: (params.include_domains_mode as "restrict" | "prefer" | undefined) ?? "restrict",
+          }
+        : undefined
     );
     // REQ-021i: a structured-fact query gets a sourced fact before prose.
     const text = await withStructuredFacts(content, params.query);
