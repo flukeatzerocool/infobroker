@@ -32,6 +32,14 @@ export interface SearchResult {
   fact?: StructuredFact;
   published_date?: string;
   source_type?: string;
+  /**
+   * REQ-020k: the provider-declared origin of this result. Three sites populate
+   * it (the generic normalizer's `original_source | origin | source` mapping, a
+   * generic provider's `field_map`, and the Yep provider), so it is not
+   * guaranteed to identify a document: it may be a publisher, a section, or a
+   * feed. Reconciliation derives identity with `originIdentity`, which refuses
+   * anything that does not name a document.
+   */
   original_source?: string;
   /** Canonical URL / content family used for independence checks (REQ-121). */
   source_family?: string;
@@ -92,6 +100,10 @@ export interface ProviderConfig {
     snippet?: string;
     published_date?: string;
     source_type?: string;
+    /**
+     * REQ-020k: the provider-declared origin of a cited source. Same contract as
+     * `SearchResult.original_source`; identity is derived, never assumed.
+     */
     original_source?: string;
     authors?: string;
     doi?: string;
@@ -296,6 +308,10 @@ export interface CorroborationSource {
   modality_marker?: string;
   source_type?: string;
   archived_url?: string;
+  /**
+   * REQ-020k: the origin recorded on a claim source. Carried forward from a
+   * search result or citation; identity is derived, never assumed.
+   */
   original_source?: string;
   /** ISO time the source was first attributed to this claim (REQ-109). */
   retrieved_at?: string;

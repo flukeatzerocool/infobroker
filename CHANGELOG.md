@@ -2,6 +2,17 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- `original_source` now has a contract and a derived identity. Three paths
+  populate the field and none promised a document, so reconciliation could not
+  group on it. A committed inventory names every producer, declaration, and
+  reference, and a test fails when a source file mentions the field without
+  being listed, so the inventory cannot rot (REQ-020k). `originIdentity`
+  accepts only an http(s) URL with a non-root path, case-folds the host, keeps
+  the path verbatim, and strips tracking query strings, fragments, and section
+  or feed suffixes; a site root is a publisher and yields no identity. The
+  inventory finds a document-identifying origin at the Yep provider, so
+  grouping in the reconciler proceeds (D-145).
+
 - Retrieved text is now marked as data. The security model named a residual
   risk: fetched page text reached the client indistinguishable from the server's
   own output, so an agent had nothing to tell a page body from an instruction

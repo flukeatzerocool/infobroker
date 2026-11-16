@@ -2900,3 +2900,22 @@ control; a delimiter that survives only below the truncation bound is not. `raw`
 mode therefore returns its body verbatim and carries the marker on the structured
 side, per REQ-001's plain-text clause. The residual narrows to a client that
 ignores the marker, which no server-side marker can fix.
+
+### D-145: Identity Is Derived, Never Trusted (2026-11-16)
+
+Grouping results by `original_source` was deferred because the field has three
+producer paths and no contract (D-139). The inventory asked by the roadmap is now
+committed: two extract sites, one of them the generic normalizer's
+`original_source | origin | source` mapping, one the configured `field_map`, one
+the Yep provider's `source.url | site | name`; two merge sites carry the value
+forward. A test reads every source file, classifies each mention as producer,
+declaration, or reference, and fails when a new mention appears unclassified.
+
+The rule derived from that inventory is deliberately narrow. Accept only http(s);
+require a non-empty, non-root path, because a site root names a publisher and
+grouping two articles by their publisher would merge distinct documents; case-fold
+the host but preserve the path, because two case-different paths can be two
+documents; drop query strings, fragments, and section or feed suffixes
+(`/feed`, `/amp`, `/print`, `/rss`, `.rss`, `atom.xml`) because they change how a
+document is served, not which document it is. The Yep producer satisfies the
+roadmap trigger, so the reconciler can group by identity in the next increment.
