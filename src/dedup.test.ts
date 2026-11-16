@@ -178,3 +178,55 @@ describe("reconcileResults snippet basis (REQ-020j)", () => {
     expect(out).toHaveLength(1);
   });
 });
+
+// @implements REQ-020k origin-grouping
+describe("origin grouping (REQ-020k)", () => {
+  function withOrigin(title: string, url: string, snippet: string, origin: string): SearchResult {
+    return { ...r(title, url, snippet), original_source: origin, provider: "p" };
+  }
+
+  it("collapses two URLs that name the same document, whatever their text says", () => {
+    const results = [
+      withOrigin("Solar output rises", "https://a.com/news/1", "Panel efficiency improved across the board", "https://pub.example/story"),
+      withOrigin("Different headline entirely", "https://b.com/syndicated", "An unrelated-looking snippet body", "https://pub.example/story/amp"),
+      r("Sourdough baking", "https://c.com/3", "How to bake sourdough bread at home"),
+    ];
+    const out = reconcileResults(results, "solar panel efficiency");
+    expect(out).toHaveLength(2);
+    const kept = out.find((x) => x.original_source?.includes("pub.example"));
+    expect(kept?.providers).toEqual(["p"]);
+    expect(out.some((x) => x.url === "https://b.com/syndicated")).toBe(false);
+  });
+
+  it("keeps two distinct documents from one publisher apart", () => {
+    const results = [
+      withOrigin("Story one", "https://a.com/1", "first article body text here", "https://pub.example/one"),
+      withOrigin("Story two", "https://b.com/2", "second article body text here", "https://pub.example/two"),
+    ];
+    expect(reconcileResults(results, "article body")).toHaveLength(2);
+  });
+
+  it("does not group by a publisher root", () => {
+    const results = [
+      withOrigin("Story one", "https://a.com/1", "first article body text here", "https://pub.example"),
+      withOrigin("Story two", "https://b.com/2", "second article body text here", "https://pub.example/"),
+    ];
+    expect(reconcileResults(results, "article body")).toHaveLength(2);
+  });
+
+  it("treats a path case difference as two documents", () => {
+    const results = [
+      withOrigin("Story", "https://a.com/1", "first article body text here", "https://pub.example/Story"),
+      withOrigin("Story", "https://b.com/2", "second article body text here", "https://pub.example/story"),
+    ];
+    expect(reconcileResults(results, "article body")).toHaveLength(2);
+  });
+
+  it("keeps a result with no identity in its own group", () => {
+    const results = [
+      withOrigin("One", "https://a.com/1", "first article body text here", "not a url"),
+      withOrigin("Two", "https://b.com/2", "second article body text here", "not a url"),
+    ];
+    expect(reconcileResults(results, "article body")).toHaveLength(2);
+  });
+});

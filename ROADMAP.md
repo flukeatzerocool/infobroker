@@ -19,9 +19,3 @@
 Open-web scope boundary; the authoritative list lives in `DECISIONS.md`
 under `## Scope Non-goals`.
 
-## Reconciler origin grouping
-
-- Inventory every producer of `original_source` (the generic normalizer mapping, `field_map`, provider fallbacks) and define a value that identifies a document rather than a publisher, section, or feed.
-- Group results by that value before similarity, with a rule for section and feed URLs and for path case.
-
-**Trigger:** the inventory shows `original_source` carries a document-identifying URL for at least one enabled provider.

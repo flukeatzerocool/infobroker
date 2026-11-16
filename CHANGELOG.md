@@ -2,6 +2,15 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- Results that name the same document now collapse before similarity runs.
+  Reconciliation compared titles and snippets, so a feed or AMP variant of one
+  story survived as a second result, and the boilerplate that made those
+  variants look different is exactly what defeats similarity. Two results that
+  share a derived document identity now collapse with their providers and
+  original source preserved (REQ-020k), while two articles from one publisher
+  and two case-different paths stay apart (D-146). Processing holds 1.000
+  recall and precision over 8 cases and the retrieval baseline does not move.
+
 - `original_source` now has a contract and a derived identity. Three paths
   populate the field and none promised a document, so reconciliation could not
   group on it. A committed inventory names every producer, declaration, and

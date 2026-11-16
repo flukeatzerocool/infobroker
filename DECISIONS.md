@@ -2919,3 +2919,21 @@ documents; drop query strings, fragments, and section or feed suffixes
 (`/feed`, `/amp`, `/print`, `/rss`, `.rss`, `atom.xml`) because they change how a
 document is served, not which document it is. The Yep producer satisfies the
 roadmap trigger, so the reconciler can group by identity in the next increment.
+
+### D-146: Group by Identity Before Similarity, and Never by Publisher (2026-11-16)
+
+A feed, AMP, or tracking-parameter variant of a story is the same document served
+differently, but reconciliation compared titles and snippets, and the boilerplate
+those variants add is what pushes similarity below the collapse threshold. The
+reconciler now derives a document identity (D-145) and collapses a shared identity
+first, before any content comparison, merging the contributing providers and
+preserving the original source. The ordering is deliberate: identity is a stronger
+signal than content similarity, and running similarity first would let a variant
+survive on the very boilerplate that made the grouping necessary.
+
+The negative half matters as much. A publisher root yields no identity, so two
+articles from one outlet never merge; a path case difference is two documents; a
+malformed or non-http value is a group of one. Grouping therefore never reduces
+the count of genuinely distinct results, so REQ-020g's requested-maximum guarantee
+is untouched. Processing measures 1.000 recall, 1.000 precision, and 1.000
+collapsed-total accuracy over 8 cases; the retrieval baseline is unchanged.

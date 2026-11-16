@@ -7,6 +7,7 @@
 // automatic fallback on small result sets.
 import type { SearchResult } from "./types.js";
 import { identityTokens, pairwiseSimilarity, rankDocs, tokenize } from "./embed.js";
+import { originIdentity } from "./origin-identity.js";
 
 export const DEFAULT_DEDUP_THRESHOLD = 0.85;
 
@@ -128,6 +129,15 @@ export function reconcileResults(
 
   const order = orderedIndexes(results, query, qualityOf, qualityWeight);
 
+  // REQ-020k: a shared document identity collapses before any content
+  // comparison. Two URLs that name the same document — a feed or section
+  // variant, a tracking parameter, a case-folded host — are the same result
+  // even when their titles and snippets differ, and similarity across them is
+  // defeated by exactly the boilerplate that made the suffix rule necessary.
+  // A value that yields no identity (a site root, a malformed string) groups
+  // with nothing.
+  const originIds = results.map((result) => originIdentity(result.original_source));
+
   // REQ-020j: a second acceptance path. A reheadlined syndication of the same
   // body falls below threshold on title-plus-snippet alone, so the snippets are
   // compared as a basis in their own right — guarded by an identifying-value
@@ -160,6 +170,14 @@ export function reconcileResults(
   for (const i of order) {
     if (drop.has(i)) continue;
     const keep = { ...results[i] };
+    const identity = originIds[i];
+    if (identity) {
+      for (let j = 0; j < results.length; j++) {
+        if (j === i || drop.has(j) || originIds[j] !== identity) continue;
+        mergeProvenance(keep, results[j]);
+        drop.add(j);
+      }
+    }
     for (let j = 0; j < results.length; j++) {
       if (j === i || drop.has(j)) continue;
       if (sim[i][j] >= threshold || snippetMatches(i, j)) {
