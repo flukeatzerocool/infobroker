@@ -23,9 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Pinned to commit SHAs (not floating tags) so a compromised or moved
-      # action tag cannot inject code into the publish job.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # action tag cannot inject code into the publish job. Both majors run on
+      # the Node 24 runner runtime; the older v4 pins ran on Node 20 unless
+      # forced, and the v4 setup-node rejected `package-manager-cache`, so the
+      # cache setting below did nothing but warn.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
@@ -74,39 +77,58 @@ jobs:
       - name: Publish to npm
         if: steps.check.outputs.should_publish == 'true'
         run: npm publish --provenance --access public
-      # npm's write side returns before its read side serves the new version
-      # (observed ~2 min). The MCP Registry validates server.json against npm,
-      # so publishing too early 400s. Wait until npm actually serves it.
-      - name: Wait for npm to serve the new version
-        if: steps.check.outputs.should_publish == 'true'
-        env:
-          VERSION: ${{ steps.check.outputs.local_version }}
-        run: |
-          for i in $(seq 1 30); do
-            if npm view "infobroker@${VERSION}" version >/dev/null 2>&1; then
-              echo "npm is serving infobroker@${VERSION}."
-              exit 0
-            fi
-            echo "attempt ${i}: npm not serving infobroker@${VERSION} yet; sleeping 10s."
-            sleep 10
-          done
-          echo "Timed out waiting for npm to serve infobroker@${VERSION}." >&2
-          exit 1
+      # npm's publish is asynchronous: the CLI returns immediately with "Your
+      # package is being processed and may take a few minutes to become
+      # available", and the read side then serves the version after a lag with
+      # a long tail — observed from ~2 min up to 5m18s (run 43947605837 gave up
+      # at 5m00s and npm went green 2s later, failing a release npm had already
+      # accepted). The MCP Registry validates server.json against npm, so "npm
+      # not serving yet" is a retry condition, not a failure. The wait and the
+      # publish therefore share one bounded budget with a long tail instead of
+      # a fixed pre-wait that can expire before the publish is even attempted.
       - name: Publish to MCP Registry
         if: steps.mcpcheck.outputs.mcp_should_publish == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.local_version }}
+          # Propagation budget in probes: SHORT_ATTEMPTS at SHORT_DELAY, then
+          # the remainder at LONG_DELAY — 60 probes here ≈ 26 minutes. The
+          # schedule is data, not prose, so scripts/publish-workflow.test.ts
+          # can assert the total never drops below its 15-minute floor; the
+          # 5-minute window that failed on 2026-11-16 was under that floor.
+          WAIT_ATTEMPTS: 60
+          SHORT_ATTEMPTS: 11
+          SHORT_DELAY: 10
+          LONG_DELAY: 30
         run: |
+          wait_for_npm() {
+            local attempt delay
+            for attempt in $(seq 1 "$WAIT_ATTEMPTS"); do
+              if npm view "infobroker@${VERSION}" version >/dev/null 2>&1; then
+                echo "npm is serving infobroker@${VERSION} (probe ${attempt})."
+                return 0
+              fi
+              if [ "$attempt" -le "$SHORT_ATTEMPTS" ]; then delay=$SHORT_DELAY; else delay=$LONG_DELAY; fi
+              echo "probe ${attempt}/${WAIT_ATTEMPTS}: npm is not serving infobroker@${VERSION} yet; sleeping ${delay}s."
+              sleep "$delay"
+            done
+            echo "::error::npm never served infobroker@${VERSION} within the propagation budget." >&2
+            return 1
+          }
+
+          wait_for_npm || exit 1
+
           # mcp-publisher is a pre-built binary; install then publish.
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
           chmod +x mcp-publisher
           ./mcp-publisher login github-oidc
-          # Belt-and-braces: even after the wait step, registry-side npm
-          # propagation can lag. Retry the publish with backoff.
-          for i in $(seq 1 5); do
+          # Registry-side validation can still lag behind npm's read side, so
+          # retry the publish itself on top of the propagation wait.
+          for attempt in $(seq 1 5); do
             if ./mcp-publisher publish server.json; then
               exit 0
             fi
-            echo "MCP Registry publish attempt ${i} failed; retrying in 15s." >&2
+            echo "MCP Registry publish attempt ${attempt} failed; retrying in 15s." >&2
             sleep 15
           done
-          echo "MCP Registry publish failed after 5 attempts." >&2
+          echo "::error::MCP Registry publish failed after 5 attempts." >&2
           exit 1
