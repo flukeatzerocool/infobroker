@@ -639,6 +639,346 @@
           "snippet": "Audit, liability and model-change clauses."
         }
       ]
+    },
+    {
+      "id": "heat-pump-cold-climate",
+      "query": "heat pump performance in cold climates",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://energy.example.org/heat-pump-cold",
+          "grade": 2
+        },
+        {
+          "url": "https://hvac.example.com/cold-weather",
+          "grade": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "Boiler efficiency ratings",
+          "url": "https://hvac.example.net/boilers",
+          "snippet": "Seasonal efficiency of condensing boilers."
+        },
+        {
+          "title": "Home insulation grants",
+          "url": "https://gov.example.org/insulation",
+          "snippet": "Grant thresholds for cavity and solid walls."
+        },
+        {
+          "title": "Refrigerant phase-out",
+          "url": "https://hvac.example.net/refrigerant",
+          "snippet": "F-gas rules and replacement schedules."
+        },
+        {
+          "title": "Solar thermal payback",
+          "url": "https://energy.example.com/solar-thermal",
+          "snippet": "Payback periods by climate zone."
+        },
+        {
+          "title": "Smart thermostat review",
+          "url": "https://gadget.example.com/thermostat",
+          "snippet": "A review of programmable thermostats."
+        },
+        {
+          "title": "Cold-climate heat pumps",
+          "url": "https://energy.example.org/heat-pump-cold",
+          "snippet": "Capacity retention and defrost cycles below -10C."
+        },
+        {
+          "title": "District heating networks",
+          "url": "https://city.example.net/district",
+          "snippet": "Network economics for dense housing."
+        },
+        {
+          "title": "Cold weather operation",
+          "url": "https://hvac.example.com/cold-weather",
+          "snippet": "Field data on heat pump output in freezing conditions."
+        },
+        {
+          "title": "Heat pump noise complaints",
+          "url": "https://news.example.com/noise",
+          "snippet": "Planning disputes over outdoor unit noise."
+        }
+      ]
+    },
+    {
+      "id": "coral-restoration-costs",
+      "query": "coral reef restoration cost per hectare",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://marine.example.org/restoration-costs",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Dive tourism revenue",
+          "url": "https://tourism.example.com/dive",
+          "snippet": "Reef tourism receipts by region."
+        },
+        {
+          "title": "Nursery propagation methods",
+          "url": "https://marine.example.net/nursery",
+          "snippet": "Coral fragment growth rates."
+        },
+        {
+          "title": "Restoration cost per hectare",
+          "url": "https://marine.example.org/restoration-costs",
+          "snippet": "Costed projects across three reef systems."
+        },
+        {
+          "title": "Fish stock assessments",
+          "url": "https://fisheries.example.org/stock",
+          "snippet": "Quota advice for reef species."
+        },
+        {
+          "title": "Bleaching monitoring",
+          "url": "https://marine.example.org/bleaching",
+          "snippet": "Degree-heating week records."
+        },
+        {
+          "title": "Marine protected areas",
+          "url": "https://policy.example.net/mpa",
+          "snippet": "Enforcement costs and outcomes."
+        },
+        {
+          "title": "Artificial reef structures",
+          "url": "https://engineering.example.com/reef",
+          "snippet": "Concrete module deployment."
+        },
+        {
+          "title": "Volunteer diver programmes",
+          "url": "https://ngo.example.org/volunteers",
+          "snippet": "Programme logistics and funding."
+        }
+      ]
+    },
+    {
+      "id": "grid-storage-arbitrage",
+      "query": "battery storage arbitrage revenue stack",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://energy.example.net/revenue-stack",
+          "grade": 2
+        },
+        {
+          "url": "https://markets.example.org/arbitrage",
+          "grade": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "Capacity market rules",
+          "url": "https://markets.example.net/capacity",
+          "snippet": "Auction parameters and de-rating."
+        },
+        {
+          "title": "Ancillary service prices",
+          "url": "https://markets.example.org/ancillary",
+          "snippet": "Frequency response clearing prices."
+        },
+        {
+          "title": "Revenue stacking",
+          "url": "https://energy.example.net/revenue-stack",
+          "snippet": "How wholesale, capacity and ancillary revenues combine."
+        },
+        {
+          "title": "Lithium price outlook",
+          "url": "https://materials.example.com/lithium",
+          "snippet": "Supply and demand forecasts."
+        },
+        {
+          "title": "Interconnection delays",
+          "url": "https://grid.example.org/queues",
+          "snippet": "Queue durations by region."
+        },
+        {
+          "title": "Arbitrage spreads",
+          "url": "https://markets.example.org/arbitrage",
+          "snippet": "Daily price spreads in four markets."
+        },
+        {
+          "title": "Fire safety standards",
+          "url": "https://standards.example.net/bess",
+          "snippet": "Thermal runaway testing requirements."
+        },
+        {
+          "title": "Degradation curves",
+          "url": "https://materials.example.net/degradation",
+          "snippet": "Capacity fade by chemistry and cycle count."
+        },
+        {
+          "title": "Ofgem licensing",
+          "url": "https://regulator.example.org/licence",
+          "snippet": "Licence conditions for storage operators."
+        }
+      ]
+    },
+    {
+      "id": "vaccine-cold-chain",
+      "query": "vaccine cold chain failure rates",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://health.example.org/cold-chain",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Immunisation coverage",
+          "url": "https://health.example.net/coverage",
+          "snippet": "Coverage estimates by district."
+        },
+        {
+          "title": "Cold chain failure rates",
+          "url": "https://health.example.org/cold-chain",
+          "snippet": "Excursion frequency and stock losses."
+        },
+        {
+          "title": "Vial wastage",
+          "url": "https://health.example.net/wastage",
+          "snippet": "Open-vial policy effects."
+        },
+        {
+          "title": "Solar direct-drive fridges",
+          "url": "https://engineering.example.com/sdd",
+          "snippet": "Off-grid refrigeration performance."
+        },
+        {
+          "title": "Training curricula",
+          "url": "https://training.example.org/epi",
+          "snippet": "Field epidemiology modules."
+        },
+        {
+          "title": "Seroprevalence surveys",
+          "url": "https://health.example.org/sero",
+          "snippet": "Antibody prevalence by age band."
+        },
+        {
+          "title": "Procurement lead times",
+          "url": "https://supply.example.net/leadtimes",
+          "snippet": "Tender-to-delivery intervals."
+        },
+        {
+          "title": "Temperature loggers",
+          "url": "https://devices.example.com/loggers",
+          "snippet": "Logger accuracy and calibration."
+        }
+      ]
+    },
+    {
+      "id": "school-air-quality",
+      "query": "classroom ventilation and student performance",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://buildings.example.org/ventilation",
+          "grade": 2
+        },
+        {
+          "url": "https://journal.example.net/co2-attention",
+          "grade": 1
+        }
+      ],
+      "results": [
+        {
+          "title": "Absence and attainment",
+          "url": "https://education.example.com/absence",
+          "snippet": "Attendance and exam outcomes."
+        },
+        {
+          "title": "Class size effects",
+          "url": "https://education.example.net/class-size",
+          "snippet": "Evidence on pupil-teacher ratios."
+        },
+        {
+          "title": "CO2 and attention",
+          "url": "https://journal.example.net/co2-attention",
+          "snippet": "Cognitive test scores against indoor CO2."
+        },
+        {
+          "title": "Building regulations",
+          "url": "https://buildings.example.net/regs",
+          "snippet": "Ventilation requirements for new schools."
+        },
+        {
+          "title": "Ventilation retrofits",
+          "url": "https://buildings.example.org/ventilation",
+          "snippet": "Measured ventilation rates after retrofit."
+        },
+        {
+          "title": "Acoustic design",
+          "url": "https://buildings.example.com/acoustics",
+          "snippet": "Reverberation targets in classrooms."
+        },
+        {
+          "title": "Heating costs",
+          "url": "https://energy.example.net/school-heating",
+          "snippet": "Energy spend per pupil."
+        },
+        {
+          "title": "Teacher workload",
+          "url": "https://education.example.org/workload",
+          "snippet": "Survey of hours worked."
+        }
+      ]
+    },
+    {
+      "id": "microplastics-drinking-water",
+      "query": "microplastics removal in drinking water treatment",
+      "language": "en",
+      "judgments": [
+        {
+          "url": "https://water.example.org/microplastics",
+          "grade": 2
+        }
+      ],
+      "results": [
+        {
+          "title": "Pipe leak detection",
+          "url": "https://water.example.net/leaks",
+          "snippet": "Acoustic leak surveying."
+        },
+        {
+          "title": "Microplastics removal",
+          "url": "https://water.example.org/microplastics",
+          "snippet": "Coagulation and filtration removal efficiency."
+        },
+        {
+          "title": "Disinfection by-products",
+          "url": "https://water.example.net/dbps",
+          "snippet": "Trihalomethane formation."
+        },
+        {
+          "title": "Reservoir management",
+          "url": "https://water.example.com/reservoirs",
+          "snippet": "Abstraction licensing."
+        },
+        {
+          "title": "Lead service lines",
+          "url": "https://water.example.com/lead",
+          "snippet": "Replacement programmes."
+        },
+        {
+          "title": "Bottled water consumption",
+          "url": "https://market.example.org/bottled",
+          "snippet": "Per-capita sales."
+        },
+        {
+          "title": "Wastewater reuse",
+          "url": "https://water.example.org/reuse",
+          "snippet": "Potable reuse treatment trains."
+        },
+        {
+          "title": "Algal bloom treatment",
+          "url": "https://water.example.net/algae",
+          "snippet": "Toxin removal options."
+        }
+      ]
     }
   ]
 }

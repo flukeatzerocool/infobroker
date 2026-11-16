@@ -1,18 +1,18 @@
 {
   "version": 1,
   "k": 5,
-  "corpus": 20,
+  "corpus": 26,
   "reconciled": {
-    "mean_precision": 0.558,
+    "mean_precision": 0.498,
     "mean_recall": 1,
-    "mrr": 0.963,
-    "ndcg": 0.947
+    "mrr": 0.971,
+    "ndcg": 0.941
   },
   "raw": {
-    "mean_precision": 0.54,
-    "mean_recall": 0.975,
-    "mrr": 0.704,
-    "ndcg": 0.761
+    "mean_precision": 0.462,
+    "mean_recall": 0.923,
+    "mrr": 0.619,
+    "ndcg": 0.686
   },
   "cases": [
     {
@@ -193,6 +193,60 @@
       "mrr": 1,
       "ndcg_at_k": 1,
       "returned": 2,
+      "relevant": 1
+    },
+    {
+      "id": "heat-pump-cold-climate",
+      "precision_at_k": 0.4,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 0.7967075809905066,
+      "returned": 9,
+      "relevant": 2
+    },
+    {
+      "id": "coral-restoration-costs",
+      "precision_at_k": 0.2,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 8,
+      "relevant": 1
+    },
+    {
+      "id": "grid-storage-arbitrage",
+      "precision_at_k": 0.4,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 0.7967075809905066,
+      "returned": 9,
+      "relevant": 2
+    },
+    {
+      "id": "vaccine-cold-chain",
+      "precision_at_k": 0.2,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 8,
+      "relevant": 1
+    },
+    {
+      "id": "school-air-quality",
+      "precision_at_k": 0.4,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 0.944847956559586,
+      "returned": 8,
+      "relevant": 2
+    },
+    {
+      "id": "microplastics-drinking-water",
+      "precision_at_k": 0.2,
+      "recall_at_k": 1,
+      "mrr": 1,
+      "ndcg_at_k": 1,
+      "returned": 8,
       "relevant": 1
     }
   ]

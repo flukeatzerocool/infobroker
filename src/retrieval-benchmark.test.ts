@@ -80,6 +80,14 @@ describe("retrieval baseline binding (F-R5-F-2)", () => {  const report = runBen
   it("records the raw (unreconciled) aggregates the floor is compared against", () => {
     expect(baseline.raw).toEqual(report.raw);
   });
+
+  // REQ-130 falsifiability: recall@k can fall, and reconciliation is what lifts
+  // it. Comparing the report's own aggregates proves the metric moves without
+  // degrading the corpus to manufacture a failure.
+  it("proves recall can fall by comparing raw order against reconciliation", () => {
+    expect(report.raw.mean_recall).toBeLessThan(report.reconciled.mean_recall);
+    expect(report.reconciled.mean_recall).toBeGreaterThanOrEqual(baseline.reconciled.mean_recall - 0.001);
+  });
 });
 
 // @implements REQ-130 reconciler-failure
