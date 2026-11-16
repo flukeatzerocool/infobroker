@@ -2,6 +2,15 @@
 
 ## 2026.11.14 — Corroboration routing and provenance fidelity
 
+- The KB-first relevance floor stays at 0.3, and the measurement says why. The
+  sufficiency benchmark can now separate "a cross-topic chunk rode along" from
+  "unrelated content satisfied sufficiency", and at both chunk scales the second
+  count is zero: the single cross-topic admission sits beside a relevant top
+  result. Zeroing it would need a floor of 0.34, measured at a recall cost of
+  3.8 points at snippet scale and 19 points at page scale, so the shipped value
+  is unchanged and a test pins the measured outcome rather than the number
+  (D-143). The roadmap item closes as measured, not met.
+
 - KB-first sufficiency is now measured. Retrieved chunks were ranked by a
   score that divides matched occurrences by text length, and a threshold of 0.3
   was hand-set with no evidence about what it admitted. A benchmark seeds a temp

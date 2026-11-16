@@ -36,7 +36,7 @@ a gate proves; "measurement" is what can regress and be caught.
 | Function | Runtime surface | Gate evidence | Measurement |
 |---|---|---|---|
 | Direction | `search_web` direction block, incl. the deferred choice | `check-tdqs`, Arena, `test-fixtures/direction` | REQ-135: offer rate, false-offer rate, slot recall |
-| Collection | `search_web`, `fetch_page`, `get_citations`, `inspect_providers` | Arena, `check-tdqs` | REQ-130: precision/recall/MRR/nDCG over 26 cases; REQ-076b: KB-first admission — 4.8% of admitted chunks are cross-topic at snippet scale, 0% at page scale |
+| Collection | `search_web`, `fetch_page`, `get_citations`, `inspect_providers` | Arena, `check-tdqs` | REQ-130: precision/recall/MRR/nDCG over 26 cases; REQ-076b: KB-first admission — 4.8% of admitted snippet-scale chunks are cross-topic, 0% at page scale, and no case is made sufficient by unrelated content (26 cases) |
 | Processing and exploitation | `meta.processing` on search and fetch (no tool of its own) | Arena, `check-gate-coverage` | REQ-136/REQ-020j: dedup recall/precision and collapse-total accuracy over 8 cases |
 | Analysis and production | `verify_claims`, `search_web (analyze)` | Arena, `check-gate-coverage` | REQ-123: Brier score and reliability curve over the documented gold set |
 | Dissemination | `manage_kb` ingest with a required receipt and grade; the report itself is client-authored | `check-report-fixtures`, `check-gate-coverage` | REQ-134: structural grade and offline grounding score |

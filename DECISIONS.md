@@ -2855,3 +2855,25 @@ First run: 4.8% of snippet-scale admissions are cross-topic, 0% at page scale,
 no admission rests on a single token, and sufficiency recall is 0.69 (snippet) /
 0.50 (page). The item's trigger has fired at snippet scale, so the relevance-floor
 increment proceeds against this baseline.
+
+### D-143: The KB-First Floor Stays at 0.3 Because Unrelated Content Never Satisfies Sufficiency Alone (2026-11-16)
+
+The measurement added in D-142 admits one cross-topic chunk at snippet scale
+(4.76% of admitted instances, score 0.3396 against a relevant top at 0.4795) and
+none at page scale. The question the roadmap asked is narrower than that number:
+does a binary or unrelated chunk *satisfy* KB-first sufficiency? The benchmark now
+answers it directly — a case counts only when every admitted chunk is cross-topic
+or unjudged and none is relevant. That count is zero at both chunk scales.
+
+A five-point sweep of the relevance floor shows what removing the incidental
+admission would cost: 0.34 is the lowest threshold that zeroes the instance-level
+rate, and it moves sufficiency recall from 0.692 to 0.654 at snippet scale and
+from 0.500 to 0.308 at page scale. Paying 19 recall points at page scale to drop a
+row that arrives beside a relevant result is the wrong trade, and the roadmap's
+own trigger was the case-level condition, not the instance-level one.
+
+The shipped floor therefore stays 0.3. The decision is pinned by a test rather than
+by a comment: `src/kb-sufficiency-benchmark.test.ts` reads the shipped
+`config.json` values, runs the measurement, and fails if any case becomes
+sufficient on non-relevant chunks alone. A future floor change must show a
+non-zero case-level count and record its recall cost.

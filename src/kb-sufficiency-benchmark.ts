@@ -77,6 +77,13 @@ export interface SufficiencyReport {
   binary_hit_admitted: number;
   /** Cases whose highest-ranked admitted chunk is a cross-topic document. */
   cases_with_irrelevant_top: number;
+  /**
+   * The roadmap's trigger condition: cases where KB-first sufficiency is
+   * satisfied on chunks that are all cross-topic or unjudged — no relevant
+   * document among them. A non-zero count means unrelated content alone
+   * replaced external search.
+   */
+  cases_sufficient_on_non_relevant: number;
 }
 
 function fixturePath(name: string): string {
@@ -244,6 +251,9 @@ export function runSufficiencyBenchmark(
         sufficiency_recall: recallDenominator === 0 ? 0 : Number((recallNumerator / recallDenominator).toFixed(4)),
         binary_hit_admitted: binaryHits,
         cases_with_irrelevant_top: irrelevantTop,
+        cases_sufficient_on_non_relevant: caseReports.filter(
+          (entry) => entry.admitted > 0 && entry.labels.relevant === 0,
+        ).length,
       });
     } finally {
       if (!options.keepStore) rmSync(root, { recursive: true, force: true });

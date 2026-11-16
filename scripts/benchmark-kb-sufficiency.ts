@@ -34,6 +34,7 @@ function summary(report: SufficiencyReport): string {
     `  sufficiency_recall=${report.sufficiency_recall}`,
     `  binary_hit_admitted=${report.binary_hit_admitted}`,
     `  cases_with_irrelevant_top=${report.cases_with_irrelevant_top}`,
+    `  cases_sufficient_on_non_relevant=${report.cases_sufficient_on_non_relevant}`,
   ];
   const flagged = report.cases.filter((entry) => entry.top_label === "irrelevant");
   for (const entry of flagged) {

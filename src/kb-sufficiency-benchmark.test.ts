@@ -1,8 +1,10 @@
 // @implements REQ-076b measurement
+// @implements REQ-076b judged-population
+// @implements REQ-076b shipped-floor
 // The sufficiency benchmark must score the server's own admission predicate,
 // must be able to fail, and must not leak its internal evidence field.
 import { beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -105,6 +107,28 @@ describe("KB-first sufficiency measurement", () => {
       expect(projected[0]!.source_url).toBe("https://q.example/1");
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+
+  it("keeps the shipped floor: no case is made sufficient by unrelated content alone", () => {
+    // REQ-076b shipped-floor: the shipped thresholds must never let cross-topic
+    // or unjudged chunks satisfy sufficiency on their own. Raising the floor to
+    // 0.34 would zero the instance-level cross-topic admission at a measured
+    // recall cost (snippet 0.654, page 0.308), so the shipped value stays 0.3
+    // and this assertion is what keeps that decision honest (D-143).
+    const shipped = JSON.parse(
+      readFileSync(join(import.meta.dirname, "..", "config.json"), "utf8"),
+    ) as { kb: { kb_first_relevance_threshold: number; kb_first_confidence_threshold: number } };
+    const reports = runSufficiencyBenchmark({
+      kb: {
+        kb_first_relevance_threshold: shipped.kb.kb_first_relevance_threshold,
+        kb_first_confidence_threshold: shipped.kb.kb_first_confidence_threshold,
+      },
+      scales: ["snippet", "page"],
+    });
+    expect(shipped.kb.kb_first_relevance_threshold).toBe(0.3);
+    for (const report of reports) {
+      expect(report.cases_sufficient_on_non_relevant, `scale ${report.scale}`).toBe(0);
     }
   }, TIMEOUT);
 
