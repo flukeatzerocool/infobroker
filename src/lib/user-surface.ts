@@ -74,6 +74,10 @@ export interface Finding {
 }
 
 /** Feature groups an audience persona is expected to cover. */
+// Audience-facing §D groups. This is a separate declaration from
+// feature-taxonomy.ts's USER_FACING_GROUPS, which drives README coverage; both
+// exclude group 11 (Processing & Provenance), a cross-cutting response contract
+// no persona is written against.
 export const AUDIENCE_GROUPS = [1, 2, 3, 4, 5, 7] as const;
 
 /** Groups that are cross-cutting rather than a single audience. */
@@ -151,6 +155,33 @@ export function specFunctions(specText: string): SpecFunctions {
     if (name) functions.push(name);
   }
   return { functions, hasEvidenceColumn };
+}
+
+/**
+ * The REQ ids each §1 function row cites in its Evidence cell. The column is
+ * prose ("§7 dispatch; REQ-020a, ..."), so only REQ ids are read. A citation
+ * that resolves nowhere, or that appears under two functions, makes §1's parity
+ * claim unverifiable — the defect this check exists to catch.
+ */
+export function functionEvidence(specText: string): Array<{ fn: string; reqs: string[] }> {
+  const start = specText.indexOf("## §1 Mission and Capability Model");
+  if (start === -1) return [];
+  const rest = specText.slice(start);
+  const next = /^## /m.exec(rest.slice(4));
+  const section = next ? rest.slice(0, 4 + next.index) : rest;
+  const lines = section.split("\n");
+  const headerIndex = lines.findIndex((line) => /^\|\s*Function\s*\|/i.test(line));
+  if (headerIndex === -1) return [];
+  const out: Array<{ fn: string; reqs: string[] }> = [];
+  for (const line of lines.slice(headerIndex + 2)) {
+    if (!line.trim().startsWith("|")) break;
+    const cells = line.split("|").map((cell) => cell.trim());
+    const fn = (cells[1] ?? "").replace(/\*\*/g, "").trim();
+    if (!fn) continue;
+    const reqs = [...(cells[3] ?? "").matchAll(/REQ-\d{3}[a-z]?/g)].map((m) => m[0]);
+    out.push({ fn, reqs });
+  }
+  return out;
 }
 
 /** Every second-level key under the declared register sections. */
@@ -327,6 +358,33 @@ export function checkUserSurface(input: UserSurfaceInput): Finding[] {
         code: "function-missing",
         message: `§1 function "${fn}" has no row in the goal-evidence matrix`,
       });
+    }
+  }
+
+  // A §1 Evidence citation must resolve to a §D primary home, and one REQ may
+  // not be claimed by two functions: either case makes the parity claim
+  // unverifiable while the table still looks complete.
+  const homeOf = new Map<string, number>();
+  for (const row of taxonomy) {
+    for (const req of row.reqs) homeOf.set(req, row.group);
+  }
+  const claimedBy = new Map<string, string>();
+  for (const row of functionEvidence(input.specText)) {
+    for (const req of row.reqs) {
+      if (!homeOf.has(req)) {
+        findings.push({
+          code: "evidence-unknown-req",
+          message: `§1 function "${row.fn}" cites ${req}, which has no §D primary home`,
+        });
+      }
+      const prior = claimedBy.get(req);
+      if (prior !== undefined && prior !== row.fn) {
+        findings.push({
+          code: "evidence-duplicate-home",
+          message: `${req} is cited as evidence by both "${prior}" and "${row.fn}"`,
+        });
+      }
+      claimedBy.set(req, row.fn);
     }
   }
 

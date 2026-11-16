@@ -133,12 +133,12 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
   });
 
   it("reports a REQ listed in two groups", () => {
-    // REQ-003 is G1, which group 2 already carries, so only the home is wrong.
-    const gates = LIVE_GATES.get("REQ-003")!;
+    // REQ-073 is G1 (group 1), which group 2 also carries, so only the home is wrong.
+    const gates = LIVE_GATES.get("REQ-073")!;
     expect(gates.every((g) => group(2).gates.includes(g))).toBe(true);
-    const spec = mutate("| REQ-010, REQ-011, REQ-013,", "| REQ-003, REQ-010, REQ-011, REQ-013,");
+    const spec = mutate("| REQ-010, REQ-011, REQ-013,", "| REQ-073, REQ-010, REQ-011, REQ-013,");
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 1 'Direction & Retrieval': REQ-003 also appears in group 2 — exactly one home required",
+      "Feature taxonomy (§D) group 1 'Direction & Retrieval': REQ-073 also appears in group 2 — exactly one home required",
     ]);
   });
 
@@ -214,9 +214,9 @@ describe("checkFeatureTaxonomyCoverage (REQ-078)", () => {
 
   it("reports a row with no REQs that declares a gate", () => {
     const row = rowFor(LIVE, 9);
-    const spec = LIVE.replace(row, `${row}\n| 11 | Empty | (no tools) | | G1 |`);
+    const spec = LIVE.replace(row, `${row}\n| 12 | Empty | (no tools) | | G1 |`);
     expect(run(spec)).toEqual([
-      "Feature taxonomy (§D) group 11 'Empty': Gate [G1] does not match its REQs' manifest gates []",
+      "Feature taxonomy (§D) group 12 'Empty': Gate [G1] does not match its REQs' manifest gates []",
     ]);
   });
 });

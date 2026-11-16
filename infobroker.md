@@ -33,10 +33,10 @@ and a failed fetch re-enters direction.
 
 | Function | Obligation | Evidence |
 |---|---|---|
-| **Direction** | Turn the consumer's need into an executable requirement — intent, sources, language, depth, shape, audience and handling — disclose what was inferred, and offer the choice instead of searching when two materially different requirements are plausible. | §7 dispatch; REQ-020a, REQ-020b, REQ-020c, REQ-020e, REQ-124, REQ-127, REQ-128 |
+| **Direction** | Turn the consumer's need into an executable requirement — intent, sources, language, depth, shape, audience and handling — disclose what was inferred, and offer the choice instead of searching when two materially different requirements are plausible. | §7 dispatch; REQ-020a, REQ-020b, REQ-020c, REQ-020e, REQ-124, REQ-128, REQ-131, REQ-131a |
 | **Collection** | Reach the right sources across search, reference, scholarly, code, Q&A, news, filings and macro data, and degrade rather than fail when a provider is unavailable. | §A provider catalog; REQ-020h, REQ-031, REQ-031a, REQ-031b |
 | **Processing and exploitation** | Turn raw provider responses into citable evidence: source identity and modality, dates, snapshots, deduplication, truncation and quota accounting. | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122 |
-| **Analysis and production** | Corroborate, attribute, calibrate confidence and likelihood, and state alternatives and gaps — judgments and graded claims, not link lists. | REQ-026a, REQ-123, REQ-115 |
+| **Analysis and production** | Corroborate, attribute, calibrate confidence and likelihood, and state alternatives and gaps — judgments and graded claims, not link lists. | REQ-026a, REQ-115, REQ-123, REQ-132 |
 | **Dissemination** | Deliver manifest-bearing reports that pass the quality gate, archive with a receipt, and stay recallable and re-checkable. | REQ-114, REQ-116, REQ-119, REQ-110 |
 
 The knowledge base is the loop's memory, not a side cache: a disseminated
@@ -1927,16 +1927,17 @@ the table.
 
 | # | Feature area | Tools | Primary REQs | Gate |
 |---|--------------|-------|--------------|------|
-| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-003, REQ-004, REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021c, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130, REQ-133 | G0, G1 |
+| 1 | Direction & Retrieval | `search_web`, `fetch_page`, `get_citations` | REQ-020, REQ-020a, REQ-020b, REQ-020c, REQ-020d, REQ-020e, REQ-020g, REQ-020h, REQ-020i, REQ-124, REQ-131, REQ-131a, REQ-128, REQ-021, REQ-021a, REQ-021b, REQ-021d, REQ-021e, REQ-021f, REQ-021g, REQ-021h, REQ-021i, REQ-021j, REQ-021k, REQ-027, REQ-027a, REQ-028, REQ-073, REQ-095, REQ-130 | G0, G1 |
 | 2 | Provider Intelligence | `inspect_providers` | REQ-010, REQ-011, REQ-013, REQ-014, REQ-015, REQ-129, REQ-024, REQ-024a, REQ-024b, REQ-024c, REQ-070, REQ-071, REQ-104 | G0, G1, G3 |
-| 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-121, REQ-122, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
+| 3 | Corroboration & Analysis | `verify_claims` | REQ-026, REQ-026a, REQ-026b, REQ-026c, REQ-026d, REQ-026e, REQ-026f, REQ-026g, REQ-026h, REQ-026i, REQ-123, REQ-020f, REQ-127, REQ-088, REQ-132 | G0, G1, G3 |
 | 4 | Knowledge Base | `manage_kb` | REQ-060, REQ-060a, REQ-060b, REQ-060c, REQ-060d, REQ-060e, REQ-060f, REQ-060g, REQ-060h, REQ-060i, REQ-064, REQ-065, REQ-066, REQ-067, REQ-072, REQ-074, REQ-075, REQ-076, REQ-076a, REQ-082, REQ-083, REQ-084, REQ-085, REQ-086, REQ-087, REQ-103, REQ-108, REQ-109, REQ-110 | G0, G1 |
-| 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-031b, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-038, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
+| 5 | State, Resilience & Operations | `reload_config` | REQ-030, REQ-031, REQ-031a, REQ-031b, REQ-032, REQ-033, REQ-034, REQ-035, REQ-036, REQ-037, REQ-040, REQ-042, REQ-043, REQ-081, REQ-091, REQ-105, REQ-111, REQ-111a, REQ-112, REQ-113 | G1, G3 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001, REQ-002, REQ-079, REQ-089, REQ-090, REQ-092, REQ-106 | G0, G1, G3 |
 | 7 | Dissemination & Report Contract | (no tools) | REQ-114, REQ-115, REQ-116, REQ-117, REQ-118, REQ-119, REQ-120, REQ-120a, REQ-125, REQ-126 | G1, G3 |
 | 8 | Spec Governance | (no tools) | REQ-055, REQ-077, REQ-078, REQ-080 | G3 |
 | 9 | Security & Content Safety | (all 7 tools, enforced server-side) | REQ-096, REQ-097, REQ-098, REQ-099, REQ-100, REQ-101, REQ-102 | G0, G1, G3 |
 | 10 | Client Skills | (no tools) | REQ-050, REQ-051, REQ-052, REQ-053, REQ-054, REQ-107 | G3 |
+| 11 | Processing & Provenance | (no tools) | REQ-003, REQ-004, REQ-021c, REQ-038, REQ-121, REQ-122, REQ-133 | G1 |
 
 Notes:
 
@@ -1947,6 +1948,9 @@ Notes:
   Group 7 is the server-side report contract (REQ-114–126), Group 10 is the
   client skills that write the prose (REQ-050–054, REQ-107). Group 7 is verified
   by the report fixtures and the G3 drift detector; Group 10 by file presence.
+- **Group 11** is the processing response contract (REQ-133): it governs fields on
+  the search and fetch responses rather than owning a tool, so it is
+  cross-cutting like Group 6 and excluded from the audience-facing set.
 - **Group 8** is a maintainer concern with no runtime tool surface, verified by
   the G3 drift detector rather than by live tool calls.
 - The README documents Groups 1–5 as the user-facing feature tour, surfaces

@@ -162,6 +162,9 @@ export function checkFeatureTaxonomyCoverage(
 // §D groups the README documents as the user-facing feature tour: Groups 1–5
 // plus Group 7 (Client Artifacts). Groups 6 and 8 are maintainer/spec concerns
 // surfaced only in the spec (per the §D notes), not in the README.
+// Audience-facing groups the README tour must cover. Mirrors
+// user-surface.ts's AUDIENCE_GROUPS deliberately; both exclude group 11
+// (Processing & Provenance), which is cross-cutting and has no tour section.
 export const USER_FACING_GROUPS: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 7]);
 
 // README §MCP Server subsection title → §D feature-area group.

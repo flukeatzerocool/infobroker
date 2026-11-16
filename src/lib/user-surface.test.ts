@@ -9,6 +9,7 @@ import {
   registerPaths,
   registerableConfigPaths,
   specFunctions,
+  functionEvidence,
   DECLARED_SHAPES,
   DIRECTION_STAGES,
   type UserSurfaceInput,
@@ -36,7 +37,7 @@ Mission.
 | 4 | Knowledge Base | \`manage_kb\` | REQ-060 | G0 |
 | 5 | State & Operations | \`reload_config\` | REQ-040 | G0 |
 | 6 | Tool Surface & Contracts | (all 7 tools) | REQ-001 | G0 |
-| 7 | Client Artifacts | (no tools) | REQ-050 | G3 |
+| 7 | Client Artifacts | (no tools) | REQ-114 | G3 |
 | 8 | Spec Governance | (no tools) | REQ-055 | G3 |
 | 9 | Security & Content Safety | (all 7 tools) | REQ-096 | G0 |
 `;
@@ -221,5 +222,32 @@ describe("checkUserSurface", () => {
     expect(codes(base({ specText: "# nothing" }))).toEqual(
       expect.arrayContaining(["taxonomy-missing", "functions-unparsed"]),
     );
+  });
+});
+
+describe("function evidence mapping", () => {
+  it("reads the REQ ids a §1 row cites", () => {
+    expect(functionEvidence(SPEC).map((row) => row.fn)).toEqual([
+      "Direction",
+      "Collection",
+      "Processing and exploitation",
+      "Analysis and production",
+      "Dissemination",
+    ]);
+    expect(functionEvidence(SPEC).find((row) => row.fn === "Collection")?.reqs).toEqual([]);
+  });
+
+  it("flags an evidence citation with no §D primary home", () => {
+    const specText = SPEC.replace("| REQ-114 |", "| REQ-999 |");
+    expect(codes(base({ specText }))).toContain("evidence-unknown-req");
+  });
+
+  it("flags one REQ claimed as evidence by two functions", () => {
+    const specText = SPEC.replace("| REQ-114 |", "| REQ-003 |");
+    expect(codes(base({ specText }))).toContain("evidence-duplicate-home");
+  });
+
+  it("accepts the shipped mapping", () => {
+    expect(codes(base())).toEqual([]);
   });
 });
